@@ -66,3 +66,22 @@ Violations:
 - Explicit return types on all functions
 - No implicit any
 - Use Result types for operations that can fail
+
+## Branding Rules
+
+Branding is treated as a repository-level invariant, not a creative playground.
+
+- Branding assets are immutable outside `docs/assets/branding/`.
+- All logos and icons MUST be generated using prompts in `docs/assets/branding/prompts/`.
+- LLMs must refuse to generate logos or icons outside the defined branding prompts.
+- Requests for ad-hoc branding must be rejected.
+- Visual consistency is a hard repository rule.
+- No branding files are allowed in `apps/`, `packages/`, or repository root.
+- No images may be embedded directly in any README.
+
+Violations:
+
+- ❌ Creating branding assets outside `docs/assets/branding/exports/`
+- ❌ Generating logos/icons without using official prompts
+- ❌ Ad-hoc or experimental branding requests
+- ❌ Embedding images directly in READMEs

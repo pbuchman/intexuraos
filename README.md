@@ -7,6 +7,7 @@ Notion models the world. PraxOS executes.
 - [Architecture & Philosophy](./docs/README.md)
 - [Setup Guide](./docs/setup.md)
 - [Development Guide](./docs/development.md)
+- [Branding](./docs/assets/branding/README.md)
 
 ## Quick Start
 
