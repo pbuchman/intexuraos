@@ -68,6 +68,20 @@ export default tseslint.config(
       'no-implied-eval': 'error',
       'no-return-await': 'off',
       '@typescript-eslint/return-await': ['error', 'always'],
+      // Block deep imports into other packages' /src/ directories
+      // Cross-package imports should use the public entrypoint (index.ts)
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@praxos/*/src/*', '@praxos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+          ],
+        },
+      ],
     },
   },
   {

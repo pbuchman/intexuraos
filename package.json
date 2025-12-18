@@ -24,7 +24,8 @@
     "build": "tsc -b",
     "clean": "rm -rf apps/*/dist packages/*/dist packages/*/*/dist node_modules/.cache",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
-    "ci": "npm run lint && npm run verify:boundaries && npm run format:check && npm run typecheck && npm run test:coverage && npm run build"
+    "verify:common": "node scripts/verify-common.mjs",
+    "ci": "npm run lint && npm run verify:boundaries && npm run verify:common && npm run format:check && npm run typecheck && npm run test:coverage && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

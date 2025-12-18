@@ -49,6 +49,8 @@ Operations should be safe to retry. Running the same action twice with the same 
 └─────────────────────────────────────────────────────────┘
 ```
 
+For detailed package contracts and dependency rules, see [Package Contracts](./architecture/package-contracts.md).
+
 ## Status
 
 This is **sandbox v1** - a minimal viable scaffold for validating the architecture and workflows before production deployment.
