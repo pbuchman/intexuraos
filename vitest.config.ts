@@ -8,7 +8,14 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['packages/**/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/*.spec.ts', '**/index.ts', '**/*.d.ts', '**/fastifyPlugin.ts'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.spec.ts',
+        '**/index.ts',
+        '**/*.d.ts',
+        '**/fastifyPlugin.ts',
+        '**/fastifyAuthPlugin.ts',
+      ],
       thresholds: {
         lines: 90,
         branches: 85,

@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { praxosFastifyPlugin } from '@praxos/common';
+import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
 import { v1Routes } from './v1/routes.js';
 
 const SERVICE_NAME = 'notion-gpt-service';
@@ -273,6 +273,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
   await app.register(praxosFastifyPlugin);
+  await app.register(fastifyAuthPlugin);
 
   await app.register(fastifySwagger, buildOpenApiOptions());
   await app.register(fastifySwaggerUi, {

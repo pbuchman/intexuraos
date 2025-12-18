@@ -314,19 +314,49 @@ System endpoints do not require authentication.
 
 ## Authentication
 
-### Step 5 Stub Auth
+### JWT Validation (Step 6+)
 
-During Step 5 development, authentication uses a stub implementation:
+Protected endpoints require a valid JWT token:
 
-- Protected endpoints require: `Authorization: Bearer <token>`
-- userId is derived as: `usr_` + first 12 characters of token
-- Any non-empty token is accepted
-- This is for contract validation only
+```
+Authorization: Bearer <jwt>
+```
 
-### Step 6+ Production Auth
+#### Validation Rules
 
-Step 6 will replace stub auth with real JWT validation:
+- **Signature**: Verified against JWKS (fetched from `AUTH_JWKS_URL`)
+- **Issuer** (`iss`): Must match `AUTH_ISSUER`
+- **Audience** (`aud`): Must match `AUTH_AUDIENCE`
+- **Expiration** (`exp`): Token must not be expired
+- **Subject** (`sub`): Must be present and non-empty
 
-- Auth0-issued JWT tokens required
-- Full token verification (signature, expiry, audience)
-- userId extracted from JWT claims
+#### User Identity
+
+The `userId` is derived directly from the JWT `sub` claim:
+
+```
+userId = jwt.sub
+```
+
+This provides a stable identifier across sessions.
+
+#### Required Environment Variables
+
+| Variable        | Description                   | Example                                               |
+| --------------- | ----------------------------- | ----------------------------------------------------- |
+| `AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
+| `AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
+| `AUTH_AUDIENCE` | Expected token audience       | `https://api.praxos.app`                              |
+
+All three variables must be set for authentication to work.
+If any are missing, protected endpoints return `503 MISCONFIGURED`.
+
+#### Error Responses
+
+| Condition           | Error Code      | HTTP Status |
+| ------------------- | --------------- | ----------- |
+| Missing auth header | `UNAUTHORIZED`  | 401         |
+| Invalid auth format | `UNAUTHORIZED`  | 401         |
+| Invalid/expired JWT | `UNAUTHORIZED`  | 401         |
+| Missing `sub` claim | `UNAUTHORIZED`  | 401         |
+| Auth not configured | `MISCONFIGURED` | 503         |
