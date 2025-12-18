@@ -128,6 +128,8 @@ module "firestore" {
 }
 
 # Secret Manager
+# NOTE: Only app-level secrets are stored here.
+# Per-user Notion integration tokens are stored in Firestore, not Secret Manager.
 module "secret_manager" {
   source = "../../modules/secret-manager"
 
@@ -136,10 +138,9 @@ module "secret_manager" {
   labels      = local.common_labels
 
   secrets = {
-    "PRAXOS_AUTH_JWKS_URL"  = "Auth0 JWKS URL for JWT verification"
-    "PRAXOS_AUTH_ISSUER"    = "Auth0 issuer URL"
-    "PRAXOS_AUTH_AUDIENCE"  = "Auth0 audience identifier"
-    "PRAXOS_NOTION_API_KEY" = "Notion API key (placeholder for future use)"
+    "PRAXOS_AUTH_JWKS_URL" = "Auth0 JWKS URL for JWT verification"
+    "PRAXOS_AUTH_ISSUER"   = "Auth0 issuer URL"
+    "PRAXOS_AUTH_AUDIENCE" = "Auth0 audience identifier"
   }
 
   depends_on = [google_project_service.apis]

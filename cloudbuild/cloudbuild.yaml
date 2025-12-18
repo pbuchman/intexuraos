@@ -1,27 +1,32 @@
 # PraxOS Cloud Build Configuration
 # Builds and deploys affected services on push to development branch.
+#
+# Substitutions are provided by the Cloud Build trigger (Terraform):
+# - _REGION: GCP region
+# - _ARTIFACT_REGISTRY_URL: Full Artifact Registry URL
+# - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
   # Step 1: Show Node.js version
-  - name: 'node:20'
+  - name: 'node:22-slim'
     id: 'node-version'
     entrypoint: 'node'
     args: ['--version']
 
   # Step 2: Install dependencies
-  - name: 'node:20'
+  - name: 'node:22-slim'
     id: 'npm-ci'
     entrypoint: 'npm'
     args: ['ci']
 
   # Step 3: Run CI checks (lint, typecheck, test, build)
-  - name: 'node:20'
+  - name: 'node:22-slim'
     id: 'npm-run-ci'
     entrypoint: 'npm'
     args: ['run', 'ci']
 
   # Step 4: Detect affected services
-  - name: 'node:20'
+  - name: 'node:22-slim'
     id: 'detect-affected'
     entrypoint: 'node'
     args: ['cloudbuild/scripts/detect-affected.mjs']
@@ -95,33 +100,15 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-affected'
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Deploying auth-service to Cloud Run..."
-          gcloud run deploy praxos-auth-service \
-            --image=${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA \
-            --region=${_REGION} \
-            --platform=managed \
-            --quiet
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-affected.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-        if grep -q '"notion-gpt-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Deploying notion-gpt-service to Cloud Run..."
-          gcloud run deploy praxos-notion-gpt-service \
-            --image=${_ARTIFACT_REGISTRY_URL}/notion-gpt-service:$COMMIT_SHA \
-            --region=${_REGION} \
-            --platform=managed \
-            --quiet
-        fi
-
-        echo "Deployment complete."
-
-substitutions:
-  _REGION: europe-central2
-  _ARTIFACT_REGISTRY_URL: europe-central2-docker.pkg.dev/${PROJECT_ID}/praxos-dev
-  _ENVIRONMENT: dev
+# No substitutions block here - all substitutions come from the Terraform-managed
+# Cloud Build trigger. This ensures single source of truth.
 
 options:
   logging: CLOUD_LOGGING_ONLY

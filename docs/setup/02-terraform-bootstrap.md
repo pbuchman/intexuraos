@@ -72,7 +72,7 @@ Review the plan carefully. It should create:
 
 - Artifact Registry repository
 - Firestore database
-- Secret Manager secrets (4 secrets)
+- Secret Manager secrets (3 secrets)
 - Service accounts (3 accounts)
 - IAM bindings
 - Cloud Run services (2 services)
@@ -109,11 +109,10 @@ echo -n "https://${AUTH0_DOMAIN}/" | \
 
 echo -n "${AUTH0_AUDIENCE}" | \
   gcloud secrets versions add PRAXOS_AUTH_AUDIENCE --data-file=-
-
-# Notion API key (when you have it)
-# echo -n "your-notion-api-key" | \
-#   gcloud secrets versions add PRAXOS_NOTION_API_KEY --data-file=-
 ```
+
+> **Note**: Per-user Notion integration tokens are stored in Firestore, not Secret Manager.
+> There is no app-level Notion API key in this architecture.
 
 ## 6. Verify Outputs
 
