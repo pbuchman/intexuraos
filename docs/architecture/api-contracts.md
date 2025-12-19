@@ -8,10 +8,10 @@ All API responses use a consistent JSON envelope structure.
 
 ### Success Response
 
-```json
+```jsonc
 {
   "success": true,
-  "data": { ... },
+  "data": { /* response payload */ },
   "diagnostics": {
     "requestId": "550e8400-e29b-41d4-a716-446655440000",
     "durationMs": 42
@@ -312,7 +312,7 @@ Success responses must include verifiable identifiers when relevant.
 
 ### Examples
 
-```json
+```jsonc
 // ✗ Bad: no way to verify success
 { "success": true, "data": { "created": true } }
 
