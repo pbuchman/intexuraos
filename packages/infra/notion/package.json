@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
