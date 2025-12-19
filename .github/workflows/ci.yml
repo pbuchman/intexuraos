@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+jobs:
+  # =============================================================================
+  # Main CI: Lint, Verify, Typecheck, Test, Build
+  # =============================================================================
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CI
+        run: npm run ci
+
+  # =============================================================================
+  # Terraform: Format, Validate
+  # =============================================================================
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.0'
+
+      - name: Format Check
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
+      - name: Initialize (root)
+        working-directory: terraform
+        run: terraform init -backend=false
+
+      - name: Validate (root)
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Initialize (dev)
+        working-directory: terraform/environments/dev
+        run: terraform init -backend=false
+
+      - name: Validate (dev)
+        working-directory: terraform/environments/dev
+        run: terraform validate
