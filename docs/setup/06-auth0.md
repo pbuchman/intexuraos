@@ -115,7 +115,7 @@ From your tenant domain, derive:
 | `AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
 | `AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
 | `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_AUDIENCE` | `urn:praxos:api` (from API Identifier)           |
+| `AUTH_AUDIENCE` | `urn:praxos:api` (from API Identifier)                   |
 
 ## 6. Generate Encryption Key for Refresh Tokens
 
@@ -502,7 +502,7 @@ export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 | ----------------------------- | ----------------------------------------- | ------------------------------------------------------- |
 | `AUTH0_DOMAIN`                | Auth0 tenant domain                       | `praxos-dev.eu.auth0.com`                               |
 | `AUTH0_CLIENT_ID`             | Native app client ID                      | `abc123...`                                             |
-| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:praxos:api`                                |
+| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:praxos:api`                                        |
 | `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification  | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`                 | Token issuer for verification             | `https://praxos-dev.eu.auth0.com/`                      |
 | `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                     |
@@ -513,7 +513,7 @@ export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 | --------------- | ----------------- | ------------------------------------------------------- |
 | `AUTH_JWKS_URL` | JWKS endpoint URL | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Token issuer      | `https://praxos-dev.eu.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected audience | `urn:praxos:api`                                |
+| `AUTH_AUDIENCE` | Expected audience | `urn:praxos:api`                                        |
 
 ## 13. Troubleshooting Checklist
 

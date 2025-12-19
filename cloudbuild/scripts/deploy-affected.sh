@@ -14,9 +14,6 @@
 #   ENVIRONMENT           - Environment name (dev, staging, prod)
 #
 
-# Enable verbose debugging
-set -x
-
 set -euo pipefail
 
 WORKSPACE="${WORKSPACE:-/workspace}"
@@ -27,12 +24,6 @@ echo "REGION: ${REGION:-not set}"
 echo "ARTIFACT_REGISTRY_URL: ${ARTIFACT_REGISTRY_URL:-not set}"
 echo "COMMIT_SHA: ${COMMIT_SHA:-not set}"
 echo "ENVIRONMENT: ${ENVIRONMENT:-not set}"
-echo "AFFECTED_FILE: ${AFFECTED_FILE}"
-echo "PWD: $(pwd)"
-echo ""
-echo "Listing workspace directory:"
-ls -la "${WORKSPACE}/" || echo "Failed to list workspace"
-echo ""
 
 # Validate required environment variables
 validate_env() {
@@ -55,35 +46,32 @@ validate_env() {
 
 # Read affected services from JSON file
 read_affected() {
-  echo "DEBUG: Checking for affected file at: $AFFECTED_FILE"
-
   if [[ ! -f "$AFFECTED_FILE" ]]; then
     echo "ERROR: Affected file not found at $AFFECTED_FILE"
-    echo "DEBUG: Listing /workspace directory:"
-    ls -la /workspace/ 2>&1 || echo "Failed to list /workspace"
     echo "This file should be created by detect-affected.mjs"
     exit 1
   fi
 
-  echo "DEBUG: File exists. Contents of $AFFECTED_FILE:"
+  echo "Contents of $AFFECTED_FILE:"
   cat "$AFFECTED_FILE"
   echo ""
-  echo "DEBUG: End of file contents"
 
-  # Extract services array using grep/sed (no jq dependency)
-  # Format: "services": ["auth-service", "notion-gpt-service", "api-docs-hub"]
-  local services_line
-  services_line=$(grep -o '"services"[[:space:]]*:[[:space:]]*\[[^]]*\]' "$AFFECTED_FILE" || true)
+  # Extract service names from JSON (handles both single-line and multi-line JSON)
+  # First, remove newlines to get single-line JSON
+  local json_oneline
+  json_oneline=$(tr -d '\n' < "$AFFECTED_FILE")
 
-  if [[ -z "$services_line" ]]; then
+  # Extract everything between "services": [ and ]
+  local services_array
+  services_array=$(echo "$json_oneline" | sed -n 's/.*"services"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p')
+
+  if [[ -z "$services_array" ]]; then
     echo "ERROR: Could not parse 'services' array from $AFFECTED_FILE"
     exit 1
   fi
 
-  echo "DEBUG: Parsed services line: $services_line"
-
-  # Extract service names (matches auth-service, notion-gpt-service, whatsapp-service, api-docs-hub)
-  echo "$services_line" | grep -oE '"[a-z-]+"' | tr -d '"' | grep -v '^services$' || true
+  # Extract individual service names (words with hyphens)
+  echo "$services_array" | grep -oE '"[a-z][-a-z]*"' | tr -d '"'
 }
 
 # Map service name to Cloud Run service name
