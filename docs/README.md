@@ -53,6 +53,8 @@ For detailed package contracts and dependency rules, see [Package Contracts](./a
 
 For API response formats and service contracts, see [API Contracts](./architecture/api-contracts.md).
 
+For aggregated API documentation from all services, see [API Docs Hub](./architecture/api-contracts.md#runtime-openapi-aggregation).
+
 For branding guidelines and assets, see [Branding](./assets/branding/README.md).
 
 ## Setup Guides
