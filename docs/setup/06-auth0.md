@@ -1,12 +1,24 @@
-# Auth0 Setup Guide
+# Auth0 Setup Guide (Updated 2025-12-19)
 
-This guide covers setting up Auth0 for PraxOS authentication using the Device Authorization Flow (DAF).
+This guide covers setting up Auth0 for PraxOS authentication using the Device Authorization Flow (DAF) with refresh token support for daily usage scenarios.
 
 ## Prerequisites
 
 - Auth0 account (free tier works)
 - `gcloud` CLI installed and authenticated
 - GCP project with Secret Manager enabled
+
+## Overview: Device Flow + Refresh Tokens
+
+PraxOS uses OAuth2 Device Authorization Flow for authentication, which is ideal for:
+- CLI applications
+- IoT devices  
+- API consumers that cannot easily handle browser redirects
+
+To support **daily usage without re-authentication**, we implement:
+- **Refresh tokens** - Long-lived tokens stored securely server-side
+- **Token rotation** - Automatic refresh token rotation for enhanced security
+- **Encrypted storage** - AES-256-GCM encryption in Firestore
 
 ## 1. Create Auth0 Tenant
 
@@ -33,9 +45,11 @@ The API defines the audience identifier used for token validation.
 After creation, configure:
 
 1. Go to API **Settings** tab
-2. Set **Token Expiration (Seconds)**: `3600` (1 hour for v1 sandbox)
-3. Enable **Allow Offline Access** if you need refresh tokens later
+2. **Token Expiration (Seconds)**: `3600` (1 hour for access tokens)
+3. **Allow Offline Access**: ✅ **ENABLE THIS** (required for refresh tokens)
 4. Click **Save**
+
+> **Note**: Enabling "Allow Offline Access" is essential for refresh tokens. Without this, the `offline_access` scope will be ignored.
 
 ## 3. Create Native Application for Device Authorization Flow
 
@@ -54,8 +68,27 @@ After creation, configure:
    - No callback URLs needed for Device Flow
 4. Scroll to **Advanced Settings** → **Grant Types**
 5. Enable:
-   - [x] Device Code
+   - [x] **Device Code** (required for device flow)
+   - [x] **Refresh Token** (required for refresh tokens)
 6. Click **Save Changes**
+
+### Refresh Token Rotation Settings
+
+1. Still in **Advanced Settings**, go to **Grant Types** section
+2. Locate **Refresh Token Rotation**:
+   - **Rotation**: ✅ **ENABLE** (recommended for security)
+   - **Reuse Interval**: `0` seconds (immediate revocation on use)
+   - **Absolute Lifetime**: `2592000` seconds (30 days)
+   - **Idle Lifetime**: `1296000` seconds (15 days)
+3. Click **Save Changes**
+
+> **Refresh Token Lifetimes Explained:**
+> - **Absolute Lifetime (30 days)**: Maximum token age regardless of usage
+> - **Idle Lifetime (15 days)**: Token expires if unused for this period
+> 
+> For **daily usage**, idle lifetime is the key setting. 15 days means users must authenticate at least once every 15 days. Adjust based on your security requirements:
+> - More permissive: 30-90 days idle
+> - More restrictive: 7-14 days idle
 
 ## 4. Enable Device Authorization Flow on Tenant
 
@@ -74,7 +107,24 @@ From your tenant domain, derive:
 | `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_AUDIENCE` | `https://api.praxos.app` (from API Identifier)           |
 
-## 6. Populate Secret Manager (GCP)
+## 6. Generate Encryption Key for Refresh Tokens
+
+Refresh tokens are encrypted at rest using AES-256-GCM. Generate a secure encryption key:
+
+```bash
+# Using Node.js (if available)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+# Using OpenSSL
+openssl rand -base64 32
+
+# Example output:
+# k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5=
+```
+
+Save this key securely - you'll need it for Secret Manager.
+
+## 7. Populate Secret Manager (GCP)
 
 Terraform creates the secrets; you populate them with actual values using `gcloud secrets versions add`.
 
@@ -89,6 +139,7 @@ export PROJECT_ID=your-gcp-project-id
 export AUTH0_DOMAIN="your-tenant.eu.auth0.com"
 export AUTH0_CLIENT_ID="your-native-app-client-id"
 export AUTH0_AUDIENCE="https://api.praxos.app"
+export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
 
 # Populate secret versions (Terraform created the secrets, we add values)
 
@@ -111,6 +162,10 @@ echo -n "https://${AUTH0_DOMAIN}/" | \
 # Auth audience - required for JWT verification
 echo -n "${AUTH0_AUDIENCE}" | \
   gcloud secrets versions add PRAXOS_AUTH_AUDIENCE --data-file=- --project=$PROJECT_ID
+
+# Token encryption key - required for encrypting refresh tokens
+echo -n "${TOKEN_ENCRYPTION_KEY}" | \
+  gcloud secrets versions add PRAXOS_TOKEN_ENCRYPTION_KEY --data-file=- --project=$PROJECT_ID
 ```
 
 To update an existing secret value:
@@ -120,7 +175,7 @@ echo -n "new-value" | \
   gcloud secrets versions add PRAXOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
 ```
 
-## 7. Obtain Token via Device Authorization Flow
+## 8. Authentication Flow (with Refresh Tokens)
 
 ### Step 1: Request Device Code
 
@@ -128,15 +183,13 @@ echo -n "new-value" | \
 # Using auth-service helper
 curl -X POST http://localhost:3000/v1/auth/device/start \
   -H "Content-Type: application/json" \
-  -d '{"audience": "https://api.praxos.app", "scope": "openid profile email"}'
-
-# Or directly via Auth0
-curl -X POST "https://your-tenant.eu.auth0.com/oauth/device/code" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=YOUR_CLIENT_ID" \
-  -d "audience=https://api.praxos.app" \
-  -d "scope=openid profile email"
+  -d '{
+    "audience": "https://api.praxos.app",
+    "scope": "openid profile email offline_access"
+  }'
 ```
+
+> **Note**: The `offline_access` scope is included by default and is **required** for refresh tokens.
 
 Response:
 
@@ -168,13 +221,6 @@ Response:
 curl -X POST http://localhost:3000/v1/auth/device/poll \
   -H "Content-Type: application/json" \
   -d '{"device_code": "XXXX-XXXX-XXXX"}'
-
-# Or directly via Auth0
-curl -X POST "https://your-tenant.eu.auth0.com/oauth/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=YOUR_CLIENT_ID" \
-  -d "device_code=XXXX-XXXX-XXXX" \
-  -d "grant_type=urn:ietf:params:oauth:grant-type:device_code"
 ```
 
 **While waiting for user:**
@@ -196,20 +242,70 @@ curl -X POST "https://your-tenant.eu.auth0.com/oauth/token" \
   "success": true,
   "data": {
     "access_token": "eyJhbGciOiJSUzI1NiIs...",
+    "refresh_token": "v1.MRrT...",
     "token_type": "Bearer",
-    "expires_in": 3600
+    "expires_in": 3600,
+    "scope": "openid profile email offline_access"
   }
 }
 ```
 
-### Step 4: Use Token
+> **Important**: The refresh token is automatically stored server-side (encrypted) and associated with the user's ID. Clients should **only store the access token**.
+
+### Step 4: Use Access Token
 
 ```bash
 curl http://localhost:3001/v1/integrations/notion/status \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
 ```
 
-## 8. What the User Sees
+### Step 5: Refresh Token (Daily Usage)
+
+When the access token expires (after 1 hour), refresh it:
+
+```bash
+curl -X POST http://localhost:3000/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "auth0|507f1f77bcf86cd799439011"}'
+```
+
+**Success Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "eyJhbGciOiJSUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "scope": "openid profile email offline_access"
+  }
+}
+```
+
+**Re-authentication Required:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Refresh token is invalid or expired. User must re-authenticate."
+  }
+}
+```
+
+> **Daily Usage Pattern**: 
+> 1. User authenticates once via device flow
+> 2. Refresh token is stored server-side (valid for 15 days idle, 30 days absolute)
+> 3. Each day, client calls `/v1/auth/refresh` to get fresh access token
+> 4. User doesn't need to re-authenticate unless:
+>    - 15 days of inactivity
+>    - 30 days since initial authentication
+>    - Refresh token manually revoked
+>    - Auth0 rotation security event
+
+## 9. What the User Sees
 
 ### Device Activation Page
 
@@ -229,7 +325,47 @@ curl http://localhost:3001/v1/integrations/notion/status \
 2. User can close browser
 3. CLI/device receives token via polling
 
-## 9. Common Failure Modes
+## 10. Security Considerations
+
+### Refresh Token Storage
+
+- ✅ **Encrypted at rest** using AES-256-GCM
+- ✅ **Server-side only** - never sent to client
+- ✅ **Per-user isolation** - stored with userId as key
+- ✅ **Automatic cleanup** - deleted on logout or invalid_grant
+
+### Refresh Token Rotation
+
+When rotation is enabled:
+- Each refresh operation returns a **new** refresh token
+- The old refresh token is **immediately revoked**
+- Reuse of old token **invalidates entire token family** (security feature)
+- Protects against token theft and replay attacks
+
+**Best Practice**: Enable rotation for production environments.
+
+### Logging and Monitoring
+
+- ✅ **Token redaction** - Tokens never appear in logs (first 4 + last 4 chars only)
+- ✅ **Error tracking** - Failed refresh attempts logged with userId
+- ❌ **No token introspection** - Tokens validated locally via JWKS
+
+### Refresh Token Revocation
+
+To revoke a user's refresh token:
+
+```bash
+# Via Management API (requires API token)
+curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
+  -H "Authorization: Bearer YOUR_MGMT_API_TOKEN" \
+  -d '{"type": "refresh_token"}'
+
+# Or delete from Firestore directly (admin only)
+# Collection: auth_tokens
+# Document ID: {userId}
+```
+
+## 11. Common Failure Modes
 
 ### Invalid Audience
 
@@ -259,10 +395,36 @@ curl http://localhost:3001/v1/integrations/notion/status \
 
 **Causes:**
 
-- Token TTL exceeded
+- Access token TTL exceeded (1 hour by default)
 - Clock skew between client and server
 
-**Fix:** Request new token. Ensure server time is synced.
+**Fix:** Use refresh endpoint to get new access token. Ensure server time is synced.
+
+### Refresh Token Invalid (invalid_grant)
+
+**Symptom:** `401 UNAUTHORIZED` from `/v1/auth/refresh` with "invalid_grant"
+
+**Causes:**
+
+- Refresh token expired (idle or absolute lifetime exceeded)
+- Refresh token manually revoked
+- Refresh token reused (rotation enabled and old token reused)
+- `offline_access` scope not granted during initial auth
+
+**Fix:** User must re-authenticate via device flow.
+
+### Missing offline_access Scope
+
+**Symptom:** Token response doesn't include `refresh_token`
+
+**Causes:**
+
+- `offline_access` scope not requested in `/device/start`
+- API doesn't have "Allow Offline Access" enabled
+
+**Fix:** 
+1. Include `offline_access` in scope (default in updated auth-service)
+2. Verify API settings in Auth0 Dashboard
 
 ### Wrong Domain
 
@@ -285,8 +447,7 @@ curl https://your-tenant.eu.auth0.com/.well-known/jwks.json
 
 **Causes:**
 
-- One or more of `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` not set
-- For auth-service: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` not set
+- One or more required environment variables not set
 
 **Fix:** Set all required environment variables:
 
@@ -296,6 +457,7 @@ export AUTH0_CLIENT_ID=your-client-id
 export AUTH_JWKS_URL=https://your-tenant.eu.auth0.com/.well-known/jwks.json
 export AUTH_ISSUER=https://your-tenant.eu.auth0.com/
 export AUTH_AUDIENCE=https://api.praxos.app
+export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 ```
 
 ### Device Code Expired
@@ -304,7 +466,7 @@ export AUTH_AUDIENCE=https://api.praxos.app
 
 **Causes:**
 
-- User didn't complete authorization within `expires_in` seconds
+- User didn't complete authorization within `expires_in` seconds (900 default)
 - Polling after expiration
 
 **Fix:** Restart flow with new device code request.
@@ -315,19 +477,22 @@ export AUTH_AUDIENCE=https://api.praxos.app
 
 **Causes:**
 
-- Polling faster than `interval` seconds
+- Polling faster than `interval` seconds (5 default)
 
 **Fix:** Respect the `interval` value from device code response.
 
-## Environment Variable Summary
+## 12. Environment Variable Summary
 
 ### auth-service
 
-| Variable          | Description              | Example                   |
-| ----------------- | ------------------------ | ------------------------- |
-| `AUTH0_DOMAIN`    | Auth0 tenant domain      | `praxos-dev.eu.auth0.com` |
-| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`               |
-| `AUTH_AUDIENCE`   | API identifier (default) | `https://api.praxos.app`  |
+| Variable                      | Description                                     | Example                                          |
+| ----------------------------- | ----------------------------------------------- | ------------------------------------------------ |
+| `AUTH0_DOMAIN`                | Auth0 tenant domain                             | `praxos-dev.eu.auth0.com`                        |
+| `AUTH0_CLIENT_ID`             | Native app client ID                            | `abc123...`                                      |
+| `AUTH_AUDIENCE`               | API identifier (default for device flow)        | `https://api.praxos.app`                         |
+| `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification        | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `AUTH_ISSUER`                 | Token issuer for verification                   | `https://praxos-dev.eu.auth0.com/`               |
+| `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes)       | `k7J9mL2nP4qR6s...`                              |
 
 ### notion-gpt-service (and other protected services)
 
@@ -337,9 +502,44 @@ export AUTH_AUDIENCE=https://api.praxos.app
 | `AUTH_ISSUER`   | Token issuer      | `https://praxos-dev.eu.auth0.com/`                      |
 | `AUTH_AUDIENCE` | Expected audience | `https://api.praxos.app`                                |
 
-## Security Notes (v1 Sandbox)
+## 13. Troubleshooting Checklist
 
-- **No JWT blacklist**: Revoked tokens remain valid until expiry
-- **Short TTL only**: Use 1-hour expiry for access tokens
-- **No refresh tokens**: Request new token via DAF when expired
-- **Client secret not used**: Native apps use PKCE or device flow without secret
+When debugging auth issues, verify in order:
+
+1. ✅ **Auth0 API Settings**: "Allow Offline Access" enabled
+2. ✅ **Auth0 App Grants**: Device Code + Refresh Token enabled
+3. ✅ **Rotation Settings**: Configured with appropriate lifetimes
+4. ✅ **Scope**: `offline_access` included in `/device/start` request
+5. ✅ **Environment Variables**: All required vars set correctly
+6. ✅ **Encryption Key**: Valid base64-encoded 32-byte key
+7. ✅ **Token Response**: Includes `refresh_token` field
+8. ✅ **Firestore**: `auth_tokens` collection exists and has write permissions
+9. ✅ **Logs**: Check for token storage errors in auth-service logs
+10. ✅ **Token Expiry**: Check idle and absolute lifetimes haven't expired
+
+## 14. Production Checklist
+
+Before going to production:
+
+- [ ] Refresh token rotation **enabled**
+- [ ] Idle lifetime set to match usage pattern (15 days for daily usage)
+- [ ] Absolute lifetime set appropriately (30 days recommended)
+- [ ] Encryption key generated securely and stored in Secret Manager
+- [ ] Encryption key **never** committed to version control
+- [ ] Access token TTL set to 1 hour (not longer)
+- [ ] Monitor refresh token usage and failure rates
+- [ ] Have process for user support (expired refresh tokens)
+- [ ] Test full flow: auth → daily refresh → idle expiry
+- [ ] Document token revocation process for security incidents
+
+## 15. References (2025-12-19)
+
+Official Auth0 documentation references:
+
+- [Device Authorization Flow](https://auth0.com/docs/get-started/authentication-and-authorization-flow/device-authorization-flow) - Latest device flow implementation
+- [Refresh Tokens](https://auth0.com/docs/secure/tokens/refresh-tokens) - Refresh token concepts and best practices
+- [Refresh Token Rotation](https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation) - Automatic rotation for enhanced security
+- [Native Applications](https://auth0.com/docs/get-started/applications/application-types#native-applications) - Native app (no client secret)
+- [offline_access Scope](https://auth0.com/docs/get-started/apis/scopes/openid-connect-scopes#offline-access) - Required for refresh tokens
+
+All references verified as current on 2025-12-19.

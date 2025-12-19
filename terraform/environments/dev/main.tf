@@ -151,6 +151,8 @@ module "secret_manager" {
     "PRAXOS_AUTH_JWKS_URL"   = "Auth0 JWKS URL for JWT verification"
     "PRAXOS_AUTH_ISSUER"     = "Auth0 issuer URL"
     "PRAXOS_AUTH_AUDIENCE"   = "Auth0 audience identifier"
+    # Token encryption key
+    "PRAXOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
     "PRAXOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
     "PRAXOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
@@ -195,11 +197,12 @@ module "auth_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/auth-service:latest"
 
   secrets = {
-    AUTH0_DOMAIN    = module.secret_manager.secret_ids["PRAXOS_AUTH0_DOMAIN"]
-    AUTH0_CLIENT_ID = module.secret_manager.secret_ids["PRAXOS_AUTH0_CLIENT_ID"]
-    AUTH_JWKS_URL   = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER     = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE   = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
+    AUTH0_DOMAIN              = module.secret_manager.secret_ids["PRAXOS_AUTH0_DOMAIN"]
+    AUTH0_CLIENT_ID           = module.secret_manager.secret_ids["PRAXOS_AUTH0_CLIENT_ID"]
+    AUTH_JWKS_URL             = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER               = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE             = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
+    PRAXOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["PRAXOS_TOKEN_ENCRYPTION_KEY"]
   }
 
   depends_on = [
