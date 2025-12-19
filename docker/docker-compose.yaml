@@ -43,6 +43,28 @@ services:
       auth-service:
         condition: service_healthy
 
+  whatsapp-service:
+    build:
+      context: ..
+      dockerfile: apps/whatsapp-service/Dockerfile
+    ports:
+      - '8082:8080'
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      - LOG_LEVEL=debug
+    env_file:
+      - ../.env.local
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8080/health']
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    depends_on:
+      auth-service:
+        condition: service_healthy
+
 # For local development with GCP dependencies:
 # 1. Run: gcloud auth application-default login
 # 2. Create .env.local with your configuration (see docs/setup/05-local-dev-with-gcp-deps.md)

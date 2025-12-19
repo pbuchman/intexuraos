@@ -4,12 +4,13 @@
  * Firestore infrastructure adapter - implements domain persistence ports.
  *
  * Structure:
- * - client.ts                      Firestore client singleton
- * - authTokenRepository.ts         Per-user Auth0 token storage (encrypted)
- * - notionConnectionRepository.ts  Per-user Notion config storage
- * - idempotencyLedger.ts          Idempotency tracking
- * - encryption.ts                  Token encryption utilities
- * - testing/                       Test fakes for use in other packages
+ * - client.ts                           Firestore client singleton
+ * - authTokenRepository.ts              Per-user Auth0 token storage (encrypted)
+ * - notionConnectionRepository.ts       Per-user Notion config storage
+ * - idempotencyLedger.ts                Idempotency tracking
+ * - whatsappWebhookEventRepository.ts   WhatsApp webhook event storage
+ * - encryption.ts                       Token encryption utilities
+ * - testing/                            Test fakes for use in other packages
  */
 
 // Client
@@ -19,9 +20,19 @@ export { getFirestore, resetFirestore, setFirestore } from './client.js';
 export { FirestoreAuthTokenRepository } from './authTokenRepository.js';
 export { FirestoreNotionConnectionRepository } from './notionConnectionRepository.js';
 export { FirestoreIdempotencyLedger } from './idempotencyLedger.js';
+export {
+  FirestoreWhatsAppWebhookEventRepository,
+  type WhatsAppWebhookEvent,
+  type WhatsAppWebhookEventRepository,
+  type WebhookEventError,
+} from './whatsappWebhookEventRepository.js';
 
 // Encryption utilities
 export { encryptToken, decryptToken, generateEncryptionKey } from './encryption.js';
 
 // Testing utilities (for use by consuming packages)
-export { FakeNotionConnectionRepository, FakeIdempotencyLedger } from './testing/index.js';
+export {
+  FakeNotionConnectionRepository,
+  FakeIdempotencyLedger,
+  FakeWhatsAppWebhookEventRepository,
+} from './testing/index.js';
