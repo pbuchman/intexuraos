@@ -146,13 +146,13 @@ module "secret_manager" {
 
   secrets = {
     # Auth0 secrets
-    "PRAXOS_AUTH0_DOMAIN"         = "Auth0 tenant domain for Device Authorization Flow"
-    "PRAXOS_AUTH0_CLIENT_ID"      = "Auth0 Native app client ID for Device Authorization Flow"
-    "PRAXOS_AUTH_JWKS_URL"        = "Auth0 JWKS URL for JWT verification"
-    "PRAXOS_AUTH_ISSUER"          = "Auth0 issuer URL"
-    "PRAXOS_AUTH_AUDIENCE"        = "Auth0 audience identifier"
+    "PRAXOS_AUTH0_DOMAIN"             = "Auth0 tenant domain for Device Authorization Flow"
+    "PRAXOS_AUTH0_CLIENT_ID"          = "Auth0 Native app client ID for Device Authorization Flow"
+    "PRAXOS_AUTH_JWKS_URL"            = "Auth0 JWKS URL for JWT verification"
+    "PRAXOS_AUTH_ISSUER"              = "Auth0 issuer URL"
+    "PRAXOS_AUTH_AUDIENCE"            = "Auth0 audience identifier"
     # Token encryption key
-    "PRAXOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
+    "PRAXOS_TOKEN_ENCRYPTION_KEY"     = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
     "PRAXOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
     "PRAXOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
