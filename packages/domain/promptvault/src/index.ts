@@ -22,6 +22,7 @@ export type {
   NotionConnectionRepository,
   NotionApiPort,
   IdempotencyLedger,
+  CreatePromptVaultNoteParams,
 } from './ports.js';
 export {
   NOTION_ERROR_CODES,

@@ -103,6 +103,17 @@ export interface NotionConnectionRepository {
 }
 
 /**
+ * Parameters for creating a PromptVault note.
+ */
+export interface CreatePromptVaultNoteParams {
+  token: string;
+  parentPageId: string;
+  title: string;
+  prompt: string;
+  userId: string;
+}
+
+/**
  * Port for Notion API operations.
  */
 export interface NotionApiPort {
@@ -121,13 +132,15 @@ export interface NotionApiPort {
   ): Promise<Result<{ page: NotionPage; blocks: NotionBlock[] }, NotionError>>;
 
   /**
-   * Create a new page (note) as a child of the given parent.
+   * Create a PromptVault note with exact block structure:
+   * 1. heading_2: "Prompt"
+   * 2. code block (markdown): verbatim prompt content
+   * 3. heading_2: "Meta"
+   * 4. bulleted_list_item: "Source: GPT PromptVault"
+   * 5. bulleted_list_item: "UserId: {userId}"
    */
-  createPage(
-    token: string,
-    parentPageId: string,
-    title: string,
-    content: string
+  createPromptVaultNote(
+    params: CreatePromptVaultNoteParams
   ): Promise<Result<CreatedNote, NotionError>>;
 }
 

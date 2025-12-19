@@ -9,7 +9,16 @@ import type {
   NotionBlock,
   CreatedNote,
   NotionError,
+  CreatePromptVaultNoteParams,
 } from '@praxos/domain-promptvault';
+
+/**
+ * Captured PromptVault note creation call for test assertions.
+ */
+export interface CapturedPromptVaultNote {
+  params: CreatePromptVaultNoteParams;
+  result: CreatedNote;
+}
 
 /**
  * Mock implementation of NotionApiPort for testing.
@@ -17,6 +26,7 @@ import type {
  */
 export class MockNotionApiAdapter implements NotionApiPort {
   private pageCounter = 0;
+  private capturedNotes: CapturedPromptVaultNote[] = [];
 
   async validateToken(token: string): Promise<Result<boolean, NotionError>> {
     // Simulate invalid token for testing
@@ -46,28 +56,44 @@ export class MockNotionApiAdapter implements NotionApiPort {
     return await Promise.resolve(ok({ page, blocks }));
   }
 
-  async createPage(
-    _token: string,
-    _parentPageId: string,
-    title: string,
-    _content: string
+  async createPromptVaultNote(
+    params: CreatePromptVaultNoteParams
   ): Promise<Result<CreatedNote, NotionError>> {
     this.pageCounter++;
     const id = `note_${String(this.pageCounter).padStart(6, '0')}`;
 
-    return await Promise.resolve(
-      ok({
-        id,
-        url: `https://notion.so/${id.replace(/_/g, '-')}`,
-        title,
-      })
-    );
+    const result: CreatedNote = {
+      id,
+      url: `https://notion.so/${id.replace(/_/g, '-')}`,
+      title: params.title,
+    };
+
+    // Capture the call for test assertions
+    this.capturedNotes.push({ params, result });
+
+    return await Promise.resolve(ok(result));
   }
 
   /**
-   * Reset counter (for test cleanup).
+   * Get all captured PromptVault note creation calls.
+   * Useful for verifying verbatim storage and block structure.
+   */
+  getCapturedNotes(): CapturedPromptVaultNote[] {
+    return [...this.capturedNotes];
+  }
+
+  /**
+   * Get the last captured PromptVault note.
+   */
+  getLastCapturedNote(): CapturedPromptVaultNote | undefined {
+    return this.capturedNotes[this.capturedNotes.length - 1];
+  }
+
+  /**
+   * Reset counter and captured notes (for test cleanup).
    */
   reset(): void {
     this.pageCounter = 0;
+    this.capturedNotes = [];
   }
 }

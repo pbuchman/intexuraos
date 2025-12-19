@@ -270,19 +270,26 @@ describe('NotionApiAdapter', () => {
     });
   });
 
-  describe('createPage', () => {
+  describe('createPromptVaultNote', () => {
     const token = 'valid-token';
     const parentPageId = 'parent-123';
     const title = 'New Note';
-    const content = 'Note content';
+    const prompt = 'Note prompt content';
+    const userId = 'user-123';
 
-    it('creates page successfully', async () => {
+    it('creates page successfully with correct block structure', async () => {
       mockClient.pages.create.mockResolvedValue({
         id: 'new-page-123',
         url: 'https://notion.so/new-page-123',
       });
 
-      const result = await adapter.createPage(token, parentPageId, title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -290,6 +297,54 @@ describe('NotionApiAdapter', () => {
         expect(result.value.url).toBe('https://notion.so/new-page-123');
         expect(result.value.title).toBe(title);
       }
+
+      // Verify the block structure passed to Notion
+      expect(mockClient.pages.create).toHaveBeenCalledWith({
+        parent: { page_id: parentPageId },
+        properties: {
+          title: {
+            title: [{ text: { content: title } }],
+          },
+        },
+        children: [
+          {
+            object: 'block',
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ type: 'text', text: { content: 'Prompt' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'code',
+            code: {
+              rich_text: [{ type: 'text', text: { content: prompt } }],
+              language: 'markdown',
+            },
+          },
+          {
+            object: 'block',
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ type: 'text', text: { content: 'Meta' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: [{ type: 'text', text: { content: 'Source: GPT PromptVault' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: [{ type: 'text', text: { content: `UserId: ${userId}` } }],
+            },
+          },
+        ],
+      });
     });
 
     it('constructs URL when not provided', async () => {
@@ -298,7 +353,13 @@ describe('NotionApiAdapter', () => {
         // No 'url' property
       });
 
-      const result = await adapter.createPage(token, parentPageId, title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -311,7 +372,13 @@ describe('NotionApiAdapter', () => {
         createNotionError(APIErrorCode.ValidationError, 'Invalid parent')
       );
 
-      const result = await adapter.createPage(token, 'invalid-parent', title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId: 'invalid-parent',
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -324,7 +391,13 @@ describe('NotionApiAdapter', () => {
         createNotionError(APIErrorCode.InvalidJSON, 'Invalid JSON')
       );
 
-      const result = await adapter.createPage(token, parentPageId, title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -337,7 +410,13 @@ describe('NotionApiAdapter', () => {
         createNotionError(APIErrorCode.ObjectNotFound, 'Parent not found')
       );
 
-      const result = await adapter.createPage(token, 'missing-parent', title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId: 'missing-parent',
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -350,12 +429,45 @@ describe('NotionApiAdapter', () => {
         createNotionError(APIErrorCode.Unauthorized, 'Invalid token')
       );
 
-      const result = await adapter.createPage(token, parentPageId, title, content);
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt,
+        userId,
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('UNAUTHORIZED');
       }
+    });
+
+    it('stores prompt verbatim without modification', async () => {
+      mockClient.pages.create.mockResolvedValue({
+        id: 'new-page-verbatim',
+        url: 'https://notion.so/new-page-verbatim',
+      });
+
+      const verbatimPrompt = '  \n\n  Prompt with whitespace  \n\n  ';
+
+      await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt: verbatimPrompt,
+        userId,
+      });
+
+      // Verify the exact prompt was passed
+      const callArgs = mockClient.pages.create.mock.calls[0]?.[0] as {
+        children: {
+          type: string;
+          code?: { rich_text: { text: { content: string } }[] };
+        }[];
+      };
+      const codeBlock = callArgs.children.find((c) => c.type === 'code');
+      expect(codeBlock?.code?.rich_text[0]?.text.content).toBe(verbatimPrompt);
     });
   });
 

@@ -4,7 +4,7 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
 import { clearJwksCache } from '@praxos/common';
-import { FakeNotionConnectionRepository, FakeIdempotencyLedger } from '@praxos/infra-firestore';
+import { FakeNotionConnectionRepository } from '@praxos/infra-firestore';
 import { MockNotionApiAdapter } from '@praxos/infra-notion';
 
 describe('notion-gpt-service v1 endpoints', () => {
@@ -14,7 +14,6 @@ describe('notion-gpt-service v1 endpoints', () => {
 
   // Test adapter instances
   let connectionRepository: FakeNotionConnectionRepository;
-  let idempotencyLedger: FakeIdempotencyLedger;
   let notionApi: MockNotionApiAdapter;
 
   const issuer = 'https://test-issuer.example.com/';
@@ -81,14 +80,12 @@ describe('notion-gpt-service v1 endpoints', () => {
   beforeEach(async () => {
     // Create fresh test adapters from infra packages
     connectionRepository = new FakeNotionConnectionRepository();
-    idempotencyLedger = new FakeIdempotencyLedger();
     notionApi = new MockNotionApiAdapter();
 
     // Inject test adapters via DI
     setServices({
       connectionRepository,
       notionApi,
-      idempotencyLedger,
     });
 
     clearJwksCache();
@@ -417,8 +414,8 @@ describe('notion-gpt-service v1 endpoints', () => {
     });
   });
 
-  describe('POST /v1/tools/notion/note', () => {
-    it('fails with MISCONFIGURED when not connected', async () => {
+  describe('POST /v1/tools/notion/note (legacy endpoint - REMOVED)', () => {
+    it('returns 404 for the removed endpoint', async () => {
       const token = await createToken({ sub: 'user-note' });
 
       const response = await app.inject({
@@ -432,6 +429,24 @@ describe('notion-gpt-service v1 endpoints', () => {
         },
       });
 
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('POST /v1/tools/notion/promptvault/note', () => {
+    it('fails with MISCONFIGURED when not connected', async () => {
+      const token = await createToken({ sub: 'user-note' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Test Note',
+          prompt: 'Test prompt content',
+        },
+      });
+
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body) as {
         success: boolean;
@@ -441,7 +456,7 @@ describe('notion-gpt-service v1 endpoints', () => {
       expect(body.error.code).toBe('MISCONFIGURED');
     });
 
-    it('creates note with id and url', async () => {
+    it('creates note with pageId, url, and title in response', async () => {
       const token = await createToken({ sub: 'user-create-note' });
 
       // First connect
@@ -458,34 +473,34 @@ describe('notion-gpt-service v1 endpoints', () => {
       // Create note
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/note',
+        url: '/v1/tools/notion/promptvault/note',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'My Note',
-          content: 'Note content here',
-          idempotencyKey: 'idem-key-001',
+          prompt: 'My prompt content here',
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: {
-          created: { id: string; url: string; title: string };
-        };
+        data: { pageId: string; url: string; title: string };
+        diagnostics: { requestId: string; durationMs: number };
       };
       expect(body.success).toBe(true);
-      expect(body.data.created.id).toBeDefined();
-      expect(body.data.created.id.length).toBeGreaterThan(0);
-      expect(body.data.created.url).toBeDefined();
-      expect(body.data.created.url).toContain('notion.so');
-      expect(body.data.created.title).toBe('My Note');
+      expect(body.data.pageId).toBeDefined();
+      expect(body.data.pageId.length).toBeGreaterThan(0);
+      expect(body.data.url).toBeDefined();
+      expect(body.data.url).toContain('notion.so');
+      expect(body.data.title).toBe('My Note');
+      expect(body.diagnostics.requestId).toBeDefined();
+      expect(body.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
     });
 
-    it('returns same id/url for same idempotencyKey (idempotency)', async () => {
-      const token = await createToken({ sub: 'user-idempotency' });
+    it('stores prompt verbatim (no trimming or normalization)', async () => {
+      const token = await createToken({ sub: 'user-verbatim' });
 
-      // First connect
+      // Connect
       await app.inject({
         method: 'POST',
         url: '/v1/integrations/notion/connect',
@@ -496,42 +511,228 @@ describe('notion-gpt-service v1 endpoints', () => {
         },
       });
 
-      // Create note first time
-      const response1 = await app.inject({
+      // Prompt with whitespace, newlines, special chars that must be preserved
+      const verbatimPrompt = '  \n\nYou are an assistant.  \n\n  Use markdown.\n\n  ';
+
+      const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/note',
+        url: '/v1/tools/notion/promptvault/note',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Idempotent Note',
-          content: 'Content',
-          idempotencyKey: 'same-key-123',
+          title: 'Verbatim Test',
+          prompt: verbatimPrompt,
         },
       });
 
-      const body1 = JSON.parse(response1.body) as {
-        data: { created: { id: string; url: string } };
-      };
-      const firstId = body1.data.created.id;
-      const firstUrl = body1.data.created.url;
+      expect(response.statusCode).toBe(200);
 
-      // Create note second time with same key
-      const response2 = await app.inject({
+      // Verify the mock captured the exact prompt
+      const captured = notionApi.getLastCapturedNote();
+      expect(captured).toBeDefined();
+      expect(captured?.params.prompt).toBe(verbatimPrompt);
+      expect(captured?.params.userId).toBe('user-verbatim');
+    });
+
+    it('passes correct userId to Notion adapter', async () => {
+      const userId = 'auth0|specific-user-id-123';
+      const token = await createToken({ sub: userId });
+
+      // Connect
+      await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/note',
+        url: '/v1/integrations/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Different Title',
-          content: 'Different Content',
-          idempotencyKey: 'same-key-123',
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-id',
         },
       });
 
-      const body2 = JSON.parse(response2.body) as {
-        data: { created: { id: string; url: string } };
-      };
+      await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'User ID Test',
+          prompt: 'Some prompt',
+        },
+      });
 
-      expect(body2.data.created.id).toBe(firstId);
-      expect(body2.data.created.url).toBe(firstUrl);
+      const captured = notionApi.getLastCapturedNote();
+      expect(captured?.params.userId).toBe(userId);
+    });
+
+    it('rejects requests with extra fields (strict schema)', async () => {
+      const token = await createToken({ sub: 'user-strict' });
+
+      // Connect
+      await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-id',
+        },
+      });
+
+      // Try to create note with extra field
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Test',
+          prompt: 'Test prompt',
+          extraField: 'should be rejected',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects requests with missing title', async () => {
+      const token = await createToken({ sub: 'user-missing-title' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; details: { errors: { path: string }[] } };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.details.errors.some((e) => e.path === 'title')).toBe(true);
+    });
+
+    it('rejects requests with missing prompt', async () => {
+      const token = await createToken({ sub: 'user-missing-prompt' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Test Title',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; details: { errors: { path: string }[] } };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.details.errors.some((e) => e.path === 'prompt')).toBe(true);
+    });
+
+    it('rejects title exceeding max length (200 chars)', async () => {
+      const token = await createToken({ sub: 'user-long-title' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'x'.repeat(201),
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('accepts title at max length (200 chars)', async () => {
+      const token = await createToken({ sub: 'user-max-title' });
+
+      // Connect first
+      await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-id',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'x'.repeat(200),
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('rejects empty title', async () => {
+      const token = await createToken({ sub: 'user-empty-title' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: '',
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects empty prompt', async () => {
+      const token = await createToken({ sub: 'user-empty-prompt' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Test Title',
+          prompt: '',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('requires auth (401 without token)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/tools/notion/promptvault/note',
+        payload: {
+          title: 'Test',
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 
