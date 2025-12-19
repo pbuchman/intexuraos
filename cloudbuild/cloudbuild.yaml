@@ -168,6 +168,7 @@ steps:
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
 # No substitutions block here - all substitutions come from the Terraform-managed
 # Cloud Build trigger. This ensures single source of truth.

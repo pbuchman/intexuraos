@@ -101,6 +101,7 @@ resource "google_cloudbuild_trigger" "webhook_dev" {
     _REGION                = var.region
     _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
     _ENVIRONMENT           = var.environment
+    _FORCE_DEPLOY          = "false"
   }
 
   service_account = google_service_account.cloud_build.id
@@ -134,6 +135,7 @@ resource "google_cloudbuild_trigger" "manual_main" {
     _REGION                = var.region
     _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
     _ENVIRONMENT           = var.environment
+    _FORCE_DEPLOY          = "true"
   }
 
   service_account = google_service_account.cloud_build.id
