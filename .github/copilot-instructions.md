@@ -219,6 +219,7 @@ Always finish a task by running `npm run ci` and ensuring it passes. If terrafor
    - [ ] `npm run lint` passes
    - [ ] `npm run format:check` passes (run `npm run format` to fix)
    - [ ] `npm run test` passes
+   - [ ] **`npm run test:coverage` passes with ≥90% coverage** ← **MANDATORY**
    - [ ] If terraform files changed: `terraform fmt -check -recursive` passes (run `terraform fmt -recursive` to fix)
    - [ ] **`npm run ci` passes** ← **MANDATORY**
 
@@ -232,9 +233,21 @@ Always finish a task by running `npm run ci` and ensuring it passes. If terrafor
 
 ### Additional Requirements
 
+- **Coverage thresholds (non-negotiable):**
+  - Lines: ≥90%
+  - Branches: ≥85%
+  - Functions: ≥90%
+  - Statements: ≥90%
 - No new warnings introduced
 - Changes to logic have corresponding tests
 - Terraform changes validated (if applicable)
+
+**CRITICAL: Coverage is a quality gate**
+
+- Coverage below 90% is a **blocking failure**
+- Add tests until coverage meets thresholds
+- Do NOT claim task complete until coverage passes
+- Coverage check is part of `npm run ci` - it will fail if below threshold
 
 **CRITICAL: When adding or modifying workspace packages (@praxos/\*)**
 
@@ -254,7 +267,7 @@ Before claiming task complete, you MUST:
 - Run `terraform validate` in affected environments
 - See `.github/instructions/terraform.instructions.md` for full checklist
 
-**Do not claim "done" until the quality loop completes successfully. Running `npm run ci` and terraform checks (if applicable) is non-negotiable.**
+**Do not claim "done" until the quality loop completes successfully. Running `npm run ci` with passing coverage and terraform checks (if applicable) is non-negotiable.**
 
 ---
 
