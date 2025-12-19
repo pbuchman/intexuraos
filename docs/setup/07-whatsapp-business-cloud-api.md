@@ -389,24 +389,107 @@ curl -X POST "https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages" \
 ### Local Development (.env)
 
 ```bash
-# WhatsApp Business Cloud API
-WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
+# WhatsApp Business Cloud API - Required for whatsapp-service
+PRAXOS_WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
+PRAXOS_WHATSAPP_APP_SECRET=your-app-secret
+
+# Optional: for sending messages (not used by webhook service)
 WHATSAPP_ACCESS_TOKEN=your-access-token
 WHATSAPP_PHONE_NUMBER_ID=123456789012345
 WHATSAPP_WABA_ID=1234567890123456
-# Optional: for webhook signature validation
-WHATSAPP_APP_SECRET=your-app-secret
 ```
 
 ### Production (Secret Manager via Terraform)
 
-| Secret Name                       | Env Var                    | Purpose                      |
-| --------------------------------- | -------------------------- | ---------------------------- |
-| `PRAXOS_WHATSAPP_VERIFY_TOKEN`    | `WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
-| `PRAXOS_WHATSAPP_ACCESS_TOKEN`    | `WHATSAPP_ACCESS_TOKEN`    | API authentication           |
-| `PRAXOS_WHATSAPP_PHONE_NUMBER_ID` | `WHATSAPP_PHONE_NUMBER_ID` | Identify sender              |
-| `PRAXOS_WHATSAPP_WABA_ID`         | `WHATSAPP_WABA_ID`         | Business account ID          |
-| `PRAXOS_WHATSAPP_APP_SECRET`      | `WHATSAPP_APP_SECRET`      | Webhook signature validation |
+| Secret Name                       | Env Var                           | Purpose                      |
+| --------------------------------- | --------------------------------- | ---------------------------- |
+| `PRAXOS_WHATSAPP_VERIFY_TOKEN`    | `PRAXOS_WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
+| `PRAXOS_WHATSAPP_APP_SECRET`      | `PRAXOS_WHATSAPP_APP_SECRET`      | Webhook signature validation |
+| `PRAXOS_WHATSAPP_ACCESS_TOKEN`    | `PRAXOS_WHATSAPP_ACCESS_TOKEN`    | API authentication           |
+| `PRAXOS_WHATSAPP_PHONE_NUMBER_ID` | `PRAXOS_WHATSAPP_PHONE_NUMBER_ID` | Identify sender              |
+| `PRAXOS_WHATSAPP_WABA_ID`         | `PRAXOS_WHATSAPP_WABA_ID`         | Business account ID          |
+
+## PraxOS WhatsApp Service
+
+The `whatsapp-service` app provides webhook endpoints for receiving WhatsApp events.
+
+### Endpoints
+
+| Method | Path                 | Purpose                           | Auth         |
+| ------ | -------------------- | --------------------------------- | ------------ |
+| GET    | `/webhooks/whatsapp` | Webhook verification (Meta setup) | Verify token |
+| POST   | `/webhooks/whatsapp` | Receive webhook events            | Signature    |
+| GET    | `/health`            | Health check                      | None         |
+
+### Webhook Verification Flow
+
+When you configure the webhook URL in Meta's dashboard, Meta sends a GET request:
+
+```
+GET /webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=CHALLENGE
+```
+
+The service:
+
+1. Validates `hub.verify_token` matches `PRAXOS_WHATSAPP_VERIFY_TOKEN`
+2. Returns `hub.challenge` as plain text on success
+3. Returns 403 if token doesn't match
+
+### Webhook Event Flow
+
+For incoming messages and status updates, Meta sends POST requests:
+
+```
+POST /webhooks/whatsapp
+X-Hub-Signature-256: sha256=<hex-digest>
+Content-Type: application/json
+```
+
+The service:
+
+1. Validates `X-Hub-Signature-256` using `PRAXOS_WHATSAPP_APP_SECRET`
+2. Returns 401 if signature header is missing
+3. Returns 403 if signature is invalid
+4. Persists valid events to Firestore (`whatsapp_webhook_events` collection)
+5. Returns 200 to acknowledge receipt (prevents Meta retries)
+
+### Running Locally
+
+```bash
+# From repo root
+npm install
+
+# Set required environment variables
+export PRAXOS_WHATSAPP_VERIFY_TOKEN="your-verify-token"
+export PRAXOS_WHATSAPP_APP_SECRET="your-app-secret"
+
+# Build and run
+npm run build
+cd apps/whatsapp-service
+npm start
+```
+
+### Docker
+
+```bash
+# Build
+docker build -f apps/whatsapp-service/Dockerfile -t whatsapp-service .
+
+# Run
+docker run -p 8080:8080 \
+  -e PRAXOS_WHATSAPP_VERIFY_TOKEN="your-verify-token" \
+  -e PRAXOS_WHATSAPP_APP_SECRET="your-app-secret" \
+  whatsapp-service
+```
+
+### Docker Compose
+
+```bash
+# Start all services including whatsapp-service
+docker compose -f docker/docker-compose.yaml up --build
+```
+
+WhatsApp service is available at `http://localhost:8082`.
 
 ## Useful Links
 
