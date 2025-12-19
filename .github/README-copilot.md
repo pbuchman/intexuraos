@@ -23,12 +23,12 @@ This document explains how GitHub Copilot instructions are structured in this re
 
 GitHub Copilot loads instructions based on the file you're working in:
 
-| Working in | Instructions loaded |
-|------------|---------------------|
-| `apps/auth-service/src/routes.ts` | Global + `apps.instructions.md` |
-| `packages/domain/identity/src/user.ts` | Global + `packages.instructions.md` |
-| `terraform/main.tf` | Global + `terraform.instructions.md` |
-| `README.md` | Global only |
+| Working in                             | Instructions loaded                  |
+| -------------------------------------- | ------------------------------------ |
+| `apps/auth-service/src/routes.ts`      | Global + `apps.instructions.md`      |
+| `packages/domain/identity/src/user.ts` | Global + `packages.instructions.md`  |
+| `terraform/main.tf`                    | Global + `terraform.instructions.md` |
+| `README.md`                            | Global only                          |
 
 ### Path-Specific Frontmatter
 
@@ -36,7 +36,7 @@ Each path-specific file uses frontmatter to define scope:
 
 ```yaml
 ---
-applyTo: "apps/**"
+applyTo: 'apps/**'
 ---
 ```
 
@@ -64,6 +64,7 @@ If you add a new top-level directory (e.g., `/scripts`):
 ### Modifying Global Rules
 
 Edit `.github/copilot-instructions.md` only for rules that apply everywhere:
+
 - TypeScript/ESM standards
 - Testing philosophy
 - Global verification commands
@@ -76,10 +77,10 @@ Edit `.github/copilot-instructions.md` only for rules that apply everywhere:
 
 The CI workflow (`.github/workflows/ci.yml`) enforces quality gates:
 
-| Domain | Checks |
-|--------|--------|
-| Node/TS | lint, verify scripts, format, typecheck, test, build |
-| Terraform | fmt -check, validate (root, dev) |
+| Domain    | Checks                                               |
+| --------- | ---------------------------------------------------- |
+| Node/TS   | lint, verify scripts, format, typecheck, test, build |
+| Terraform | fmt -check, validate (root, dev)                     |
 
 **PRs cannot merge if any check fails.**
 
@@ -126,23 +127,27 @@ terraform validate
 Every task must complete these checks:
 
 ### Global (Always)
+
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
 - [ ] `npm run test` passes
 - [ ] `npm run ci` passes
 
 ### Apps Tasks
+
 - [ ] Logic changes have tests
 - [ ] Auth/validation changes have tests
 - [ ] No `any` without justification
 
 ### Packages Tasks
+
 - [ ] Boundary rules respected
 - [ ] Domain has no external dependencies
 - [ ] Infra properly wraps external services
 - [ ] Tests achieve 90%+ coverage
 
 ### Terraform Tasks
+
 - [ ] `terraform fmt -check -recursive` passes
 - [ ] `terraform validate` passes
 - [ ] No hard-coded secrets/regions
@@ -174,12 +179,14 @@ Every task must complete these checks:
 ## Maintenance
 
 Review and update instructions when:
+
 - Adding new verification steps
 - Changing project structure
 - Updating testing requirements
 - Adding new domains/directories
 
 Keep instructions:
+
 - **Concise** — no redundancy
 - **Verifiable** — with specific commands
 - **Current** — reflect actual project state
@@ -190,13 +197,14 @@ Keep instructions:
 
 Documentation follows minimal duplication principles:
 
-| Document | Single Purpose |
-|----------|----------------|
+| Document         | Single Purpose                   |
+| ---------------- | -------------------------------- |
 | Root `README.md` | Project overview and quick start |
-| `docs/` | All technical documentation |
-| Package READMEs | Brief purpose + link to docs |
+| `docs/`          | All technical documentation      |
+| Package READMEs  | Brief purpose + link to docs     |
 
 **Rules:**
+
 - Each document has ONE clear purpose
 - Do not duplicate content across files
 - Reference other documents instead of copying

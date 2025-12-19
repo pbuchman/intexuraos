@@ -12,4 +12,3 @@ describe('notionErrorCode', () => {
     expect(isNotionErrorCode('SOMETHING_ELSE')).toBe(false);
   });
 });
-

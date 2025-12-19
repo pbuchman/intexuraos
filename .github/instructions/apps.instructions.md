@@ -1,5 +1,5 @@
 ---
-applyTo: "apps/**"
+applyTo: 'apps/**'
 ---
 
 # Apps — Path-Specific Instructions
@@ -11,24 +11,28 @@ Applies to: `/apps` (auth-service, notion-gpt-service)
 ## Architecture
 
 ### Service Organization
+
 - Each app is a self-contained Fastify service.
 - Routes organized logically by domain/feature.
 - Proper error handling on every route.
 - Consistent response format.
 
 ### Authentication
+
 - Auth logic uses domain layer (packages/domain/identity).
 - Token validation is centralized.
 - Never expose sensitive data in responses.
 
 ### External Services
-- Use infra layer adapters (packages/infra/*).
+
+- Use infra layer adapters (packages/infra/\*).
 - Apps orchestrate domain + infra, contain no business logic.
 - Keep apps thin: delegate to domain and infra packages.
 
 ### Configuration
+
 - Environment variables via `.env` (local) or Secret Manager (production).
-- Use PRAXOS_* prefix for all secret names.
+- Use PRAXOS\_\* prefix for all secret names.
 - No hard-coded credentials.
 
 ---
@@ -36,6 +40,7 @@ Applies to: `/apps` (auth-service, notion-gpt-service)
 ## Code Quality
 
 ### No Obvious Comments
+
 - Comments explain **why**, not **what**.
 - Do not add comments that restate the code.
 - Delete worthless comments.
@@ -101,7 +106,7 @@ npm run ci            # Full CI suite
 - [ ] No new ESLint or TS warnings
 - [ ] Auth/validation changes have tests
 - [ ] Route changes are minimal and focused
-- [ ] Secrets use PRAXOS_* naming convention
+- [ ] Secrets use PRAXOS\_\* naming convention
 - [ ] Apps remain thin (business logic in domain, integrations in infra)
 
 **Verification is not optional.**

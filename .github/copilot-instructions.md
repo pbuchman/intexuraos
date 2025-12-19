@@ -84,6 +84,7 @@ praxos/
 ### 7. External Contracts
 
 Do not change casually:
+
 - HTTP response shapes
 - Message formats
 - Database schemas
@@ -176,15 +177,15 @@ Violations:
 
 Run from repo root:
 
-| Check | Command |
-|-------|---------|
-| Lint all | `npm run lint` |
-| Format check | `npm run format:check` |
-| Typecheck all | `npm run typecheck` |
-| Test all | `npm run test` |
-| Coverage | `npm run test:coverage` |
-| Build all | `npm run build` |
-| Full CI | `npm run ci` |
+| Check         | Command                 |
+| ------------- | ----------------------- |
+| Lint all      | `npm run lint`          |
+| Format check  | `npm run format:check`  |
+| Typecheck all | `npm run typecheck`     |
+| Test all      | `npm run test`          |
+| Coverage      | `npm run test:coverage` |
+| Build all     | `npm run build`         |
+| Full CI       | `npm run ci`            |
 
 Always finish a task by running `npm run ci` and ensuring it passes.
 
@@ -232,6 +233,7 @@ This ensures rules persist across sessions and are enforced consistently.
 ## Path-Specific Instructions
 
 Detailed rules for each domain are in:
+
 - `.github/instructions/apps.instructions.md` — Apps/Services
 - `.github/instructions/packages.instructions.md` — Packages (common/domain/infra)
 - `.github/instructions/terraform.instructions.md` — Infrastructure

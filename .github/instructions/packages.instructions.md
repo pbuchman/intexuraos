@@ -1,10 +1,10 @@
 ---
-applyTo: "packages/**"
+applyTo: 'packages/**'
 ---
 
 # Packages — Path-Specific Instructions
 
-Applies to: `/packages` (common, domain/*, infra/*)
+Applies to: `/packages` (common, domain/_, infra/_)
 
 ---
 
@@ -18,6 +18,7 @@ Applies to: `/packages` (common, domain/*, infra/*)
 4. **apps** — can import from anything
 
 **Violations are caught by:**
+
 - ESLint `boundaries` plugin (real-time)
 - `npm run verify:boundaries` (CI)
 
@@ -26,12 +27,14 @@ Applies to: `/packages` (common, domain/*, infra/*)
 **Purpose:** Pure business logic, no external dependencies.
 
 **Rules:**
+
 - No imports from `infra` or `apps`.
 - No direct access to external services (Firestore, Auth0, Notion, etc.).
 - Use Result types for operations that can fail.
 - All logic is testable without mocks.
 
 **Examples:**
+
 - User validation, identity logic
 - Prompt template logic
 - Action definitions
@@ -41,12 +44,14 @@ Applies to: `/packages` (common, domain/*, infra/*)
 **Purpose:** External service adapters.
 
 **Rules:**
+
 - Wraps external SDKs (Firestore, Auth0, Notion).
 - Translates external formats to domain types.
 - Handles authentication, network errors, retries.
 - Can import from `domain` to return domain types.
 
 **Examples:**
+
 - Firestore client wrapper
 - Auth0 client wrapper
 - Notion API client
@@ -56,6 +61,7 @@ Applies to: `/packages` (common, domain/*, infra/*)
 **Purpose:** Shared utilities with no business logic.
 
 **Rules:**
+
 - Result types, type guards, formatters.
 - No domain-specific logic.
 - No external dependencies except TypeScript utilities.
@@ -65,6 +71,7 @@ Applies to: `/packages` (common, domain/*, infra/*)
 ## Code Quality
 
 ### No Obvious Comments
+
 - Comments explain **why**, not **what**.
 - Do not add comments that restate the code.
 - Delete worthless comments.
@@ -110,10 +117,12 @@ Applies to: `/packages` (common, domain/*, infra/*)
 ## Boundary Verification
 
 Boundaries are enforced by:
+
 1. **ESLint boundaries plugin** (real-time in editor)
 2. **verify-boundaries.mjs script** (CI)
 
 **Forbidden:**
+
 - ❌ domain importing from infra
 - ❌ domain importing from apps
 - ❌ infra importing from apps

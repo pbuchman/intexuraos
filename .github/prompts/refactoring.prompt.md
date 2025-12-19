@@ -5,6 +5,7 @@ PREREQUISITES
 ================================================================================
 
 **You MUST read these files first — they contain all coding rules:**
+
 - `.github/copilot-instructions.md` — global rules
 - `.github/instructions/apps.instructions.md` — apps (services) rules
 - `.github/instructions/packages.instructions.md` — packages (domain/infra) rules
@@ -36,6 +37,7 @@ Refactor in this order (highest impact first):
 ## Phase 3: Execution
 
 For each change:
+
 1. Make the change.
 2. Run `npm run typecheck && npm run lint && npm run test`.
 3. If tests fail, fix before proceeding.
@@ -44,11 +46,13 @@ For each change:
 ## Phase 4: Verification
 
 Final checks before completion:
+
 ```bash
 npm run ci   # runs all checks: lint, verify scripts, format, typecheck, test, build
 ```
 
 For Terraform (if touched):
+
 ```bash
 cd terraform && terraform fmt -check -recursive && terraform validate
 ```
@@ -59,12 +63,12 @@ DECISION RULES
 
 When uncertain:
 
-| Situation | Decision |
-|-----------|----------|
-| Extract utility or keep inline? | Extract if used 2+ times |
-| Add test or skip? | Add if logic has branches or error paths |
-| Fix now or defer? | Fix if <5 min, otherwise create TODO with issue reference |
-| Which layer for logic? | Domain for business logic, Infra for external integrations |
+| Situation                       | Decision                                                   |
+| ------------------------------- | ---------------------------------------------------------- |
+| Extract utility or keep inline? | Extract if used 2+ times                                   |
+| Add test or skip?               | Add if logic has branches or error paths                   |
+| Fix now or defer?               | Fix if <5 min, otherwise create TODO with issue reference  |
+| Which layer for logic?          | Domain for business logic, Infra for external integrations |
 
 ================================================================================
 OUTPUT

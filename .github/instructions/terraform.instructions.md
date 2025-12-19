@@ -1,5 +1,5 @@
 ---
-applyTo: "terraform/**"
+applyTo: 'terraform/**'
 ---
 
 # Terraform — Path-Specific Instructions
@@ -11,10 +11,12 @@ Applies to: `/terraform`
 ## Architecture
 
 ### Module Organization
+
 - Reusable modules in `/terraform/modules/`.
 - Environment-specific configs in `/terraform/environments/`.
 
 ### Conventions
+
 - Use descriptive resource names.
 - Tag all resources appropriately.
 - Document non-obvious configurations.
@@ -23,11 +25,13 @@ Applies to: `/terraform`
 ### Parameterization
 
 **Forbidden:**
+
 - Hard-coded secrets
 - Hard-coded regions (unless truly constant)
 - Hard-coded project IDs
 
 **Required:**
+
 - Use variables for environment-specific values.
 - Use locals for computed values.
 - Use data sources for dynamic lookups.
