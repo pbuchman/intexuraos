@@ -15,6 +15,13 @@ resource "google_service_account" "notion_gpt_service" {
   description  = "Service account for notion-gpt-service Cloud Run deployment"
 }
 
+# Service account for whatsapp-service
+resource "google_service_account" "whatsapp_service" {
+  account_id   = "praxos-whatsapp-svc-${var.environment}"
+  display_name = "PraxOS WhatsApp Service (${var.environment})"
+  description  = "Service account for whatsapp-service Cloud Run deployment"
+}
+
 # Service account for api-docs-hub
 resource "google_service_account" "api_docs_hub" {
   account_id   = "praxos-docs-hub-${var.environment}"
@@ -40,11 +47,27 @@ resource "google_secret_manager_secret_iam_member" "notion_gpt_service_secrets" 
   member    = "serviceAccount:${google_service_account.notion_gpt_service.email}"
 }
 
+# WhatsApp service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.whatsapp_service.email}"
+}
+
 # Notion GPT service: Firestore access
 resource "google_project_iam_member" "notion_gpt_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.notion_gpt_service.email}"
+}
+
+# WhatsApp service: Firestore access
+resource "google_project_iam_member" "whatsapp_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
 # Auth service: Firestore access (for future session/token storage)
@@ -65,6 +88,13 @@ resource "google_project_iam_member" "notion_gpt_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.notion_gpt_service.email}"
+}
+
+# WhatsApp service: Cloud Logging
+resource "google_project_iam_member" "whatsapp_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
 # API Docs Hub: Cloud Logging
