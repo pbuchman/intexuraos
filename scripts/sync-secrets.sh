@@ -21,8 +21,15 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENVRC_FILE="${SCRIPT_DIR}/../.envrc"
 
-# Start with PROJECT_ID
-echo "export PROJECT_ID=${PROJECT_ID}" > "${ENVRC_FILE}"
+# Static variables (not from Secret Manager)
+REGION="${REGION:-europe-central2}"
+REGISTRY="${REGISTRY:-europe-central2-docker.pkg.dev/${PROJECT_ID}/praxos-dev}"
+
+cat > "${ENVRC_FILE}" << EOF
+export PROJECT_ID=${PROJECT_ID}
+export REGION=${REGION}
+export REGISTRY=${REGISTRY}
+EOF
 
 # Get all PRAXOS secrets and append to .envrc
 for secret in $(gcloud secrets list --project="${PROJECT_ID}" --format="value(name)" | grep "^PRAXOS_"); do

@@ -110,24 +110,20 @@ resource "google_cloudbuild_trigger" "webhook_dev" {
 }
 
 # -----------------------------------------------------------------------------
-# Manual Trigger for Main Branch
+# Manual Trigger (Manual invocation only)
 # -----------------------------------------------------------------------------
 
 resource "google_cloudbuild_trigger" "manual_main" {
   name        = "praxos-${var.environment}-manual"
-  description = "Manual trigger for main branch deployment"
+  description = "Manual trigger - force deploys all services"
   location    = var.region
 
-  repository_event_config {
+  # Use source_to_build for manual triggers (no automatic event)
+  source_to_build {
     repository = google_cloudbuildv2_repository.praxos.id
-
-    push {
-      branch = "^main$"
-    }
+    ref        = "refs/heads/main"
+    repo_type  = "GITHUB"
   }
-
-  # Disable automatic triggers - this is manual only
-  disabled = true
 
   filename = "cloudbuild/cloudbuild.yaml"
 
@@ -139,6 +135,4 @@ resource "google_cloudbuild_trigger" "manual_main" {
   }
 
   service_account = google_service_account.cloud_build.id
-
-  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 }
