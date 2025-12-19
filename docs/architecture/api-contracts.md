@@ -180,9 +180,47 @@ Each service exposes OpenAPI documentation.
 ### Rules
 
 - OpenAPI spec must include unified response schema components.
-- Spec must be generated, not hand-written.
+- Spec must be generated at runtime by Fastify, not hand-written.
 - Spec must include all error codes.
 - Swagger UI must be accessible without authentication.
+- No build-time OpenAPI generation or CI validation of specs.
+
+### Runtime OpenAPI Aggregation
+
+PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates OpenAPI specs from all services.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    api-docs-hub                             │
+│                                                             │
+│  GET /docs → Swagger UI with service selector dropdown      │
+│                                                             │
+│  Fetches specs at runtime from:                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ AUTH_SERVICE_OPENAPI_URL → Auth Service /openapi.json   ││
+│  │ NOTION_GPT_SERVICE_OPENAPI_URL → Notion GPT /openapi.json│
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Key Characteristics
+
+- **Runtime-only**: OpenAPI specs are generated and served at runtime by each service.
+- **No caching**: api-docs-hub fetches specs directly from target services.
+- **No proxying**: Users' browsers fetch specs directly from service URLs.
+- **Environment-driven**: Service URLs are injected via environment variables by Terraform.
+- **Not a source of truth**: api-docs-hub is a pure UI aggregator with no business logic.
+
+#### Environment Variables
+
+| Variable                         | Description                            |
+| -------------------------------- | -------------------------------------- |
+| `AUTH_SERVICE_OPENAPI_URL`       | URL to auth-service OpenAPI JSON       |
+| `NOTION_GPT_SERVICE_OPENAPI_URL` | URL to notion-gpt-service OpenAPI JSON |
+
+These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
 
 ### Schema Components
 

@@ -78,6 +78,13 @@ locals {
       min_scale = 0
       max_scale = 2
     }
+    api_docs_hub = {
+      name      = "praxos-api-docs-hub"
+      app_path  = "apps/api-docs-hub"
+      port      = 8080
+      min_scale = 0
+      max_scale = 2
+    }
   }
 
   common_labels = {
@@ -219,6 +226,36 @@ module "notion_gpt_service" {
   ]
 }
 
+# API Docs Hub - Aggregated OpenAPI documentation
+module "api_docs_hub" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.api_docs_hub.name
+  service_account = module.iam.service_accounts["api_docs_hub"]
+  port            = local.services.api_docs_hub.port
+  min_scale       = local.services.api_docs_hub.min_scale
+  max_scale       = local.services.api_docs_hub.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/api-docs-hub:latest"
+
+  # Plain env vars for OpenAPI URLs (not secrets)
+  env_vars = {
+    AUTH_SERVICE_OPENAPI_URL       = "${module.auth_service.service_url}/openapi.json"
+    NOTION_GPT_SERVICE_OPENAPI_URL = "${module.notion_gpt_service.service_url}/openapi.json"
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.auth_service,
+    module.notion_gpt_service,
+  ]
+}
+
 # Cloud Build Trigger
 module "cloud_build" {
   source = "../../modules/cloud-build"
@@ -253,6 +290,11 @@ output "auth_service_url" {
 output "notion_gpt_service_url" {
   description = "Notion GPT Service URL"
   value       = module.notion_gpt_service.service_url
+}
+
+output "api_docs_hub_url" {
+  description = "API Docs Hub URL"
+  value       = module.api_docs_hub.service_url
 }
 
 output "firestore_database" {

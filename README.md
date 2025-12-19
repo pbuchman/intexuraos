@@ -9,6 +9,22 @@ Notion models the world. PraxOS executes.
 - [API Contracts](./docs/architecture/api-contracts.md)
 - [Branding](./docs/assets/branding/README.md)
 
+## API Documentation
+
+Access aggregated API documentation for all PraxOS services via the API Docs Hub:
+
+- **Production**: Available at the `api_docs_hub_url` Terraform output
+- **Local Development**: Run `api-docs-hub` locally with required environment variables
+
+The API Docs Hub provides a unified Swagger UI interface with a dropdown to select between:
+
+- Auth Service API
+- Notion GPT Service API
+
+Each service also exposes its own documentation at `/docs` and `/openapi.json`.
+
+For details on the runtime OpenAPI aggregation architecture, see [API Contracts](./docs/architecture/api-contracts.md#runtime-openapi-aggregation).
+
 ## Setup Guides
 
 1. [GCP Project Setup](./docs/setup/01-gcp-project.md)
