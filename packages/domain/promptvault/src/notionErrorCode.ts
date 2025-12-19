@@ -11,4 +11,3 @@ export type NotionErrorCodeRuntime = (typeof NOTION_ERROR_CODES)[number];
 export function isNotionErrorCode(value: string): value is NotionErrorCodeRuntime {
   return (NOTION_ERROR_CODES as readonly string[]).includes(value);
 }
-

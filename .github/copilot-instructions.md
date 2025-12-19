@@ -1,12 +1,18 @@
-# PraxOS Copilot Instructions
+# PraxOS — Global Copilot Instructions
+
+These rules apply to **all code changes** in this repository.
+Path-specific rules are in `.github/instructions/*.instructions.md`.
+
+---
 
 ## Repository Structure
 
 ```
 praxos/
 ├── apps/                    # Deployable services (Fastify)
-│   ├── auth-service/
-│   └── notion-gpt-service/
+│   ├── auth-service/        # Example: authentication service
+│   ├── notion-gpt-service/  # Example: Notion integration service
+│   └── api-docs-hub/        # Example: API documentation hub
 ├── packages/
 │   ├── common/              # Shared utilities (Result types, etc.)
 │   ├── domain/              # Business logic, no external dependencies
@@ -22,6 +28,74 @@ praxos/
 └── docker/                  # Docker configurations
 ```
 
+---
+
+## Non-Negotiable Global Rules
+
+### 1. TypeScript Correctness
+
+- Zero `tsc` errors across all packages and apps.
+- Forbidden: `@ts-ignore`, `@ts-expect-error`, unsafe casts.
+- `any` allowed only with inline justification.
+- Explicit return types on all exported functions.
+
+**Enforcement:** `npm run typecheck` (part of CI)
+
+### 2. Zero Warnings
+
+- No TypeScript warnings.
+- No ESLint warnings.
+- No test runner warnings.
+- No unused imports, variables, deprecated APIs.
+- Always remove unused imports/exports as part of each change before considering a task complete.
+
+**If tooling reports it, you fix it.**
+
+**Enforcement:** `npm run lint` (part of CI)
+
+### 3. ESM Only
+
+- Use `import` / `export`.
+- No `require()`, no `module.exports`.
+
+**Enforcement:** TypeScript configuration, ESLint rules
+
+### 4. No Dead Code
+
+- Remove unused code immediately.
+- No TODO without issue reference or clear justification.
+
+**Enforcement:** Manual review, ESLint unused variable detection
+
+### 5. No Magic Strings
+
+- Extract constants or use configuration.
+- No copy-pasted logic — create shared utilities.
+
+**Enforcement:** Code review
+
+### 6. No Obvious Comments
+
+- Do not add comments that restate what code does.
+- Comments explain **why**, not **what**.
+- Delete worthless comments: `// increment counter`, `// return the value`.
+
+**Enforcement:** Code review
+
+### 7. External Contracts
+
+Do not change casually:
+
+- HTTP response shapes
+- Message formats
+- Database schemas
+
+If unavoidable: explicit, minimal, documented.
+
+**Enforcement:** Manual review, testing
+
+---
+
 ## No Trash Policy
 
 - No dead code. Remove unused imports, functions, variables.
@@ -29,6 +103,10 @@ praxos/
 - No warnings. ESLint must pass with zero warnings. All rules are errors.
 - No commented-out code blocks.
 - No `any` types. Use proper typing or `unknown` with type guards.
+
+**Enforcement:** Covered by global rules above
+
+---
 
 ## Boundary Rules
 
@@ -45,12 +123,20 @@ Violations:
 - ❌ domain importing from apps
 - ❌ infra importing from apps
 
+**Enforcement:** ESLint boundaries plugin + `npm run verify:boundaries` (part of CI)
+
+---
+
 ## Documentation Policy
 
 - All documentation lives in `docs/`
 - READMEs outside `docs/` must only contain:
   - Brief purpose statement
   - Links to relevant docs
+
+**Enforcement:** Manual review (planned: automated verification)
+
+---
 
 ## Testing Requirements
 
@@ -59,6 +145,23 @@ Violations:
 - Use Vitest
 - Test files: `*.test.ts` or `*.spec.ts`
 
+**Enforcement:** vitest.config.ts thresholds + `npm run test:coverage` (part of CI)
+
+### Forbidden Tests
+
+- "renders without crashing" tests
+- Snapshot-only tests
+- Tests asserting only mock calls
+- Tests that pass after breaking real logic
+
+### Required Properties
+
+- Assert **observable behavior**.
+- Fail on **realistic regressions**.
+- Mock external systems (Auth0, Firestore, Notion, Chrome APIs), not the system under test.
+
+---
+
 ## Code Style
 
 - TypeScript ESM (NodeNext)
@@ -66,6 +169,97 @@ Violations:
 - Explicit return types on all functions
 - No implicit any
 - Use Result types for operations that can fail
+
+**Enforcement:** TypeScript configuration (tsconfig.base.json), ESLint rules
+
+---
+
+## Verification Commands
+
+Run from repo root:
+
+| Check         | Command                 |
+| ------------- | ----------------------- |
+| Lint all      | `npm run lint`          |
+| Format check  | `npm run format:check`  |
+| Typecheck all | `npm run typecheck`     |
+| Test all      | `npm run test`          |
+| Coverage      | `npm run test:coverage` |
+| Build all     | `npm run build`         |
+| Full CI       | `npm run ci`            |
+
+Always finish a task by running `npm run ci` and ensuring it passes.
+
+---
+
+## Task Completion Checklist
+
+**When you finish ANY task, you MUST:**
+
+- [ ] `npm run typecheck` passes
+- [ ] `npm run lint` passes
+- [ ] `npm run test` passes
+- [ ] **`npm run ci` passes** ← **MANDATORY before claiming task complete**
+- [ ] No new warnings introduced
+- [ ] Changes to logic have corresponding tests
+- [ ] Path-specific checklist completed (see `.github/instructions/*.instructions.md`)
+
+**Do not claim "done" until verified. Running `npm run ci` is non-negotiable.**
+
+---
+
+## Honesty Rules
+
+- Do not claim work is complete unless it actually is.
+- Do not bluff about coverage or correctness.
+- If ambiguous: make a reasonable decision and document it.
+
+---
+
+## Output Preferences
+
+**When presenting information or summaries:**
+
+- **Prefer `show_content` tool** if available (displays in dedicated window)
+- Use structured output (markdown, tables) for clarity
+- Keep inline responses concise when tool is preferred
+
+---
+
+## Instruction Maintenance
+
+**REQUIRED: Keep these instruction files up to date.**
+
+When a new rule, pattern, or approach is established during development:
+
+1. **Immediately update** the appropriate instruction file:
+   - Global rules → `.github/copilot-instructions.md`
+   - Apps-specific → `.github/instructions/apps.instructions.md`
+   - Packages-specific → `.github/instructions/packages.instructions.md`
+   - Terraform-specific → `.github/instructions/terraform.instructions.md`
+
+2. **When asked to remember an approach:**
+   - Document it in the relevant instruction file
+   - Ensure it's verifiable (command or file reference)
+   - Add to task completion checklist if it's a new verification step
+
+This ensures rules persist across sessions and are enforced consistently.
+
+**Enforcement:** This is a non-negotiable requirement. Failing to update instructions breaks continuity.
+
+---
+
+## Path-Specific Instructions
+
+Detailed rules for each domain are in:
+
+- `.github/instructions/apps.instructions.md` — Apps/Services
+- `.github/instructions/packages.instructions.md` — Packages (common/domain/infra)
+- `.github/instructions/terraform.instructions.md` — Infrastructure
+
+These are loaded automatically based on the file path you're working in.
+
+---
 
 ## Branding Rules
 
