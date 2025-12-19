@@ -1,7 +1,11 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import { requireAuth } from '@praxos/common';
-import { connectRequestSchema, createNoteRequestSchema, webhookRequestSchema } from './schemas.js';
+import {
+  connectRequestSchema,
+  createPromptVaultNoteRequestSchema,
+  webhookRequestSchema,
+} from './schemas.js';
 import { getServices } from '../services.js';
 
 /**
@@ -155,12 +159,20 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     });
   });
 
-  // POST /v1/tools/notion/note
-  fastify.post('/v1/tools/notion/note', async (request, reply) => {
+  // POST /v1/tools/notion/promptvault/note
+  fastify.post('/v1/tools/notion/promptvault/note', async (request, reply) => {
     const user = await requireAuth(request, reply);
     if (user === null) return;
 
-    const { connectionRepository, notionApi, idempotencyLedger } = getServices();
+    // Validate request body first (before checking connection)
+    const parseResult = createPromptVaultNoteRequestSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      return await handleValidationError(parseResult.error, reply);
+    }
+
+    const { title, prompt } = parseResult.data;
+
+    const { connectionRepository, notionApi } = getServices();
 
     // Check if connected
     const connectedResult = await connectionRepository.isConnected(user.userId);
@@ -174,27 +186,6 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
         'MISCONFIGURED',
         'Notion integration is not configured. Call POST /v1/integrations/notion/connect first.'
       );
-    }
-
-    const parseResult = createNoteRequestSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return await handleValidationError(parseResult.error, reply);
-    }
-
-    const { title, content, idempotencyKey } = parseResult.data;
-
-    // Check idempotency ledger
-    const existingResult = await idempotencyLedger.get(user.userId, idempotencyKey);
-    if (!existingResult.ok) {
-      return await reply.fail('DOWNSTREAM_ERROR', existingResult.error.message);
-    }
-
-    const existingNote = existingResult.value;
-    if (existingNote !== null) {
-      // Return cached result
-      return await reply.ok({
-        created: existingNote,
-      });
     }
 
     // Get token
@@ -219,19 +210,25 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     const parentPageId = config.promptVaultPageId;
 
-    // Create page in Notion
-    const createResult = await notionApi.createPage(token, parentPageId, title, content);
+    // Create PromptVault note in Notion with exact block structure
+    const createResult = await notionApi.createPromptVaultNote({
+      token,
+      parentPageId,
+      title,
+      prompt,
+      userId: user.userId,
+    });
+
     if (!createResult.ok) {
       return await reply.fail('DOWNSTREAM_ERROR', createResult.error.message);
     }
 
     const createdNote = createResult.value;
 
-    // Store in idempotency ledger
-    await idempotencyLedger.set(user.userId, idempotencyKey, createdNote);
-
     return await reply.ok({
-      created: createdNote,
+      pageId: createdNote.id,
+      url: createdNote.url,
+      title: createdNote.title,
     });
   });
 

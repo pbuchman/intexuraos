@@ -236,31 +236,32 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               },
             },
           },
-          CreateNoteRequest: {
+          CreatePromptVaultNoteRequest: {
             type: 'object',
-            required: ['title', 'content', 'idempotencyKey'],
+            required: ['title', 'prompt'],
+            additionalProperties: false,
             properties: {
-              title: { type: 'string', minLength: 1 },
-              content: { type: 'string', minLength: 1 },
-              idempotencyKey: {
+              title: {
                 type: 'string',
                 minLength: 1,
-                description: 'Unique key for idempotent note creation',
+                maxLength: 200,
+                description: 'Note title (max 200 characters)',
+              },
+              prompt: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 100000,
+                description: 'Prompt content stored verbatim (max 100,000 characters)',
               },
             },
           },
-          CreateNoteResponse: {
+          CreatePromptVaultNoteResponse: {
             type: 'object',
+            required: ['pageId', 'url', 'title'],
             properties: {
-              created: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  url: { type: 'string' },
-                  title: { type: 'string' },
-                },
-                required: ['id', 'url', 'title'],
-              },
+              pageId: { type: 'string', description: 'Notion page ID' },
+              url: { type: 'string', description: 'Notion page URL' },
+              title: { type: 'string', description: 'Note title' },
             },
           },
           WebhookResponse: {

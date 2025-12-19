@@ -12,6 +12,7 @@ import type {
   CreatedNote,
   NotionError,
   NotionErrorCode,
+  CreatePromptVaultNoteParams,
 } from '@praxos/domain-promptvault';
 
 /**
@@ -168,12 +169,11 @@ export class NotionApiAdapter implements NotionApiPort {
     }
   }
 
-  async createPage(
-    token: string,
-    parentPageId: string,
-    title: string,
-    content: string
+  async createPromptVaultNote(
+    params: CreatePromptVaultNoteParams
   ): Promise<Result<CreatedNote, NotionError>> {
+    const { token, parentPageId, title, prompt, userId } = params;
+
     try {
       const client = new Client({ auth: token });
 
@@ -187,9 +187,38 @@ export class NotionApiAdapter implements NotionApiPort {
         children: [
           {
             object: 'block',
-            type: 'paragraph',
-            paragraph: {
-              rich_text: [{ type: 'text', text: { content } }],
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ type: 'text', text: { content: 'Prompt' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'code',
+            code: {
+              rich_text: [{ type: 'text', text: { content: prompt } }],
+              language: 'markdown',
+            },
+          },
+          {
+            object: 'block',
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ type: 'text', text: { content: 'Meta' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: [{ type: 'text', text: { content: 'Source: GPT PromptVault' } }],
+            },
+          },
+          {
+            object: 'block',
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: [{ type: 'text', text: { content: `UserId: ${userId}` } }],
             },
           },
         ],

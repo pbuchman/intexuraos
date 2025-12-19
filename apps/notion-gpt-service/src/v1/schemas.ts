@@ -11,15 +11,25 @@ export const connectRequestSchema = z.object({
 export type ConnectRequest = z.infer<typeof connectRequestSchema>;
 
 /**
- * POST /v1/tools/notion/note
+ * POST /v1/tools/notion/promptvault/note
+ *
+ * Schema constraints:
+ * - title: max 200 characters (Notion page title practical limit)
+ * - prompt: max 100,000 characters (Notion code block can handle large content;
+ *   if chunking is needed in the future, implement deterministic splitting)
+ * - strict: rejects any additional fields not in the schema
  */
-export const createNoteRequestSchema = z.object({
-  title: z.string().min(1, 'title is required'),
-  content: z.string().min(1, 'content is required'),
-  idempotencyKey: z.string().min(1, 'idempotencyKey is required'),
-});
+export const createPromptVaultNoteRequestSchema = z
+  .object({
+    title: z.string().min(1, 'title is required').max(200, 'title must be at most 200 characters'),
+    prompt: z
+      .string()
+      .min(1, 'prompt is required')
+      .max(100000, 'prompt must be at most 100,000 characters'),
+  })
+  .strict();
 
-export type CreateNoteRequest = z.infer<typeof createNoteRequestSchema>;
+export type CreatePromptVaultNoteRequest = z.infer<typeof createPromptVaultNoteRequestSchema>;
 
 /**
  * POST /v1/webhooks/notion
