@@ -3,14 +3,15 @@
  * Detect affected services based on git diff.
  *
  * Rules:
- * - packages/common/** affects both services
+ * - packages/common/** affects all services
  * - apps/auth-service/** affects auth-service
  * - apps/notion-gpt-service/** affects notion-gpt-service
- * - packages/domain/** affects both services
- * - packages/infra/** affects both services
+ * - apps/whatsapp-service/** affects whatsapp-service
+ * - packages/domain/** affects all services
+ * - packages/infra/** affects all services
  *
  * Output: /workspace/affected.json
- * Format: { "services": ["auth-service", "notion-gpt-service"] }
+ * Format: { "services": ["auth-service", "notion-gpt-service", "whatsapp-service"] }
  */
 
 import { execSync } from 'node:child_process';
@@ -34,6 +35,16 @@ const SERVICE_DEPS = {
   ],
   'notion-gpt-service': [
     'apps/notion-gpt-service/',
+    'packages/common/',
+    'packages/domain/',
+    'packages/infra/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
+  'whatsapp-service': [
+    'apps/whatsapp-service/',
     'packages/common/',
     'packages/domain/',
     'packages/infra/',

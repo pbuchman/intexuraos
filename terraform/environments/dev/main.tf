@@ -78,6 +78,13 @@ locals {
       min_scale = 0
       max_scale = 2
     }
+    whatsapp_service = {
+      name      = "praxos-whatsapp-service"
+      app_path  = "apps/whatsapp-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 2
+    }
     api_docs_hub = {
       name      = "praxos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
@@ -240,6 +247,34 @@ module "notion_gpt_service" {
   ]
 }
 
+# WhatsApp Service - WhatsApp Business Cloud API webhooks
+module "whatsapp_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.whatsapp_service.name
+  service_account = module.iam.service_accounts["whatsapp_service"]
+  port            = local.services.whatsapp_service.port
+  min_scale       = local.services.whatsapp_service.min_scale
+  max_scale       = local.services.whatsapp_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
+
+  secrets = {
+    PRAXOS_WHATSAPP_VERIFY_TOKEN = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_VERIFY_TOKEN"]
+    PRAXOS_WHATSAPP_APP_SECRET   = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_APP_SECRET"]
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # API Docs Hub - Aggregated OpenAPI documentation
 module "api_docs_hub" {
   source = "../../modules/cloud-run-service"
@@ -260,6 +295,7 @@ module "api_docs_hub" {
   env_vars = {
     AUTH_SERVICE_OPENAPI_URL       = "${module.auth_service.service_url}/openapi.json"
     NOTION_GPT_SERVICE_OPENAPI_URL = "${module.notion_gpt_service.service_url}/openapi.json"
+    WHATSAPP_SERVICE_OPENAPI_URL   = "${module.whatsapp_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -267,6 +303,7 @@ module "api_docs_hub" {
     module.iam,
     module.auth_service,
     module.notion_gpt_service,
+    module.whatsapp_service,
   ]
 }
 
@@ -304,6 +341,11 @@ output "auth_service_url" {
 output "notion_gpt_service_url" {
   description = "Notion GPT Service URL"
   value       = module.notion_gpt_service.service_url
+}
+
+output "whatsapp_service_url" {
+  description = "WhatsApp Service URL"
+  value       = module.whatsapp_service.service_url
 }
 
 output "api_docs_hub_url" {

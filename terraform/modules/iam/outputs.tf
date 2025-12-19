@@ -3,6 +3,7 @@ output "service_accounts" {
   value = {
     auth_service       = google_service_account.auth_service.email
     notion_gpt_service = google_service_account.notion_gpt_service.email
+    whatsapp_service   = google_service_account.whatsapp_service.email
     api_docs_hub       = google_service_account.api_docs_hub.email
   }
 }
@@ -15,6 +16,11 @@ output "auth_service_sa" {
 output "notion_gpt_service_sa" {
   description = "Notion GPT service service account email"
   value       = google_service_account.notion_gpt_service.email
+}
+
+output "whatsapp_service_sa" {
+  description = "WhatsApp service service account email"
+  value       = google_service_account.whatsapp_service.email
 }
 
 output "api_docs_hub_sa" {

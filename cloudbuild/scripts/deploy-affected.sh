@@ -76,6 +76,9 @@ get_cloud_run_name() {
     notion-gpt-service)
       echo "praxos-notion-gpt-service"
       ;;
+    whatsapp-service)
+      echo "praxos-whatsapp-service"
+      ;;
     *)
       echo ""
       ;;

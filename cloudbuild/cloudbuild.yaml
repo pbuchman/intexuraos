@@ -66,7 +66,23 @@ steps:
           echo "notion-gpt-service not affected, skipping build."
         fi
 
-  # Step 7: Push auth-service image (if affected)
+  # Step 7: Build whatsapp-service Docker image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-whatsapp-service'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building whatsapp-service..."
+          docker build -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+            -f apps/whatsapp-service/Dockerfile .
+        else
+          echo "whatsapp-service not affected, skipping build."
+        fi
+
+  # Step 8: Push auth-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-auth-service'
     entrypoint: 'bash'
@@ -81,7 +97,7 @@ steps:
           echo "auth-service not affected, skipping push."
         fi
 
-  # Step 8: Push notion-gpt-service image (if affected)
+  # Step 9: Push notion-gpt-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-notion-gpt-service'
     entrypoint: 'bash'
@@ -96,7 +112,22 @@ steps:
           echo "notion-gpt-service not affected, skipping push."
         fi
 
-  # Step 9: Deploy affected services to Cloud Run
+  # Step 10: Push whatsapp-service image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-whatsapp-service'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing whatsapp-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
+        else
+          echo "whatsapp-service not affected, skipping push."
+        fi
+
+  # Step 11: Deploy affected services to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-affected'
     entrypoint: 'bash'
