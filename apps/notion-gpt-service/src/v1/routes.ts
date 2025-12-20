@@ -364,7 +364,7 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      const { prompts, hasMore, nextCursor } = result.value;
+      const {prompts, hasMore, nextCursor } = result.value;
 
       return await reply.ok({
         prompts: prompts.map((p) => ({
@@ -376,7 +376,7 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
           url: p.url,
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
-          ...(includeContent && 'content' in p ? { content: p.content } : {}),
+          ...(includeContent === true && 'content' in p ? { content: p.content } : {}),
         })),
         hasMore,
         nextCursor: nextCursor ?? null,

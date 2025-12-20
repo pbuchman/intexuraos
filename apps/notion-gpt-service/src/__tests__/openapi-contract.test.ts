@@ -87,7 +87,8 @@ describe('notion-gpt-service OpenAPI contract', () => {
     expect(paths?.['/v1/integrations/notion/status']).toBeDefined();
     expect(paths?.['/v1/integrations/notion/disconnect']).toBeDefined();
     expect(paths?.['/v1/tools/notion/promptvault/main-page']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/note']).toBeDefined();
+    expect(paths?.['/v1/tools/notion/promptvault/prompts']).toBeDefined();
+    expect(paths?.['/v1/tools/notion/promptvault/prompts/{promptId}']).toBeDefined();
     expect(paths?.['/v1/webhooks/notion']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
@@ -105,7 +106,8 @@ describe('notion-gpt-service OpenAPI contract', () => {
       '/v1/integrations/notion/status',
       '/v1/integrations/notion/disconnect',
       '/v1/tools/notion/promptvault/main-page',
-      '/v1/tools/notion/promptvault/note',
+      '/v1/tools/notion/promptvault/prompts',
+      '/v1/tools/notion/promptvault/prompts/{promptId}',
     ];
 
     for (const endpoint of protectedEndpoints) {
@@ -113,7 +115,7 @@ describe('notion-gpt-service OpenAPI contract', () => {
       expect(methods).toBeDefined();
       if (methods === undefined) continue;
       for (const [method, operation] of Object.entries(methods)) {
-        if (method !== 'get' && method !== 'post') continue;
+        if (method !== 'get' && method !== 'post' && method !== 'patch') continue;
         expect(
           operation.security,
           `${method.toUpperCase()} ${endpoint} should have security`

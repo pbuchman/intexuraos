@@ -67,23 +67,17 @@ function mapNotionError(error: unknown): NotionError {
  * Extract title from Notion page properties.
  */
 function extractPageTitle(page: PageObjectResponse): string {
-  if (!('properties' in page)) {
-    return 'Untitled';
-  }
-
   const titleProp =
     page.properties['title'] ??
     page.properties['Title'] ??
     page.properties['Name'] ??
     page.properties['name'];
 
-  if (
-    titleProp !== null &&
-    typeof titleProp === 'object' &&
-    'title' in titleProp &&
-    Array.isArray(titleProp.title)
-  ) {
-    return titleProp.title.map((t: { plain_text?: string }) => t.plain_text ?? '').join('');
+  if (typeof titleProp === 'object' && 'title' in titleProp) {
+    const titleArray = (titleProp as { title: { plain_text?: string }[] }).title;
+    if (Array.isArray(titleArray)) {
+      return titleArray.map((t) => t.plain_text ?? '').join('');
+    }
   }
 
   return 'Untitled';
@@ -147,8 +141,8 @@ function parsePromptBlocks(blocks: BlockObjectResponse[]): ParsedBlocks {
         }
       } else if (text.startsWith('Source:')) {
         const sourcePart = text.substring(7).trim();
-        const match = sourcePart.match(/^(gpt|manual|import)(\s+\((.+)\))?/i);
-        if (match !== null && match[1] !== undefined) {
+        const match = /^(gpt|manual|import)(\s+\((.+)\))?/i.exec(sourcePart);
+        if (match?.[1] !== undefined) {
           const type = match[1].toLowerCase() as 'gpt' | 'manual' | 'import';
           const details = match[3];
           source = details !== undefined ? { type, details } : { type, details: undefined };
@@ -305,7 +299,7 @@ export class NotionPromptRepository implements PromptRepository {
         });
       }
 
-      const page = response as PageObjectResponse;
+      const page = response;
       const { createdAt, updatedAt } = extractTimestamps(page);
       const url = page.url;
 
@@ -385,7 +379,7 @@ export class NotionPromptRepository implements PromptRepository {
           try {
             const page = await client.pages.retrieve({ page_id: (block as { id: string }).id });
             if ('properties' in page) {
-              pages.push(page as PageObjectResponse);
+              pages.push(page);
             }
           } catch {
             continue;
@@ -394,7 +388,7 @@ export class NotionPromptRepository implements PromptRepository {
       }
 
       // Fetch page details
-      const prompts: Array<Prompt | PromptSummary> = [];
+      const prompts: (Prompt | PromptSummary)[] = [];
       for (const pageObj of pages) {
         try {
           const title = extractPageTitle(pageObj);
@@ -437,7 +431,7 @@ export class NotionPromptRepository implements PromptRepository {
               url,
             });
           }
-        } catch (e) {
+        } catch {
           // Skip pages that fail to load
           continue;
         }
@@ -479,7 +473,7 @@ export class NotionPromptRepository implements PromptRepository {
         });
       }
 
-      const pageObj = page as PageObjectResponse;
+      const pageObj = page;
       const title = extractPageTitle(pageObj);
       const { createdAt, updatedAt } = extractTimestamps(pageObj);
       const url = pageObj.url;
