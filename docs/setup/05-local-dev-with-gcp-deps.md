@@ -4,7 +4,7 @@ This document describes how to run PraxOS services locally while using GCP Fires
 
 ## Overview
 
-Local development uses:
+Local uses:
 
 - **Local services**: Node.js processes via `docker-compose` or `npm run dev`
 - **Remote Firestore**: Dev project's Firestore database
@@ -60,7 +60,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 Create `.env.local` in the repository root (gitignored):
 
 ```bash
-# .env.local - Local development environment
+# .env.local - Local environment
 # DO NOT COMMIT THIS FILE
 
 # GCP Project (for Firestore and Secret Manager)

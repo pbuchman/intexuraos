@@ -83,7 +83,7 @@ function getDiffRange() {
     }
   }
 
-  // Local development fallback
+  // Local fallback
   return 'HEAD~1..HEAD';
 }
 

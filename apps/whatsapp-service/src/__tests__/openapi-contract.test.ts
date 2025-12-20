@@ -70,7 +70,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(servers?.length).toBe(2);
 
     expect(servers?.[0]?.url).toBe('http://localhost:8082');
-    expect(servers?.[0]?.description).toBe('Local development');
+    expect(servers?.[0]?.description).toBe('Local');
 
     expect(servers?.[1]?.url).toBe('https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app');
     expect(servers?.[1]?.description).toBe('Cloud (Development)');

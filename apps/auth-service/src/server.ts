@@ -55,7 +55,7 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: local development and Cloud Run deployment
   const servers = [
-    { url: 'http://localhost:8080', description: 'Local development' },
+    { url: 'http://localhost:8080', description: 'Local' },
     {
       url: 'https://praxos-auth-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
