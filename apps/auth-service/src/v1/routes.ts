@@ -78,6 +78,8 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/auth/device/start',
     {
       schema: {
+        operationId: 'startDeviceAuth',
+        summary: 'Start Device Authorization Flow',
         description: 'Start Device Authorization Flow. Returns device code and user code.',
         tags: ['auth'],
         body: {
@@ -194,6 +196,8 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/auth/device/poll',
     {
       schema: {
+        operationId: 'pollDeviceAuth',
+        summary: 'Poll for token',
         description:
           'Poll for token after user authorization. Returns CONFLICT (409) if authorization pending.',
         tags: ['auth'],
@@ -364,6 +368,8 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/auth/refresh',
     {
       schema: {
+        operationId: 'refreshToken',
+        summary: 'Refresh access token',
         description: 'Refresh access token using stored refresh token.',
         tags: ['auth'],
         body: {
@@ -526,6 +532,8 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/auth/config',
     {
       schema: {
+        operationId: 'getAuthConfig',
+        summary: 'Get auth configuration',
         description: 'Get non-secret auth configuration for troubleshooting.',
         tags: ['auth'],
         response: {

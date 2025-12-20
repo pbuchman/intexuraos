@@ -99,6 +99,8 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
+  const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? 'http://localhost:8081';
+
   return {
     openapi: {
       info: {
@@ -106,13 +108,15 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         description: 'PraxOS Notion GPT Service - Integration layer for GPT Actions with Notion',
         version: SERVICE_VERSION,
       },
+      servers: [{ url: publicBaseUrl }],
       components: {
         securitySchemes: {
           bearerAuth: {
             type: 'http',
             scheme: 'bearer',
+            bearerFormat: 'JWT',
             description:
-              'Step 5 stub auth: any token accepted, userId derived from first 12 chars. Step 6 will replace with JWT validation.',
+              'JWT token validated via JWKS. Token must include valid iss (issuer), aud (audience), and sub (user ID) claims.',
           },
         },
         schemas: {
@@ -348,10 +352,13 @@ export async function buildServer(): Promise<FastifyInstance> {
     '/health',
     {
       schema: {
+        operationId: 'getHealth',
+        summary: 'Health check',
         description: 'Health check endpoint',
         tags: ['system'],
         response: {
           200: {
+            description: 'Service health status',
             type: 'object',
             required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
             properties: {

@@ -32,9 +32,16 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/integrations/notion/connect',
     {
       schema: {
+        operationId: 'connectNotion',
+        summary: 'Connect Notion integration',
         description: 'Connect Notion integration for the authenticated user',
         tags: ['integrations'],
         security: [{ bearerAuth: [] }],
+        response: {
+          200: { description: 'Connection successful' },
+          401: { description: 'Unauthorized' },
+          502: { description: 'Downstream error' },
+        },
       },
     },
     async (request, reply) => {
@@ -74,9 +81,16 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/integrations/notion/status',
     {
       schema: {
+        operationId: 'getNotionStatus',
+        summary: 'Get Notion integration status',
         description: 'Get Notion integration status for the authenticated user',
         tags: ['integrations'],
         security: [{ bearerAuth: [] }],
+        response: {
+          200: { description: 'Status retrieved successfully' },
+          401: { description: 'Unauthorized' },
+          502: { description: 'Downstream error' },
+        },
       },
     },
     async (request, reply) => {
@@ -106,9 +120,16 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/integrations/notion/disconnect',
     {
       schema: {
+        operationId: 'disconnectNotion',
+        summary: 'Disconnect Notion integration',
         description: 'Disconnect Notion integration for the authenticated user',
         tags: ['integrations'],
         security: [{ bearerAuth: [] }],
+        response: {
+          200: { description: 'Disconnection successful' },
+          401: { description: 'Unauthorized' },
+          502: { description: 'Downstream error' },
+        },
       },
     },
     async (request, reply) => {
@@ -136,9 +157,17 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/tools/notion/promptvault/main-page',
     {
       schema: {
+        operationId: 'getPromptVaultMainPage',
+        summary: 'Get PromptVault main page',
         description: 'Get the main PromptVault page from Notion',
         tags: ['tools'],
         security: [{ bearerAuth: [] }],
+        response: {
+          200: { description: 'Page retrieved successfully' },
+          401: { description: 'Unauthorized' },
+          502: { description: 'Downstream error' },
+          503: { description: 'Service misconfigured' },
+        },
       },
     },
     async (request, reply) => {
@@ -204,9 +233,18 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/tools/notion/promptvault/note',
     {
       schema: {
+        operationId: 'createPromptVaultNote',
+        summary: 'Create PromptVault note',
         description: 'Create a new note in the PromptVault',
         tags: ['tools'],
         security: [{ bearerAuth: [] }],
+        response: {
+          200: { description: 'Note created successfully' },
+          400: { description: 'Invalid request' },
+          401: { description: 'Unauthorized' },
+          502: { description: 'Downstream error' },
+          503: { description: 'Service misconfigured' },
+        },
       },
     },
     async (request, reply) => {
@@ -287,8 +325,14 @@ export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/v1/webhooks/notion',
     {
       schema: {
-        description: 'Receive Notion webhooks',
+        operationId: 'receiveNotionWebhook',
+        summary: 'Receive Notion webhooks',
+        description: 'Receive Notion webhooks (stub - accepts any JSON)',
         tags: ['webhooks'],
+        response: {
+          200: { description: 'Webhook received' },
+          400: { description: 'Invalid request' },
+        },
       },
     },
     async (request, reply) => {

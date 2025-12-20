@@ -53,6 +53,8 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
+  const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? 'http://localhost:8080';
+
   return {
     openapi: {
       info: {
@@ -60,6 +62,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         description: 'PraxOS Authentication Service - Device Authorization Flow helpers',
         version: SERVICE_VERSION,
       },
+      servers: [{ url: publicBaseUrl }],
       components: {
         schemas: {
           ApiOk: {
@@ -260,10 +263,13 @@ export async function buildServer(): Promise<FastifyInstance> {
     '/health',
     {
       schema: {
+        operationId: 'getHealth',
+        summary: 'Health check',
         description: 'Health check endpoint',
         tags: ['system'],
         response: {
           200: {
+            description: 'Service health status',
             type: 'object',
             required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
             properties: {

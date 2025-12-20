@@ -87,6 +87,8 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
+  const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? 'http://localhost:8082';
+
   return {
     openapi: {
       info: {
@@ -94,6 +96,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         description: 'PraxOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
         version: SERVICE_VERSION,
       },
+      servers: [{ url: publicBaseUrl }],
       components: {
         schemas: {
           ApiOk: {
@@ -179,10 +182,13 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     '/health',
     {
       schema: {
+        operationId: 'getHealth',
+        summary: 'Health check',
         description: 'Health check endpoint',
         tags: ['system'],
         response: {
           200: {
+            description: 'Service health status',
             type: 'object',
             required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
             properties: {
