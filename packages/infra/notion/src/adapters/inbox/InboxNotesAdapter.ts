@@ -78,7 +78,8 @@ function extractRichText(prop: unknown): string {
     Array.isArray((prop as { rich_text: unknown[] }).rich_text)
   ) {
     const richTextArray = (prop as { rich_text: { plain_text?: string }[] }).rich_text;
-    return richTextArray.map((t) => t.plain_text ?? '').join('');
+    const text = richTextArray.map((t) => t.plain_text ?? '').join('');
+    return text;
   }
   return '';
 }
@@ -128,7 +129,7 @@ function extractDate(prop: unknown): Date | undefined {
     typeof (prop as { date: { start?: string } }).date === 'object'
   ) {
     const start = (prop as { date: { start?: string } }).date.start;
-    if (start) {
+    if (start !== undefined && start !== '') {
       return new Date(start);
     }
   }
@@ -158,7 +159,7 @@ function extractRelationIds(prop: unknown): string[] {
 function extractUrl(prop: unknown): string | undefined {
   if (typeof prop === 'object' && prop !== null && 'url' in prop) {
     const url = (prop as { url: unknown }).url;
-    return typeof url === 'string' ? url : undefined;
+    return typeof url === 'string' && url !== '' ? url : undefined;
   }
   return undefined;
 }
@@ -185,24 +186,38 @@ function extractTitle(prop: unknown): string {
 function pageToInboxNote(page: { id: string; properties: Record<string, unknown> }): InboxNote {
   const props = page.properties;
 
+  const cleanText = extractRichText(props['Clean text']);
+  const transcript = extractRichText(props['Transcript']);
+  const sender = extractRichText(props['Sender']);
+  const externalId = extractRichText(props['External ID']);
+  const processingRunId = extractRichText(props['Processing run id']);
+  const errors = extractRichText(props['Errors']);
+
+  // Extract select values that might be missing
+  const statusValue = extractSelect(props['Status']) as InboxNote['status'] | undefined;
+  const sourceValue = extractSelect(props['Source']) as InboxNote['source'] | undefined;
+  const messageTypeValue = extractSelect(props['Message type']) as InboxNote['messageType'] | undefined;
+  const typeValue = extractSelect(props['Type']) as InboxNote['type'] | undefined;
+  const processedByValue = extractSelect(props['Processed by']) as InboxNote['processedBy'] | undefined;
+
   return {
     id: page.id,
     title: extractTitle(props['Title']),
-    status: (extractSelect(props['Status']) as InboxNote['status']) ?? 'Inbox',
-    source: (extractSelect(props['Source']) as InboxNote['source']) ?? 'WhatsApp',
-    messageType: (extractSelect(props['Message type']) as InboxNote['messageType']) ?? 'Text',
-    type: (extractSelect(props['Type']) as InboxNote['type']) ?? 'Other',
+    status: statusValue ?? 'Inbox',
+    source: sourceValue ?? 'WhatsApp',
+    messageType: messageTypeValue ?? 'Text',
+    type: typeValue ?? 'Other',
     topics: extractMultiSelect(props['Topic']) as InboxNote['topics'],
     originalText: extractRichText(props['Original text']),
-    cleanText: extractRichText(props['Clean text']) || undefined,
-    transcript: extractRichText(props['Transcript']) || undefined,
+    cleanText: cleanText !== '' ? cleanText : undefined,
+    transcript: transcript !== '' ? transcript : undefined,
     media: [], // Media files are complex, skipping for now
     capturedAt: extractDate(props['Captured at']) ?? new Date(),
-    sender: extractRichText(props['Sender']) || undefined,
-    externalId: extractRichText(props['External ID']) || undefined,
-    processingRunId: extractRichText(props['Processing run id']) || undefined,
-    processedBy: (extractSelect(props['Processed by']) as InboxNote['processedBy']) ?? 'None',
-    errors: extractRichText(props['Errors']) || undefined,
+    sender: sender !== '' ? sender : undefined,
+    externalId: externalId !== '' ? externalId : undefined,
+    processingRunId: processingRunId !== '' ? processingRunId : undefined,
+    processedBy: processedByValue ?? 'None',
+    errors: errors !== '' ? errors : undefined,
     actionIds: extractRelationIds(props['Actions']),
     url: extractUrl(props['URL']),
   };
@@ -238,22 +253,22 @@ export class InboxNotesAdapter implements InboxNotesRepository {
           'Original text': {
             rich_text: [{ text: { content: params.originalText } }],
           },
-          ...(params.cleanText && {
+          ...(params.cleanText !== undefined && params.cleanText !== '' && {
             'Clean text': {
               rich_text: [{ text: { content: params.cleanText } }],
             },
           }),
-          ...(params.transcript && {
+          ...(params.transcript !== undefined && params.transcript !== '' && {
             Transcript: {
               rich_text: [{ text: { content: params.transcript } }],
             },
           }),
-          ...(params.sender && {
+          ...(params.sender !== undefined && params.sender !== '' && {
             Sender: {
               rich_text: [{ text: { content: params.sender } }],
             },
           }),
-          ...(params.externalId && {
+          ...(params.externalId !== undefined && params.externalId !== '' && {
             'External ID': {
               rich_text: [{ text: { content: params.externalId } }],
             },
@@ -263,7 +278,7 @@ export class InboxNotesAdapter implements InboxNotesRepository {
           'Captured at': {
             date: { start: params.capturedAt.toISOString() },
           },
-          ...(params.url && {
+          ...(params.url !== undefined && params.url !== '' && {
             URL: { url: params.url },
           }),
         },
@@ -341,7 +356,7 @@ export class InboxNotesAdapter implements InboxNotesRepository {
     try {
       const properties: Record<string, Record<string, unknown>> = {};
 
-      if (params.status) {
+      if (params.status !== undefined) {
         properties['Status'] = { select: { name: params.status } };
       }
       if (params.cleanText !== undefined) {
@@ -354,7 +369,7 @@ export class InboxNotesAdapter implements InboxNotesRepository {
           rich_text: [{ text: { content: params.transcript } }],
         };
       }
-      if (params.processedBy) {
+      if (params.processedBy !== undefined) {
         properties['Processed by'] = { select: { name: params.processedBy } };
       }
       if (params.processingRunId !== undefined) {
@@ -377,7 +392,7 @@ export class InboxNotesAdapter implements InboxNotesRepository {
           multi_select: params.topics.map((t) => ({ name: t })),
         };
       }
-      if (params.type) {
+      if (params.type !== undefined) {
         properties['Type'] = { select: { name: params.type } };
       }
 

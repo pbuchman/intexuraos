@@ -71,7 +71,7 @@ function mapMessageType(waType: WhatsAppMessage['type']): CreateInboxNoteParams[
  * Generate title from message content.
  */
 function generateTitle(message: WhatsAppMessage): string {
-  if (message.text) {
+  if (message.text !== undefined && message.text !== '') {
     const truncated = message.text.slice(0, 50);
     return `WA: ${truncated}${message.text.length > 50 ? '...' : ''}`;
   }
@@ -111,7 +111,8 @@ export class IngestWhatsAppMessage {
       externalId: message.messageId,
       type: 'Other', // Default classification
       topics: [], // No automatic topic assignment yet
-      media: message.mediaUrl && message.mediaFilename
+      media: (message.mediaUrl !== undefined && message.mediaUrl !== '' && 
+              message.mediaFilename !== undefined && message.mediaFilename !== '')
         ? [{
             name: message.mediaFilename,
             url: message.mediaUrl,

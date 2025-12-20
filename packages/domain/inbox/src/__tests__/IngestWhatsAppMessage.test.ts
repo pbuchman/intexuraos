@@ -55,7 +55,9 @@ describe('IngestWhatsAppMessage', () => {
       expect(result.value.externalId).toBe('wamid.123');
     }
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockRepository.getByExternalId).toHaveBeenCalledWith('wamid.123');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'WhatsApp',
@@ -149,7 +151,9 @@ describe('IngestWhatsAppMessage', () => {
       expect(result.value.id).toBe('note-existing');
     }
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockRepository.getByExternalId).toHaveBeenCalledWith('wamid.duplicate');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockRepository.create).not.toHaveBeenCalled();
   });
 
@@ -199,6 +203,7 @@ describe('IngestWhatsAppMessage', () => {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         messageType: 'Audio',
