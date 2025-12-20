@@ -4,6 +4,32 @@ import { webhookVerifyQuerySchema, type WebhookPayload } from './schemas.js';
 import { validateWebhookSignature, SIGNATURE_HEADER } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
+import type { WhatsAppMessage } from '@praxos/domain-inbox';
+
+/**
+ * Extract WhatsApp messages from webhook payload.
+ */
+function extractWhatsAppMessages(payload: WebhookPayload): WhatsAppMessage[] {
+  const messages: WhatsAppMessage[] = [];
+
+  for (const entry of payload.entry) {
+    for (const change of entry.changes) {
+      if (change.value.messages) {
+        for (const msg of change.value.messages) {
+          messages.push({
+            messageId: msg.id,
+            from: msg.from,
+            timestamp: msg.timestamp,
+            type: msg.type as WhatsAppMessage['type'],
+            text: msg.text?.body,
+          });
+        }
+      }
+    }
+  }
+
+  return messages;
+}
 
 /**
  * Handle Zod validation errors.
@@ -229,8 +255,8 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
         // Extract phone number ID from payload
         const phoneNumberId = extractPhoneNumberId(request.body);
 
-        // Persist webhook event
-        const { webhookEventRepository } = getServices();
+        // Persist webhook event (raw payload)
+        const { webhookEventRepository, ingestWhatsAppMessage } = getServices(config);
         const saveResult = await webhookEventRepository.saveEvent({
           payload: request.body,
           signatureValid: true,
@@ -241,6 +267,24 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
         if (!saveResult.ok) {
           // Log error but still return 200 to prevent Meta retries
           request.log.error({ error: saveResult.error }, 'Failed to persist webhook event');
+        }
+
+        // Extract and ingest WhatsApp messages to Notion Inbox
+        const messages = extractWhatsAppMessages(request.body);
+        for (const message of messages) {
+          const ingestResult = await ingestWhatsAppMessage.execute(message);
+          if (!ingestResult.ok) {
+            // Log error but continue processing other messages
+            request.log.error(
+              { error: ingestResult.error, messageId: message.messageId },
+              'Failed to ingest message to Notion Inbox'
+            );
+          } else {
+            request.log.info(
+              { noteId: ingestResult.value.id, messageId: message.messageId },
+              'Successfully ingested message to Notion Inbox'
+            );
+          }
         }
 
         return await reply.ok({ received: true });

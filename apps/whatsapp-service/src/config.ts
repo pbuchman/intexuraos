@@ -22,6 +22,16 @@ const configSchema = z.object({
   appSecret: z.string().min(1, 'PRAXOS_WHATSAPP_APP_SECRET is required'),
 
   /**
+   * Notion API token for inbox ingestion.
+   */
+  notionToken: z.string().min(1, 'PRAXOS_NOTION_TOKEN is required'),
+
+  /**
+   * Notion Inbox Notes database ID (data source ID).
+   */
+  notionInboxDatabaseId: z.string().min(1, 'PRAXOS_NOTION_INBOX_DATABASE_ID is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -42,6 +52,8 @@ export function loadConfig(): Config {
   return configSchema.parse({
     verifyToken: process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'],
     appSecret: process.env['PRAXOS_WHATSAPP_APP_SECRET'],
+    notionToken: process.env['PRAXOS_NOTION_TOKEN'],
+    notionInboxDatabaseId: process.env['PRAXOS_NOTION_INBOX_DATABASE_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -52,6 +64,11 @@ export function loadConfig(): Config {
  * Returns list of missing variables.
  */
 export function validateConfigEnv(): string[] {
-  const required = ['PRAXOS_WHATSAPP_VERIFY_TOKEN', 'PRAXOS_WHATSAPP_APP_SECRET'];
+  const required = [
+    'PRAXOS_WHATSAPP_VERIFY_TOKEN',
+    'PRAXOS_WHATSAPP_APP_SECRET',
+    'PRAXOS_NOTION_TOKEN',
+    'PRAXOS_NOTION_INBOX_DATABASE_ID',
+  ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

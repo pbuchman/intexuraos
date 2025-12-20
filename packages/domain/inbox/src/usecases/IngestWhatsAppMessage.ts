@@ -34,17 +34,17 @@ export interface WhatsAppMessage {
   /**
    * Text content (for text messages).
    */
-  text?: string;
+  text?: string | undefined;
 
   /**
    * Media URL (for media messages).
    */
-  mediaUrl?: string;
+  mediaUrl?: string | undefined;
 
   /**
    * Media filename (for media messages).
    */
-  mediaFilename?: string;
+  mediaFilename?: string | undefined;
 }
 
 /**

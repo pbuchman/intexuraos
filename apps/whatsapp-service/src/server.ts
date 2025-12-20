@@ -40,7 +40,7 @@ function checkSecrets(): HealthCheck {
   };
 }
 
-async function checkFirestore(): Promise<HealthCheck> {
+async function checkFirestore(_config: Config): Promise<HealthCheck> {
   const start = Date.now();
 
   // Skip actual Firestore check in test environment
@@ -216,7 +216,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     },
     async (_req, reply) => {
       const started = Date.now();
-      const firestoreCheck = await checkFirestore();
+      const firestoreCheck = await checkFirestore(config);
       const checks: HealthCheck[] = [checkSecrets(), firestoreCheck];
       const status = computeOverallStatus(checks);
 

@@ -13,6 +13,8 @@ describe('whatsapp-service endpoints', () => {
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    notionToken: 'test-notion-token',
+    notionInboxDatabaseId: 'test-inbox-db-id',
     port: 8080,
     host: '0.0.0.0',
   };
@@ -77,6 +79,16 @@ describe('whatsapp-service endpoints', () => {
     // Inject test adapters via DI
     setServices({
       webhookEventRepository,
+      inboxNotesRepository: {
+        create: async () => ({ ok: true, value: {} as never }),
+        getById: async () => ({ ok: true, value: null }),
+        getByExternalId: async () => ({ ok: true, value: null }),
+        update: async () => ({ ok: true, value: {} as never }),
+        queryByStatus: async () => ({ ok: true, value: [] }),
+      },
+      ingestWhatsAppMessage: {
+        execute: async () => ({ ok: true, value: {} as never }),
+      } as never,
     });
 
     // Set test environment to skip real Firestore health check
@@ -509,6 +521,8 @@ describe('config validation', () => {
 
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['PRAXOS_NOTION_TOKEN'] = 'test-notion-token';
+    process.env['PRAXOS_NOTION_INBOX_DATABASE_ID'] = 'test-db-id';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
