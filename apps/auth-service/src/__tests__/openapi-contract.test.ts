@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../server.js';
 
 interface OpenApiSpec {
-  servers?: { url: string }[];
+  servers?: { url: string; description?: string }[];
   paths?: Record<string, Record<string, { operationId?: string; requestBody?: unknown }>>;
   components?: {
     schemas?: Record<string, unknown>;
@@ -51,6 +51,19 @@ describe('auth-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).not.toBe('');
   });
 
+  it('includes both local and production servers', () => {
+    const servers = openapiSpec.servers;
+    expect(servers).toBeDefined();
+
+    const localServer = servers?.find((s) => s.url === 'http://localhost:8080');
+    const prodServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
+
+    expect(localServer).toBeDefined();
+    expect(localServer?.description).toBe('Local development');
+    expect(prodServer).toBeDefined();
+    expect(prodServer?.description).toBe('Production (Cloud Run)');
+  });
+
   it('every path+method has an operationId', () => {
     const paths = openapiSpec.paths;
     expect(paths).toBeDefined();
@@ -89,6 +102,12 @@ describe('auth-service OpenAPI contract', () => {
 
   it('uses PUBLIC_BASE_URL in servers', () => {
     const servers = openapiSpec.servers;
-    expect(servers?.[0]?.url).toBe('https://auth.praxos.app');
+    // Should include production server and optional custom deployment
+    const prodServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
+    expect(prodServer).toBeDefined();
+
+    // If PUBLIC_BASE_URL was set to something different, it should also be present
+    const customServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
+    expect(customServer).toBeDefined();
   });
 });

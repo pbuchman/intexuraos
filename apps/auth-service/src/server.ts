@@ -53,7 +53,22 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? 'http://localhost:8080';
+  const publicBaseUrl = process.env['PUBLIC_BASE_URL'];
+
+  // Include both local and deployed servers for GPT Actions compatibility
+  const servers = [
+    { url: 'http://localhost:8080', description: 'Local development' },
+    { url: 'https://auth.praxos.app', description: 'Production (Cloud Run)' },
+  ];
+
+  // If PUBLIC_BASE_URL is set and not in the default list, add it
+  if (
+    publicBaseUrl !== undefined &&
+    publicBaseUrl !== '' &&
+    !servers.some((s) => s.url === publicBaseUrl)
+  ) {
+    servers.push({ url: publicBaseUrl, description: 'Custom deployment' });
+  }
 
   return {
     openapi: {
@@ -62,7 +77,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         description: 'PraxOS Authentication Service - Device Authorization Flow helpers',
         version: SERVICE_VERSION,
       },
-      servers: [{ url: publicBaseUrl }],
+      servers,
       components: {
         schemas: {
           ApiOk: {

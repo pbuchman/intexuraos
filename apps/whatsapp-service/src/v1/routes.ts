@@ -96,28 +96,20 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
               type: 'object',
               properties: {
                 success: { type: 'boolean', enum: [false] },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
-                  },
-                },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'error'],
             },
             403: {
               description: 'Invalid verify token',
               type: 'object',
               properties: {
                 success: { type: 'boolean', enum: [false] },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
-                  },
-                },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'error'],
             },
           },
         },
@@ -167,41 +159,30 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
               type: 'object',
               properties: {
                 success: { type: 'boolean', enum: [true] },
-                data: {
-                  type: 'object',
-                  properties: {
-                    received: { type: 'boolean' },
-                  },
-                },
+                data: { $ref: 'WebhookReceivedResponse#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'data'],
             },
             401: {
               description: 'Missing signature header',
               type: 'object',
               properties: {
                 success: { type: 'boolean', enum: [false] },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
-                  },
-                },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'error'],
             },
             403: {
               description: 'Invalid signature',
               type: 'object',
               properties: {
                 success: { type: 'boolean', enum: [false] },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
-                  },
-                },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'error'],
             },
           },
         },

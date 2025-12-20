@@ -87,7 +87,22 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const publicBaseUrl = process.env['PUBLIC_BASE_URL'] ?? 'http://localhost:8082';
+  const publicBaseUrl = process.env['PUBLIC_BASE_URL'];
+
+  // Include both local and deployed servers for GPT Actions compatibility
+  const servers = [
+    { url: 'http://localhost:8082', description: 'Local development' },
+    { url: 'https://whatsapp.praxos.app', description: 'Production (Cloud Run)' },
+  ];
+
+  // If PUBLIC_BASE_URL is set and not in the default list, add it
+  if (
+    publicBaseUrl !== undefined &&
+    publicBaseUrl !== '' &&
+    !servers.some((s) => s.url === publicBaseUrl)
+  ) {
+    servers.push({ url: publicBaseUrl, description: 'Custom deployment' });
+  }
 
   return {
     openapi: {
@@ -96,7 +111,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         description: 'PraxOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
         version: SERVICE_VERSION,
       },
-      servers: [{ url: publicBaseUrl }],
+      servers,
       components: {
         schemas: {
           ApiOk: {
@@ -162,6 +177,50 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   await app.register(praxosFastifyPlugin);
+
+  // Register shared schemas for $ref usage in routes
+  app.addSchema({
+    $id: 'Diagnostics',
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      durationMs: { type: 'number' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'ErrorCode',
+    type: 'string',
+    enum: [
+      'INVALID_REQUEST',
+      'UNAUTHORIZED',
+      'FORBIDDEN',
+      'NOT_FOUND',
+      'CONFLICT',
+      'DOWNSTREAM_ERROR',
+      'INTERNAL_ERROR',
+      'MISCONFIGURED',
+    ],
+  });
+
+  app.addSchema({
+    $id: 'ErrorBody',
+    type: 'object',
+    required: ['code', 'message'],
+    properties: {
+      code: { type: 'string' },
+      message: { type: 'string' },
+      details: { type: 'object' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'WebhookReceivedResponse',
+    type: 'object',
+    properties: {
+      received: { type: 'boolean' },
+    },
+  });
 
   // CORS for cross-origin OpenAPI access (api-docs-hub)
   await app.register(fastifyCors, {
