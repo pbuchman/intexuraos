@@ -178,7 +178,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"staticAssets":true' /workspace/affected.json 2>/dev/null; then
+        if grep -q '"staticAssets":[[:space:]]*true' /workspace/affected.json 2>/dev/null; then
           echo "Static assets affected, syncing to GCS bucket..."
           BUCKET="praxos-static-assets-${_ENVIRONMENT}"
           echo "Bucket name: $$BUCKET"
