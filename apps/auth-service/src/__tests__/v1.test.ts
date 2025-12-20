@@ -371,6 +371,7 @@ describe('auth-service v1 endpoints', () => {
       process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
 
       app = await buildServer();
 
@@ -408,6 +409,7 @@ describe('auth-service v1 endpoints', () => {
     });
 
     it('GET /docs returns Swagger UI', async () => {
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
@@ -420,6 +422,7 @@ describe('auth-service v1 endpoints', () => {
     });
 
     it('GET /openapi.json returns OpenAPI spec', async () => {
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
