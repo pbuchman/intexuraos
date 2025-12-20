@@ -7,9 +7,7 @@ resource "google_storage_bucket" "static_assets" {
   project  = var.project_id
 
   # Uniform bucket-level access (required for public access)
-  uniform_bucket_level_access {
-    enabled = true
-  }
+  uniform_bucket_level_access = true
 
   # CORS configuration for cross-origin access
   cors {

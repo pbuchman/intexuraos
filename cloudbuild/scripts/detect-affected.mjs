@@ -172,8 +172,7 @@ function main() {
   };
 
   // Ensure workspace directory exists (for local testing)
-  const workspaceDir = WORKSPACE;
-  if (!existsSync(workspaceDir)) {
+  if (!existsSync(WORKSPACE)) {
     console.log(`Workspace directory does not exist, using current directory`);
     writeFileSync('./affected.json', JSON.stringify(output, null, 2));
     console.log(`Written to: ./affected.json`);
@@ -186,4 +185,3 @@ function main() {
 }
 
 main();
-

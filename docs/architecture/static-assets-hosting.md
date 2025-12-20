@@ -7,6 +7,7 @@ PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets in
 ## Architecture
 
 ### Source of Truth
+
 - **Location**: `docs/assets/**` (entire directory, recursively)
 - All files in this directory are synchronized to the GCS bucket
 
@@ -34,11 +35,13 @@ PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets in
 ### Public URLs
 
 Static assets are accessible via:
+
 ```
 https://storage.googleapis.com/praxos-static-assets-{environment}/{path}
 ```
 
 Example:
+
 ```
 https://storage.googleapis.com/praxos-static-assets-dev/branding/exports/primary/logo-primary-light.png
 ```
@@ -58,6 +61,7 @@ terraform output static_assets_public_url     # https://storage.googleapis.com/p
 ### Initial Setup
 
 1. Apply Terraform configuration:
+
 ```bash
 cd terraform/environments/dev
 terraform init
@@ -72,6 +76,7 @@ terraform apply
 ### Continuous Deployment
 
 Cloud Build automatically syncs assets when:
+
 - Changes are pushed to `docs/assets/**`
 - The development branch trigger runs
 - The `detect-affected.mjs` script marks `staticAssets: true`
@@ -97,6 +102,7 @@ gsutil ls -r gs://$BUCKET_NAME/
 ### Adding New Assets
 
 1. Add files to `docs/assets/**` following the existing structure:
+
    ```
    docs/assets/
    ├── branding/
@@ -153,16 +159,19 @@ curl https://storage.googleapis.com/storage/v1/b/praxos-static-assets-dev/o
 ## Security Considerations
 
 ### Public Access
+
 - Bucket is **intentionally public** for anonymous read access
 - Only files in `docs/assets/**` are synchronized
 - No secrets or sensitive data should be placed in `docs/assets/**`
 
 ### Write Access
+
 - Cloud Build service account has write access
 - No public write access (only read)
 - Manual uploads require GCP authentication
 
 ### CORS Policy
+
 - Allows all origins (`*`) for GET and HEAD requests
 - Required for loading assets from different domains
 - Max age: 3600 seconds (1 hour)
@@ -201,9 +210,9 @@ curl https://storage.googleapis.com/storage/v1/b/praxos-static-assets-dev/o
 ## Future Enhancements
 
 Potential improvements (not currently implemented):
+
 - CDN integration for faster global access
 - Image optimization pipeline
 - Asset versioning for cache busting
 - Multi-environment support (staging, production)
 - Asset validation and size limits
-
