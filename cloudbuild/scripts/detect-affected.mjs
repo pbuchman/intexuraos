@@ -143,7 +143,10 @@ function main() {
   console.log('=== Detecting Affected Services ===');
   console.log(`COMMIT_SHA: ${process.env.COMMIT_SHA || 'not set'}`);
   console.log(`BRANCH_NAME: ${process.env.BRANCH_NAME || 'not set'}`);
+  console.log(`FORCE_DEPLOY: ${process.env.FORCE_DEPLOY || 'false'}`);
   console.log(`Output file: ${OUTPUT_FILE}`);
+
+  const forceDeployEnabled = process.env.FORCE_DEPLOY === 'true';
 
   const diffRange = getDiffRange();
   console.log(`Diff range: ${diffRange}`);
@@ -160,8 +163,9 @@ function main() {
   const affectedServices = getAffectedServices(changedFiles);
   console.log(`\nAffected services: ${affectedServices.join(', ') || 'none'}`);
 
-  const staticAssetsAffected = checkStaticAssetsAffected(changedFiles);
-  console.log(`Static assets affected: ${staticAssetsAffected}`);
+  // Static assets are affected if files changed OR if force deploy is enabled
+  const staticAssetsAffected = checkStaticAssetsAffected(changedFiles) || forceDeployEnabled;
+  console.log(`Static assets affected: ${staticAssetsAffected}${forceDeployEnabled ? ' (force deploy)' : ''}`);
 
   const output = {
     services: affectedServices,
