@@ -33,7 +33,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     // Set required env vars
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
-    process.env['PUBLIC_BASE_URL'] = 'https://whatsapp.praxos.app';
+    process.env['SERVICE_URL'] = 'https://whatsapp-dev.example.com';
     process.env['VITEST'] = 'true';
 
     app = await buildServer(testConfig);
@@ -48,7 +48,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     await app.close();
     delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
-    delete process.env['PUBLIC_BASE_URL'];
+    delete process.env['SERVICE_URL'];
     delete process.env['VITEST'];
   });
 
@@ -66,17 +66,16 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).not.toBe('');
   });
 
-  it('includes both local and production servers', () => {
+  it('has exactly two servers (local + cloud)', () => {
     const servers = openapiSpec.servers;
     expect(servers).toBeDefined();
+    expect(servers?.length).toBe(2);
 
-    const localServer = servers?.find((s) => s.url === 'http://localhost:8082');
-    const prodServer = servers?.find((s) => s.url === 'https://whatsapp.praxos.app');
+    expect(servers?.[0]?.url).toBe('http://localhost:8082');
+    expect(servers?.[0]?.description).toBe('Local development');
 
-    expect(localServer).toBeDefined();
-    expect(localServer?.description).toBe('Local development');
-    expect(prodServer).toBeDefined();
-    expect(prodServer?.description).toBe('Production (Cloud Run)');
+    expect(servers?.[1]?.url).toBe('https://whatsapp-dev.example.com');
+    expect(servers?.[1]?.description).toBe('Cloud (Development)');
   });
 
   it('every path+method has an operationId', () => {
@@ -110,13 +109,6 @@ describe('whatsapp-service OpenAPI contract', () => {
 
     expect(paths?.['/webhooks/whatsapp']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
-  });
-
-  it('uses PUBLIC_BASE_URL in servers', () => {
-    const servers = openapiSpec.servers;
-    // Should include production server and optional custom deployment
-    const prodServer = servers?.find((s) => s.url === 'https://whatsapp.praxos.app');
-    expect(prodServer).toBeDefined();
   });
 
   it('POST /webhooks/whatsapp documents signature header', () => {

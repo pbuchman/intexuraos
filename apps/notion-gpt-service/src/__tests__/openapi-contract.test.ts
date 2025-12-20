@@ -24,7 +24,7 @@ describe('notion-gpt-service OpenAPI contract', () => {
     process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['AUTH_AUDIENCE'] = 'https://api.test.com';
-    process.env['PUBLIC_BASE_URL'] = 'https://notion.praxos.app';
+    process.env['SERVICE_URL'] = 'https://notion-dev.example.com';
     process.env['VITEST'] = 'true';
 
     app = await buildServer();
@@ -40,7 +40,7 @@ describe('notion-gpt-service OpenAPI contract', () => {
     delete process.env['AUTH_JWKS_URL'];
     delete process.env['AUTH_ISSUER'];
     delete process.env['AUTH_AUDIENCE'];
-    delete process.env['PUBLIC_BASE_URL'];
+    delete process.env['SERVICE_URL'];
     delete process.env['VITEST'];
   });
 
@@ -58,17 +58,16 @@ describe('notion-gpt-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).not.toBe('');
   });
 
-  it('includes both local and production servers', () => {
+  it('has exactly two servers (local + cloud)', () => {
     const servers = openapiSpec.servers;
     expect(servers).toBeDefined();
+    expect(servers?.length).toBe(2);
 
-    const localServer = servers?.find((s) => s.url === 'http://localhost:8081');
-    const prodServer = servers?.find((s) => s.url === 'https://notion.praxos.app');
+    expect(servers?.[0]?.url).toBe('http://localhost:8081');
+    expect(servers?.[0]?.description).toBe('Local development');
 
-    expect(localServer).toBeDefined();
-    expect(localServer?.description).toBe('Local development');
-    expect(prodServer).toBeDefined();
-    expect(prodServer?.description).toBe('Production (Cloud Run)');
+    expect(servers?.[1]?.url).toBe('https://notion-dev.example.com');
+    expect(servers?.[1]?.description).toBe('Cloud (Development)');
   });
 
   it('every path+method has an operationId', () => {
@@ -103,13 +102,6 @@ describe('notion-gpt-service OpenAPI contract', () => {
     expect(paths?.['/v1/tools/notion/promptvault/note']).toBeDefined();
     expect(paths?.['/v1/webhooks/notion']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
-  });
-
-  it('uses PUBLIC_BASE_URL in servers', () => {
-    const servers = openapiSpec.servers;
-    // Should include production server and optional custom deployment
-    const prodServer = servers?.find((s) => s.url === 'https://notion.praxos.app');
-    expect(prodServer).toBeDefined();
   });
 
   it('protected endpoints require bearerAuth security', () => {

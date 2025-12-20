@@ -99,22 +99,16 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const publicBaseUrl = process.env['PUBLIC_BASE_URL'];
+  const serviceUrl = process.env['SERVICE_URL'];
+  if (serviceUrl === undefined || serviceUrl === '') {
+    throw new Error('SERVICE_URL environment variable is required for OpenAPI spec generation');
+  }
 
-  // Include both local and deployed servers for GPT Actions compatibility
+  // Exactly two servers: local development and Cloud Run deployment
   const servers = [
     { url: 'http://localhost:8081', description: 'Local development' },
-    { url: 'https://notion.praxos.app', description: 'Production (Cloud Run)' },
+    { url: serviceUrl, description: 'Cloud (Development)' },
   ];
-
-  // If PUBLIC_BASE_URL is set and not in the default list, add it
-  if (
-    publicBaseUrl !== undefined &&
-    publicBaseUrl !== '' &&
-    !servers.some((s) => s.url === publicBaseUrl)
-  ) {
-    servers.push({ url: publicBaseUrl, description: 'Custom deployment' });
-  }
 
   return {
     openapi: {

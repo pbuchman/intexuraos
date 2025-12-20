@@ -19,7 +19,7 @@ describe('auth-service OpenAPI contract', () => {
     process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
     process.env['AUTH0_CLIENT_ID'] = 'test-client';
     process.env['AUTH_AUDIENCE'] = 'https://api.test.com';
-    process.env['PUBLIC_BASE_URL'] = 'https://auth.praxos.app';
+    process.env['SERVICE_URL'] = 'https://auth-dev.example.com';
 
     app = await buildServer();
     const response = await app.inject({
@@ -34,7 +34,7 @@ describe('auth-service OpenAPI contract', () => {
     delete process.env['AUTH0_DOMAIN'];
     delete process.env['AUTH0_CLIENT_ID'];
     delete process.env['AUTH_AUDIENCE'];
-    delete process.env['PUBLIC_BASE_URL'];
+    delete process.env['SERVICE_URL'];
   });
 
   it('has no "Default Response" placeholders', () => {
@@ -51,17 +51,16 @@ describe('auth-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).not.toBe('');
   });
 
-  it('includes both local and production servers', () => {
+  it('has exactly two servers (local + cloud)', () => {
     const servers = openapiSpec.servers;
     expect(servers).toBeDefined();
+    expect(servers?.length).toBe(2);
 
-    const localServer = servers?.find((s) => s.url === 'http://localhost:8080');
-    const prodServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
+    expect(servers?.[0]?.url).toBe('http://localhost:8080');
+    expect(servers?.[0]?.description).toBe('Local development');
 
-    expect(localServer).toBeDefined();
-    expect(localServer?.description).toBe('Local development');
-    expect(prodServer).toBeDefined();
-    expect(prodServer?.description).toBe('Production (Cloud Run)');
+    expect(servers?.[1]?.url).toBe('https://auth-dev.example.com');
+    expect(servers?.[1]?.description).toBe('Cloud (Development)');
   });
 
   it('every path+method has an operationId', () => {
@@ -98,16 +97,5 @@ describe('auth-service OpenAPI contract', () => {
     expect(paths?.['/v1/auth/refresh']).toBeDefined();
     expect(paths?.['/v1/auth/config']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
-  });
-
-  it('uses PUBLIC_BASE_URL in servers', () => {
-    const servers = openapiSpec.servers;
-    // Should include production server and optional custom deployment
-    const prodServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
-    expect(prodServer).toBeDefined();
-
-    // If PUBLIC_BASE_URL was set to something different, it should also be present
-    const customServer = servers?.find((s) => s.url === 'https://auth.praxos.app');
-    expect(customServer).toBeDefined();
   });
 });

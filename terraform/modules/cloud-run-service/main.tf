@@ -51,6 +51,12 @@ resource "google_cloud_run_v2_service" "service" {
         }
       }
 
+      # Automatically inject SERVICE_URL
+      env {
+        name  = "SERVICE_URL"
+        value = google_cloud_run_v2_service.service.uri
+      }
+
       # Startup probe (health check)
       startup_probe {
         http_get {

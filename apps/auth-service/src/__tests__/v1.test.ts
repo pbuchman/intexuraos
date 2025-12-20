@@ -24,6 +24,7 @@ describe('auth-service v1 endpoints', () => {
     delete process.env['AUTH0_DOMAIN'];
     delete process.env['AUTH0_CLIENT_ID'];
     delete process.env['AUTH_AUDIENCE'];
+    delete process.env['SERVICE_URL'];
     nock.cleanAll();
   });
 
@@ -35,6 +36,7 @@ describe('auth-service v1 endpoints', () => {
     it('POST /v1/auth/device/start returns 503 when AUTH0_DOMAIN is missing', async () => {
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       // AUTH0_DOMAIN not set
 
       app = await buildServer();
@@ -57,6 +59,7 @@ describe('auth-service v1 endpoints', () => {
 
     it('POST /v1/auth/device/poll returns 503 when config missing', async () => {
       // No env vars set
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
@@ -76,6 +79,7 @@ describe('auth-service v1 endpoints', () => {
 
     it('GET /v1/auth/config returns 503 when config missing', async () => {
       // No env vars set
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
@@ -98,6 +102,7 @@ describe('auth-service v1 endpoints', () => {
       process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
     });
 
     it('returns expected fields on success', async () => {
@@ -204,6 +209,7 @@ describe('auth-service v1 endpoints', () => {
       process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
     });
 
     it('returns 400 when device_code is missing', async () => {
@@ -335,6 +341,7 @@ describe('auth-service v1 endpoints', () => {
       process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
 
       app = await buildServer();
 
@@ -364,6 +371,7 @@ describe('auth-service v1 endpoints', () => {
       process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
       process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
       process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
 
       app = await buildServer();
 
@@ -380,6 +388,7 @@ describe('auth-service v1 endpoints', () => {
 
   describe('System endpoints', () => {
     it('GET /health returns health status', async () => {
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
@@ -400,6 +409,7 @@ describe('auth-service v1 endpoints', () => {
     });
 
     it('GET /docs returns Swagger UI', async () => {
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
@@ -412,6 +422,7 @@ describe('auth-service v1 endpoints', () => {
     });
 
     it('GET /openapi.json returns OpenAPI spec', async () => {
+      process.env['SERVICE_URL'] = 'https://auth-test.example.com';
       app = await buildServer();
 
       const response = await app.inject({
