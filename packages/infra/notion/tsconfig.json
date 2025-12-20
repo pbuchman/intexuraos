@@ -7,5 +7,5 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../common" }, { "path": "../../domain/promptvault" }]
+  "references": [{ "path": "../../common" }, { "path": "../../domain/inbox" }, { "path": "../../domain/promptvault" }]
 }

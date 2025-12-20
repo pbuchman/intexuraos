@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@praxos/common": "*",
+    "@praxos/domain-inbox": "*",
     "@praxos/domain-promptvault": "*",
     "@notionhq/client": "^2.2.15"
   }

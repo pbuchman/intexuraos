@@ -89,12 +89,12 @@ export interface InboxNote {
   /**
    * Normalized/cleaned text.
    */
-  cleanText?: string;
+  cleanText?: string | undefined;
 
   /**
    * Speech-to-text transcript (for audio/video).
    */
-  transcript?: string;
+  transcript?: string | undefined;
 
   /**
    * Media file attachments.
@@ -109,17 +109,17 @@ export interface InboxNote {
   /**
    * Sender identifier (phone number, email, username, etc.).
    */
-  sender?: string;
+  sender?: string | undefined;
 
   /**
    * External idempotency key (e.g., WhatsApp message ID).
    */
-  externalId?: string;
+  externalId?: string | undefined;
 
   /**
    * Processing run identifier.
    */
-  processingRunId?: string;
+  processingRunId?: string | undefined;
 
   /**
    * Processor type that handled this note.
@@ -129,7 +129,7 @@ export interface InboxNote {
   /**
    * Error messages from processing.
    */
-  errors?: string;
+  errors?: string | undefined;
 
   /**
    * Related action IDs.
@@ -139,7 +139,7 @@ export interface InboxNote {
   /**
    * Optional URL reference.
    */
-  url?: string;
+  url?: string | undefined;
 }
 
 /**

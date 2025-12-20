@@ -194,7 +194,9 @@ describe('IngestWhatsAppMessage', () => {
     if (result.ok) {
       expect(result.value.messageType).toBe('Audio');
       expect(result.value.media).toHaveLength(1);
-      expect(result.value.media[0].name).toBe('voice.ogg');
+      if (result.value.media[0]) {
+        expect(result.value.media[0].name).toBe('voice.ogg');
+      }
     }
 
     expect(mockRepository.create).toHaveBeenCalledWith(

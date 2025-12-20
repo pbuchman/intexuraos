@@ -3,7 +3,7 @@
  * Maps WhatsApp webhook payload to domain InboxNote and persists to repository.
  */
 import type { Result } from '@praxos/common';
-import { ok, err } from '@praxos/common';
+import { ok } from '@praxos/common';
 import type { InboxNotesRepository, InboxError } from '../ports/repositories.js';
 import type { InboxNote, CreateInboxNoteParams } from '../models/InboxNote.js';
 

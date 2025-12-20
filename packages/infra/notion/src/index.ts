@@ -10,6 +10,7 @@
 
 // Adapters
 export { NotionApiAdapter } from './adapter.js';
+export { InboxNotesAdapter, type InboxNotesAdapterConfig } from './adapters/inbox/index.js';
 
 // Testing utilities (for use by consuming packages)
 export { MockNotionApiAdapter, type CapturedPromptVaultNote } from './testing/index.js';
