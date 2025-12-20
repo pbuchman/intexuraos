@@ -179,10 +179,10 @@ steps:
       - |
         if grep -q '"staticAssets":true' /workspace/affected.json 2>/dev/null; then
           echo "Static assets affected, syncing to GCS bucket..."
-          BUCKET_NAME="praxos-static-assets-${_ENVIRONMENT}"
-          echo "Bucket name: $BUCKET_NAME"
-          echo "Syncing docs/assets/** to gs://$BUCKET_NAME/"
-          gsutil -m rsync -r -d docs/assets/ "gs://$BUCKET_NAME/"
+          BUCKET="praxos-static-assets-${_ENVIRONMENT}"
+          echo "Bucket name: $$BUCKET"
+          echo "Syncing docs/assets/** to gs://$$BUCKET/"
+          gsutil -m rsync -r -d docs/assets/ "gs://$$BUCKET/"
           echo "Static assets sync complete."
         else
           echo "Static assets not affected, skipping sync."
