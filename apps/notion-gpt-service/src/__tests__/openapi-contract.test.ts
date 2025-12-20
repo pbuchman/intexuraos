@@ -61,10 +61,10 @@ describe('notion-gpt-service OpenAPI contract', () => {
   it('includes both local and production servers', () => {
     const servers = openapiSpec.servers;
     expect(servers).toBeDefined();
-    
-    const localServer = servers?.find(s => s.url === 'http://localhost:8081');
-    const prodServer = servers?.find(s => s.url === 'https://notion.praxos.app');
-    
+
+    const localServer = servers?.find((s) => s.url === 'http://localhost:8081');
+    const prodServer = servers?.find((s) => s.url === 'https://notion.praxos.app');
+
     expect(localServer).toBeDefined();
     expect(localServer?.description).toBe('Local development');
     expect(prodServer).toBeDefined();
@@ -108,7 +108,7 @@ describe('notion-gpt-service OpenAPI contract', () => {
   it('uses PUBLIC_BASE_URL in servers', () => {
     const servers = openapiSpec.servers;
     // Should include production server and optional custom deployment
-    const prodServer = servers?.find(s => s.url === 'https://notion.praxos.app');
+    const prodServer = servers?.find((s) => s.url === 'https://notion.praxos.app');
     expect(prodServer).toBeDefined();
   });
 
@@ -149,16 +149,27 @@ describe('notion-gpt-service OpenAPI contract', () => {
       if (path === '/health' || path === '/docs' || path === '/openapi.json') continue;
 
       for (const [method, operation] of Object.entries(methods)) {
-        const responses = (operation as { responses?: Record<string, { properties?: Record<string, unknown> }> }).responses;
+        const responses = (
+          operation as { responses?: Record<string, { properties?: Record<string, unknown> }> }
+        ).responses;
         if (!responses) continue;
 
         const response200 = responses['200'];
         if (!response200) continue;
 
         const props = response200.properties;
-        expect(props, `${method.toUpperCase()} ${path} 200 response should have properties`).toBeDefined();
-        expect(props?.['success'], `${method.toUpperCase()} ${path} 200 response should have success field`).toBeDefined();
-        expect(props?.['data'], `${method.toUpperCase()} ${path} 200 response should have data field`).toBeDefined();
+        expect(
+          props,
+          `${method.toUpperCase()} ${path} 200 response should have properties`
+        ).toBeDefined();
+        expect(
+          props?.['success'],
+          `${method.toUpperCase()} ${path} 200 response should have success field`
+        ).toBeDefined();
+        expect(
+          props?.['data'],
+          `${method.toUpperCase()} ${path} 200 response should have data field`
+        ).toBeDefined();
       }
     }
   });
@@ -173,7 +184,9 @@ describe('notion-gpt-service OpenAPI contract', () => {
       if (path === '/health' || path === '/docs' || path === '/openapi.json') continue;
 
       for (const [method, operation] of Object.entries(methods)) {
-        const responses = (operation as { responses?: Record<string, { properties?: Record<string, unknown> }> }).responses;
+        const responses = (
+          operation as { responses?: Record<string, { properties?: Record<string, unknown> }> }
+        ).responses;
         if (!responses) continue;
 
         for (const code of errorCodes) {
@@ -181,9 +194,18 @@ describe('notion-gpt-service OpenAPI contract', () => {
           if (!errorResponse) continue;
 
           const props = errorResponse.properties;
-          expect(props, `${method.toUpperCase()} ${path} ${code} response should have properties`).toBeDefined();
-          expect(props?.['success'], `${method.toUpperCase()} ${path} ${code} response should have success field`).toBeDefined();
-          expect(props?.['error'], `${method.toUpperCase()} ${path} ${code} response should have error field`).toBeDefined();
+          expect(
+            props,
+            `${method.toUpperCase()} ${path} ${code} response should have properties`
+          ).toBeDefined();
+          expect(
+            props?.['success'],
+            `${method.toUpperCase()} ${path} ${code} response should have success field`
+          ).toBeDefined();
+          expect(
+            props?.['error'],
+            `${method.toUpperCase()} ${path} ${code} response should have error field`
+          ).toBeDefined();
         }
       }
     }

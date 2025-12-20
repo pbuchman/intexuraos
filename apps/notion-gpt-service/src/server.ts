@@ -108,8 +108,11 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   ];
 
   // If PUBLIC_BASE_URL is set and not in the default list, add it
-  if (publicBaseUrl !== undefined && publicBaseUrl !== '' && 
-      !servers.some(s => s.url === publicBaseUrl)) {
+  if (
+    publicBaseUrl !== undefined &&
+    publicBaseUrl !== '' &&
+    !servers.some((s) => s.url === publicBaseUrl)
+  ) {
     servers.push({ url: publicBaseUrl, description: 'Custom deployment' });
   }
 
