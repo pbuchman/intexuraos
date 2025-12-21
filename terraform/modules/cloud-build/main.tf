@@ -78,6 +78,13 @@ resource "google_project_iam_member" "cloud_build_logs_writer" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs to write to static assets bucket
+resource "google_storage_bucket_iam_member" "cloud_build_storage_admin" {
+  bucket = var.static_assets_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Webhook Trigger for Development Branch
 # -----------------------------------------------------------------------------

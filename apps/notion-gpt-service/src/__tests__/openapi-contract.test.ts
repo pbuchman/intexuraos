@@ -97,7 +97,8 @@ describe('notion-gpt-service OpenAPI contract', () => {
     expect(paths?.['/v1/integrations/notion/status']).toBeDefined();
     expect(paths?.['/v1/integrations/notion/disconnect']).toBeDefined();
     expect(paths?.['/v1/tools/notion/promptvault/main-page']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/note']).toBeDefined();
+    expect(paths?.['/v1/tools/notion/promptvault/prompts']).toBeDefined();
+    expect(paths?.['/v1/tools/notion/promptvault/prompts/{promptId}']).toBeDefined();
     expect(paths?.['/v1/webhooks/notion']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
@@ -110,7 +111,7 @@ describe('notion-gpt-service OpenAPI contract', () => {
       '/v1/integrations/notion/status',
       '/v1/integrations/notion/disconnect',
       '/v1/tools/notion/promptvault/main-page',
-      '/v1/tools/notion/promptvault/note',
+      '/v1/tools/notion/promptvault/prompts',
     ];
 
     for (const endpoint of protectedEndpoints) {

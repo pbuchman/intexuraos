@@ -2,9 +2,13 @@
  * Service container for notion-gpt-service.
  * Provides dependency injection for adapters.
  */
-import type { NotionConnectionRepository, NotionApiPort } from '@praxos/domain-promptvault';
+import type {
+  NotionConnectionRepository,
+  NotionApiPort,
+  PromptRepository,
+} from '@praxos/domain-promptvault';
 import { FirestoreNotionConnectionRepository } from '@praxos/infra-firestore';
-import { NotionApiAdapter } from '@praxos/infra-notion';
+import { NotionApiAdapter, createNotionPromptRepository } from '@praxos/infra-notion';
 
 /**
  * Service container holding all adapter instances.
@@ -12,6 +16,7 @@ import { NotionApiAdapter } from '@praxos/infra-notion';
 export interface ServiceContainer {
   connectionRepository: NotionConnectionRepository;
   notionApi: NotionApiPort;
+  promptRepository: PromptRepository;
 }
 
 let container: ServiceContainer | null = null;
@@ -21,10 +26,17 @@ let container: ServiceContainer | null = null;
  * In production, uses real Firestore and Notion adapters.
  */
 export function getServices(): ServiceContainer {
-  container ??= {
-    connectionRepository: new FirestoreNotionConnectionRepository(),
-    notionApi: new NotionApiAdapter(),
-  };
+  if (container === null) {
+    const connectionRepository = new FirestoreNotionConnectionRepository();
+    const notionApi = new NotionApiAdapter();
+    const promptRepository = createNotionPromptRepository(connectionRepository, notionApi);
+
+    container = {
+      connectionRepository,
+      notionApi,
+      promptRepository,
+    };
+  }
   return container;
 }
 

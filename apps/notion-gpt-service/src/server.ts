@@ -248,7 +248,27 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               },
             },
           },
-          CreatePromptVaultNoteRequest: {
+          // Prompt API schemas
+          Prompt: {
+            type: 'object',
+            required: ['id', 'title', 'prompt'],
+            properties: {
+              id: { type: 'string', description: 'Unique prompt identifier' },
+              title: { type: 'string', description: 'Prompt title' },
+              prompt: { type: 'string', description: 'Prompt content' },
+              createdAt: {
+                type: 'string',
+                format: 'date-time',
+                description: 'Creation timestamp (ISO 8601)',
+              },
+              updatedAt: {
+                type: 'string',
+                format: 'date-time',
+                description: 'Last update timestamp (ISO 8601)',
+              },
+            },
+          },
+          CreatePromptRequest: {
             type: 'object',
             required: ['title', 'prompt'],
             additionalProperties: false,
@@ -257,23 +277,50 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
                 type: 'string',
                 minLength: 1,
                 maxLength: 200,
-                description: 'Note title (max 200 characters)',
+                description: 'Prompt title (max 200 characters)',
               },
               prompt: {
                 type: 'string',
                 minLength: 1,
                 maxLength: 100000,
-                description: 'Prompt content stored verbatim (max 100,000 characters)',
+                description: 'Prompt content (max 100,000 characters)',
               },
             },
           },
-          CreatePromptVaultNoteResponse: {
+          UpdatePromptRequest: {
             type: 'object',
-            required: ['pageId', 'url', 'title'],
+            additionalProperties: false,
+            description: 'At least one of title or prompt must be provided',
             properties: {
-              pageId: { type: 'string', description: 'Notion page ID' },
-              url: { type: 'string', description: 'Notion page URL' },
-              title: { type: 'string', description: 'Note title' },
+              title: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 200,
+                description: 'New prompt title (max 200 characters)',
+              },
+              prompt: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 100000,
+                description: 'New prompt content (max 100,000 characters)',
+              },
+            },
+          },
+          PromptResponse: {
+            type: 'object',
+            required: ['prompt'],
+            properties: {
+              prompt: { $ref: '#/components/schemas/Prompt' },
+            },
+          },
+          PromptsListResponse: {
+            type: 'object',
+            required: ['prompts'],
+            properties: {
+              prompts: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/Prompt' },
+              },
             },
           },
           WebhookResponse: {
@@ -496,8 +543,22 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   });
 
+  // Prompt API schemas
   app.addSchema({
-    $id: 'CreatePromptVaultNoteRequest',
+    $id: 'Prompt',
+    type: 'object',
+    required: ['id', 'title', 'prompt'],
+    properties: {
+      id: { type: 'string', description: 'Unique prompt identifier' },
+      title: { type: 'string', description: 'Prompt title' },
+      prompt: { type: 'string', description: 'Prompt content' },
+      createdAt: { type: 'string', format: 'date-time', description: 'Creation timestamp' },
+      updatedAt: { type: 'string', format: 'date-time', description: 'Last update timestamp' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'CreatePromptRequest',
     type: 'object',
     required: ['title', 'prompt'],
     additionalProperties: false,
@@ -506,25 +567,56 @@ export async function buildServer(): Promise<FastifyInstance> {
         type: 'string',
         minLength: 1,
         maxLength: 200,
-        description: 'Note title (max 200 characters)',
+        description: 'Prompt title (max 200 characters)',
       },
       prompt: {
         type: 'string',
         minLength: 1,
         maxLength: 100000,
-        description: 'Prompt content stored verbatim (max 100,000 characters)',
+        description: 'Prompt content (max 100,000 characters)',
       },
     },
   });
 
   app.addSchema({
-    $id: 'CreatePromptVaultNoteResponse',
+    $id: 'UpdatePromptRequest',
     type: 'object',
-    required: ['pageId', 'url', 'title'],
+    additionalProperties: false,
+    description: 'At least one of title or prompt must be provided',
     properties: {
-      pageId: { type: 'string', description: 'Notion page ID' },
-      url: { type: 'string', description: 'Notion page URL' },
-      title: { type: 'string', description: 'Note title' },
+      title: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 200,
+        description: 'New prompt title (max 200 characters)',
+      },
+      prompt: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 100000,
+        description: 'New prompt content (max 100,000 characters)',
+      },
+    },
+  });
+
+  app.addSchema({
+    $id: 'PromptResponse',
+    type: 'object',
+    required: ['prompt'],
+    properties: {
+      prompt: { $ref: 'Prompt#' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'PromptsListResponse',
+    type: 'object',
+    required: ['prompts'],
+    properties: {
+      prompts: {
+        type: 'array',
+        items: { $ref: 'Prompt#' },
+      },
     },
   });
 

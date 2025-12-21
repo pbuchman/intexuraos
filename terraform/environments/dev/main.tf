@@ -338,10 +338,12 @@ module "cloud_build" {
   github_connection_name = var.github_connection_name
 
   artifact_registry_url = module.artifact_registry.repository_url
+  static_assets_bucket  = module.static_assets.bucket_name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
+    module.static_assets,
   ]
 }
 
