@@ -46,6 +46,7 @@ function checkConfig(config: Config): HealthCheck {
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
         description:

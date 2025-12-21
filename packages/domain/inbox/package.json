@@ -1,5 +1,5 @@
 {
-  "name": "@praxos/infra-firestore",
+  "name": "@praxos/domain-inbox",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -20,10 +20,6 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@praxos/common": "*",
-    "@praxos/domain-identity": "*",
-    "@praxos/domain-promptvault": "*",
-    "@praxos/domain-inbox": "*",
-    "@google-cloud/firestore": "^7.10.0"
+    "@praxos/common": "*"
   }
 }

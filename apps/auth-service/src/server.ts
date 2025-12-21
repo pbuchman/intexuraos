@@ -105,6 +105,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
         description: 'PraxOS Authentication Service - Device Authorization Flow helpers',

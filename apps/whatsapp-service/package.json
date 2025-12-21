@@ -23,7 +23,10 @@
   },
   "dependencies": {
     "@praxos/common": "*",
+    "@praxos/domain-inbox": "*",
+    "@praxos/domain-identity": "*",
     "@praxos/infra-firestore": "*",
+    "@praxos/infra-notion": "*",
     "@fastify/cors": "^10.0.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",

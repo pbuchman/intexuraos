@@ -5,3 +5,4 @@
 export { FakeNotionConnectionRepository } from './fakeNotionConnectionRepository.js';
 export { FakeIdempotencyLedger } from './fakeIdempotencyLedger.js';
 export { FakeWhatsAppWebhookEventRepository } from './fakeWhatsAppWebhookEventRepository.js';
+export { FakeWhatsAppUserMappingRepository } from './fakeWhatsAppUserMappingRepository.js';

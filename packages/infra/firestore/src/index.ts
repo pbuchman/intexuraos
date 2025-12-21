@@ -7,6 +7,7 @@
  * - client.ts                           Firestore client singleton
  * - authTokenRepository.ts              Per-user Auth0 token storage (encrypted)
  * - notionConnectionRepository.ts       Per-user Notion config storage
+ * - whatsappUserMappingRepository.ts    Per-user WhatsApp mapping storage
  * - idempotencyLedger.ts                Idempotency tracking
  * - whatsappWebhookEventRepository.ts   WhatsApp webhook event storage
  * - encryption.ts                       Token encryption utilities
@@ -19,13 +20,9 @@ export { getFirestore, resetFirestore, setFirestore } from './client.js';
 // Adapters
 export { FirestoreAuthTokenRepository } from './authTokenRepository.js';
 export { FirestoreNotionConnectionRepository } from './notionConnectionRepository.js';
+export { FirestoreWhatsAppUserMappingRepository } from './whatsappUserMappingRepository.js';
 export { FirestoreIdempotencyLedger } from './idempotencyLedger.js';
-export {
-  FirestoreWhatsAppWebhookEventRepository,
-  type WhatsAppWebhookEvent,
-  type WhatsAppWebhookEventRepository,
-  type WebhookEventError,
-} from './whatsappWebhookEventRepository.js';
+export { FirestoreWhatsAppWebhookEventRepository } from './whatsappWebhookEventRepository.js';
 
 // Encryption utilities
 export { encryptToken, decryptToken, generateEncryptionKey } from './encryption.js';
@@ -35,4 +32,5 @@ export {
   FakeNotionConnectionRepository,
   FakeIdempotencyLedger,
   FakeWhatsAppWebhookEventRepository,
+  FakeWhatsAppUserMappingRepository,
 } from './testing/index.js';

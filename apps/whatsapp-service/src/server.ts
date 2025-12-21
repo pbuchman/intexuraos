@@ -3,9 +3,10 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { praxosFastifyPlugin } from '@praxos/common';
+import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { createV1Routes } from './v1/routes.js';
+import { createWhatsAppMappingRoutes } from './v1/whatsappMappingRoutes.js';
 import { validateConfigEnv, type Config } from './config.js';
 
 const SERVICE_NAME = 'whatsapp-service';
@@ -98,6 +99,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
         description: 'PraxOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
@@ -144,6 +146,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       },
       tags: [
         { name: 'webhooks', description: 'WhatsApp webhook endpoints' },
+        { name: 'whatsapp', description: 'WhatsApp mapping management' },
         { name: 'system', description: 'System endpoints' },
       ],
     },
@@ -225,8 +228,14 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     routePrefix: '/docs',
   });
 
+  // Register auth plugin (JWT validation)
+  await app.register(fastifyAuthPlugin);
+
   // Register v1 routes
   await app.register(createV1Routes(config));
+
+  // Register WhatsApp mapping routes
+  await app.register(createWhatsAppMappingRoutes);
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
   app.get(
