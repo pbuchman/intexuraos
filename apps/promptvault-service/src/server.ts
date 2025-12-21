@@ -411,10 +411,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Initialize services with the logger (must be done early, before routes use them)
   getServices(notionLogger);
 
-  // CORS for cross-origin OpenAPI access (api-docs-hub)
+  // CORS for cross-origin API access (api-docs-hub, Swagger UI)
   await app.register(fastifyCors, {
     origin: true,
-    methods: ['GET', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
   await app.register(praxosFastifyPlugin);
