@@ -3,16 +3,21 @@ import type { FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeWhatsAppWebhookEventRepository } from '@praxos/infra-firestore';
+import {
+  FakeWhatsAppWebhookEventRepository,
+  FakeWhatsAppUserMappingRepository,
+} from '@praxos/infra-firestore';
 import type { Config } from '../config.js';
 
 describe('whatsapp-service endpoints', () => {
   let app: FastifyInstance;
   let webhookEventRepository: FakeWhatsAppWebhookEventRepository;
+  let userMappingRepository: FakeWhatsAppUserMappingRepository;
 
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    allowedPhoneNumberIds: ['test-phone-id'],
     port: 8080,
     host: '0.0.0.0',
   };
@@ -73,10 +78,12 @@ describe('whatsapp-service endpoints', () => {
   beforeEach(async () => {
     // Create fresh test adapters
     webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
+    userMappingRepository = new FakeWhatsAppUserMappingRepository();
 
     // Inject test adapters via DI
     setServices({
       webhookEventRepository,
+      userMappingRepository,
     });
 
     // Set test environment to skip real Firestore health check

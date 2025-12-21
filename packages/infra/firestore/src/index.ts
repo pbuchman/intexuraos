@@ -32,4 +32,5 @@ export {
   FakeNotionConnectionRepository,
   FakeIdempotencyLedger,
   FakeWhatsAppWebhookEventRepository,
+  FakeWhatsAppUserMappingRepository,
 } from './testing/index.js';

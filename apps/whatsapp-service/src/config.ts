@@ -22,6 +22,15 @@ const configSchema = z.object({
   appSecret: z.string().min(1, 'PRAXOS_WHATSAPP_APP_SECRET is required'),
 
   /**
+   * Allowed WhatsApp Business phone number IDs.
+   * Comma-separated list of phone number IDs that this service will process.
+   */
+  allowedPhoneNumberIds: z
+    .string()
+    .min(1, 'PRAXOS_WHATSAPP_PHONE_NUMBER_ID is required')
+    .transform((val) => val.split(',').map((id) => id.trim())),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -42,6 +51,7 @@ export function loadConfig(): Config {
   return configSchema.parse({
     verifyToken: process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'],
     appSecret: process.env['PRAXOS_WHATSAPP_APP_SECRET'],
+    allowedPhoneNumberIds: process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -52,6 +62,10 @@ export function loadConfig(): Config {
  * Returns list of missing variables.
  */
 export function validateConfigEnv(): string[] {
-  const required = ['PRAXOS_WHATSAPP_VERIFY_TOKEN', 'PRAXOS_WHATSAPP_APP_SECRET'];
+  const required = [
+    'PRAXOS_WHATSAPP_VERIFY_TOKEN',
+    'PRAXOS_WHATSAPP_APP_SECRET',
+    'PRAXOS_WHATSAPP_PHONE_NUMBER_ID',
+  ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

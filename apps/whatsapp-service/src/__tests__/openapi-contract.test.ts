@@ -25,6 +25,7 @@ describe('whatsapp-service OpenAPI contract', () => {
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    allowedPhoneNumberIds: ['test-phone-id'],
     port: 8080,
     host: '0.0.0.0',
   };

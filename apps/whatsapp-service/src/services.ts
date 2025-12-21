@@ -2,14 +2,21 @@
  * Service container for whatsapp-service.
  * Provides dependency injection for adapters.
  */
-import type { WhatsAppWebhookEventRepository } from '@praxos/domain-inbox';
-import { FirestoreWhatsAppWebhookEventRepository } from '@praxos/infra-firestore';
+import type {
+  WhatsAppWebhookEventRepository,
+  WhatsAppUserMappingRepository,
+} from '@praxos/domain-inbox';
+import {
+  FirestoreWhatsAppWebhookEventRepository,
+  FirestoreWhatsAppUserMappingRepository,
+} from '@praxos/infra-firestore';
 
 /**
  * Service container holding all adapter instances.
  */
 export interface ServiceContainer {
   webhookEventRepository: WhatsAppWebhookEventRepository;
+  userMappingRepository: WhatsAppUserMappingRepository;
 }
 
 let container: ServiceContainer | null = null;
@@ -21,6 +28,7 @@ let container: ServiceContainer | null = null;
 export function getServices(): ServiceContainer {
   container ??= {
     webhookEventRepository: new FirestoreWhatsAppWebhookEventRepository(),
+    userMappingRepository: new FirestoreWhatsAppUserMappingRepository(),
   };
   return container;
 }
