@@ -2,7 +2,7 @@
  * Service container for whatsapp-service.
  * Provides dependency injection for adapters.
  */
-import type { WhatsAppWebhookEventRepository } from '@praxos/infra-firestore';
+import type { WhatsAppWebhookEventRepository } from '@praxos/domain-inbox';
 import { FirestoreWhatsAppWebhookEventRepository } from '@praxos/infra-firestore';
 
 /**

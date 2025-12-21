@@ -210,13 +210,14 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
         // Extract phone number ID from payload
         const phoneNumberId = extractPhoneNumberId(request.body);
 
-        // Persist webhook event
+        // Persist webhook event with initial PENDING status
         const { webhookEventRepository } = getServices();
         const saveResult = await webhookEventRepository.saveEvent({
           payload: request.body,
           signatureValid: true,
           receivedAt: new Date().toISOString(),
           phoneNumberId,
+          status: 'PENDING',
         });
 
         if (!saveResult.ok) {

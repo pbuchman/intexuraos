@@ -72,6 +72,7 @@ describe('FakeWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: new Date().toISOString(),
       phoneNumberId: '123456789',
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
@@ -92,12 +93,14 @@ describe('FakeWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: new Date().toISOString(),
       phoneNumberId: '111',
+      status: 'PENDING' as const,
     };
     const event2 = {
       payload: { msg: 'second' },
       signatureValid: false,
       receivedAt: new Date().toISOString(),
       phoneNumberId: '222',
+      status: 'PENDING' as const,
     };
 
     await repository.saveEvent(event1);
@@ -113,6 +116,7 @@ describe('FakeWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: new Date().toISOString(),
       phoneNumberId: '333',
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
@@ -135,6 +139,7 @@ describe('FakeWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: new Date().toISOString(),
       phoneNumberId: null,
+      status: 'PENDING' as const,
     });
 
     repository.clear();
@@ -149,6 +154,7 @@ describe('FakeWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: new Date().toISOString(),
       phoneNumberId: null,
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
@@ -178,6 +184,7 @@ describe('FirestoreWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: '2025-01-01T00:00:00.000Z',
       phoneNumberId: '123456789',
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
@@ -203,13 +210,14 @@ describe('FirestoreWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: '2025-01-01T00:00:00.000Z',
       phoneNumberId: null,
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('INTERNAL_ERROR');
+      expect(result.error.code).toBe('PERSISTENCE_ERROR');
       expect(result.error.message).toContain('Failed to save webhook event');
       expect(result.error.message).toContain('Firestore unavailable');
     }
@@ -235,13 +243,14 @@ describe('FirestoreWhatsAppWebhookEventRepository', () => {
       signatureValid: true,
       receivedAt: '2025-01-01T00:00:00.000Z',
       phoneNumberId: null,
+      status: 'PENDING' as const,
     };
 
     const result = await repository.saveEvent(event);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('INTERNAL_ERROR');
+      expect(result.error.code).toBe('PERSISTENCE_ERROR');
       expect(result.error.message).toContain('Unknown Firestore error');
     }
   });

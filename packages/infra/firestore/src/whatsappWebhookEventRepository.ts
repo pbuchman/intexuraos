@@ -1,7 +1,15 @@
 /**
  * Firestore implementation for storing WhatsApp webhook events.
+ * Implements the domain interface from @praxos/domain-inbox.
  */
 import { ok, err, type Result } from '@praxos/common';
+import type {
+  WhatsAppWebhookEventRepository,
+  WhatsAppWebhookEvent,
+  WebhookProcessingStatus,
+  IgnoredReason,
+  InboxError,
+} from '@praxos/domain-inbox';
 import { getFirestore } from './client.js';
 import { randomUUID } from 'node:crypto';
 
@@ -11,49 +19,19 @@ import { randomUUID } from 'node:crypto';
 const WHATSAPP_EVENTS_COLLECTION = 'whatsapp_webhook_events';
 
 /**
- * Persisted webhook event structure.
+ * Firestore document structure.
  */
-export interface WhatsAppWebhookEvent {
-  /**
-   * Unique event ID.
-   */
+interface WhatsAppWebhookEventDoc {
   id: string;
-  /**
-   * Raw webhook payload from Meta.
-   */
   payload: unknown;
-  /**
-   * Whether signature was valid.
-   */
   signatureValid: boolean;
-  /**
-   * ISO timestamp when event was received.
-   */
   receivedAt: string;
-  /**
-   * Phone number ID from metadata (if available).
-   */
   phoneNumberId: string | null;
-}
-
-/**
- * Error type for webhook event repository operations.
- */
-export interface WebhookEventError {
-  code: 'INTERNAL_ERROR';
-  message: string;
-}
-
-/**
- * Repository interface for WhatsApp webhook events.
- */
-export interface WhatsAppWebhookEventRepository {
-  /**
-   * Save a webhook event to storage.
-   */
-  saveEvent(
-    event: Omit<WhatsAppWebhookEvent, 'id'>
-  ): Promise<Result<WhatsAppWebhookEvent, WebhookEventError>>;
+  status: WebhookProcessingStatus;
+  ignoredReason?: IgnoredReason;
+  failureDetails?: string;
+  inboxNoteId?: string;
+  processedAt?: string;
 }
 
 /**
@@ -62,7 +40,7 @@ export interface WhatsAppWebhookEventRepository {
 export class FirestoreWhatsAppWebhookEventRepository implements WhatsAppWebhookEventRepository {
   async saveEvent(
     event: Omit<WhatsAppWebhookEvent, 'id'>
-  ): Promise<Result<WhatsAppWebhookEvent, WebhookEventError>> {
+  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
     try {
       const db = getFirestore();
       const id = randomUUID();
@@ -78,8 +56,98 @@ export class FirestoreWhatsAppWebhookEventRepository implements WhatsAppWebhookE
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
-        code: 'INTERNAL_ERROR',
+        code: 'PERSISTENCE_ERROR',
         message: `Failed to save webhook event: ${message}`,
+      });
+    }
+  }
+
+  async updateEventStatus(
+    eventId: string,
+    status: WebhookProcessingStatus,
+    metadata: {
+      ignoredReason?: IgnoredReason;
+      failureDetails?: string;
+      inboxNoteId?: string;
+    }
+  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(WHATSAPP_EVENTS_COLLECTION).doc(eventId);
+
+      const update: Partial<WhatsAppWebhookEventDoc> = {
+        status,
+        processedAt: new Date().toISOString(),
+      };
+
+      if (metadata.ignoredReason) {
+        update.ignoredReason = metadata.ignoredReason;
+      }
+      if (metadata.failureDetails) {
+        update.failureDetails = metadata.failureDetails;
+      }
+      if (metadata.inboxNoteId) {
+        update.inboxNoteId = metadata.inboxNoteId;
+      }
+
+      await docRef.update(update);
+
+      // Fetch and return updated event
+      const doc = await docRef.get();
+      const data = doc.data() as WhatsAppWebhookEventDoc;
+
+      const event: WhatsAppWebhookEvent = {
+        id: data.id,
+        payload: data.payload,
+        signatureValid: data.signatureValid,
+        receivedAt: data.receivedAt,
+        phoneNumberId: data.phoneNumberId,
+        status: data.status,
+        ...(data.ignoredReason && { ignoredReason: data.ignoredReason }),
+        ...(data.failureDetails && { failureDetails: data.failureDetails }),
+        ...(data.inboxNoteId && { inboxNoteId: data.inboxNoteId }),
+        ...(data.processedAt && { processedAt: data.processedAt }),
+      };
+
+      return ok(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: `Failed to update webhook event status: ${message}`,
+      });
+    }
+  }
+
+  async getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(WHATSAPP_EVENTS_COLLECTION).doc(eventId);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        return ok(null);
+      }
+
+      const data = doc.data() as WhatsAppWebhookEventDoc;
+      const event: WhatsAppWebhookEvent = {
+        id: data.id,
+        payload: data.payload,
+        signatureValid: data.signatureValid,
+        receivedAt: data.receivedAt,
+        phoneNumberId: data.phoneNumberId,
+        status: data.status,
+        ...(data.ignoredReason && { ignoredReason: data.ignoredReason }),
+        ...(data.failureDetails && { failureDetails: data.failureDetails }),
+        ...(data.inboxNoteId && { inboxNoteId: data.inboxNoteId }),
+        ...(data.processedAt && { processedAt: data.processedAt }),
+      };
+      return ok(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: `Failed to get webhook event: ${message}`,
       });
     }
   }
