@@ -3,6 +3,7 @@
 ## Prerequisites (Must be completed first)
 
 ### 1. Create WhatsApp webhook payload types and validation
+
 - Location: `packages/domain/whatsapp/`
 - Create TypeScript types for WhatsApp Business Cloud API webhook payloads
 - Include: `WebhookPayload`, `MessageEntry`, `TextMessage`, `Contact`
@@ -11,6 +12,7 @@
 - Tests required: Schema validation for valid/invalid payloads
 
 ### 2. Create InboxNote domain model
+
 - Location: `packages/domain/inbox/`
 - Create `InboxNote` entity matching schema in `docs/notion-inbox.md`
 - Properties: Title, Status, Source, MessageType, Type, Topic, OriginalText, CleanText, Sender, ExternalID, CapturedAt, URL
@@ -19,12 +21,14 @@
 - Tests required: Entity creation, validation of required fields
 
 ### 3. Create InboxNote repository port (interface)
+
 - Location: `packages/domain/inbox/`
 - Define `InboxNoteRepository` interface with `create(note: InboxNote): Promise<Result<InboxNote, Error>>`
 - This is the port in hexagonal architecture
 - Tests required: N/A (interface only)
 
 ### 4. Create WhatsApp user mapping domain types
+
 - Location: `packages/domain/identity/` or `packages/domain/whatsapp/`
 - Create `WhatsAppUserMapping` type: `{ phoneNumber: string, userId: string }`
 - Create `WhatsAppUserMappingRepository` port interface
@@ -32,6 +36,7 @@
 - Tests required: Type validation
 
 ### 5. Create webhook persistence domain types
+
 - Location: `packages/domain/whatsapp/`
 - Create `WebhookRecord` entity with:
   - `id`, `payload`, `status`, `rejectionReason`, `createdAt`
@@ -45,6 +50,7 @@
 ## Infrastructure Layer (Depends on domain layer)
 
 ### 6. Create Firestore adapter for webhook persistence
+
 - Location: `packages/infra/firestore/`
 - Implement `WebhookRepository` port
 - Collection: `whatsapp_webhooks`
@@ -52,6 +58,7 @@
 - Tests required: CRUD operations with mocked Firestore
 
 ### 7. Create Firestore adapter for WhatsApp user mappings
+
 - Location: `packages/infra/firestore/`
 - Implement `WhatsAppUserMappingRepository` port
 - Collection: `whatsapp_user_mappings`
@@ -59,6 +66,7 @@
 - Tests required: findByPhoneNumber with mocked Firestore
 
 ### 8. Create Notion adapter for InboxNote persistence
+
 - Location: `packages/infra/notion/`
 - Implement `InboxNoteRepository` port
 - Use database ID from `docs/notion-inbox.md`: `fd13e74a-1128-495f-ae24-8a70acf30f62`
@@ -66,6 +74,7 @@
 - Tests required: Property mapping, API call structure with mocked Notion client
 
 ### 9. Create WhatsApp messaging adapter (outgoing messages)
+
 - Location: `packages/infra/whatsapp/`
 - Create `WhatsAppMessenger` port in domain
 - Implement adapter using WhatsApp Business Cloud API
@@ -78,6 +87,7 @@
 ## Application Service Layer (Depends on infrastructure adapters)
 
 ### 10. Create ProcessWhatsAppWebhook use case
+
 - Location: `apps/whatsapp-service/src/application/` or `packages/domain/whatsapp/`
 - Orchestrates the full flow:
   1. Persist webhook (always)
@@ -93,6 +103,7 @@
 - Tests required: Full flow with mocked ports, all status paths
 
 ### 11. Create WhatsApp service configuration
+
 - Location: `apps/whatsapp-service/src/config/`
 - Environment variables:
   - `PRAXOS_WHATSAPP_SERVED_PHONE_NUMBERS` (comma-separated list)
@@ -108,6 +119,7 @@
 ## HTTP Layer (Depends on application services)
 
 ### 12. Create webhook verification endpoint (GET)
+
 - Location: `apps/whatsapp-service/src/routes/webhooks/`
 - Endpoint: `GET /webhooks/whatsapp`
 - Verify `hub.verify_token` matches `PRAXOS_WHATSAPP_VERIFY_TOKEN`
@@ -115,6 +127,7 @@
 - Tests required: Verification flow
 
 ### 13. Create webhook handler endpoint (POST)
+
 - Location: `apps/whatsapp-service/src/routes/webhooks/`
 - Endpoint: `POST /webhooks/whatsapp`
 - Validate webhook signature using `PRAXOS_WHATSAPP_APP_SECRET`
@@ -124,6 +137,7 @@
 - Tests required: Signature validation, payload parsing, status codes
 
 ### 14. Create Fastify route registration
+
 - Location: `apps/whatsapp-service/src/routes/`
 - Register webhook routes with Fastify
 - Add request logging
@@ -135,6 +149,7 @@
 ## User Mapping Management (Parallel track)
 
 ### 15. Create WhatsApp connection management endpoints
+
 - Location: `apps/whatsapp-service/src/routes/connections/` or separate admin service
 - Endpoints analogous to Notion connection flow:
   - `POST /connections/whatsapp` - create mapping
@@ -148,6 +163,7 @@
 ## Notification Messages (Depends on WhatsApp adapter)
 
 ### 16. Define notification message templates
+
 - Location: `packages/domain/whatsapp/` or config
 - Messages for:
   - Success: "Your note has been saved to PraxOS."
@@ -161,6 +177,7 @@
 ## Infrastructure Setup
 
 ### 17. Add Firestore collections and indexes
+
 - Location: `terraform/` or Firestore setup scripts
 - Collections:
   - `whatsapp_webhooks`
@@ -168,6 +185,7 @@
 - Tests required: N/A (infrastructure)
 
 ### 18. Add Secret Manager secrets for WhatsApp
+
 - Location: `terraform/`
 - Secrets per `docs/setup/07-whatsapp-business-cloud-api.md`:
   - `PRAXOS_WHATSAPP_VERIFY_TOKEN`
@@ -182,12 +200,14 @@
 ## Integration & E2E Tests
 
 ### 19. Create integration tests for full webhook flow
+
 - Location: `apps/whatsapp-service/src/__tests__/`
 - Test complete flow with mocked external services
 - Cover all webhook statuses: PROCESSED, FAILED, USER_UNMAPPED, IGNORED
 - Tests required: This IS the test task
 
 ### 20. Update CI/CD for whatsapp-service
+
 - Location: `.github/workflows/` or existing CI config
 - Add whatsapp-service to build/test pipeline
 - Ensure coverage thresholds are met (90%+ per copilot-instructions.md)
@@ -198,12 +218,14 @@
 ## Documentation
 
 ### 21. Create whatsapp-service README
+
 - Location: `apps/whatsapp-service/README.md`
 - Brief purpose statement
 - Links to `docs/setup/07-whatsapp-business-cloud-api.md`
 - Links to `docs/notion-inbox.md`
 
 ### 22. Update docs/notion-inbox.md if schema changes discovered
+
 - Verify all property names match actual Notion database
 - Document any discrepancies found during implementation
 
@@ -212,6 +234,7 @@
 ## Verification Checklist (Per Task)
 
 Each task above must satisfy:
+
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
 - [ ] `npm run test:coverage` passes with ≥90% coverage

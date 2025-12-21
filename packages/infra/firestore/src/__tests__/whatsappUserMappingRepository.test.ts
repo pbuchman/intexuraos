@@ -38,23 +38,37 @@ function createMockFirestore(): {
   };
 
   result.instance = {
-    collection: (_collectionPath: string): {
+    collection: (
+      _collectionPath: string
+    ): {
       doc: (userId: string) => {
         get: () => Promise<{ exists: boolean; data: () => WhatsAppUserMappingDoc | undefined }>;
         set: (data: WhatsAppUserMappingDoc) => Promise<void>;
         update: (update: Partial<WhatsAppUserMappingDoc>) => Promise<void>;
       };
-      where: (field: string, op: string, value: unknown) => {
-        get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+      where: (
+        field: string,
+        op: string,
+        value: unknown
+      ) => {
+        get: () => Promise<{
+          empty: boolean;
+          docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+        }>;
       };
     } => ({
-      doc: (userId: string): {
+      doc: (
+        userId: string
+      ): {
         get: () => Promise<{ exists: boolean; data: () => WhatsAppUserMappingDoc | undefined }>;
         set: (data: WhatsAppUserMappingDoc) => Promise<void>;
         update: (update: Partial<WhatsAppUserMappingDoc>) => Promise<void>;
       } => ({
         /* eslint-disable @typescript-eslint/require-await */
-        get: async (): Promise<{ exists: boolean; data: () => WhatsAppUserMappingDoc | undefined }> => {
+        get: async (): Promise<{
+          exists: boolean;
+          data: () => WhatsAppUserMappingDoc | undefined;
+        }> => {
           if (result.shouldFail) {
             throw new Error('Firestore error');
           }
@@ -81,14 +95,31 @@ function createMockFirestore(): {
           docs.set(userId, { ...existing, ...update });
         },
       }),
-      where: (field: string, op: string, value: unknown): {
-        where: (field2: string, op2: string, value2: unknown) => {
+      where: (
+        field: string,
+        op: string,
+        value: unknown
+      ): {
+        where: (
+          field2: string,
+          op2: string,
+          value2: unknown
+        ) => {
           limit: (_n: number) => {
-            get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+            get: () => Promise<{
+              empty: boolean;
+              docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+            }>;
           };
-          get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+          get: () => Promise<{
+            empty: boolean;
+            docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+          }>;
         };
-        get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+        get: () => Promise<{
+          empty: boolean;
+          docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+        }>;
       } => {
         let filtered = Array.from(docs.entries()).map(([id, doc]) => ({ id, doc }));
 
@@ -100,20 +131,38 @@ function createMockFirestore(): {
         }
 
         return {
-          where: (field2: string, op2: string, value2: unknown): {
+          where: (
+            field2: string,
+            op2: string,
+            value2: unknown
+          ): {
             limit: (_n: number) => {
-              get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+              get: () => Promise<{
+                empty: boolean;
+                docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+              }>;
             };
-            get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+            get: () => Promise<{
+              empty: boolean;
+              docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+            }>;
           } => {
             if (field2 === 'connected' && op2 === '==') {
               filtered = filtered.filter(({ doc }) => doc.connected === value2);
             }
             return {
-              limit: (_n: number): {
-                get: () => Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }>;
+              limit: (
+                _n: number
+              ): {
+                get: () => Promise<{
+                  empty: boolean;
+                  docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+                }>;
               } => ({
-                get: async (): Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }> => {
+                get: async (): Promise<{
+                  empty: boolean;
+                  docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+                }> => {
                   if (result.shouldFail) {
                     throw new Error('Firestore error');
                   }
@@ -126,7 +175,10 @@ function createMockFirestore(): {
                   };
                 },
               }),
-              get: async (): Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }> => {
+              get: async (): Promise<{
+                empty: boolean;
+                docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+              }> => {
                 if (result.shouldFail) {
                   throw new Error('Firestore error');
                 }
@@ -140,7 +192,10 @@ function createMockFirestore(): {
               },
             };
           },
-          get: async (): Promise<{ empty: boolean; docs: { id: string; data: () => WhatsAppUserMappingDoc }[] }> => {
+          get: async (): Promise<{
+            empty: boolean;
+            docs: { id: string; data: () => WhatsAppUserMappingDoc }[];
+          }> => {
             if (result.shouldFail) {
               throw new Error('Firestore error');
             }

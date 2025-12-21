@@ -3,7 +3,10 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ok, err, type Result } from '@praxos/common';
-import { ProcessWhatsAppWebhookUseCase, type WhatsAppWebhookPayload } from '../usecases/processWhatsAppWebhook.js';
+import {
+  ProcessWhatsAppWebhookUseCase,
+  type WhatsAppWebhookPayload,
+} from '../usecases/processWhatsAppWebhook.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -147,10 +150,13 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
     };
 
     notesRepo = {
-      createNote: async (note: InboxNote): Promise<Result<InboxNote, InboxError>> => ok({ ...note, id: 'note-1' }),
+      createNote: async (note: InboxNote): Promise<Result<InboxNote, InboxError>> =>
+        ok({ ...note, id: 'note-1' }),
       getNote: async (): Promise<Result<InboxNote | null, InboxError>> => ok(null),
-      updateNote: async (noteId: string, updates: Partial<InboxNote>): Promise<Result<InboxNote, InboxError>> =>
-        ok({ ...sampleNote, id: noteId, ...updates }),
+      updateNote: async (
+        noteId: string,
+        updates: Partial<InboxNote>
+      ): Promise<Result<InboxNote, InboxError>> => ok({ ...sampleNote, id: noteId, ...updates }),
       /* eslint-enable @typescript-eslint/require-await */
     };
 
@@ -410,7 +416,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   describe('user mapping', () => {
     it('returns USER_UNMAPPED when no mapping found', async (): Promise<void> => {
       // eslint-disable-next-line @typescript-eslint/require-await
-      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> => ok(null);
+      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> =>
+        ok(null);
 
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
@@ -446,7 +453,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
 
     it('returns USER_UNMAPPED when mapping is null', async (): Promise<void> => {
       // eslint-disable-next-line @typescript-eslint/require-await
-      mappingRepo.getMapping = async (): Promise<Result<WhatsAppUserMapping | null, InboxError>> => ok(null);
+      mappingRepo.getMapping = async (): Promise<Result<WhatsAppUserMapping | null, InboxError>> =>
+        ok(null);
 
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
@@ -464,7 +472,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
         message: 'Database error',
       };
       // eslint-disable-next-line @typescript-eslint/require-await
-      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> => err(error);
+      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> =>
+        err(error);
 
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
@@ -481,7 +490,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
         message: 'Database error',
       };
       // eslint-disable-next-line @typescript-eslint/require-await
-      mappingRepo.getMapping = async (): Promise<Result<WhatsAppUserMapping | null, InboxError>> => err(error);
+      mappingRepo.getMapping = async (): Promise<Result<WhatsAppUserMapping | null, InboxError>> =>
+        err(error);
 
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
@@ -516,8 +526,13 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       let capturedStatus: string | undefined;
       let capturedData: object | undefined;
 
-      // eslint-disable-next-line @typescript-eslint/require-await
-      webhookRepo.updateEventStatus = async (_id: string, status: WebhookProcessingStatus, data?: object): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+      /* eslint-disable @typescript-eslint/require-await */
+      webhookRepo.updateEventStatus = async (
+        _id: string,
+        status: WebhookProcessingStatus,
+        data?: object
+      ): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+        /* eslint-enable @typescript-eslint/require-await */
         capturedStatus = status;
         capturedData = data;
         const dataObj = data as Record<string, unknown> | undefined;
@@ -528,9 +543,15 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
           receivedAt: new Date().toISOString(),
           phoneNumberId: '123456789012345',
           status,
-          ...(dataObj?.['ignoredReason'] !== undefined && { ignoredReason: dataObj['ignoredReason'] as unknown }),
-          ...(dataObj?.['failureDetails'] !== undefined && { failureDetails: dataObj['failureDetails'] as string }),
-          ...(dataObj?.['inboxNoteId'] !== undefined && { inboxNoteId: dataObj['inboxNoteId'] as string }),
+          ...(dataObj?.['ignoredReason'] !== undefined && {
+            ignoredReason: dataObj['ignoredReason'] as unknown,
+          }),
+          ...(dataObj?.['failureDetails'] !== undefined && {
+            failureDetails: dataObj['failureDetails'] as string,
+          }),
+          ...(dataObj?.['inboxNoteId'] !== undefined && {
+            inboxNoteId: dataObj['inboxNoteId'] as string,
+          }),
         } as WhatsAppWebhookEvent);
       };
 
@@ -543,11 +564,17 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
 
     it('updates webhook event status to PROCESSED without note ID if undefined', async (): Promise<void> => {
       // eslint-disable-next-line @typescript-eslint/require-await
-      notesRepo.createNote = async (note: InboxNote): Promise<Result<InboxNote, InboxError>> => ok({ ...note });
+      notesRepo.createNote = async (note: InboxNote): Promise<Result<InboxNote, InboxError>> =>
+        ok({ ...note });
 
       let capturedData: object | undefined;
-      // eslint-disable-next-line @typescript-eslint/require-await
-      webhookRepo.updateEventStatus = async (_id: string, status: WebhookProcessingStatus, data?: object): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+      /* eslint-disable @typescript-eslint/require-await */
+      webhookRepo.updateEventStatus = async (
+        _id: string,
+        status: WebhookProcessingStatus,
+        data?: object
+      ): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+        /* eslint-enable @typescript-eslint/require-await */
         capturedData = data;
         return ok({
           id: 'event-1',
@@ -569,8 +596,13 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       let capturedStatus: string | undefined;
       let capturedData: object | undefined;
 
-      // eslint-disable-next-line @typescript-eslint/require-await
-      webhookRepo.updateEventStatus = async (_id: string, status: WebhookProcessingStatus, data?: object): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+      /* eslint-disable @typescript-eslint/require-await */
+      webhookRepo.updateEventStatus = async (
+        _id: string,
+        status: WebhookProcessingStatus,
+        data?: object
+      ): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+        /* eslint-enable @typescript-eslint/require-await */
         capturedStatus = status;
         capturedData = data;
         const dataObj = data as Record<string, unknown> | undefined;
@@ -582,11 +614,15 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
           phoneNumberId: '123456789012345',
           status,
         };
-        
-        if (dataObj !== undefined && 'ignoredReason' in dataObj && dataObj['ignoredReason'] !== undefined) {
+
+        if (
+          dataObj !== undefined &&
+          'ignoredReason' in dataObj &&
+          dataObj['ignoredReason'] !== undefined
+        ) {
           return ok({ ...baseEvent, ignoredReason: dataObj['ignoredReason'] as IgnoredReason });
         }
-        
+
         return ok(baseEvent);
       };
 
@@ -601,11 +637,16 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
 
     it('updates webhook event status to USER_UNMAPPED with reason', async (): Promise<void> => {
       // eslint-disable-next-line @typescript-eslint/require-await
-      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> => ok(null);
+      mappingRepo.findUserByPhoneNumber = async (): Promise<Result<string | null, InboxError>> =>
+        ok(null);
 
       let capturedStatus: string | undefined;
-      // eslint-disable-next-line @typescript-eslint/require-await
-      webhookRepo.updateEventStatus = async (_id: string, status: WebhookProcessingStatus): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+      /* eslint-disable @typescript-eslint/require-await */
+      webhookRepo.updateEventStatus = async (
+        _id: string,
+        status: WebhookProcessingStatus
+      ): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+        /* eslint-enable @typescript-eslint/require-await */
         capturedStatus = status;
         return ok({
           id: 'event-1',
@@ -634,8 +675,13 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       let capturedStatus: string | undefined;
       let capturedData: object | undefined;
 
-      // eslint-disable-next-line @typescript-eslint/require-await
-      webhookRepo.updateEventStatus = async (_id: string, status: WebhookProcessingStatus, data?: object): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+      /* eslint-disable @typescript-eslint/require-await */
+      webhookRepo.updateEventStatus = async (
+        _id: string,
+        status: WebhookProcessingStatus,
+        data?: object
+      ): Promise<Result<WhatsAppWebhookEvent, InboxError>> => {
+        /* eslint-enable @typescript-eslint/require-await */
         capturedStatus = status;
         capturedData = data;
         const dataObj = data as Record<string, unknown> | undefined;
@@ -647,11 +693,11 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
           phoneNumberId: '123456789012345',
           status,
         };
-        
+
         if (dataObj?.['failureDetails'] !== undefined) {
           return ok({ ...baseEvent, failureDetails: dataObj['failureDetails'] as string });
         }
-        
+
         return ok(baseEvent);
       };
 

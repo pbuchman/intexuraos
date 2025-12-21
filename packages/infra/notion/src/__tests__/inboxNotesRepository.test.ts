@@ -87,7 +87,9 @@ describe('NotionInboxNotesRepository', () => {
 
       await repo.createNote(sampleNote);
 
-      const createCall = mockClient.pages.create.mock.calls[0]?.[0] as { properties: Record<string, unknown> } | undefined;
+      const createCall = mockClient.pages.create.mock.calls[0]?.[0] as
+        | { properties: Record<string, unknown> }
+        | undefined;
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         const properties = createCall.properties;
