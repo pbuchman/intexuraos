@@ -1,0 +1,215 @@
+NOTION PROMPT VAULT — CONTEXT & TEST CASES
+
+This document provides test cases, edge case specifications, and additional context for the Notion Prompt Vault model. Load this as context reference.
+
+---
+
+# TEST CASES
+
+## A. Review Cases
+
+### A1. Missing prompt
+Command: `/review`
+Expected: Error "Missing prompt payload."
+
+### A2. Too few dimensions
+Input: Only 6 scored dimensions
+Expected: Self-test fails, error "Invalid review — 10 dimensions required."
+
+### A3. Invalid weight
+Input: Weight = 0
+Expected: Error: "Weight must be between 1 and 10."
+
+---
+
+## B. Save Behavior
+
+### B1. Save before review
+Command: `/save`
+State: `SAVE_ALLOWED = false`
+Expected: Error, reject with diagnostics.
+
+### B2. Save with prompt (Notion misconfigured)
+Command: `/save <prompt>`
+State: Notion misconfigured
+Expected: Error, diagnostics include `NOTION_CONFIGURED: NO`
+
+### B3. Successful review → save
+- Run: `/review <prompt>`
+- Score = 8.6
+- Ends loop
+- `/save` allowed
+Expected: Save works, shows success URL
+
+---
+
+## C. Auth Flow
+
+### C1. Start auth
+Command: `/auth start`
+Expected: Return device code, user instructions
+
+### C2. Poll auth (success)
+Command: `/auth poll`
+Expected: Store token, set `ACCESS_TOKEN`, `EXPIRES_AT`
+
+### C3. Poll auth (pending)
+Command: `/auth poll`
+Response: `authorization_pending`
+Expected: "Pending authorization. Complete login, then retry /auth poll."
+
+### C4. Poll auth (slow down)
+Command: `/auth poll`
+Response: `slow_down`
+Expected: "Slow down. Wait 5–10 seconds, then retry /auth poll."
+
+### C5. Poll auth (timeout)
+State: 12 unsuccessful polls
+Expected: Error "Auth timed out: run /auth start again" + diagnostics
+
+---
+
+## D. Edge Logic
+
+### D1. Loop termination via `stop`
+Score = 9.0, user says `stop`
+Expected: Loop ends, allow `/save`
+
+### D2. Max score = 10
+Score = 10.0
+Expected: Exit loop, allow `/save` immediately
+
+### D3. Max iterations reached
+State: `IMPROVEMENT_ITERATIONS = 10`, Score = 7.5
+Expected: Force loop exit, allow `/save`
+
+### D4. Token expiry during session
+State: `EXPIRES_AT` is 3 minutes ago
+Command: `/save`
+Expected: Error "Unauthorized: token expired", diagnostics, suggest `/auth start`
+
+### D5. Dimension tie-breaker
+State: Goal clarity = 5, Edge cases = 5 (both tied for lowest)
+Expected: Choose Goal clarity (weight 10 > weight 7)
+
+### D6. Save after failed save
+State: `LAST_SAVE_ERROR` is set, `SAVE_ALLOWED = false`
+Command: `/save`
+Expected: Error, must re-run `/review` first
+
+### D7. User declines improvement
+Score = 7.5, user answers "no" to improvement question
+Expected: Loop ends, allow `/save`
+
+### D8. Token refresh triggered
+State: `REFRESH_TOKEN` present, `EXPIRES_AT` in 3 minutes
+Command: `/save`
+Expected: Silent refresh, then proceed with save
+
+### D9. Token refresh fails
+State: `REFRESH_TOKEN` present, refresh API returns error
+Expected: Error "Unauthorized: token expired, run /auth start"
+
+---
+
+## E. API Error Handling
+
+### E1. Rate limited (429)
+Response: HTTP 429
+Expected: Wait indicated time, retry once, fail with diagnostics if still 429
+
+### E2. Server error (5xx)
+Response: HTTP 503
+Expected: Retry with exponential backoff (1s, 2s), fail after 2 retries
+
+### E3. Client error (4xx)
+Response: HTTP 400
+Expected: Fail immediately, no retry, show diagnostics
+
+---
+
+## F. Notion Integration
+
+### F1. Config without auth
+Command: `/config notion`
+State: No `ACCESS_TOKEN`
+Expected: Error "Unauthorized: run /auth start"
+
+### F2. Connection test fails
+Command: `/config notion`
+Response: API returns error
+Expected: Set `NOTION_CONNECTION_OK = NO`, show diagnostics
+
+### F3. Connection test succeeds
+Command: `/config notion`
+Response: API returns parent page info
+Expected: Set `NOTION_CONFIGURED = YES`, `NOTION_CONNECTION_OK = YES`, store page ID/title
+
+---
+
+# DIMENSION WEIGHT REFERENCE
+
+| # | Dimension | Default Weight |
+|---|-----------|----------------|
+| 1 | Goal clarity | 10 |
+| 2 | Output format | 9 |
+| 3 | Constraints & rules | 9 |
+| 4 | Context | 7 |
+| 5 | Role | 8 |
+| 6 | Quality bar | 6 |
+| 7 | Step-by-step guidance | 5 |
+| 8 | Examples | 4 |
+| 9 | Tone | 3 |
+| 10 | Edge cases | 7 |
+
+**Total weight sum:** 68
+
+---
+
+# SCORING FORMULA
+
+```
+Final Score = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+Example:
+- All dimensions score 8 → Final = 8.00
+- Goal clarity (w=10) scores 10, all others score 7 → Final = (10×10 + 7×58) / 68 = 7.44
+
+---
+
+# STATE INITIALIZATION
+
+On session start, all state resets to defaults:
+```
+ACCESS_TOKEN = null
+REFRESH_TOKEN = null
+EXPIRES_AT = null
+SAVE_ALLOWED = false
+LAST_REVIEWED_PROMPT = null
+LAST_REVIEW_SCORE = null
+IMPROVEMENT_ITERATIONS = 0
+LAST_SAVE_ERROR = null
+NOTION_CONFIGURED = NO
+NOTION_CONNECTION_OK = NO
+NOTION_PARENT_PAGE_ID = null
+NOTION_PARENT_PAGE_TITLE = null
+```
+
+---
+
+# API ENDPOINTS REFERENCE
+
+## Auth Service
+Base: `https://praxos-auth-service-ooafxzbaua-lm.a.run.app`
+- `POST /v1/auth/device/start` — Initiate device flow
+- `POST /v1/auth/device/poll` — Poll for token
+
+## PromptVault Service
+- `GET /v1/integrations/notion/status` — Check Notion connection
+- `POST /v1/tools/notion/promptvault/prompts` — Save prompt to Notion
+
+---
+
+# END OF CONTEXT DOCUMENT
+
