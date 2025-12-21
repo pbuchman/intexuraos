@@ -28,6 +28,12 @@ vi.mock('@notionhq/client', () => {
       ValidationError: 'validation_error',
       InvalidJSON: 'invalid_json',
     },
+    LogLevel: {
+      DEBUG: 'debug',
+      INFO: 'info',
+      WARN: 'warn',
+      ERROR: 'error',
+    },
   };
 });
 

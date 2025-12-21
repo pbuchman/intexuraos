@@ -10,7 +10,7 @@
  */
 
 // Adapters
-export { NotionApiAdapter } from './adapter.js';
+export { NotionApiAdapter, type NotionLogger } from './adapter.js';
 export { createNotionPromptRepository } from './promptRepository.js';
 
 // Testing utilities (for use by consuming packages)

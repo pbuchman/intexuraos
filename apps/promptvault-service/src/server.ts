@@ -5,7 +5,9 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
+import type { NotionLogger } from '@praxos/infra-notion';
 import { v1Routes } from './v1/routes.js';
+import { getServices } from './services.js';
 
 const SERVICE_NAME = 'promptvault-service';
 const SERVICE_VERSION = '0.0.1';
@@ -392,6 +394,22 @@ export async function buildServer(): Promise<FastifyInstance> {
       },
     },
   });
+
+  // Create NotionLogger adapter from Fastify logger
+  const notionLogger: NotionLogger = {
+    info: (msg, data) => {
+      app.log.info({ notionApi: true, ...data }, msg);
+    },
+    warn: (msg, data) => {
+      app.log.warn({ notionApi: true, ...data }, msg);
+    },
+    error: (msg, data) => {
+      app.log.error({ notionApi: true, ...data }, msg);
+    },
+  };
+
+  // Initialize services with the logger (must be done early, before routes use them)
+  getServices(notionLogger);
 
   // CORS for cross-origin OpenAPI access (api-docs-hub)
   await app.register(fastifyCors, {
