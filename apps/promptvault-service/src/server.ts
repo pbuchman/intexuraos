@@ -105,7 +105,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
     {
       // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
       // The Cloud Run service name change requires a manual redeployment.
-      url: 'https://praxos-notion-gpt-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development) - Legacy URL',
     },
   ];
