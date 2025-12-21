@@ -61,7 +61,7 @@ function createMockFirestore(): {
             throw new Error('Firestore error');
           }
           const existing = docs.get(userId);
-          if (!existing) {
+          if (existing === undefined) {
             throw new Error('Document not found');
           }
           docs.set(userId, { ...existing, ...update });
@@ -132,14 +132,14 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
   let repo: FirestoreWhatsAppUserMappingRepository;
   let mockDb: ReturnType<typeof createMockFirestore>;
 
-  beforeEach(() => {
+  beforeEach((): void => {
     mockDb = createMockFirestore();
     vi.mocked(getFirestore).mockReturnValue(mockDb.instance as never);
     repo = new FirestoreWhatsAppUserMappingRepository();
   });
 
   describe('saveMapping', () => {
-    it('creates new mapping successfully', async () => {
+    it('creates new mapping successfully', async (): Promise<void> => {
       const result = await repo.saveMapping('user-1', ['+1234567890'], 'notion-db-id');
 
       expect(result.ok).toBe(true);
@@ -152,7 +152,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('updates existing mapping preserving createdAt', async () => {
+    it('updates existing mapping preserving createdAt', async (): Promise<void> => {
       const originalCreatedAt = '2024-01-01T00:00:00.000Z';
       mockDb.docs.set('user-1', {
         userId: 'user-1',
@@ -174,7 +174,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('rejects mapping when phone number is already mapped to different user', async () => {
+    it('rejects mapping when phone number is already mapped to different user', async (): Promise<void> => {
       mockDb.docs.set('user-2', {
         userId: 'user-2',
         phoneNumbers: ['+1234567890'],
@@ -197,7 +197,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('allows same user to update their own phone numbers', async () => {
+    it('allows same user to update their own phone numbers', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1111111111'],
@@ -215,7 +215,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns error when Firestore operation fails', async () => {
+    it('returns error when Firestore operation fails', async (): Promise<void> => {
       mockDb.shouldFail = true;
 
       const result = await repo.saveMapping('user-1', ['+1234567890'], 'db-id');
@@ -229,7 +229,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
   });
 
   describe('getMapping', () => {
-    it('returns mapping when it exists', async () => {
+    it('returns mapping when it exists', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -253,7 +253,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns null when mapping does not exist', async () => {
+    it('returns null when mapping does not exist', async (): Promise<void> => {
       const result = await repo.getMapping('non-existent-user');
 
       expect(result.ok).toBe(true);
@@ -262,7 +262,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns error when Firestore operation fails', async () => {
+    it('returns error when Firestore operation fails', async (): Promise<void> => {
       mockDb.shouldFail = true;
 
       const result = await repo.getMapping('user-1');
@@ -276,7 +276,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
   });
 
   describe('findUserByPhoneNumber', () => {
-    it('finds user by phone number', async () => {
+    it('finds user by phone number', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890', '+0987654321'],
@@ -294,7 +294,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns null when phone number not found', async () => {
+    it('returns null when phone number not found', async (): Promise<void> => {
       const result = await repo.findUserByPhoneNumber('+9999999999');
 
       expect(result.ok).toBe(true);
@@ -303,7 +303,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('ignores disconnected mappings', async () => {
+    it('ignores disconnected mappings', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -321,7 +321,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns error when Firestore operation fails', async () => {
+    it('returns error when Firestore operation fails', async (): Promise<void> => {
       mockDb.shouldFail = true;
 
       const result = await repo.findUserByPhoneNumber('+1234567890');
@@ -335,7 +335,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
   });
 
   describe('disconnectMapping', () => {
-    it('disconnects existing mapping', async () => {
+    it('disconnects existing mapping', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -357,7 +357,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       expect(stored?.connected).toBe(false);
     });
 
-    it('returns error when mapping not found', async () => {
+    it('returns error when mapping not found', async (): Promise<void> => {
       const result = await repo.disconnectMapping('non-existent-user');
 
       expect(result.ok).toBe(false);
@@ -367,7 +367,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns error when Firestore operation fails', async () => {
+    it('returns error when Firestore operation fails', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -390,7 +390,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
   });
 
   describe('isConnected', () => {
-    it('returns true for connected mapping', async () => {
+    it('returns true for connected mapping', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -408,7 +408,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns false for disconnected mapping', async () => {
+    it('returns false for disconnected mapping', async (): Promise<void> => {
       mockDb.docs.set('user-1', {
         userId: 'user-1',
         phoneNumbers: ['+1234567890'],
@@ -426,7 +426,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns false for non-existent mapping', async () => {
+    it('returns false for non-existent mapping', async (): Promise<void> => {
       const result = await repo.isConnected('non-existent-user');
 
       expect(result.ok).toBe(true);
@@ -435,7 +435,7 @@ describe('FirestoreWhatsAppUserMappingRepository', () => {
       }
     });
 
-    it('returns error when Firestore operation fails', async () => {
+    it('returns error when Firestore operation fails', async (): Promise<void> => {
       mockDb.shouldFail = true;
 
       const result = await repo.isConnected('user-1');

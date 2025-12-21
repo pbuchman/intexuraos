@@ -43,7 +43,7 @@ describe('NotionInboxNotesRepository', () => {
     processedBy: 'None',
   };
 
-  beforeEach(() => {
+  beforeEach((): void => {
     mockClient = {
       pages: {
         create: vi.fn(),
@@ -57,7 +57,7 @@ describe('NotionInboxNotesRepository', () => {
   });
 
   describe('createNote', () => {
-    it('creates note in Notion successfully', async () => {
+    it('creates note in Notion successfully', async (): Promise<void> => {
       mockClient.pages.create.mockResolvedValue({
         id: 'notion-page-id',
         object: 'page',
@@ -79,7 +79,7 @@ describe('NotionInboxNotesRepository', () => {
       );
     });
 
-    it('maps note properties correctly', async () => {
+    it('maps note properties correctly', async (): Promise<void> => {
       mockClient.pages.create.mockResolvedValue({
         id: 'notion-page-id',
         object: 'page',
@@ -89,7 +89,7 @@ describe('NotionInboxNotesRepository', () => {
 
       const createCall = mockClient.pages.create.mock.calls[0]?.[0];
       expect(createCall).toBeDefined();
-      if (createCall) {
+      if (createCall !== undefined) {
         const properties = createCall.properties;
 
         expect(properties).toHaveProperty('Title');
@@ -99,7 +99,7 @@ describe('NotionInboxNotesRepository', () => {
       }
     });
 
-    it('returns error when Notion API fails', async () => {
+    it('returns error when Notion API fails', async (): Promise<void> => {
       mockClient.pages.create.mockRejectedValue(new Error('Notion API error'));
 
       const result = await repo.createNote(sampleNote);
@@ -111,7 +111,7 @@ describe('NotionInboxNotesRepository', () => {
       }
     });
 
-    it('handles note with all optional fields', async () => {
+    it('handles note with all optional fields', async (): Promise<void> => {
       mockClient.pages.create.mockResolvedValue({
         id: 'notion-page-id',
         object: 'page',
@@ -183,7 +183,7 @@ describe('NotionInboxNotesRepository', () => {
       const result = await repo.getNote('notion-page-id');
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value) {
+      if (result.ok && result.value !== undefined) {
         expect(result.value.id).toBe('notion-page-id');
         expect(result.value.title).toBe('Test Note');
         expect(result.value.status).toBe('Inbox');
@@ -191,7 +191,7 @@ describe('NotionInboxNotesRepository', () => {
       }
     });
 
-    it('returns null when page has no properties', async () => {
+    it('returns null when page has no properties', async (): Promise<void> => {
       mockClient.pages.retrieve.mockResolvedValue({
         id: 'notion-page-id',
         object: 'page',
@@ -205,7 +205,7 @@ describe('NotionInboxNotesRepository', () => {
       }
     });
 
-    it('returns error when Notion API fails', async () => {
+    it('returns error when Notion API fails', async (): Promise<void> => {
       mockClient.pages.retrieve.mockRejectedValue(new Error('Notion API error'));
 
       const result = await repo.getNote('notion-page-id');
@@ -281,7 +281,7 @@ describe('NotionInboxNotesRepository', () => {
       );
     });
 
-    it('returns error when response has no properties', async () => {
+    it('returns error when response has no properties', async (): Promise<void> => {
       mockClient.pages.update.mockResolvedValue({
         id: 'notion-page-id',
         object: 'page',
@@ -296,7 +296,7 @@ describe('NotionInboxNotesRepository', () => {
       }
     });
 
-    it('returns error when Notion API fails', async () => {
+    it('returns error when Notion API fails', async (): Promise<void> => {
       mockClient.pages.update.mockRejectedValue(new Error('Notion API error'));
 
       const result = await repo.updateNote('notion-page-id', { status: 'Processing' });

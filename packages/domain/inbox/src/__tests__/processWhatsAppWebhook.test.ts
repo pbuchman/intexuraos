@@ -63,7 +63,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
     };
   }
 
-  beforeEach(() => {
+  beforeEach((): void => {
     // Create mock repositories
     webhookRepo = {
       saveEvent: async () =>
@@ -149,7 +149,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   });
 
   describe('valid text message processing', () => {
-    it('processes valid webhook and creates inbox note', async () => {
+    it('processes valid webhook and creates inbox note', async (): Promise<void> => {
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
 
@@ -164,19 +164,19 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('creates title from message text', async () => {
+    it('creates title from message text', async (): Promise<void> => {
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.inboxNote) {
+      if (result.ok && result.value.inboxNote !== undefined) {
         expect(result.value.inboxNote.title).toBe('WA: Hello, World!');
       }
     });
 
-    it('truncates long messages in title', async () => {
+    it('truncates long messages in title', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]?.text) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]?.text !== undefined) {
         payload.entry[0].changes[0].value.messages[0].text.body =
           'This is a very long message that should be truncated to 50 characters';
       }
@@ -184,43 +184,43 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       const result = await useCase.execute('event-1', payload);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.inboxNote) {
+      if (result.ok && result.value.inboxNote !== undefined) {
         expect(result.value.inboxNote.title).toBe(
           'WA: This is a very long message that should be truncat...'
         );
       }
     });
 
-    it('includes sender name in sender field', async () => {
+    it('includes sender name in sender field', async (): Promise<void> => {
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.inboxNote) {
+      if (result.ok && result.value.inboxNote !== undefined) {
         expect(result.value.inboxNote.sender).toBe('Test User (15551234567)');
       }
     });
 
-    it('uses phone number if no sender name', async () => {
+    it('uses phone number if no sender name', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.contacts?.[0]) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.contacts?.[0] !== undefined) {
         delete payload.entry[0].changes[0].value.contacts[0].profile;
       }
 
       const result = await useCase.execute('event-1', payload);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.inboxNote) {
+      if (result.ok && result.value.inboxNote !== undefined) {
         expect(result.value.inboxNote.sender).toBe('15551234567');
       }
     });
 
-    it('converts timestamp to ISO date', async () => {
+    it('converts timestamp to ISO date', async (): Promise<void> => {
       const payload = createValidPayload();
       const result = await useCase.execute('event-1', payload);
 
       expect(result.ok).toBe(true);
-      if (result.ok && result.value.inboxNote) {
+      if (result.ok && result.value.inboxNote !== undefined) {
         const capturedDate = new Date(result.value.inboxNote.capturedAt);
         expect(capturedDate.toISOString()).toBe(new Date(1234567890 * 1000).toISOString());
       }
@@ -228,7 +228,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   });
 
   describe('webhook classification - ignored cases', () => {
-    it('ignores non-whatsapp_business_account objects', async () => {
+    it('ignores non-whatsapp_business_account objects', async (): Promise<void> => {
       const payload = createValidPayload();
       payload.object = 'instagram_account';
 
@@ -241,7 +241,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores webhook with no entries', async () => {
+    it('ignores webhook with no entries', async (): Promise<void> => {
       const payload = createValidPayload();
       payload.entry = [];
 
@@ -254,7 +254,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores webhook with undefined entries', async () => {
+    it('ignores webhook with undefined entries', async (): Promise<void> => {
       const payload = createValidPayload();
       delete payload.entry;
 
@@ -267,9 +267,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores entry with no changes', async () => {
+    it('ignores entry with no changes', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]) {
+      if (payload.entry?.[0] !== undefined) {
         payload.entry[0].changes = [];
       }
 
@@ -282,9 +282,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores unsupported phone number ID', async () => {
+    it('ignores unsupported phone number ID', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.metadata) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.metadata !== undefined) {
         payload.entry[0].changes[0].value.metadata.phone_number_id = '999999999';
       }
 
@@ -301,9 +301,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores webhook with no phone number ID', async () => {
+    it('ignores webhook with no phone number ID', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.metadata) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.metadata !== undefined) {
         delete payload.entry[0].changes[0].value.metadata.phone_number_id;
       }
 
@@ -316,9 +316,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores webhook with empty phone number ID', async () => {
+    it('ignores webhook with empty phone number ID', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.metadata) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.metadata !== undefined) {
         payload.entry[0].changes[0].value.metadata.phone_number_id = '';
       }
 
@@ -331,9 +331,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores status updates (no messages)', async () => {
+    it('ignores status updates (no messages)', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value) {
+      if (payload.entry?.[0]?.changes?.[0]?.value !== undefined) {
         delete payload.entry[0].changes[0].value.messages;
         payload.entry[0].changes[0].value.statuses = [
           { id: 'msg-1', status: 'delivered', timestamp: '1234567890' },
@@ -350,9 +350,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores non-text message types', async () => {
+    it('ignores non-text message types', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0] !== undefined) {
         payload.entry[0].changes[0].value.messages[0].type = 'image';
         delete payload.entry[0].changes[0].value.messages[0].text;
       }
@@ -367,9 +367,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores text message with no body', async () => {
+    it('ignores text message with no body', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]?.text) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]?.text !== undefined) {
         payload.entry[0].changes[0].value.messages[0].text.body = '';
       }
 
@@ -382,9 +382,9 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('ignores text message with undefined body', async () => {
+    it('ignores text message with undefined body', async (): Promise<void> => {
       const payload = createValidPayload();
-      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0]) {
+      if (payload.entry?.[0]?.changes?.[0]?.value.messages?.[0] !== undefined) {
         delete payload.entry[0].changes[0].value.messages[0].text;
       }
 
@@ -399,7 +399,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   });
 
   describe('user mapping', () => {
-    it('returns USER_UNMAPPED when no mapping found', async () => {
+    it('returns USER_UNMAPPED when no mapping found', async (): Promise<void> => {
       mappingRepo.findUserByPhoneNumber = async () => ok(null);
 
       const payload = createValidPayload();
@@ -412,7 +412,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('returns USER_UNMAPPED when mapping is disconnected', async () => {
+    it('returns USER_UNMAPPED when mapping is disconnected', async (): Promise<void> => {
       mappingRepo.getMapping = async () =>
         ok({
           userId: 'user-1',
@@ -433,7 +433,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('returns USER_UNMAPPED when mapping is null', async () => {
+    it('returns USER_UNMAPPED when mapping is null', async (): Promise<void> => {
       mappingRepo.getMapping = async () => ok(null);
 
       const payload = createValidPayload();
@@ -446,7 +446,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('propagates error from findUserByPhoneNumber', async () => {
+    it('propagates error from findUserByPhoneNumber', async (): Promise<void> => {
       const error: InboxError = {
         code: 'PERSISTENCE_ERROR',
         message: 'Database error',
@@ -462,7 +462,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('propagates error from getMapping', async () => {
+    it('propagates error from getMapping', async (): Promise<void> => {
       const error: InboxError = {
         code: 'PERSISTENCE_ERROR',
         message: 'Database error',
@@ -480,7 +480,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   });
 
   describe('Notion persistence', () => {
-    it('returns FAILED when Notion write fails', async () => {
+    it('returns FAILED when Notion write fails', async (): Promise<void> => {
       const error: InboxError = {
         code: 'PERSISTENCE_ERROR',
         message: 'Notion API error',
@@ -497,7 +497,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
-    it('updates webhook event status to PROCESSED with note ID', async () => {
+    it('updates webhook event status to PROCESSED with note ID', async (): Promise<void> => {
       let capturedStatus: string | undefined;
       let capturedData: object | undefined;
 
@@ -524,7 +524,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       expect(capturedData).toEqual({ inboxNoteId: 'note-1' });
     });
 
-    it('updates webhook event status to PROCESSED without note ID if undefined', async () => {
+    it('updates webhook event status to PROCESSED without note ID if undefined', async (): Promise<void> => {
       notesRepo.createNote = async (note: InboxNote) => ok({ ...note });
 
       let capturedData: object | undefined;
@@ -546,7 +546,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       expect(capturedData).toEqual({});
     });
 
-    it('updates webhook event status to IGNORED with reason', async () => {
+    it('updates webhook event status to IGNORED with reason', async (): Promise<void> => {
       let capturedStatus: string | undefined;
       let capturedData: object | undefined;
 
@@ -573,7 +573,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       expect(capturedData).toHaveProperty('ignoredReason');
     });
 
-    it('updates webhook event status to USER_UNMAPPED with reason', async () => {
+    it('updates webhook event status to USER_UNMAPPED with reason', async (): Promise<void> => {
       mappingRepo.findUserByPhoneNumber = async () => ok(null);
 
       let capturedStatus: string | undefined;
@@ -595,7 +595,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       expect(capturedStatus).toBe('USER_UNMAPPED');
     });
 
-    it('updates webhook event status to FAILED with details', async () => {
+    it('updates webhook event status to FAILED with details', async (): Promise<void> => {
       const error: InboxError = {
         code: 'PERSISTENCE_ERROR',
         message: 'Notion API error',
