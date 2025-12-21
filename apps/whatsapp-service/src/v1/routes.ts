@@ -6,6 +6,7 @@ import { getServices } from '../services.js';
 import type { Config } from '../config.js';
 import { ProcessWhatsAppWebhookUseCase } from '@praxos/domain-inbox';
 import { NotionInboxNotesRepository } from '@praxos/infra-notion';
+import { sendWhatsAppMessage } from '../whatsappClient.js';
 
 /**
  * Handle Zod validation errors.
@@ -89,6 +90,49 @@ function extractSenderPhoneNumber(payload: unknown): string | null {
           const message = value.messages[0];
           if (message !== undefined && typeof message.from === 'string') {
             return message.from;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract message ID from webhook payload if available.
+ * Used for creating message replies (context).
+ */
+function extractMessageId(payload: unknown): string | null {
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'entry' in payload &&
+    Array.isArray((payload as { entry: unknown }).entry)
+  ) {
+    const entry = (payload as { entry: unknown[] }).entry[0];
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      'changes' in entry &&
+      Array.isArray((entry as { changes: unknown }).changes)
+    ) {
+      const change = (entry as { changes: unknown[] }).changes[0];
+      if (
+        typeof change === 'object' &&
+        change !== null &&
+        'value' in change &&
+        typeof (change as { value: unknown }).value === 'object' &&
+        (change as { value: unknown }).value !== null
+      ) {
+        const value = (change as { value: { messages?: Array<{ id?: string }> } }).value;
+        if (
+          value.messages !== undefined &&
+          Array.isArray(value.messages) &&
+          value.messages.length > 0
+        ) {
+          const message = value.messages[0];
+          if (message !== undefined && typeof message.id === 'string') {
+            return message.id;
           }
         }
       }
@@ -325,7 +369,10 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
               inboxNotesRepo as never // Type assertion needed due to null case
             );
 
-            const result = await useCase.execute(savedEvent.id, request.body);
+            const result = await useCase.execute(
+              savedEvent.id,
+              request.body as unknown as Parameters<typeof useCase.execute>[1]
+            );
 
             if (!result.ok) {
               request.log.error(
@@ -337,6 +384,42 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
                 { status: result.value.status, eventId: savedEvent.id },
                 'Webhook processed'
               );
+
+              // Send confirmation message if successfully processed
+              if (result.value.status === 'PROCESSED' && fromNumber !== null) {
+                const originalMessageId = extractMessageId(request.body);
+                const phoneNumberId = extractPhoneNumberId(request.body);
+
+                if (phoneNumberId !== null) {
+                  const sendResult = await sendWhatsAppMessage(
+                    phoneNumberId,
+                    fromNumber,
+                    'Message added to the processing queue',
+                    config.accessToken,
+                    originalMessageId ?? undefined
+                  );
+
+                  if (sendResult.success) {
+                    request.log.info(
+                      {
+                        eventId: savedEvent.id,
+                        messageId: sendResult.messageId,
+                        recipient: fromNumber,
+                      },
+                      'Sent confirmation message'
+                    );
+                  } else {
+                    request.log.error(
+                      {
+                        eventId: savedEvent.id,
+                        error: sendResult.error,
+                        recipient: fromNumber,
+                      },
+                      'Failed to send confirmation message'
+                    );
+                  }
+                }
+              }
             }
           } catch (error) {
             request.log.error(

@@ -19,6 +19,7 @@ describe('whatsapp-service endpoints', () => {
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    accessToken: 'test-access-token',
     allowedPhoneNumberIds: ['test-phone-id'],
     port: 8080,
     host: '0.0.0.0',
@@ -35,7 +36,8 @@ describe('whatsapp-service endpoints', () => {
   /**
    * Create a sample WhatsApp webhook payload.
    */
-  function createWebhookPayload(): object {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function createWebhookPayload(): any {
     return {
       object: 'whatsapp_business_account',
       entry: [
@@ -95,6 +97,7 @@ describe('whatsapp-service endpoints', () => {
     process.env['VITEST'] = 'true';
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
     process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
 
     app = await buildServer(testConfig);
@@ -106,6 +109,7 @@ describe('whatsapp-service endpoints', () => {
     delete process.env['VITEST'];
     delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
+    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
     delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
   });
 
@@ -523,6 +527,7 @@ describe('config validation', () => {
 
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
     process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = 'test';
 
     const missing = validateConfigEnv();
