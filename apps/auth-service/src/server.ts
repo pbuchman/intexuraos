@@ -4,6 +4,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import { praxosFastifyPlugin } from '@praxos/common';
+import { getFirestore } from '@praxos/infra-firestore';
 import { v1AuthRoutes } from './v1/routes.js';
 
 const SERVICE_NAME = 'auth-service';
@@ -28,22 +29,62 @@ interface HealthResponse {
 
 function checkSecrets(): HealthCheck {
   const start = Date.now();
+  const required = [
+    'AUTH0_DOMAIN',
+    'AUTH0_CLIENT_ID',
+    'AUTH_JWKS_URL',
+    'AUTH_ISSUER',
+    'AUTH_AUDIENCE',
+    'PRAXOS_TOKEN_ENCRYPTION_KEY',
+  ];
+  const missing = required.filter((k) => process.env[k] === undefined || process.env[k] === '');
+
   return {
     name: 'secrets',
-    status: 'ok',
+    status: missing.length === 0 ? 'ok' : 'down',
     latencyMs: Date.now() - start,
-    details: null,
+    details: missing.length > 0 ? { missing } : null,
   };
 }
 
-function checkFirestore(): HealthCheck {
+async function checkFirestore(): Promise<HealthCheck> {
   const start = Date.now();
-  return {
-    name: 'firestore',
-    status: 'ok',
-    latencyMs: Date.now() - start,
-    details: null,
-  };
+
+  // Skip actual Firestore check in test environment
+  if (process.env['NODE_ENV'] === 'test' || process.env['VITEST'] !== undefined) {
+    return {
+      name: 'firestore',
+      status: 'ok',
+      latencyMs: Date.now() - start,
+      details: { note: 'Skipped in test environment' },
+    };
+  }
+
+  try {
+    const db = getFirestore();
+    // Simple connectivity check with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Firestore health check timed out'));
+      }, 3000);
+    });
+
+    await Promise.race([db.listCollections(), timeoutPromise]);
+    return {
+      name: 'firestore',
+      status: 'ok',
+      latencyMs: Date.now() - start,
+      details: null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      name: 'firestore',
+      status: 'down',
+      latencyMs: Date.now() - start,
+      details: { error: message },
+    };
+  }
 }
 
 function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
@@ -304,7 +345,8 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
     async (_req, reply) => {
       const started = Date.now();
-      const checks: HealthCheck[] = [checkSecrets(), checkFirestore()];
+      const firestoreCheck = await checkFirestore();
+      const checks: HealthCheck[] = [checkSecrets(), firestoreCheck];
       const status = computeOverallStatus(checks);
 
       const response: HealthResponse = {

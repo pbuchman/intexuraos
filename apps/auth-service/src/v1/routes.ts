@@ -148,13 +148,12 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { audience, scope } = parseResult.data;
-      const effectiveAudience = audience ?? config.audience;
 
       const deviceCodeUrl = `https://${config.domain}/oauth/device/code`;
 
       const formBody = [
         `client_id=${encodeURIComponent(config.clientId)}`,
-        `audience=${encodeURIComponent(effectiveAudience)}`,
+        `audience=${encodeURIComponent(audience)}`,
         `scope=${encodeURIComponent(scope)}`,
       ].join('&');
 

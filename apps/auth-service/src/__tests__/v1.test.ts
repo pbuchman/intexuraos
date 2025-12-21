@@ -380,6 +380,14 @@ describe('auth-service v1 endpoints', () => {
 
   describe('System endpoints', () => {
     it('GET /health returns health status', async () => {
+      // Set all required env vars for the health check
+      process.env['AUTH0_DOMAIN'] = 'test-tenant.eu.auth0.com';
+      process.env['AUTH0_CLIENT_ID'] = 'test-client-id';
+      process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
+      process.env['AUTH_AUDIENCE'] = 'urn:praxos:api';
+      process.env['PRAXOS_TOKEN_ENCRYPTION_KEY'] = 'dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw==';
+
       app = await buildServer();
 
       const response = await app.inject({
