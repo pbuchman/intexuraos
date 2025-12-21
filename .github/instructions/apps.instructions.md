@@ -98,6 +98,21 @@ Violations (FORBIDDEN):
 - ❌ Creating a service not included in api-docs-hub
 - ❌ Missing CORS configuration for OpenAPI endpoints
 
+### Exception: api-docs-hub
+
+`api-docs-hub` is a special aggregator service that serves as a unified documentation portal. It is **exempt** from the following requirements:
+
+- `/openapi.json` endpoint (it aggregates specs from other services via Swagger UI `urls` config)
+- CORS configuration (it proxies to other services' OpenAPI endpoints)
+- Tests for OpenAPI contract (it doesn't expose its own API spec)
+- Being included in itself (circular dependency)
+
+`api-docs-hub` MUST still have:
+
+- Swagger UI at `/docs` (configured to show all service specs)
+- Terraform module
+- Health endpoint at `/health`
+
 ---
 
 ## Verification Commands

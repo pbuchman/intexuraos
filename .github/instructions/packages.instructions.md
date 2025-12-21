@@ -10,6 +10,14 @@ Applies to: `/packages` (common, domain/\*, infra/\*)
 
 ## Architecture
 
+### Package Naming Convention
+
+All packages use the `@praxos/` scope:
+
+- `@praxos/common` — Shared utilities
+- `@praxos/domain-<name>` — Domain packages (e.g., `@praxos/domain-inbox`, `@praxos/domain-identity`)
+- `@praxos/infra-<name>` — Infra packages (e.g., `@praxos/infra-firestore`, `@praxos/infra-notion`)
+
 ### Layer Hierarchy (Enforced by ESLint)
 
 1. **common** — can only import from `common`
@@ -55,6 +63,20 @@ Applies to: `/packages` (common, domain/\*, infra/\*)
 - Firestore client wrapper
 - Auth0 client wrapper
 - Notion API client
+
+**Testing Utilities:**
+
+Infra packages SHOULD provide in-memory fakes for testing in `src/testing/`:
+
+- `packages/infra/firestore/src/testing/` — Fake repositories (e.g., `fakeNotionConnectionRepository.ts`)
+- `packages/infra/notion/src/testing/` — Mock adapters (e.g., `mockNotionApiAdapter.ts`)
+
+These fakes:
+
+- Implement the same interfaces as real adapters
+- Store data in-memory for deterministic testing
+- Are exported via `src/testing/index.ts`
+- Are used by domain layer tests to avoid external dependencies
 
 ### Common Layer (`packages/common`)
 
