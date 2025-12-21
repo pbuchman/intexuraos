@@ -11,17 +11,17 @@ COPY package*.json ./
 COPY apps/api-docs-hub/package*.json ./apps/api-docs-hub/
 COPY packages/common/package*.json ./packages/common/
 
-# Install dependencies
-RUN npm ci --workspace=@praxos/common --workspace=apps/api-docs-hub
+# Install ALL dependencies including root devDependencies (typescript)
+RUN npm ci
 
 # Copy source files
 COPY tsconfig*.json ./
 COPY packages/common/ ./packages/common/
 COPY apps/api-docs-hub/ ./apps/api-docs-hub/
 
-# Build
+# Build all packages in dependency order
 RUN npm run build --workspace=@praxos/common
-RUN npm run build --workspace=apps/api-docs-hub
+RUN npm run build --workspace=@praxos/api-docs-hub
 
 # Stage 2: Production
 FROM node:22-alpine AS production

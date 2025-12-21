@@ -350,7 +350,7 @@ WhatsApp Business Cloud API integration follows strict credential handling:
 - **No ad-hoc credentials** in code or docs - all WhatsApp tokens/secrets use PRAXOS\_\* naming
 - **All setup instructions** live in `docs/setup/07-whatsapp-business-cloud-api.md`
 - **Secrets in production** use Secret Manager (PRAXOS*WHATSAPP*\* prefix)
-- **Local development** uses `.env` with minimal required variables only
+- **Local** uses `.env` with minimal required variables only
 
 Required secrets (Terraform creates, user populates):
 

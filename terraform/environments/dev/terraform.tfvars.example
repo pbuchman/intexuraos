@@ -20,3 +20,5 @@ github_repo = "praxos"
 # GitHub branch to trigger builds
 github_branch = "development"
 
+# Cloud Build GitHub connection name
+github_connection_name = "github-connection"

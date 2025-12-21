@@ -21,10 +21,10 @@ services:
       start_period: 10s
       retries: 3
 
-  notion-gpt-service:
+  promptvault-service:
     build:
       context: ..
-      dockerfile: apps/notion-gpt-service/Dockerfile
+      dockerfile: apps/promptvault-service/Dockerfile
     ports:
       - '8081:8080'
     environment:

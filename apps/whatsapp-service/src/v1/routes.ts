@@ -67,33 +67,49 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
       '/webhooks/whatsapp',
       {
         schema: {
-          description: 'WhatsApp webhook verification endpoint',
+          operationId: 'verifyWhatsAppWebhook',
+          summary: 'Verify WhatsApp webhook',
+          description:
+            'WhatsApp webhook verification endpoint - returns hub.challenge as plain text',
           tags: ['webhooks'],
           querystring: {
             type: 'object',
             properties: {
-              'hub.mode': { type: 'string' },
-              'hub.verify_token': { type: 'string' },
-              'hub.challenge': { type: 'string' },
+              'hub.mode': { type: 'string', description: 'Must be "subscribe"' },
+              'hub.verify_token': { type: 'string', description: 'Verify token to validate' },
+              'hub.challenge': { type: 'string', description: 'Challenge to echo back' },
             },
           },
           response: {
             200: {
-              type: 'string',
               description: 'Returns hub.challenge on successful verification',
-            },
-            403: {
-              type: 'object',
-              properties: {
-                success: { type: 'boolean' },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
+              content: {
+                'text/plain': {
+                  schema: {
+                    type: 'string',
                   },
                 },
               },
+            },
+            400: {
+              description: 'Invalid request - missing required parameters',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+              required: ['success', 'error'],
+            },
+            403: {
+              description: 'Invalid verify token',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+              required: ['success', 'error'],
             },
           },
         },
@@ -123,44 +139,50 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
     fastify.post(
       '/webhooks/whatsapp',
       {
-        config: {
-          // Disable default body parsing so we can access raw body for signature validation
-          rawBody: true,
-        },
         schema: {
-          description: 'WhatsApp webhook event receiver',
+          operationId: 'receiveWhatsAppWebhook',
+          summary: 'Receive WhatsApp webhook events',
+          description: 'WhatsApp webhook event receiver - receives messages and status updates',
           tags: ['webhooks'],
           headers: {
             type: 'object',
             properties: {
-              [SIGNATURE_HEADER]: { type: 'string' },
+              [SIGNATURE_HEADER]: {
+                type: 'string',
+                description: 'HMAC-SHA256 signature for payload validation',
+              },
             },
           },
           response: {
             200: {
+              description: 'Webhook received successfully',
               type: 'object',
               properties: {
-                success: { type: 'boolean' },
-                data: {
-                  type: 'object',
-                  properties: {
-                    received: { type: 'boolean' },
-                  },
-                },
+                success: { type: 'boolean', enum: [true] },
+                data: { $ref: 'WebhookReceivedResponse#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'data'],
             },
             401: {
+              description: 'Missing signature header',
               type: 'object',
               properties: {
-                success: { type: 'boolean' },
-                error: {
-                  type: 'object',
-                  properties: {
-                    code: { type: 'string' },
-                    message: { type: 'string' },
-                  },
-                },
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
               },
+              required: ['success', 'error'],
+            },
+            403: {
+              description: 'Invalid signature',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+              required: ['success', 'error'],
             },
           },
         },

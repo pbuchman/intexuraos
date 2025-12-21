@@ -21,7 +21,8 @@ interface EnvVar {
 
 const REQUIRED_ENV_VARS: EnvVar[] = [
   { key: 'AUTH_SERVICE_OPENAPI_URL', displayName: 'Auth Service API' },
-  { key: 'NOTION_GPT_SERVICE_OPENAPI_URL', displayName: 'Notion GPT Service API' },
+  { key: 'PROMPTVAULT_SERVICE_OPENAPI_URL', displayName: 'PromptVault Service API' },
+  { key: 'WHATSAPP_SERVICE_OPENAPI_URL', displayName: 'WhatsApp Service API' },
 ];
 
 /**

@@ -38,7 +38,7 @@ The API defines the audience identifier used for token validation.
 2. Click **Create API**
 3. Configure:
    - **Name**: `PraxOS API`
-   - **Identifier**: `https://api.praxos.app` (this is your `AUTH_AUDIENCE`)
+   - **Identifier**: `urn:praxos:api` (this is your `AUTH_AUDIENCE`)
    - **Signing Algorithm**: `RS256`
 4. Click **Create**
 
@@ -94,11 +94,17 @@ After creation, configure:
 > - More permissive: 30-90 days idle
 > - More restrictive: 7-14 days idle
 
-## 4. Enable Device Authorization Flow on Tenant
+## 4. Verify Device Authorization Flow is Enabled
 
-1. Go to **Settings** → **Advanced**
-2. Under **Grant Types**, ensure **Device Code** is enabled
-3. Click **Save**
+Device Authorization Flow is enabled **per-application** (done in Step 3 under Grant Types).
+
+There is no separate tenant-level setting required. If you enabled "Device Code" in the application's Advanced Settings → Grant Types, the flow is ready to use.
+
+To verify:
+
+1. Go to **Applications** → **Applications** → **PraxOS CLI**
+2. Go to **Settings** → **Advanced Settings** → **Grant Types**
+3. Confirm **Device Code** is checked
 
 ## 5. Find Issuer and JWKS URL
 
@@ -109,7 +115,7 @@ From your tenant domain, derive:
 | `AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
 | `AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
 | `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_AUDIENCE` | `https://api.praxos.app` (from API Identifier)           |
+| `AUTH_AUDIENCE` | `urn:praxos:api` (from API Identifier)                   |
 
 ## 6. Generate Encryption Key for Refresh Tokens
 
@@ -142,7 +148,7 @@ export PROJECT_ID=your-gcp-project-id
 # Set your Auth0 configuration values
 export AUTH0_DOMAIN="your-tenant.eu.auth0.com"
 export AUTH0_CLIENT_ID="your-native-app-client-id"
-export AUTH0_AUDIENCE="https://api.praxos.app"
+export AUTH0_AUDIENCE="urn:praxos:api"
 export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
 
 # Populate secret versions (Terraform created the secrets, we add values)
@@ -188,7 +194,7 @@ echo -n "new-value" | \
 curl -X POST http://localhost:3000/v1/auth/device/start \
   -H "Content-Type: application/json" \
   -d '{
-    "audience": "https://api.praxos.app",
+    "audience": "urn:praxos:api",
     "scope": "openid profile email offline_access"
   }'
 ```
@@ -463,7 +469,7 @@ export AUTH0_DOMAIN=your-tenant.eu.auth0.com
 export AUTH0_CLIENT_ID=your-client-id
 export AUTH_JWKS_URL=https://your-tenant.eu.auth0.com/.well-known/jwks.json
 export AUTH_ISSUER=https://your-tenant.eu.auth0.com/
-export AUTH_AUDIENCE=https://api.praxos.app
+export AUTH_AUDIENCE=urn:praxos:api
 export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 ```
 
@@ -496,18 +502,18 @@ export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 | ----------------------------- | ----------------------------------------- | ------------------------------------------------------- |
 | `AUTH0_DOMAIN`                | Auth0 tenant domain                       | `praxos-dev.eu.auth0.com`                               |
 | `AUTH0_CLIENT_ID`             | Native app client ID                      | `abc123...`                                             |
-| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `https://api.praxos.app`                                |
+| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:praxos:api`                                        |
 | `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification  | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`                 | Token issuer for verification             | `https://praxos-dev.eu.auth0.com/`                      |
 | `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                     |
 
-### notion-gpt-service (and other protected services)
+### promptvault-service (and other protected services)
 
 | Variable        | Description       | Example                                                 |
 | --------------- | ----------------- | ------------------------------------------------------- |
 | `AUTH_JWKS_URL` | JWKS endpoint URL | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Token issuer      | `https://praxos-dev.eu.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected audience | `https://api.praxos.app`                                |
+| `AUTH_AUDIENCE` | Expected audience | `urn:praxos:api`                                        |
 
 ## 13. Troubleshooting Checklist
 

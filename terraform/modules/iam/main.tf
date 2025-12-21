@@ -8,11 +8,11 @@ resource "google_service_account" "auth_service" {
   description  = "Service account for auth-service Cloud Run deployment"
 }
 
-# Service account for notion-gpt-service
-resource "google_service_account" "notion_gpt_service" {
-  account_id   = "praxos-notion-svc-${var.environment}"
-  display_name = "PraxOS Notion GPT Service (${var.environment})"
-  description  = "Service account for notion-gpt-service Cloud Run deployment"
+# Service account for promptvault-service
+resource "google_service_account" "promptvault_service" {
+  account_id   = "praxos-pv-svc-${var.environment}"
+  display_name = "PraxOS PromptVault Service (${var.environment})"
+  description  = "Service account for promptvault-service Cloud Run deployment"
 }
 
 # Service account for whatsapp-service
@@ -38,13 +38,13 @@ resource "google_secret_manager_secret_iam_member" "auth_service_secrets" {
   member    = "serviceAccount:${google_service_account.auth_service.email}"
 }
 
-# Notion GPT service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "notion_gpt_service_secrets" {
+# PromptVault service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "promptvault_service_secrets" {
   for_each = var.secret_ids
 
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.notion_gpt_service.email}"
+  member    = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # WhatsApp service: Secret Manager access
@@ -56,11 +56,11 @@ resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
   member    = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
-# Notion GPT service: Firestore access
-resource "google_project_iam_member" "notion_gpt_firestore" {
+# PromptVault service: Firestore access
+resource "google_project_iam_member" "promptvault_service_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.notion_gpt_service.email}"
+  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # WhatsApp service: Firestore access
@@ -84,10 +84,10 @@ resource "google_project_iam_member" "auth_service_logging" {
   member  = "serviceAccount:${google_service_account.auth_service.email}"
 }
 
-resource "google_project_iam_member" "notion_gpt_service_logging" {
+resource "google_project_iam_member" "promptvault_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.notion_gpt_service.email}"
+  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # WhatsApp service: Cloud Logging

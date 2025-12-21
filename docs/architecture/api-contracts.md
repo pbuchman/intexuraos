@@ -8,14 +8,16 @@ All API responses use a consistent JSON envelope structure.
 
 ### Success Response
 
-```json
+```jsonc
 {
   "success": true,
-  "data": { ... },
+  "data": {
+    /* response payload */
+  },
   "diagnostics": {
     "requestId": "550e8400-e29b-41d4-a716-446655440000",
-    "durationMs": 42
-  }
+    "durationMs": 42,
+  },
 }
 ```
 
@@ -192,17 +194,17 @@ PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates
 #### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    api-docs-hub                             │
-│                                                             │
-│  GET /docs → Swagger UI with service selector dropdown      │
-│                                                             │
-│  Fetches specs at runtime from:                             │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ AUTH_SERVICE_OPENAPI_URL → Auth Service /openapi.json   ││
-│  │ NOTION_GPT_SERVICE_OPENAPI_URL → Notion GPT /openapi.json│
-│  └─────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    api-docs-hub                                 │
+│                                                                 │
+│  GET /docs → Swagger UI with service selector dropdown          │
+│                                                                 │
+│  Fetches specs at runtime from:                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ AUTH_SERVICE_OPENAPI_URL → Auth Service /openapi.json       ││
+│  │ PROMPTVAULT_SERVICE_OPENAPI_URL → PromptVault /openapi.json ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 #### Key Characteristics
@@ -215,10 +217,10 @@ PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates
 
 #### Environment Variables
 
-| Variable                         | Description                            |
-| -------------------------------- | -------------------------------------- |
-| `AUTH_SERVICE_OPENAPI_URL`       | URL to auth-service OpenAPI JSON       |
-| `NOTION_GPT_SERVICE_OPENAPI_URL` | URL to notion-gpt-service OpenAPI JSON |
+| Variable                          | Description                             |
+| --------------------------------- | --------------------------------------- |
+| `AUTH_SERVICE_OPENAPI_URL`        | URL to auth-service OpenAPI JSON        |
+| `PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
 
 These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
 
@@ -312,7 +314,7 @@ Success responses must include verifiable identifiers when relevant.
 
 ### Examples
 
-```json
+```jsonc
 // ✗ Bad: no way to verify success
 { "success": true, "data": { "created": true } }
 
@@ -384,7 +386,7 @@ This provides a stable identifier across sessions.
 | --------------- | ----------------------------- | ----------------------------------------------------- |
 | `AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected token audience       | `https://api.praxos.app`                              |
+| `AUTH_AUDIENCE` | Expected token audience       | `urn:praxos:api`                                      |
 
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
@@ -399,7 +401,7 @@ The auth-service provides Device Authorization Flow helpers for CLI/device authe
 | ----------------- | ------------------------ | ------------------------- |
 | `AUTH0_DOMAIN`    | Auth0 tenant domain      | `praxos-dev.eu.auth0.com` |
 | `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`               |
-| `AUTH_AUDIENCE`   | API identifier (default) | `https://api.praxos.app`  |
+| `AUTH_AUDIENCE`   | API identifier (default) | `urn:praxos:api`          |
 
 If any required variable is missing, endpoints return `503 MISCONFIGURED`.
 
@@ -411,7 +413,7 @@ Start Device Authorization Flow. Returns device code and user code.
 
 ```json
 {
-  "audience": "https://api.praxos.app",
+  "audience": "urn:praxos:api",
   "scope": "openid profile email"
 }
 ```
@@ -492,7 +494,7 @@ Get non-secret auth configuration for troubleshooting.
   "data": {
     "domain": "praxos-dev.eu.auth0.com",
     "issuer": "https://praxos-dev.eu.auth0.com/",
-    "audience": "https://api.praxos.app",
+    "audience": "urn:praxos:api",
     "jwksUrl": "https://praxos-dev.eu.auth0.com/.well-known/jwks.json"
   }
 }

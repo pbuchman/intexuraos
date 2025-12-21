@@ -4,7 +4,7 @@ This document describes how to run PraxOS services locally while using GCP Fires
 
 ## Overview
 
-Local development uses:
+Local uses:
 
 - **Local services**: Node.js processes via `docker-compose` or `npm run dev`
 - **Remote Firestore**: Dev project's Firestore database
@@ -60,7 +60,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 Create `.env.local` in the repository root (gitignored):
 
 ```bash
-# .env.local - Local development environment
+# .env.local - Local environment
 # DO NOT COMMIT THIS FILE
 
 # GCP Project (for Firestore and Secret Manager)
@@ -70,14 +70,14 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 # Option A: Direct values (faster, no GCP calls)
 AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
 AUTH_ISSUER=https://your-tenant.auth0.com/
-AUTH_AUDIENCE=https://api.praxos.app
+AUTH_AUDIENCE=urn:praxos:api
 
 # Option B: Use Secret Manager (comment out Option A)
 # AUTH_USE_SECRET_MANAGER=true
 
 # Service ports (defaults)
 AUTH_SERVICE_PORT=8080
-NOTION_GPT_SERVICE_PORT=8081
+PROMPTVAULT_SERVICE_PORT=8081
 
 # Logging
 LOG_LEVEL=debug
@@ -92,8 +92,8 @@ LOG_LEVEL=debug
 cd apps/auth-service
 npm run dev
 
-# Terminal 2: Notion GPT service
-cd apps/notion-gpt-service
+# Terminal 2: PromptVault service
+cd apps/promptvault-service
 npm run dev
 ```
 
@@ -155,7 +155,7 @@ praxos/
 ├── apps/
 │   ├── auth-service/
 │   │   └── .env        # Service-specific overrides (gitignored)
-│   └── notion-gpt-service/
+│   └── promptvault-service/
 │       └── .env        # Service-specific overrides (gitignored)
 ```
 

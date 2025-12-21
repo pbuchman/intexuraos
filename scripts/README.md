@@ -1,5 +1,3 @@
 # Scripts
 
-Build and deployment scripts.
-
-See [docs](../docs/README.md) for usage.
+Build, deployment, and utility scripts.

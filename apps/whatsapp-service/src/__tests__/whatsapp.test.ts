@@ -114,6 +114,34 @@ describe('whatsapp-service endpoints', () => {
       expect(body.checks).toBeDefined();
     });
   });
+  describe('GET /docs', () => {
+    it('returns Swagger UI', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/docs',
+      });
+
+      // Swagger UI redirects or returns HTML
+      expect([200, 302]).toContain(response.statusCode);
+    });
+  });
+
+  describe('GET /openapi.json', () => {
+    it('returns OpenAPI specification', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/openapi.json',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        openapi: string;
+        info: { title: string };
+      };
+      expect(body.openapi).toMatch(/^3\./);
+      expect(body.info.title).toBe('whatsapp-service');
+    });
+  });
 
   describe('GET /webhooks/whatsapp (webhook verification)', () => {
     it('returns challenge when verify token matches', async () => {

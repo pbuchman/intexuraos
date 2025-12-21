@@ -19,7 +19,7 @@ Access aggregated API documentation for all PraxOS services via the API Docs Hub
 The API Docs Hub provides a unified Swagger UI interface with a dropdown to select between:
 
 - Auth Service API
-- Notion GPT Service API
+- PromptVault Service API
 
 Each service also exposes its own documentation at `/docs` and `/openapi.json`.
 

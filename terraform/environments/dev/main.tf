@@ -62,6 +62,11 @@ variable "github_branch" {
   default     = "development"
 }
 
+variable "github_connection_name" {
+  description = "Name of the Cloud Build GitHub connection (created manually via GCP Console)"
+  type        = string
+}
+
 locals {
   services = {
     auth_service = {
@@ -71,9 +76,9 @@ locals {
       min_scale = 0
       max_scale = 2
     }
-    notion_gpt_service = {
-      name      = "praxos-notion-gpt-service"
-      app_path  = "apps/notion-gpt-service"
+    promptvault_service = {
+      name      = "praxos-promptvault-service"
+      app_path  = "apps/promptvault-service"
       port      = 8080
       min_scale = 0
       max_scale = 2
@@ -111,6 +116,7 @@ resource "google_project_service" "apis" {
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "storage.googleapis.com",
   ])
 
   project            = var.project_id
@@ -121,6 +127,18 @@ resource "google_project_service" "apis" {
 # Artifact Registry
 module "artifact_registry" {
   source = "../../modules/artifact-registry"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  labels      = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Static Assets Bucket
+module "static_assets" {
+  source = "../../modules/static-assets"
 
   project_id  = var.project_id
   region      = var.region
@@ -219,20 +237,20 @@ module "auth_service" {
   ]
 }
 
-module "notion_gpt_service" {
+module "promptvault_service" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.notion_gpt_service.name
-  service_account = module.iam.service_accounts["notion_gpt_service"]
-  port            = local.services.notion_gpt_service.port
-  min_scale       = local.services.notion_gpt_service.min_scale
-  max_scale       = local.services.notion_gpt_service.max_scale
+  service_name    = local.services.promptvault_service.name
+  service_account = module.iam.service_accounts["promptvault_service"]
+  port            = local.services.promptvault_service.port
+  min_scale       = local.services.promptvault_service.min_scale
+  max_scale       = local.services.promptvault_service.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-gpt-service:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
 
   secrets = {
     AUTH_JWKS_URL = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
@@ -293,16 +311,16 @@ module "api_docs_hub" {
 
   # Plain env vars for OpenAPI URLs (not secrets)
   env_vars = {
-    AUTH_SERVICE_OPENAPI_URL       = "${module.auth_service.service_url}/openapi.json"
-    NOTION_GPT_SERVICE_OPENAPI_URL = "${module.notion_gpt_service.service_url}/openapi.json"
-    WHATSAPP_SERVICE_OPENAPI_URL   = "${module.whatsapp_service.service_url}/openapi.json"
+    AUTH_SERVICE_OPENAPI_URL        = "${module.auth_service.service_url}/openapi.json"
+    PROMPTVAULT_SERVICE_OPENAPI_URL = "${module.promptvault_service.service_url}/openapi.json"
+    WHATSAPP_SERVICE_OPENAPI_URL    = "${module.whatsapp_service.service_url}/openapi.json"
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.auth_service,
-    module.notion_gpt_service,
+    module.promptvault_service,
     module.whatsapp_service,
   ]
 }
@@ -311,19 +329,21 @@ module "api_docs_hub" {
 module "cloud_build" {
   source = "../../modules/cloud-build"
 
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  github_owner  = var.github_owner
-  github_repo   = var.github_repo
-  github_branch = var.github_branch
-  labels        = local.common_labels
+  project_id             = var.project_id
+  region                 = var.region
+  environment            = var.environment
+  github_owner           = var.github_owner
+  github_repo            = var.github_repo
+  github_branch          = var.github_branch
+  github_connection_name = var.github_connection_name
 
   artifact_registry_url = module.artifact_registry.repository_url
+  static_assets_bucket  = module.static_assets.bucket_name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
+    module.static_assets,
   ]
 }
 
@@ -338,9 +358,9 @@ output "auth_service_url" {
   value       = module.auth_service.service_url
 }
 
-output "notion_gpt_service_url" {
-  description = "Notion GPT Service URL"
-  value       = module.notion_gpt_service.service_url
+output "promptvault_service_url" {
+  description = "PromptVault Service URL"
+  value       = module.promptvault_service.service_url
 }
 
 output "whatsapp_service_url" {
@@ -361,5 +381,15 @@ output "firestore_database" {
 output "service_accounts" {
   description = "Service account emails"
   value       = module.iam.service_accounts
+}
+
+output "static_assets_bucket_name" {
+  description = "Static assets bucket name"
+  value       = module.static_assets.bucket_name
+}
+
+output "static_assets_public_url" {
+  description = "Static assets public base URL"
+  value       = module.static_assets.public_base_url
 }
 

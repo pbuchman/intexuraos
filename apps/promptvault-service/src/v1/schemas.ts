@@ -11,7 +11,7 @@ export const connectRequestSchema = z.object({
 export type ConnectRequest = z.infer<typeof connectRequestSchema>;
 
 /**
- * POST /v1/tools/notion/promptvault/note
+ * POST /v1/tools/notion/promptvault/prompts
  *
  * Schema constraints:
  * - title: max 200 characters (Notion page title practical limit)
@@ -19,7 +19,7 @@ export type ConnectRequest = z.infer<typeof connectRequestSchema>;
  *   if chunking is needed in the future, implement deterministic splitting)
  * - strict: rejects any additional fields not in the schema
  */
-export const createPromptVaultNoteRequestSchema = z
+export const createPromptRequestSchema = z
   .object({
     title: z.string().min(1, 'title is required').max(200, 'title must be at most 200 characters'),
     prompt: z
@@ -29,7 +29,33 @@ export const createPromptVaultNoteRequestSchema = z
   })
   .strict();
 
-export type CreatePromptVaultNoteRequest = z.infer<typeof createPromptVaultNoteRequestSchema>;
+export type CreatePromptRequest = z.infer<typeof createPromptRequestSchema>;
+
+/**
+ * PATCH /v1/tools/notion/promptvault/prompts/{promptId}
+ *
+ * At least one of title or prompt must be provided.
+ */
+export const updatePromptRequestSchema = z
+  .object({
+    title: z
+      .string()
+      .min(1, 'title cannot be empty')
+      .max(200, 'title must be at most 200 characters')
+      .optional(),
+    prompt: z
+      .string()
+      .min(1, 'prompt cannot be empty')
+      .max(100000, 'prompt must be at most 100,000 characters')
+      .optional(),
+  })
+  .strict()
+  .refine((data) => data.title !== undefined || data.prompt !== undefined, {
+    message: 'at least one of title or prompt must be provided',
+    path: [],
+  });
+
+export type UpdatePromptRequest = z.infer<typeof updatePromptRequestSchema>;
 
 /**
  * POST /v1/webhooks/notion

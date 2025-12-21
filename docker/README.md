@@ -25,10 +25,10 @@ docker compose -f docker/docker-compose.yaml down
 
 ## Services
 
-| Service            | Local Port | Health Check                 |
-| ------------------ | ---------- | ---------------------------- |
-| auth-service       | 8080       | http://localhost:8080/health |
-| notion-gpt-service | 8081       | http://localhost:8081/health |
+| Service             | Local Port | Health Check                 |
+| ------------------- | ---------- | ---------------------------- |
+| auth-service        | 8080       | http://localhost:8080/health |
+| promptvault-service | 8081       | http://localhost:8081/health |
 
 ## See Also
 

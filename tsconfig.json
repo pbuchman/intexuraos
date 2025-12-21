@@ -9,7 +9,7 @@
     { "path": "packages/infra/notion" },
     { "path": "packages/infra/firestore" },
     { "path": "apps/auth-service" },
-    { "path": "apps/notion-gpt-service" },
+    { "path": "apps/promptvault-service" },
     { "path": "apps/whatsapp-service" }
   ]
 }

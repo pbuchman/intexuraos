@@ -142,6 +142,35 @@ export interface NotionApiPort {
   createPromptVaultNote(
     params: CreatePromptVaultNoteParams
   ): Promise<Result<CreatedNote, NotionError>>;
+
+  /**
+   * List all child pages under a parent page.
+   * Returns page metadata for each child.
+   */
+  listChildPages(token: string, parentPageId: string): Promise<Result<NotionPage[], NotionError>>;
+
+  /**
+   * Get a prompt page with its full content.
+   * Extracts the prompt text from the code block.
+   */
+  getPromptPage(
+    token: string,
+    pageId: string
+  ): Promise<
+    Result<
+      { page: NotionPage; promptContent: string; createdAt?: string; updatedAt?: string },
+      NotionError
+    >
+  >;
+
+  /**
+   * Update a prompt page's title and/or content.
+   */
+  updatePromptPage(
+    token: string,
+    pageId: string,
+    update: { title?: string; promptContent?: string }
+  ): Promise<Result<{ page: NotionPage; promptContent: string; updatedAt?: string }, NotionError>>;
 }
 
 /**

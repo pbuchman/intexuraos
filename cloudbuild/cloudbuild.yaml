@@ -25,8 +25,8 @@ steps:
     entrypoint: 'npm'
     args: ['run', 'ci']
 
-  # Step 4: Detect affected services
-  - name: 'node:22-slim'
+  # Step 4: Detect affected services (uses full node image for git)
+  - name: 'node:22'
     id: 'detect-affected'
     entrypoint: 'node'
     args: ['cloudbuild/scripts/detect-affected.mjs']
@@ -50,20 +50,20 @@ steps:
           echo "auth-service not affected, skipping build."
         fi
 
-  # Step 6: Build notion-gpt-service Docker image (if affected)
+  # Step 6: Build promptvault-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-notion-gpt-service'
+    id: 'build-promptvault-service'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if grep -q '"notion-gpt-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Building notion-gpt-service..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/notion-gpt-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/notion-gpt-service:latest \
-            -f apps/notion-gpt-service/Dockerfile .
+        if grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building promptvault-service..."
+          docker build -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+            -f apps/promptvault-service/Dockerfile .
         else
-          echo "notion-gpt-service not affected, skipping build."
+          echo "promptvault-service not affected, skipping build."
         fi
 
   # Step 7: Build whatsapp-service Docker image (if affected)
@@ -82,7 +82,23 @@ steps:
           echo "whatsapp-service not affected, skipping build."
         fi
 
-  # Step 8: Push auth-service image (if affected)
+  # Step 8: Build api-docs-hub Docker image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-api-docs-hub'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          echo "Building api-docs-hub..."
+          docker build -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+            -f apps/api-docs-hub/Dockerfile .
+        else
+          echo "api-docs-hub not affected, skipping build."
+        fi
+
+  # Step 9: Push auth-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-auth-service'
     entrypoint: 'bash'
@@ -97,22 +113,22 @@ steps:
           echo "auth-service not affected, skipping push."
         fi
 
-  # Step 9: Push notion-gpt-service image (if affected)
+  # Step 10: Push promptvault-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-notion-gpt-service'
+    id: 'push-promptvault-service'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if grep -q '"notion-gpt-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing notion-gpt-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-gpt-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-gpt-service:latest
+        if grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing promptvault-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
         else
-          echo "notion-gpt-service not affected, skipping push."
+          echo "promptvault-service not affected, skipping push."
         fi
 
-  # Step 10: Push whatsapp-service image (if affected)
+  # Step 11: Push whatsapp-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-whatsapp-service'
     entrypoint: 'bash'
@@ -127,7 +143,22 @@ steps:
           echo "whatsapp-service not affected, skipping push."
         fi
 
-  # Step 11: Deploy affected services to Cloud Run
+  # Step 12: Push api-docs-hub image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-api-docs-hub'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing api-docs-hub..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
+        else
+          echo "api-docs-hub not affected, skipping push."
+        fi
+
+  # Step 13: Deploy affected services to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-affected'
     entrypoint: 'bash'
@@ -137,6 +168,21 @@ steps:
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # Step 14: Sync static assets to GCS bucket (always run)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'sync-static-assets'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Syncing static assets to GCS bucket..."
+        BUCKET="praxos-static-assets-${_ENVIRONMENT}"
+        echo "Bucket name: $$BUCKET"
+        echo "Syncing docs/assets/** to gs://$$BUCKET/"
+        gsutil -m rsync -r -d docs/assets/ "gs://$$BUCKET/"
+        echo "Static assets sync complete."
 
 # No substitutions block here - all substitutions come from the Terraform-managed
 # Cloud Build trigger. This ensures single source of truth.

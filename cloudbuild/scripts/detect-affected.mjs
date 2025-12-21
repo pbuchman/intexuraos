@@ -4,14 +4,17 @@
  *
  * Rules:
  * - packages/common/** affects all services
+ * - packages/domain/** affects all services (except api-docs-hub)
+ * - packages/infra/** affects all services (except api-docs-hub)
  * - apps/auth-service/** affects auth-service
- * - apps/notion-gpt-service/** affects notion-gpt-service
+ * - apps/promptvault-service/** affects promptvault-service
  * - apps/whatsapp-service/** affects whatsapp-service
- * - packages/domain/** affects all services
- * - packages/infra/** affects all services
+ * - apps/api-docs-hub/** affects api-docs-hub
  *
  * Output: /workspace/affected.json
- * Format: { "services": ["auth-service", "notion-gpt-service", "whatsapp-service"] }
+ * Format: {
+ *   "services": ["auth-service", "promptvault-service", "whatsapp-service", "api-docs-hub"]
+ * }
  */
 
 import { execSync } from 'node:child_process';
@@ -33,8 +36,8 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
-  'notion-gpt-service': [
-    'apps/notion-gpt-service/',
+  'promptvault-service': [
+    'apps/promptvault-service/',
     'packages/common/',
     'packages/domain/',
     'packages/infra/',
@@ -48,6 +51,14 @@ const SERVICE_DEPS = {
     'packages/common/',
     'packages/domain/',
     'packages/infra/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
+  'api-docs-hub': [
+    'apps/api-docs-hub/',
+    'packages/common/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -72,7 +83,7 @@ function getDiffRange() {
     }
   }
 
-  // Local development fallback
+  // Local fallback
   return 'HEAD~1..HEAD';
 }
 
@@ -148,8 +159,7 @@ function main() {
   };
 
   // Ensure workspace directory exists (for local testing)
-  const workspaceDir = WORKSPACE;
-  if (!existsSync(workspaceDir)) {
+  if (!existsSync(WORKSPACE)) {
     console.log(`Workspace directory does not exist, using current directory`);
     writeFileSync('./affected.json', JSON.stringify(output, null, 2));
     console.log(`Written to: ./affected.json`);

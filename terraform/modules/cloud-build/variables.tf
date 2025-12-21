@@ -28,14 +28,18 @@ variable "github_branch" {
   type        = string
 }
 
+variable "github_connection_name" {
+  description = "Name of the Cloud Build GitHub connection (created manually via GCP Console)"
+  type        = string
+}
+
 variable "artifact_registry_url" {
   description = "Artifact Registry URL"
   type        = string
 }
 
-variable "labels" {
-  description = "Labels to apply to resources"
-  type        = map(string)
-  default     = {}
+variable "static_assets_bucket" {
+  description = "Name of the GCS bucket for static assets"
+  type        = string
 }
 

@@ -23,5 +23,8 @@
     "@praxos/common": "*",
     "@praxos/domain-promptvault": "*",
     "@notionhq/client": "^2.2.15"
+  },
+  "devDependencies": {
+    "@praxos/infra-firestore": "*"
   }
 }

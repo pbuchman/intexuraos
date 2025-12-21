@@ -51,6 +51,7 @@ resource "google_cloud_run_v2_service" "service" {
         }
       }
 
+
       # Startup probe (health check)
       startup_probe {
         http_get {

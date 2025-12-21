@@ -8,7 +8,17 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['packages/**/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/*.spec.ts', '**/index.ts', '**/*.d.ts'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.spec.ts',
+        '**/index.ts',
+        '**/*.d.ts',
+        // Exclude type-only files (no runtime code)
+        'packages/domain/identity/**/*.ts',
+        'packages/domain/promptvault/src/ports.ts',
+        'packages/domain/promptvault/src/ports/**/*.ts',
+        'packages/domain/promptvault/src/models/Prompt.ts',
+      ],
       thresholds: {
         lines: 90,
         branches: 85,

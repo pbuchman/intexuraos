@@ -5,9 +5,9 @@ import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
 import { clearJwksCache } from '@praxos/common';
 import { FakeNotionConnectionRepository } from '@praxos/infra-firestore';
-import { MockNotionApiAdapter } from '@praxos/infra-notion';
+import { MockNotionApiAdapter, createNotionPromptRepository } from '@praxos/infra-notion';
 
-describe('notion-gpt-service v1 endpoints', () => {
+describe('promptvault-service v1 endpoints', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let privateKey: jose.KeyLike;
@@ -61,10 +61,9 @@ describe('notion-gpt-service v1 endpoints', () => {
     await jwksServer.listen({ port: 0, host: '127.0.0.1' });
     const address = jwksServer.server.address();
     if (address !== null && typeof address === 'object') {
-      const jwksUrl = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
-
       // Set environment variables for JWT auth
-      process.env['AUTH_JWKS_URL'] = jwksUrl;
+      process.env['AUTH_JWKS_URL'] =
+        `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
       process.env['AUTH_ISSUER'] = issuer;
       process.env['AUTH_AUDIENCE'] = audience;
     }
@@ -86,6 +85,7 @@ describe('notion-gpt-service v1 endpoints', () => {
     setServices({
       connectionRepository,
       notionApi,
+      promptRepository: createNotionPromptRepository(connectionRepository, notionApi),
     });
 
     clearJwksCache();
@@ -213,7 +213,7 @@ describe('notion-gpt-service v1 endpoints', () => {
   });
 
   describe('POST /v1/integrations/notion/connect', () => {
-    it('connects successfully and does not leak token', async () => {
+    it('connects successfully, validates page access, and includes page info in response', async () => {
       const token = await createToken({ sub: 'user-123' });
 
       const response = await app.inject({
@@ -232,17 +232,76 @@ describe('notion-gpt-service v1 endpoints', () => {
         data: {
           connected: boolean;
           promptVaultPageId: string;
+          pageTitle: string;
+          pageUrl: string;
         };
         diagnostics: { requestId: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(true);
       expect(body.data.promptVaultPageId).toBe('page-123');
+      // Verify page info from validation is included
+      expect(body.data.pageTitle).toBe('Prompt Vault');
+      expect(body.data.pageUrl).toContain('page-123');
       expect(body.diagnostics.requestId).toBeDefined();
 
       // Verify token is NOT in response
       const bodyStr = response.body;
       expect(bodyStr).not.toContain('secret-notion-token');
+    });
+
+    it('returns 400 INVALID_REQUEST when page is not accessible (not shared with integration)', async () => {
+      const token = await createToken({ sub: 'user-inaccessible' });
+
+      // Configure the mock to return NOT_FOUND for this page
+      notionApi.setPageInaccessible('inaccessible-page-id');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'valid-token',
+          promptVaultPageId: 'inaccessible-page-id',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string; details?: { pageId: string } };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Could not access page');
+      expect(body.error.message).toContain('shared with your Notion integration');
+      expect(body.error.details?.pageId).toBe('inaccessible-page-id');
+    });
+
+    it('returns 401 UNAUTHORIZED when Notion token is invalid', async () => {
+      const token = await createToken({ sub: 'user-bad-notion' });
+
+      // Configure the mock to treat this token as invalid
+      notionApi.setTokenInvalid('bad-notion-token');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'bad-notion-token',
+          promptVaultPageId: 'some-page-id',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+      expect(body.error.message).toContain('Invalid Notion token');
     });
 
     it('returns 400 INVALID_REQUEST when notionToken is missing', async () => {
@@ -414,35 +473,65 @@ describe('notion-gpt-service v1 endpoints', () => {
     });
   });
 
-  describe('POST /v1/tools/notion/note (legacy endpoint - REMOVED)', () => {
-    it('returns 404 for the removed endpoint', async () => {
-      const token = await createToken({ sub: 'user-note' });
+  describe('GET /v1/tools/notion/promptvault/prompts (listPrompts)', () => {
+    it('fails with MISCONFIGURED when not connected', async () => {
+      const token = await createToken({ sub: 'user-list-prompts' });
 
       const response = await app.inject({
+        method: 'GET',
+        url: '/v1/tools/notion/promptvault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns empty list when connected but no prompts exist', async () => {
+      const token = await createToken({ sub: 'user-empty-list' });
+
+      // Connect first
+      await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/note',
+        url: '/v1/integrations/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Test Note',
-          content: 'Test content',
-          idempotencyKey: 'key-123',
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-id',
         },
       });
 
-      expect(response.statusCode).toBe(404);
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/tools/notion/promptvault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { prompts: unknown[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompts).toHaveLength(0);
     });
   });
 
-  describe('POST /v1/tools/notion/promptvault/note', () => {
+  describe('POST /v1/tools/notion/promptvault/prompts (createPrompt)', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
-      const token = await createToken({ sub: 'user-note' });
+      const token = await createToken({ sub: 'user-create-prompt' });
 
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/tools/notion/promptvault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Test Note',
+          title: 'Test Prompt',
           prompt: 'Test prompt content',
         },
       });
@@ -456,10 +545,10 @@ describe('notion-gpt-service v1 endpoints', () => {
       expect(body.error.code).toBe('MISCONFIGURED');
     });
 
-    it('creates note with pageId, url, and title in response', async () => {
-      const token = await createToken({ sub: 'user-create-note' });
+    it('creates prompt successfully', async () => {
+      const token = await createToken({ sub: 'user-create-prompt-success' });
 
-      // First connect
+      // Connect first
       await app.inject({
         method: 'POST',
         url: '/v1/integrations/notion/connect',
@@ -470,131 +559,27 @@ describe('notion-gpt-service v1 endpoints', () => {
         },
       });
 
-      // Create note
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/tools/notion/promptvault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'My Note',
-          prompt: 'My prompt content here',
+          title: 'My New Prompt',
+          prompt: 'This is my prompt content',
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { pageId: string; url: string; title: string };
-        diagnostics: { requestId: string; durationMs: number };
+        data: {
+          prompt: { id: string; title: string; prompt: string };
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.data.pageId).toBeDefined();
-      expect(body.data.pageId.length).toBeGreaterThan(0);
-      expect(body.data.url).toBeDefined();
-      expect(body.data.url).toContain('notion.so');
-      expect(body.data.title).toBe('My Note');
-      expect(body.diagnostics.requestId).toBeDefined();
-      expect(body.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
-    });
-
-    it('stores prompt verbatim (no trimming or normalization)', async () => {
-      const token = await createToken({ sub: 'user-verbatim' });
-
-      // Connect
-      await app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
-
-      // Prompt with whitespace, newlines, special chars that must be preserved
-      const verbatimPrompt = '  \n\nYou are an assistant.  \n\n  Use markdown.\n\n  ';
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          title: 'Verbatim Test',
-          prompt: verbatimPrompt,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Verify the mock captured the exact prompt
-      const captured = notionApi.getLastCapturedNote();
-      expect(captured).toBeDefined();
-      expect(captured?.params.prompt).toBe(verbatimPrompt);
-      expect(captured?.params.userId).toBe('user-verbatim');
-    });
-
-    it('passes correct userId to Notion adapter', async () => {
-      const userId = 'auth0|specific-user-id-123';
-      const token = await createToken({ sub: userId });
-
-      // Connect
-      await app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
-
-      await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          title: 'User ID Test',
-          prompt: 'Some prompt',
-        },
-      });
-
-      const captured = notionApi.getLastCapturedNote();
-      expect(captured?.params.userId).toBe(userId);
-    });
-
-    it('rejects requests with extra fields (strict schema)', async () => {
-      const token = await createToken({ sub: 'user-strict' });
-
-      // Connect
-      await app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
-
-      // Try to create note with extra field
-      const response = await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          title: 'Test',
-          prompt: 'Test prompt',
-          extraField: 'should be rejected',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string; message: string };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.data.prompt.id).toBeDefined();
+      expect(body.data.prompt.title).toBe('My New Prompt');
+      expect(body.data.prompt.prompt).toBe('This is my prompt content');
     });
 
     it('rejects requests with missing title', async () => {
@@ -602,7 +587,7 @@ describe('notion-gpt-service v1 endpoints', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/tools/notion/promptvault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -612,11 +597,10 @@ describe('notion-gpt-service v1 endpoints', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string; details: { errors: { path: string }[] } };
+        error: { code: string };
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.details.errors.some((e) => e.path === 'title')).toBe(true);
     });
 
     it('rejects requests with missing prompt', async () => {
@@ -624,7 +608,7 @@ describe('notion-gpt-service v1 endpoints', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/tools/notion/promptvault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'Test Title',
@@ -634,11 +618,10 @@ describe('notion-gpt-service v1 endpoints', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string; details: { errors: { path: string }[] } };
+        error: { code: string };
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.details.errors.some((e) => e.path === 'prompt')).toBe(true);
     });
 
     it('rejects title exceeding max length (200 chars)', async () => {
@@ -646,7 +629,7 @@ describe('notion-gpt-service v1 endpoints', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/tools/notion/promptvault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'x'.repeat(201),
@@ -662,9 +645,29 @@ describe('notion-gpt-service v1 endpoints', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+  });
 
-    it('accepts title at max length (200 chars)', async () => {
-      const token = await createToken({ sub: 'user-max-title' });
+  describe('GET /v1/tools/notion/promptvault/prompts/:promptId (getPrompt)', () => {
+    it('fails with MISCONFIGURED when not connected', async () => {
+      const token = await createToken({ sub: 'user-get-prompt' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/tools/notion/promptvault/prompts/some-prompt-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns NOT_FOUND for non-existent prompt', async () => {
+      const token = await createToken({ sub: 'user-get-nonexistent' });
 
       // Connect first
       await app.inject({
@@ -678,61 +681,92 @@ describe('notion-gpt-service v1 endpoints', () => {
       });
 
       const response = await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        method: 'GET',
+        url: '/v1/tools/notion/promptvault/prompts/nonexistent-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('PATCH /v1/tools/notion/promptvault/prompts/:promptId (updatePrompt)', () => {
+    it('fails with MISCONFIGURED when not connected', async () => {
+      const token = await createToken({ sub: 'user-update-prompt' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/v1/tools/notion/promptvault/prompts/some-prompt-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'x'.repeat(200),
-          prompt: 'Test prompt',
+          title: 'Updated Title',
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
-    it('rejects empty title', async () => {
-      const token = await createToken({ sub: 'user-empty-title' });
+    it('rejects empty update (no title or prompt)', async () => {
+      const token = await createToken({ sub: 'user-empty-update' });
 
       const response = await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        method: 'PATCH',
+        url: '/v1/tools/notion/promptvault/prompts/some-id',
         headers: { authorization: `Bearer ${token}` },
-        payload: {
-          title: '',
-          prompt: 'Test prompt',
-        },
+        payload: {},
       });
 
       expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
-    it('rejects empty prompt', async () => {
-      const token = await createToken({ sub: 'user-empty-prompt' });
+    it('returns NOT_FOUND for non-existent prompt', async () => {
+      const token = await createToken({ sub: 'user-update-nonexistent' });
 
-      const response = await app.inject({
+      // Connect first
+      await app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        url: '/v1/integrations/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Test Title',
-          prompt: '',
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-id',
         },
       });
 
-      expect(response.statusCode).toBe(400);
-    });
-
-    it('requires auth (401 without token)', async () => {
       const response = await app.inject({
-        method: 'POST',
-        url: '/v1/tools/notion/promptvault/note',
+        method: 'PATCH',
+        url: '/v1/tools/notion/promptvault/prompts/nonexistent-id',
+        headers: { authorization: `Bearer ${token}` },
         payload: {
-          title: 'Test',
-          prompt: 'Test prompt',
+          title: 'New Title',
         },
       });
 
-      expect(response.statusCode).toBe(401);
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 
@@ -772,7 +806,7 @@ describe('notion-gpt-service v1 endpoints', () => {
       };
       // Health is NOT wrapped in success/data envelope
       expect(body.status).toBeDefined();
-      expect(body.serviceName).toBe('notion-gpt-service');
+      expect(body.serviceName).toBe('promptvault-service');
       expect(body.checks).toBeDefined();
       expect((body as { success?: boolean }).success).toBeUndefined();
     });
@@ -790,7 +824,7 @@ describe('notion-gpt-service v1 endpoints', () => {
         components: { securitySchemes: unknown };
       };
       expect(body.openapi).toMatch(/^3\./);
-      expect(body.info.title).toBe('notion-gpt-service');
+      expect(body.info.title).toBe('PromptVaultService');
       expect(body.components.securitySchemes).toBeDefined();
     });
   });

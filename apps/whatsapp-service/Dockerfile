@@ -14,8 +14,9 @@ COPY packages/infra/firestore/package*.json ./packages/infra/firestore/
 COPY packages/domain/promptvault/package*.json ./packages/domain/promptvault/
 COPY packages/domain/identity/package*.json ./packages/domain/identity/
 
-# Install dependencies
-RUN npm ci --workspace=@praxos/common --workspace=@praxos/domain-identity --workspace=@praxos/domain-promptvault --workspace=@praxos/infra-firestore --workspace=apps/whatsapp-service
+# Install ALL dependencies including root devDependencies (typescript)
+# Workspace filter doesn't install root devDeps, so we install everything for build
+RUN npm ci
 
 # Copy source files
 COPY tsconfig*.json ./
