@@ -129,6 +129,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: 'PromptVaultService',
         description:

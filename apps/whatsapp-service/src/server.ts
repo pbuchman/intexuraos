@@ -99,6 +99,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
         description: 'PraxOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
