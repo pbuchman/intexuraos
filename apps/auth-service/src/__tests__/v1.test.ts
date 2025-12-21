@@ -438,6 +438,209 @@ describe('auth-service v1 endpoints', () => {
       expect(spec.paths['/v1/auth/device/start']).toBeDefined();
       expect(spec.paths['/v1/auth/device/poll']).toBeDefined();
       expect(spec.paths['/v1/auth/config']).toBeDefined();
+      expect(spec.paths['/v1/auth/oauth/token']).toBeDefined();
+    });
+  });
+
+  describe('POST /v1/auth/oauth/token', () => {
+    beforeEach(() => {
+      process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
+      process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
+      process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    });
+
+    it('returns 400 when config missing', async () => {
+      delete process.env['AUTH0_DOMAIN'];
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          code: 'test-code',
+          redirect_uri: 'https://example.com/callback',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('server_error');
+    });
+
+    it('returns 400 when code missing for authorization_code grant', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          redirect_uri: 'https://example.com/callback',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string; error_description: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toContain('code');
+    });
+
+    it('returns 400 when redirect_uri missing for authorization_code grant', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          code: 'test-code',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string; error_description: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toContain('redirect_uri');
+    });
+
+    it('returns 400 when refresh_token missing for refresh_token grant', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'refresh_token',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string; error_description: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toContain('refresh_token');
+    });
+
+    it('exchanges authorization code for tokens successfully', async () => {
+      app = await buildServer();
+
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        access_token: 'test-access-token',
+        token_type: 'Bearer',
+        expires_in: 86400,
+        refresh_token: 'test-refresh-token',
+        scope: 'openid profile email',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          code: 'test-code',
+          redirect_uri: 'https://example.com/callback',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        refresh_token: string;
+      };
+      expect(body.access_token).toBe('test-access-token');
+      expect(body.token_type).toBe('Bearer');
+      expect(body.expires_in).toBe(86400);
+      expect(body.refresh_token).toBe('test-refresh-token');
+    });
+
+    it('refreshes token successfully', async () => {
+      app = await buildServer();
+
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        access_token: 'new-access-token',
+        token_type: 'Bearer',
+        expires_in: 86400,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'refresh_token',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          refresh_token: 'old-refresh-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        access_token: string;
+        token_type: string;
+      };
+      expect(body.access_token).toBe('new-access-token');
+    });
+
+    it('returns Auth0 error on invalid credentials', async () => {
+      app = await buildServer();
+
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(401, {
+        error: 'invalid_client',
+        error_description: 'Client authentication failed',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'bad-client',
+          client_secret: 'bad-secret',
+          code: 'test-code',
+          redirect_uri: 'https://example.com/callback',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string; error_description: string };
+      expect(body.error).toBe('invalid_client');
+    });
+
+    it('returns error on Auth0 failure', async () => {
+      app = await buildServer();
+
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+        error: 'invalid_grant',
+        error_description: 'Invalid authorization code',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        payload: {
+          grant_type: 'authorization_code',
+          client_id: 'test-client',
+          client_secret: 'test-secret',
+          code: 'expired-code',
+          redirect_uri: 'https://example.com/callback',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('invalid_grant');
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   deviceStartRequestSchema,
   devicePollRequestSchema,
   refreshTokenRequestSchema,
+  oauthTokenRequestSchema,
   isAuth0Error,
   type DeviceStartResponse,
   type TokenResponse,
@@ -583,6 +584,183 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
 
       return await reply.ok(data);
+    }
+  );
+
+  // POST /v1/auth/oauth/token
+  // OAuth2 token endpoint for ChatGPT Actions (Authorization Code flow)
+  fastify.post(
+    '/v1/auth/oauth/token',
+    {
+      schema: {
+        operationId: 'oauthToken',
+        summary: 'OAuth2 Token Endpoint',
+        description:
+          'Exchange authorization code for tokens (Authorization Code flow). Compatible with ChatGPT Actions OAuth.',
+        tags: ['auth'],
+        body: {
+          type: 'object',
+          required: ['grant_type', 'client_id', 'client_secret'],
+          properties: {
+            grant_type: {
+              type: 'string',
+              enum: ['authorization_code', 'refresh_token'],
+              description: 'OAuth2 grant type',
+            },
+            code: {
+              type: 'string',
+              description: 'Authorization code (required for authorization_code grant)',
+            },
+            redirect_uri: {
+              type: 'string',
+              format: 'uri',
+              description: 'Redirect URI (required for authorization_code grant)',
+            },
+            refresh_token: {
+              type: 'string',
+              description: 'Refresh token (required for refresh_token grant)',
+            },
+            client_id: { type: 'string', minLength: 1 },
+            client_secret: { type: 'string', minLength: 1 },
+            code_verifier: { type: 'string', description: 'PKCE code verifier (optional)' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Token issued successfully',
+            type: 'object',
+            properties: {
+              access_token: { type: 'string' },
+              token_type: { type: 'string' },
+              expires_in: { type: 'number' },
+              refresh_token: { type: 'string' },
+              scope: { type: 'string' },
+              id_token: { type: 'string' },
+            },
+            required: ['access_token', 'token_type', 'expires_in'],
+          },
+          400: {
+            description: 'Invalid request or server error',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              error_description: { type: 'string' },
+            },
+          },
+          401: {
+            description: 'Invalid client credentials',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              error_description: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const config = loadAuth0Config();
+      if (config === null) {
+        return await reply.status(400).send({
+          error: 'server_error',
+          error_description: 'Auth0 is not configured',
+        });
+      }
+
+      const parseResult = oauthTokenRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        const details = parseResult.error.errors.map((e) => e.message).join(', ');
+        return await reply.status(400).send({
+          error: 'invalid_request',
+          error_description: details,
+        });
+      }
+
+      const {
+        grant_type,
+        code,
+        redirect_uri,
+        refresh_token,
+        client_id,
+        client_secret,
+        code_verifier,
+      } = parseResult.data;
+
+      const tokenUrl = `https://${config.domain}/oauth/token`;
+
+      // Build form body based on grant type
+      const formParams: Record<string, string> = {
+        grant_type,
+        client_id,
+        client_secret,
+      };
+
+      if (grant_type === 'authorization_code') {
+        if (code === undefined || code === '') {
+          return await reply.status(400).send({
+            error: 'invalid_request',
+            error_description: 'code is required for authorization_code grant',
+          });
+        }
+        if (redirect_uri === undefined || redirect_uri === '') {
+          return await reply.status(400).send({
+            error: 'invalid_request',
+            error_description: 'redirect_uri is required for authorization_code grant',
+          });
+        }
+        formParams['code'] = code;
+        formParams['redirect_uri'] = redirect_uri;
+        if (code_verifier !== undefined && code_verifier !== '') {
+          formParams['code_verifier'] = code_verifier;
+        }
+      } else {
+        // grant_type === 'refresh_token'
+        if (refresh_token === undefined || refresh_token === '') {
+          return await reply.status(400).send({
+            error: 'invalid_request',
+            error_description: 'refresh_token is required for refresh_token grant',
+          });
+        }
+        formParams['refresh_token'] = refresh_token;
+      }
+
+      const formBody = toFormUrlEncodedBody(formParams);
+
+      try {
+        const httpRes = await postFormUrlEncoded(tokenUrl, formBody);
+        const responseBody: unknown = httpRes.body;
+
+        if (httpRes.status < 200 || httpRes.status >= 300) {
+          if (isAuth0Error(responseBody)) {
+            const statusCode = httpRes.status === 401 ? 401 : 400;
+            return await reply.status(statusCode).send({
+              error: responseBody.error,
+              error_description: responseBody.error_description ?? responseBody.error,
+            });
+          }
+          return await reply.status(400).send({
+            error: 'server_error',
+            error_description: 'Token exchange failed',
+          });
+        }
+
+        // Return OAuth2-compliant response (flat structure, not wrapped)
+        const data = responseBody as TokenResponse;
+        return await reply.status(200).send({
+          access_token: data.access_token,
+          token_type: data.token_type,
+          expires_in: data.expires_in,
+          refresh_token: data.refresh_token,
+          scope: data.scope,
+          id_token: data.id_token,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return await reply.status(400).send({
+          error: 'server_error',
+          error_description: message,
+        });
+      }
     }
   );
 
