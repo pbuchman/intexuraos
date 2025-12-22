@@ -3,7 +3,7 @@
  * Stores per-user Auth0 tokens with encrypted refresh tokens.
  */
 
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type {
   AuthTokenRepository,
   AuthTokens,
@@ -74,10 +74,9 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
         updatedAt: doc.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to save tokens: ${message}`,
+        message: `Failed to save tokens: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -102,10 +101,9 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
         updatedAt: data.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get token metadata: ${message}`,
+        message: `Failed to get token metadata: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -126,10 +124,9 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
       const decryptedToken = decryptToken(data.refreshToken);
       return ok(decryptedToken);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get refresh token: ${message}`,
+        message: `Failed to get refresh token: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -142,10 +139,9 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
 
       return ok(doc.exists);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to check refresh token: ${message}`,
+        message: `Failed to check refresh token: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -158,10 +154,9 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
 
       return ok(undefined);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to delete tokens: ${message}`,
+        message: `Failed to delete tokens: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

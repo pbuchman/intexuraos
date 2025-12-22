@@ -4,7 +4,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
-import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
+import { praxosFastifyPlugin, fastifyAuthPlugin, getErrorMessage } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { v1AuthRoutes } from './v1/routes.js';
 
@@ -78,12 +78,11 @@ async function checkFirestore(): Promise<HealthCheck> {
       details: null,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       name: 'firestore',
       status: 'down',
       latencyMs: Date.now() - start,
-      details: { error: message },
+      details: { error: getErrorMessage(error) },
     };
   }
 }

@@ -282,6 +282,26 @@ export { routes } from './routes/index.js';
  */
 ```
 
+**Inline error message extraction** — use `getErrorMessage()` utility:
+
+```ts-example
+// ❌ Repeated inline pattern
+} catch (error) {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  return err({ code: 'INTERNAL_ERROR', message });
+}
+
+// ✅ Use getErrorMessage() from @praxos/common
+import { getErrorMessage } from '@praxos/common';
+
+} catch (error) {
+  return err({
+    code: 'INTERNAL_ERROR',
+    message: getErrorMessage(error, 'Unknown Firestore error'),
+  });
+}
+```
+
 ---
 
 ## Testing
