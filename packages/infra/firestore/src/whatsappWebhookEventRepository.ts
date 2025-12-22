@@ -2,7 +2,7 @@
  * Firestore implementation for storing WhatsApp webhook events.
  * Implements the domain interface from @praxos/domain-inbox.
  */
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppWebhookEvent,
@@ -54,10 +54,9 @@ export class FirestoreWhatsAppWebhookEventRepository implements WhatsAppWebhookE
       await docRef.set(fullEvent);
       return ok(fullEvent);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to save webhook event: ${message}`,
+        message: `Failed to save webhook event: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -111,10 +110,9 @@ export class FirestoreWhatsAppWebhookEventRepository implements WhatsAppWebhookE
 
       return ok(event);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to update webhook event status: ${message}`,
+        message: `Failed to update webhook event status: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -144,10 +142,9 @@ export class FirestoreWhatsAppWebhookEventRepository implements WhatsAppWebhookE
       };
       return ok(event);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to get webhook event: ${message}`,
+        message: `Failed to get webhook event: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

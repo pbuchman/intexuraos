@@ -3,7 +3,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
+import { praxosFastifyPlugin, fastifyAuthPlugin, getErrorMessage } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { createV1Routes } from './v1/routes.js';
 import { createWhatsAppMappingRoutes } from './v1/whatsappMappingRoutes.js';
@@ -71,12 +71,11 @@ async function checkFirestore(): Promise<HealthCheck> {
       details: null,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       name: 'firestore',
       status: 'down',
       latencyMs: Date.now() - start,
-      details: { error: message },
+      details: { error: getErrorMessage(error) },
     };
   }
 }

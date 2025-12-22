@@ -42,3 +42,13 @@ export class PraxOSError extends Error {
     this.details = details;
   }
 }
+
+/**
+ * Extract a message from an unknown error value.
+ * @param error - Any caught error value (may not be Error instance)
+ * @param fallback - Default message when error has no message (default: 'Unknown error')
+ * @returns The error message or fallback
+ */
+export function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  return error instanceof Error ? error.message : fallback;
+}

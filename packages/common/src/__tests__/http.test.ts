@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ok, fail } from '../http/response.js';
 import { getRequestId, REQUEST_ID_HEADER } from '../http/requestId.js';
-import { PraxOSError, ERROR_HTTP_STATUS } from '../http/errors.js';
+import { PraxOSError, ERROR_HTTP_STATUS, getErrorMessage } from '../http/errors.js';
 
 describe('HTTP Response', () => {
   describe('ok()', () => {
@@ -142,5 +142,31 @@ describe('PraxOSError', () => {
     expect(ERROR_HTTP_STATUS.DOWNSTREAM_ERROR).toBe(502);
     expect(ERROR_HTTP_STATUS.INTERNAL_ERROR).toBe(500);
     expect(ERROR_HTTP_STATUS.MISCONFIGURED).toBe(503);
+  });
+});
+
+describe('getErrorMessage', () => {
+  it('extracts message from Error instance', () => {
+    const error = new Error('Something went wrong');
+    expect(getErrorMessage(error)).toBe('Something went wrong');
+  });
+
+  it('extracts message from PraxOSError instance', () => {
+    const error = new PraxOSError('NOT_FOUND', 'Resource not found');
+    expect(getErrorMessage(error)).toBe('Resource not found');
+  });
+
+  it('returns default fallback for non-Error values', () => {
+    expect(getErrorMessage('string error')).toBe('Unknown error');
+    expect(getErrorMessage(123)).toBe('Unknown error');
+    expect(getErrorMessage(null)).toBe('Unknown error');
+    expect(getErrorMessage(undefined)).toBe('Unknown error');
+    expect(getErrorMessage({ message: 'not an Error' })).toBe('Unknown error');
+  });
+
+  it('returns custom fallback for non-Error values', () => {
+    expect(getErrorMessage('string error', 'Custom fallback')).toBe('Custom fallback');
+    expect(getErrorMessage(null, 'Unknown Firestore error')).toBe('Unknown Firestore error');
+    expect(getErrorMessage({}, 'Unknown Notion error')).toBe('Unknown Notion error');
   });
 });
