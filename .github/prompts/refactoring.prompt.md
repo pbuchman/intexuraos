@@ -1,4 +1,5 @@
-You are performing a **code smell detection and fix pass**.
+You are a **TypeScript Static Analysis Bot** performing a **code smell detection and fix pass**.  
+Your role is to enforce **architecture hygiene**, **code consistency**, and **explicit error handling** across the repository.
 
 ---
 
@@ -53,19 +54,19 @@ grep -rn "as any" packages/ apps/             # Type escapes
 
 ---
 
-## Phase 2: Prioritize Findings
+## Phase 2: Prioritize and Print Findings
 
-Create a prioritized list:
+**MANDATORY:** Print a prioritized list of up to 10 code smells found:
 
 ```markdown
-## Code Smell Findings
+## Prioritized Code Smell Queue (Top 10)
 
-| #   | Priority | File:Line | Smell                       | Impact | Fix Effort |
-| --- | -------- | --------- | --------------------------- | ------ | ---------- |
-| 1   | P0       | path:123  | Silent catch without reason | High   | 5 min      |
-| 2   | P1       | path:456  | Unused export               | Medium | 2 min      |
-
-...
+| Rank | Priority | File:Line      | Smell                       | Impact | Fix Effort |
+| ---- | -------- | -------------- | --------------------------- | ------ | ---------- |
+| 1    | P0       | src/foo.ts:123 | Silent catch without reason | High   | 5 min      |
+| 2    | P1       | src/bar.ts:456 | Unused export               | Medium | 2 min      |
+| 3    | P2       | src/baz.ts:78  | Duplicated validation logic | Medium | 15 min     |
+| ...  | ...      | ...            | ...                         | ...    | ...        |
 ```
 
 **Prioritization criteria:**
@@ -74,18 +75,34 @@ Create a prioritized list:
 2. **Effort**: How long to fix properly?
 3. **Risk**: Could the fix introduce bugs?
 
-Pick **one smell** to fix — the highest-impact item that can be fixed safely.
-
 ---
 
-## Phase 3: Fix the Top Smell
+## Phase 3: Justify and Fix the Top Smell
+
+**MANDATORY:** Before fixing, clearly state why the chosen item is most important:
+
+```markdown
+## Selected Fix: #1 — Silent catch without reason
+
+**Why this is the top priority:**
+
+- [Reason 1: e.g., "Hides errors that could cause silent data corruption"]
+- [Reason 2: e.g., "Violates explicit error handling policy in copilot-instructions"]
+- [Reason 3: e.g., "Quick fix with zero regression risk"]
+
+**Why not #2 or #3:**
+
+- #2 (Unused export): Lower impact — just dead code, no runtime effect
+- #3 (Duplicated logic): Higher effort, needs more careful refactoring
+```
+
+**Then:**
 
 1. Make the fix.
 2. Run `npm run ci` — must pass.
 3. If this is a **new smell pattern** not in copilot-instructions:
-
-- Add it to the "Code Smells (Fix & Document)" section.
-- Include ❌ bad example and ✅ good example.
+   - Add it to the "Code Smells (Fix & Document)" section.
+   - Include ❌ bad example and ✅ good example.
 
 ---
 
@@ -100,11 +117,14 @@ Use `show_content` tool with this structure:
 
 - Files scanned: X
 - Smells found: Y
-- Top priority: [description]
 
-### Prioritized Findings
+### Prioritized Queue (Top 10)
 
-[table from Phase 2]
+[table from Phase 2 — MANDATORY, must show ~10 items if available]
+
+### Selected Fix Justification
+
+[justification from Phase 3 — MANDATORY, explain why #1 was chosen over others]
 
 ### Fixed
 
@@ -113,9 +133,9 @@ Use `show_content` tool with this structure:
 - **Fix**: [brief description]
 - **New pattern added**: Yes/No (if yes, link to copilot-instructions update)
 
-### Remaining (for future passes)
+### Remaining Queue
 
-[list top 3 unfixed items]
+[list remaining items from the queue for future passes]
 ```
 
 ---
