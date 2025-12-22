@@ -10,6 +10,7 @@
   "references": [
     { "path": "../../packages/common" },
     { "path": "../../packages/domain/identity" },
-    { "path": "../../packages/infra/auth0" }
+    { "path": "../../packages/infra/auth0" },
+    { "path": "../../packages/infra/firestore" }
   ]
 }
