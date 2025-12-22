@@ -137,7 +137,7 @@ function createLoggingFetch(
         method,
         url: urlString,
         durationMs,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error, String(error)),
       });
       throw error;
     }
