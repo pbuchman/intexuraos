@@ -25,16 +25,30 @@ This prompt adds detection strategy. Do not duplicate rules from copilot-instruc
 
 Scan the codebase for these smell categories (in priority order):
 
-| Priority | Smell Category             | Detection Method                                         |
-| -------- | -------------------------- | -------------------------------------------------------- |
-| P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"    |
-| P1       | **Duplicated logic**       | Same logic in 2+ places (copy-paste), extract to shared  |
-| P2       | **Large files**            | Files >300 lines — split into focused modules            |
-| P3       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code |
-| P4       | **Boundary violations**    | Domain importing infra, common importing domain          |
-| P5       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers     |
-| P6       | **Missing error handling** | Unhandled promise rejections, empty catch blocks         |
-| P7       | **Inconsistent patterns**  | Mixed styles for same concern across files               |
+| Priority | Smell Category                | Detection Method                                              |
+| -------- | ----------------------------- | ------------------------------------------------------------- |
+| P0       | **Known smells**              | Patterns listed in copilot-instructions "Code Smells"         |
+| P1       | **Duplicated logic**          | Same function in 2+ apps → extract to `@praxos/common`        |
+| P2       | **Large files**               | Files >300 lines or >5 routes → split by resource/concern     |
+| P3       | **Schema/boilerplate dup**    | Repetitive response schemas, error mappings → create helpers  |
+| P4       | **Dead/unreachable code**     | Unused exports, unreachable branches, commented-out code      |
+| P5       | **Boundary violations**       | Domain importing infra, common importing domain               |
+| P6       | **Complex conditionals**      | Nested ternaries, long if-else chains, magic numbers          |
+| P7       | **Missing error handling**    | Unhandled promise rejections, empty catch blocks              |
+| P8       | **Inconsistent patterns**     | Mixed styles for same concern across files                    |
+
+### Common Duplication Patterns to Watch For
+
+- **Validation error handlers** — check if each app has its own `handleValidationError` or similar
+- **Error code mappers** — functions that map domain errors to HTTP codes, often duplicated
+- **Response schema boilerplate** — same JSON schema structure repeated per endpoint (success/error envelopes)
+- **Config loaders** — similar environment variable loading patterns across services
+
+### Large File Indicators
+
+- Route files with many endpoints should be split by resource (e.g., `/prompts`, `/integrations`, `/webhooks`)
+- Test files mirroring large source files are acceptable
+- Domain use case files >400 lines may need extraction
 
 **Scan commands:**
 
@@ -49,6 +63,9 @@ npm run test:coverage           # Low coverage may indicate dead code
 ```bash
 # Large files (>300 lines) — candidates for splitting
 find packages/ apps/ -name "*.ts" -exec wc -l {} + | sort -rn | head -20
+
+# Duplicated utilities across apps (check for same function name in multiple apps)
+grep -rn "^function " apps/ --include="*.ts" | grep -v "__tests__" | cut -d: -f3 | sort | uniq -c | sort -rn | head -10
 
 # Duplicated logic detection
 grep -rn "catch {}" packages/ apps/           # Empty catch
