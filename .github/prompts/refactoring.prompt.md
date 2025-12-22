@@ -28,12 +28,13 @@ Scan the codebase for these smell categories (in priority order):
 | Priority | Smell Category             | Detection Method                                         |
 | -------- | -------------------------- | -------------------------------------------------------- |
 | P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"    |
-| P1       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code |
-| P2       | **Duplicated logic**       | Same logic in 2+ places (copy-paste)                     |
-| P3       | **Boundary violations**    | Domain importing infra, common importing domain          |
-| P4       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers     |
-| P5       | **Missing error handling** | Unhandled promise rejections, empty catch blocks         |
-| P6       | **Inconsistent patterns**  | Mixed styles for same concern across files               |
+| P1       | **Duplicated logic**       | Same logic in 2+ places (copy-paste), extract to shared  |
+| P2       | **Large files**            | Files >300 lines — split into focused modules            |
+| P3       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code |
+| P4       | **Boundary violations**    | Domain importing infra, common importing domain          |
+| P5       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers     |
+| P6       | **Missing error handling** | Unhandled promise rejections, empty catch blocks         |
+| P7       | **Inconsistent patterns**  | Mixed styles for same concern across files               |
 
 **Scan commands:**
 
@@ -46,6 +47,10 @@ npm run test:coverage           # Low coverage may indicate dead code
 **Manual grep patterns:**
 
 ```bash
+# Large files (>300 lines) — candidates for splitting
+find packages/ apps/ -name "*.ts" -exec wc -l {} + | sort -rn | head -20
+
+# Duplicated logic detection
 grep -rn "catch {}" packages/ apps/           # Empty catch
 grep -rn "@ts-ignore" packages/ apps/         # Suppressed errors
 grep -rn "// TODO" packages/ apps/            # Deferred work
