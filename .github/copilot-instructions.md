@@ -165,6 +165,37 @@ if (isErr(result)) {
 const value = result.value;
 ```
 
+**Duplicated documentation** — keep canonical docs in one place, reference from others:
+
+```ts-example
+// ❌ Same doc block in multiple files
+// file: routes.ts
+/**
+ * Route mapping:
+ * GET /api/foo → fooRoutes.ts
+ */
+export { routes } from './routes/index.js';
+
+// file: routes/index.ts
+/**
+ * Route mapping:
+ * GET /api/foo → fooRoutes.ts   // DUPLICATED!
+ */
+
+// ✅ Single source of truth, reference elsewhere
+// file: routes.ts (canonical location)
+/**
+ * Route mapping:
+ * GET /api/foo → ./routes/fooRoutes.ts
+ */
+export { routes } from './routes/index.js';
+
+// file: routes/index.ts
+/**
+ * See ../routes.ts for route mapping.
+ */
+```
+
 ---
 
 ## Testing
