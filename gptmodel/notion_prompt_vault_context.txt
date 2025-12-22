@@ -24,17 +24,24 @@ Expected: Error: "Weight must be between 1 and 10."
 
 ## B. Save Behavior
 
-### B1. Save before review
+### B1. Save before review (no param)
 Command: `/save`
-State: `SAVE_ALLOWED = false`
-Expected: Error, reject with diagnostics.
+State: `SAVE_ALLOWED = false`, `LAST_REVIEWED_PROMPT = null`
+Expected: Error "Cannot execute `/save` — no reviewed prompt found."
 
 ### B2. Save with prompt (Notion misconfigured)
-Command: `/save <prompt>`
+Command: `/save my awesome prompt`
 State: Notion misconfigured
-Expected: Error, diagnostics include `NOTION_CONFIGURED: NO`
+Expected: Error "Cannot save — Notion not configured. Run /config notion first."
+WRONG: "no reviewed prompt found" ← this is WRONG because prompt WAS provided
 
-### B3. Successful review → save
+### B3. Save with prompt (not authenticated)
+Command: `/save my awesome prompt`
+State: User not signed in
+Expected: ChatGPT prompts user to sign in via OAuth
+WRONG: "no reviewed prompt found" ← this is WRONG because prompt WAS provided
+
+### B4. Successful review → save
 - Run: `/review <prompt>`
 - Score = 8.6
 - Ends loop
@@ -94,6 +101,14 @@ Expected: Error, must re-run `/review` first
 Score = 7.5, user answers "no" to improvement question
 Expected: Loop ends, allow `/save`
 
+### D8. Token refresh triggered
+State: `REFRESH_TOKEN` present, `EXPIRES_AT` in 3 minutes
+Command: `/save`
+Expected: Silent refresh, then proceed with save
+
+### D9. Token refresh fails
+State: `REFRESH_TOKEN` present, refresh API returns error
+Expected: Error "Unauthorized: token expired, run /auth start"
 
 ---
 
@@ -117,8 +132,8 @@ Expected: Fail immediately, no retry, show diagnostics
 
 ### F1. Config without auth
 Command: `/config notion`
-State: User not signed in (no OAuth session)
-Expected: ChatGPT prompts user to sign in first
+State: No `ACCESS_TOKEN`
+Expected: Error "Unauthorized: run /auth start"
 
 ### F2. Connection test fails
 Command: `/config notion`
@@ -186,8 +201,9 @@ Note: Authentication state is managed by ChatGPT OAuth, not tracked in model sta
 
 ## Auth Service
 Base: `https://praxos-auth-service-ooafxzbaua-lm.a.run.app`
-- OAuth token exchange handled automatically by ChatGPT Actions
-- `POST /v1/auth/oauth/token` — Token endpoint (used by ChatGPT, not called directly)
+- OAuth authorization and token exchange handled by ChatGPT Actions
+- `GET /v1/auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
+- `POST /v1/auth/oauth/token` — Token exchange (used by ChatGPT)
 
 ## PromptVault Service
 Base: `https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app`

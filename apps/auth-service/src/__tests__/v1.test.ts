@@ -565,6 +565,30 @@ describe('auth-service v1 endpoints', () => {
       expect(body.refresh_token).toBe('test-refresh-token');
     });
 
+    it('accepts form-urlencoded content type (OAuth2 standard)', async () => {
+      app = await buildServer();
+
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        access_token: 'test-access-token',
+        token_type: 'Bearer',
+        expires_in: 86400,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/oauth/token',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        payload:
+          'grant_type=authorization_code&client_id=test-client&client_secret=test-secret&code=test-code&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { access_token: string };
+      expect(body.access_token).toBe('test-access-token');
+    });
+
     it('refreshes token successfully', async () => {
       app = await buildServer();
 

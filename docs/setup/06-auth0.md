@@ -174,6 +174,35 @@ After creating your GPT:
 3. Update **Allowed Callback URLs** with the actual URL
 4. Save changes
 
+> **Getting the Callback URL from ChatGPT:**
+>
+> 1. In GPT Builder, go to **Configure** → **Actions**
+> 2. Click on your action's **Authentication** settings
+> 3. After selecting OAuth and filling in the fields, ChatGPT shows the callback URL
+> 4. It looks like: `https://chat.openai.com/aip/g-XXXXXXXXX/oauth/callback`
+> 5. Copy this exact URL to Auth0's Allowed Callback URLs
+
+### Troubleshooting: "Callback URL mismatch"
+
+If you see this error from Auth0:
+
+```
+Callback URL mismatch.
+The provided redirect_uri is not in the list of allowed callback URLs.
+```
+
+**Fix:**
+
+1. Go to Auth0 Dashboard → Applications → Your ChatGPT Application
+2. In **Settings** → **Application URIs** → **Allowed Callback URLs**
+3. Add the exact callback URL from ChatGPT (see above)
+4. Common formats:
+   - `https://chat.openai.com/aip/g-XXXXXXXXX/oauth/callback`
+   - `https://chatgpt.com/aip/g-XXXXXXXXX/oauth/callback`
+5. You can add multiple URLs (one per line) if needed
+6. Click **Save Changes**
+7. Retry the OAuth flow in ChatGPT
+
 ## 5. Find Issuer and JWKS URL
 
 From your tenant domain, derive:
