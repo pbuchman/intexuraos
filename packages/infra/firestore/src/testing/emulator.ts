@@ -8,18 +8,27 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { Firestore } from '@google-cloud/firestore';
 
-const EMULATOR_HOST = 'localhost';
-const EMULATOR_PORT = 8085;
-const EMULATOR_HOST_PORT = `${EMULATOR_HOST}:${String(EMULATOR_PORT)}`;
+const DEFAULT_EMULATOR_HOST = 'localhost';
+const DEFAULT_EMULATOR_PORT = 8085;
+const DEFAULT_EMULATOR_HOST_PORT = `${DEFAULT_EMULATOR_HOST}:${String(DEFAULT_EMULATOR_PORT)}`;
+
+/**
+ * Get the emulator host:port from env var or default.
+ */
+function getEmulatorHostPort(): string {
+  return process.env['FIRESTORE_EMULATOR_HOST'] ?? DEFAULT_EMULATOR_HOST_PORT;
+}
 
 let emulatorProcess: ChildProcess | null = null;
 
 /**
  * Check if Firestore emulator is already running.
+ * Respects FIRESTORE_EMULATOR_HOST env var if set.
  */
 export async function isEmulatorRunning(): Promise<boolean> {
+  const hostPort = getEmulatorHostPort();
   try {
-    const response = await fetch(`http://${EMULATOR_HOST_PORT}/`);
+    const response = await fetch(`http://${hostPort}/`);
     // Emulator returns 200 on root path
     return response.ok || response.status === 404;
   } catch {
@@ -45,26 +54,27 @@ async function waitForEmulator(timeoutMs = 30000): Promise<void> {
 
 /**
  * Start Firestore emulator if not already running.
- * Sets FIRESTORE_EMULATOR_HOST environment variable.
+ * Sets FIRESTORE_EMULATOR_HOST environment variable if not already set.
  *
  * @returns true if a new emulator was started, false if existing emulator was detected
  * @throws Error if emulator is not running and cannot be started
  */
 export async function ensureEmulator(): Promise<boolean> {
-  // Set emulator host for Firestore SDK to pick up
-  process.env['FIRESTORE_EMULATOR_HOST'] = EMULATOR_HOST_PORT;
+  // Set emulator host for Firestore SDK to pick up (only if not pre-configured)
+  process.env['FIRESTORE_EMULATOR_HOST'] ??= DEFAULT_EMULATOR_HOST_PORT;
 
-  // Check if emulator is already running (e.g., via Docker)
+  // Check if emulator is already running (e.g., via Docker or CI sidecar)
   if (await isEmulatorRunning()) {
     return false;
   }
 
-  // Try to start emulator process
+  // Try to start emulator process locally
   // This requires gcloud CLI to be installed
+  const localHostPort = DEFAULT_EMULATOR_HOST_PORT;
   return await new Promise((resolve, reject) => {
     emulatorProcess = spawn(
       'gcloud',
-      ['emulators', 'firestore', 'start', `--host-port=${EMULATOR_HOST_PORT}`],
+      ['emulators', 'firestore', 'start', `--host-port=${localHostPort}`],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
@@ -85,6 +95,9 @@ export async function ensureEmulator(): Promise<boolean> {
         reject(new Error(`Failed to start Firestore emulator: ${err.message}`));
       }
     });
+
+    // Update env to point to local emulator we're starting
+    process.env['FIRESTORE_EMULATOR_HOST'] = localHostPort;
 
     // Wait for emulator to be ready
     waitForEmulator()
@@ -123,7 +136,8 @@ async function safeFetch(url: string, init: RequestInit): Promise<Response | nul
  */
 export async function clearEmulatorData(): Promise<void> {
   const projectId = process.env['GCLOUD_PROJECT'] ?? 'test-project';
-  const url = `http://${EMULATOR_HOST_PORT}/emulator/v1/projects/${projectId}/databases/(default)/documents`;
+  const hostPort = getEmulatorHostPort();
+  const url = `http://${hostPort}/emulator/v1/projects/${projectId}/databases/(default)/documents`;
 
   // Best-effort cleanup - silently ignore network errors
   const response = await safeFetch(url, { method: 'DELETE' });
@@ -152,5 +166,5 @@ export function createEmulatorFirestore(): Firestore {
  * Get the emulator host string.
  */
 export function getEmulatorHost(): string {
-  return EMULATOR_HOST_PORT;
+  return getEmulatorHostPort();
 }

@@ -45,14 +45,22 @@ steps:
         exit 1
 
   # Step 4: Run CI checks (lint, typecheck, test, build)
-  - name: 'node:22-slim'
+  # Run inside Docker on cloudbuild network to reach the Firestore emulator container
+  - name: 'gcr.io/cloud-builders/docker'
     id: 'npm-run-ci'
     waitFor: ['start-firestore-emulator']
-    entrypoint: 'npm'
-    args: ['run', 'ci']
-    env:
-      - 'FIRESTORE_EMULATOR_HOST=firestore-emulator:8085'
-      - 'GCLOUD_PROJECT=test-project'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker run --rm \
+          --network cloudbuild \
+          -v /workspace:/workspace \
+          -w /workspace \
+          -e FIRESTORE_EMULATOR_HOST=firestore-emulator:8085 \
+          -e GCLOUD_PROJECT=test-project \
+          node:22-slim \
+          npm run ci
 
   # Step 5: Detect affected services (uses full node image for git)
   - name: 'node:22'

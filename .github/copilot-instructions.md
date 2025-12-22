@@ -154,6 +154,20 @@ async function safeFetch(url: string): Promise<Response | null> {
 
 ---
 
+## Output Rules
+
+**MANDATORY:** Use `show_content` tool for non-trivial output. Never print summaries, explanations, or results directly in conversation.
+
+Examples of non-trivial output:
+
+- Task completion summaries
+- Investigation findings
+- Multi-line code suggestions (when not using edit tools)
+- Architecture explanations
+- Comparison tables
+
+---
+
 ## Markdown Code Blocks
 
 Use ` ```ts-example ` (not ` ```typescript `) to prevent IDE parsing errors.
