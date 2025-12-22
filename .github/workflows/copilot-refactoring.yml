@@ -51,17 +51,19 @@ jobs:
                     .getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                   const result = await model.generateContent(
-                    `Based on these git commit messages from a merged PR, write a brief 2-3 sentence summary of what changed. Be concise and technical.\n\nCommit messages:\n${commitMessages}\n\nSummary:`
+                    `Summarize these git commit messages as 1-10 bullet points. Deduplicate and group related changes. Be concise and technical. Output only markdown bullet points, no preamble.\n\nCommit messages:\n${commitMessages}`
                   );
                   const summary = result.response.text()?.trim();
-                  if (summary) polishedSummary = `## Summary\n\n${summary}`;
+                  if (summary) polishedSummary = `## Changes\n\n${summary}`;
                 } catch (e) {
                   console.log(`Gemini API error: ${e.message}`);
                 }
               }
             }
 
-            const body = `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n${polishedSummary}\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`;
+            const body = polishedSummary
+              ? `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n${polishedSummary}\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`
+              : `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`;
 
             console.log('--- Issue body ---');
             console.log(body);
