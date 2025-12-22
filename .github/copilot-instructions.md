@@ -78,6 +78,49 @@ docs/           → All documentation
 
 ---
 
+## Code Smells (Fix & Document)
+
+Patterns to avoid. Not all are ESLint-enforced, but must be fixed when found.
+
+**RULE: When fixing a new code smell not listed here, YOU MUST add it to this section.**
+_This rule is non-negotiable._
+
+**Throw inside try-catch** — don't throw exceptions caught by the same block:
+
+```ts-example
+// ❌ Anti-pattern: throw caught locally
+try {
+  if (bad) throw new Error('fail');
+} catch (e) {
+  if (e.message.includes('fail')) throw e;
+}
+
+// ✅ Separate try-catch from conditional throw
+let result;
+try {
+  result = await riskyOperation();
+} catch {
+  return; // handle error
+}
+if (!result.ok) throw new Error('fail');
+```
+
+**Silent catch without reason** — always document why errors are ignored:
+
+```ts-example
+// ❌ Silent catch
+try { await op(); } catch {}
+
+// ✅ Document intent
+try {
+  await op();
+} catch {
+  // Best-effort cleanup, failure is acceptable
+}
+```
+
+---
+
 ## Testing
 
 - Coverage: 90% lines, 85% branches, 90% functions, 90% statements

@@ -106,6 +106,19 @@ export function stopEmulator(): void {
 }
 
 /**
+ * Fetch wrapper that returns null on network error.
+ */
+async function safeFetch(url: string, init: RequestInit): Promise<Response | null> {
+  try {
+    const result = await globalThis.fetch(url, init);
+    return result;
+  } catch {
+    // Network error - emulator might not be running
+    return null;
+  }
+}
+
+/**
  * Clear all data from the emulator.
  * Uses Firestore emulator's REST API.
  */
@@ -113,12 +126,11 @@ export async function clearEmulatorData(): Promise<void> {
   const projectId = process.env['GCLOUD_PROJECT'] ?? 'test-project';
   const url = `http://${EMULATOR_HOST_PORT}/emulator/v1/projects/${projectId}/databases/(default)/documents`;
 
-  let response: Response;
-  try {
-    response = await fetch(url, { method: 'DELETE' });
-  } catch {
-    // Network error - emulator might not be running or support this endpoint
-    // Silently ignore as this is best-effort cleanup
+  // Best-effort cleanup - silently ignore network errors
+  const response = await safeFetch(url, { method: 'DELETE' });
+
+  // If fetch failed, silently ignore (best-effort cleanup)
+  if (response === null || typeof response === 'undefined') {
     return;
   }
 
