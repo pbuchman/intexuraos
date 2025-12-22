@@ -36,15 +36,23 @@ jobs:
             let polishedSummary = '';
 
             if (prMatch) {
+              const prNumber = parseInt(prMatch[1]);
+              console.log(`Found PR #${prNumber}`);
+
               const { data: commits } = await github.rest.pulls.listCommits({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: parseInt(prMatch[1])
+                pull_number: prNumber
               });
 
+              console.log(`Found ${commits.length} commits`);
               const commitMessages = commits.map(c => `- ${c.commit.message.split('\n')[0]}`).join('\n');
+              console.log(`Commit messages:\n${commitMessages}`);
 
-              if (process.env.GEMINI_API_KEY && commits.length > 0) {
+              const hasApiKey = !!process.env.GEMINI_API_KEY;
+              console.log(`GEMINI_API_KEY present: ${hasApiKey}`);
+
+              if (hasApiKey && commits.length > 0) {
                 try {
                   const { GoogleGenerativeAI } = await import('@google/generative-ai');
                   const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
@@ -54,16 +62,28 @@ jobs:
                     `Summarize these git commit messages as 1-10 bullet points. Deduplicate and group related changes. Be concise and technical. Output only markdown bullet points, no preamble.\n\nCommit messages:\n${commitMessages}`
                   );
                   const summary = result.response.text()?.trim();
-                  if (summary) polishedSummary = `## Changes\n\n${summary}`;
+                  console.log(`Gemini response: ${summary}`);
+                  if (summary) polishedSummary = `## Changes
+
+            ${summary}`;
                 } catch (e) {
                   console.log(`Gemini API error: ${e.message}`);
+                  console.log(e.stack);
                 }
               }
+            } else {
+              console.log('No PR number found in commit message');
             }
 
-            const body = polishedSummary
-              ? `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n${polishedSummary}\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`
-              : `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`;
+            const summaryBlock = polishedSummary ? `
+
+            ${polishedSummary}
+            ` : '';
+
+            const body = `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
+            ${summaryBlock}
+            ---
+            *Commit \`${shortSha}\` · PR merge to main*`.replace(/^            /gm, '').trim();
 
             console.log('--- Issue body ---');
             console.log(body);
