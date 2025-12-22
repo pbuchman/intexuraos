@@ -32,3 +32,6 @@ cd terraform && terraform fmt -check -recursive && terraform validate
 ---
 
 ## Task
+
+Show the confirmation that you have read and understood the above instructions.
+Next await further tasks.

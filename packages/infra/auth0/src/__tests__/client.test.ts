@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Auth0ClientImpl } from '../client.js';
+import { Auth0ClientImpl, loadAuth0Config } from '../client.js';
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -194,5 +194,66 @@ describe('Auth0ClientImpl', () => {
         throw new Error('Expected fetch to be called with arguments');
       }
     });
+  });
+});
+
+describe('loadAuth0Config', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    // Create a clean copy of env
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns config when both domain and clientId are set', () => {
+    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
+    process.env['AUTH0_CLIENT_ID'] = 'test-client-id';
+
+    const config = loadAuth0Config();
+
+    expect(config).toEqual({
+      domain: 'test.auth0.com',
+      clientId: 'test-client-id',
+    });
+  });
+
+  it('returns null when domain is missing', () => {
+    delete process.env['AUTH0_DOMAIN'];
+    process.env['AUTH0_CLIENT_ID'] = 'test-client-id';
+
+    const config = loadAuth0Config();
+
+    expect(config).toBeNull();
+  });
+
+  it('returns null when clientId is missing', () => {
+    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
+    delete process.env['AUTH0_CLIENT_ID'];
+
+    const config = loadAuth0Config();
+
+    expect(config).toBeNull();
+  });
+
+  it('returns null when domain is empty string', () => {
+    process.env['AUTH0_DOMAIN'] = '';
+    process.env['AUTH0_CLIENT_ID'] = 'test-client-id';
+
+    const config = loadAuth0Config();
+
+    expect(config).toBeNull();
+  });
+
+  it('returns null when clientId is empty string', () => {
+    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
+    process.env['AUTH0_CLIENT_ID'] = '';
+
+    const config = loadAuth0Config();
+
+    expect(config).toBeNull();
   });
 });

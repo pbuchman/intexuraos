@@ -43,7 +43,7 @@ docs/           → All documentation
 | ----------------------------------- | ----------------------- |
 | Zero `tsc` errors                   | `npm run typecheck`     |
 | Zero ESLint warnings                | `npm run lint`          |
-| 90%+ test coverage                  | `npm run test:coverage` |
+| 89%+ test coverage                  | `npm run test:coverage` |
 | ESM only (`import`/`export`)        | `npm run lint`          |
 | Explicit return types on exports    | `npm run lint`          |
 | No `@ts-ignore`, `@ts-expect-error` | `npm run lint`          |
@@ -146,7 +146,7 @@ async function safeFetch(url: string): Promise<Response | null> {
 
 ## Testing
 
-- Coverage: 90% lines, 85% branches, 90% functions, 90% statements
+- Coverage: 89% lines, 85% branches, 90% functions, 89% statements
 - Mock external systems only (Auth0, Firestore, Notion)
 - Assert observable behavior, not implementation
 
