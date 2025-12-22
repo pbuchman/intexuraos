@@ -14,6 +14,9 @@ jobs:
       issues: write
       pull-requests: read
     steps:
+      - name: Install Google AI SDK
+        run: npm install @google/generative-ai
+
       - name: Create refactoring issue
         uses: actions/github-script@v7
         env:
@@ -23,81 +26,44 @@ jobs:
             const sha = context.sha;
             const shortSha = sha.substring(0, 7);
 
-            // Format date with ordinal suffix
-            const now = new Date();
-            const day = now.getDate();
-            const ordinal = (d) => {
-              if (d > 3 && d < 21) return 'th';
-              switch (d % 10) {
-                case 1: return 'st';
-                case 2: return 'nd';
-                case 3: return 'rd';
-                default: return 'th';
-              }
-            };
-            const month = now.toLocaleString('en-US', { month: 'short' });
-            const dateStr = `${day}${ordinal(day)} of ${month}`;
+            // Format date with ordinal suffix (e.g., "22nd of Dec")
+            const day = new Date().getDate();
+            const suffix = (day > 3 && day < 21) ? 'th' : ['th','st','nd','rd'][day % 10] || 'th';
+            const dateStr = `${day}${suffix} of ${new Date().toLocaleString('en-US', { month: 'short' })}`;
 
-            // Extract PR number from merge commit message
-            const mergeMsg = context.payload.head_commit.message;
-            const prMatch = mergeMsg.match(/Merge pull request #(\d+)/);
+            // Extract PR commits and generate summary
+            const prMatch = context.payload.head_commit.message.match(/Merge pull request #(\d+)/);
             let commitSummary = '';
             let polishedSummary = '';
 
             if (prMatch) {
-              const prNumber = parseInt(prMatch[1]);
-              console.log(`Found PR #${prNumber}`);
-
-              // Get commits from the PR
               const { data: commits } = await github.rest.pulls.listCommits({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: prNumber
+                pull_number: parseInt(prMatch[1])
               });
 
               const commitMessages = commits.map(c => `- ${c.commit.message.split('\n')[0]}`).join('\n');
               commitSummary = `## Commits in this merge\n\n${commitMessages}`;
-              console.log(`Found ${commits.length} commits`);
 
-              // Use Gemini to polish the summary
-              const geminiKey = process.env.GEMINI_API_KEY;
-              if (geminiKey && commits.length > 0) {
+              if (process.env.GEMINI_API_KEY && commits.length > 0) {
                 try {
-                  const prompt = `Based on these git commit messages from a merged PR, write a brief 2-3 sentence summary of what changed. Be concise and technical. Focus on the actual changes, not the process.
+                  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+                  const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+                    .getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-            Commit messages:
-            ${commitMessages}
-
-            Summary:`;
-
-                  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + geminiKey, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      contents: [{ parts: [{ text: prompt }] }],
-                      generationConfig: { maxOutputTokens: 200 }
-                    })
-                  });
-
-                  if (response.ok) {
-                    const data = await response.json();
-                    const summary = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                    if (summary) {
-                      polishedSummary = `## Summary\n\n${summary}`;
-                      console.log('Generated summary with Gemini');
-                    }
-                  }
+                  const result = await model.generateContent(
+                    `Based on these git commit messages from a merged PR, write a brief 2-3 sentence summary of what changed. Be concise and technical.\n\nCommit messages:\n${commitMessages}\n\nSummary:`
+                  );
+                  const summary = result.response.text()?.trim();
+                  if (summary) polishedSummary = `## Summary\n\n${summary}`;
                 } catch (e) {
                   console.log(`Gemini API error: ${e.message}`);
                 }
               }
             }
 
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Refactoring pass after merge ${shortSha} (${dateStr})`,
-              body: `## Task
+            const body = `## Task
 
             Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
 
@@ -121,7 +87,17 @@ jobs:
 
             ---
             **To start:** Assign this issue to Copilot.
-            `,
+            `;
+
+            console.log('--- Issue body ---');
+            console.log(body);
+            console.log('--- End issue body ---');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Refactoring pass after merge ${shortSha} (${dateStr})`,
+              body,
               labels: ['copilot', 'refactoring', 'automated']
             });
 
