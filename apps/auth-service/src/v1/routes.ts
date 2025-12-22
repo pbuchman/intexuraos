@@ -1,6 +1,6 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
-import { isErr } from '@praxos/common';
+import { isErr, getErrorMessage } from '@praxos/common';
 import { Auth0ClientImpl, loadAuth0Config as loadAuth0ConfigFromInfra } from '@praxos/infra-auth0';
 import { FirestoreAuthTokenRepository } from '@praxos/infra-firestore';
 import type { AuthTokens } from '@praxos/domain-identity';
@@ -183,10 +183,13 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const data = responseBody as DeviceStartResponse;
         return await reply.ok(data);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('DOWNSTREAM_ERROR', `Auth0 request failed: ${message}`, {
-          endpointCalled: deviceCodeUrl,
-        });
+        return await reply.fail(
+          'DOWNSTREAM_ERROR',
+          `Auth0 request failed: ${getErrorMessage(error)}`,
+          {
+            endpointCalled: deviceCodeUrl,
+          }
+        );
       }
     }
   );
@@ -355,10 +358,13 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         return await reply.ok(data);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('DOWNSTREAM_ERROR', `Auth0 request failed: ${message}`, {
-          endpointCalled: tokenUrl,
-        });
+        return await reply.fail(
+          'DOWNSTREAM_ERROR',
+          `Auth0 request failed: ${getErrorMessage(error)}`,
+          {
+            endpointCalled: tokenUrl,
+          }
+        );
       }
     }
   );
@@ -516,8 +522,10 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           id_token: newTokens.idToken,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('INTERNAL_ERROR', `Token refresh failed: ${message}`);
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Token refresh failed: ${getErrorMessage(error)}`
+        );
       }
     }
   );
@@ -750,10 +758,9 @@ export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           id_token: data.id_token,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return await reply.status(400).send({
           error: 'server_error',
-          error_description: message,
+          error_description: getErrorMessage(error),
         });
       }
     }

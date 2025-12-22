@@ -2,7 +2,7 @@
  * Firestore implementation of IdempotencyLedger.
  * Stores operation results keyed by userId + idempotencyKey.
  */
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type { IdempotencyLedger, CreatedNote, NotionError } from '@praxos/domain-promptvault';
 import { getFirestore } from './client.js';
 
@@ -47,10 +47,9 @@ export class FirestoreIdempotencyLedger implements IdempotencyLedger {
       const data = doc.data() as IdempotencyDoc;
       return ok(data.result);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get idempotency record: ${message}`,
+        message: `Failed to get idempotency record: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -75,10 +74,9 @@ export class FirestoreIdempotencyLedger implements IdempotencyLedger {
       await docRef.set(doc);
       return ok(undefined);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to set idempotency record: ${message}`,
+        message: `Failed to set idempotency record: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

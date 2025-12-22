@@ -2,7 +2,7 @@
  * Firestore implementation of NotionConnectionRepository.
  * Stores per-user Notion configuration with encrypted token.
  */
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type {
   NotionConnectionRepository,
   NotionConnectionPublic,
@@ -60,10 +60,9 @@ export class FirestoreNotionConnectionRepository implements NotionConnectionRepo
         updatedAt: doc.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to save connection: ${message}`,
+        message: `Failed to save connection: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -86,10 +85,9 @@ export class FirestoreNotionConnectionRepository implements NotionConnectionRepo
         updatedAt: data.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get connection: ${message}`,
+        message: `Failed to get connection: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -117,10 +115,9 @@ export class FirestoreNotionConnectionRepository implements NotionConnectionRepo
         updatedAt: now,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to disconnect: ${message}`,
+        message: `Failed to disconnect: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -138,10 +135,9 @@ export class FirestoreNotionConnectionRepository implements NotionConnectionRepo
       const data = doc.data() as NotionConnectionDoc;
       return ok(data.connected);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to check connection: ${message}`,
+        message: `Failed to check connection: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -163,10 +159,9 @@ export class FirestoreNotionConnectionRepository implements NotionConnectionRepo
 
       return ok(data.notionToken);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get token: ${message}`,
+        message: `Failed to get token: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

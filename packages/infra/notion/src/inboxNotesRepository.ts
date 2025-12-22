@@ -3,7 +3,7 @@
  * Maps domain InboxNote to Notion database properties.
  */
 import { Client } from '@notionhq/client';
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type { InboxNote, InboxNotesRepository, InboxError } from '@praxos/domain-inbox';
 
 /**
@@ -49,10 +49,9 @@ export class NotionInboxNotesRepository implements InboxNotesRepository {
         id: response.id,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Notion error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to create inbox note in Notion: ${message}`,
+        message: `Failed to create inbox note in Notion: ${getErrorMessage(error, 'Unknown Notion error')}`,
       });
     }
   }
@@ -69,10 +68,9 @@ export class NotionInboxNotesRepository implements InboxNotesRepository {
       const note = this.mapNotionPageToNote(response);
       return ok(note);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Notion error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to get inbox note from Notion: ${message}`,
+        message: `Failed to get inbox note from Notion: ${getErrorMessage(error, 'Unknown Notion error')}`,
       });
     }
   }
@@ -99,10 +97,9 @@ export class NotionInboxNotesRepository implements InboxNotesRepository {
       const note = this.mapNotionPageToNote(response);
       return ok(note);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Notion error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Failed to update inbox note in Notion: ${message}`,
+        message: `Failed to update inbox note in Notion: ${getErrorMessage(error, 'Unknown Notion error')}`,
       });
     }
   }

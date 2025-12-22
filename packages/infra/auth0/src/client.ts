@@ -2,7 +2,7 @@
  * Auth0 client implementation for OAuth2 operations.
  */
 
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type { Auth0Client, RefreshResult, AuthError } from '@praxos/domain-identity';
 
 /**
@@ -126,10 +126,9 @@ export class Auth0ClientImpl implements Auth0Client {
         refreshToken: tokenResponse.refresh_token, // new refresh token if rotation enabled
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
       return err({
         code: 'INTERNAL_ERROR',
-        message: `Auth0 request failed: ${message}`,
+        message: `Auth0 request failed: ${getErrorMessage(error)}`,
       });
     }
   }

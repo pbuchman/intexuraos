@@ -2,7 +2,7 @@
 export { type Result, ok, err, isOk, isErr } from './result.js';
 
 // HTTP utilities
-export { type ErrorCode, ERROR_HTTP_STATUS, PraxOSError } from './http/errors.js';
+export { type ErrorCode, ERROR_HTTP_STATUS, PraxOSError, getErrorMessage } from './http/errors.js';
 
 export {
   type Diagnostics,

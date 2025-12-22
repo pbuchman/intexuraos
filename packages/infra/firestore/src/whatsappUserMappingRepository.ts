@@ -2,7 +2,7 @@
  * Firestore implementation of WhatsAppUserMappingRepository.
  * Stores per-user WhatsApp phone number mappings with inbox configuration.
  */
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type {
   WhatsAppUserMappingRepository,
   WhatsAppUserMappingPublic,
@@ -68,10 +68,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
         updatedAt: doc.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to save mapping: ${message}`,
+        message: `Failed to save mapping: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -95,10 +94,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
         updatedAt: data.updatedAt,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to get mapping: ${message}`,
+        message: `Failed to get mapping: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -124,10 +122,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
       const data = doc.data() as WhatsAppUserMappingDoc;
       return ok(data.userId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to find user by phone number: ${message}`,
+        message: `Failed to find user by phone number: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -163,10 +160,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
         updatedAt: now,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to disconnect mapping: ${message}`,
+        message: `Failed to disconnect mapping: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -184,10 +180,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
       const data = doc.data() as WhatsAppUserMappingDoc;
       return ok(data.connected);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to check connection: ${message}`,
+        message: `Failed to check connection: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
@@ -223,10 +218,9 @@ export class FirestoreWhatsAppUserMappingRepository implements WhatsAppUserMappi
 
       return ok(undefined);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown Firestore error';
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to check phone number conflicts: ${message}`,
+        message: `Failed to check phone number conflicts: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }
