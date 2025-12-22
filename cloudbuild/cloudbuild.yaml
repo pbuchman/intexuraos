@@ -19,13 +19,42 @@ steps:
     entrypoint: 'npm'
     args: ['ci']
 
-  # Step 3: Run CI checks (lint, typecheck, test, build)
+  # Step 3: Start Firestore emulator (background sidecar for tests)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'start-firestore-emulator'
+    waitFor: ['npm-ci']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker run -d --name firestore-emulator \
+          --network cloudbuild \
+          google/cloud-sdk:emulators \
+          gcloud emulators firestore start --host-port=0.0.0.0:8085 --project=test-project
+        # Wait for emulator to be ready
+        echo "Waiting for Firestore emulator to start..."
+        for i in {1..30}; do
+          if docker exec firestore-emulator curl -sf http://localhost:8085/ > /dev/null 2>&1; then
+            echo "Firestore emulator is ready."
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "Firestore emulator failed to start within 30s"
+        docker logs firestore-emulator
+        exit 1
+
+  # Step 4: Run CI checks (lint, typecheck, test, build)
   - name: 'node:22-slim'
     id: 'npm-run-ci'
+    waitFor: ['start-firestore-emulator']
     entrypoint: 'npm'
     args: ['run', 'ci']
+    env:
+      - 'FIRESTORE_EMULATOR_HOST=firestore-emulator:8085'
+      - 'GCLOUD_PROJECT=test-project'
 
-  # Step 4: Detect affected services (uses full node image for git)
+  # Step 5: Detect affected services (uses full node image for git)
   - name: 'node:22'
     id: 'detect-affected'
     entrypoint: 'node'
@@ -34,7 +63,7 @@ steps:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
 
-  # Step 5: Build auth-service Docker image (if affected)
+  # Step 6: Build auth-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-auth-service'
     waitFor: ['detect-affected']
@@ -51,7 +80,7 @@ steps:
           echo "auth-service not affected, skipping build."
         fi
 
-  # Step 6: Build promptvault-service Docker image (if affected)
+  # Step 7: Build promptvault-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-promptvault-service'
     waitFor: ['detect-affected']
@@ -68,7 +97,7 @@ steps:
           echo "promptvault-service not affected, skipping build."
         fi
 
-  # Step 7: Build whatsapp-service Docker image (if affected)
+  # Step 8: Build whatsapp-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-whatsapp-service'
     waitFor: ['detect-affected']
@@ -85,7 +114,7 @@ steps:
           echo "whatsapp-service not affected, skipping build."
         fi
 
-  # Step 8: Build api-docs-hub Docker image (if affected)
+  # Step 9: Build api-docs-hub Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-api-docs-hub'
     waitFor: ['detect-affected']
@@ -102,7 +131,7 @@ steps:
           echo "api-docs-hub not affected, skipping build."
         fi
 
-  # Step 9: Push auth-service image (if affected)
+  # Step 10: Push auth-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-auth-service'
     waitFor: ['build-auth-service']
@@ -118,7 +147,7 @@ steps:
           echo "auth-service not affected, skipping push."
         fi
 
-  # Step 10: Push promptvault-service image (if affected)
+  # Step 11: Push promptvault-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-promptvault-service'
     waitFor: ['build-promptvault-service']
@@ -134,7 +163,7 @@ steps:
           echo "promptvault-service not affected, skipping push."
         fi
 
-  # Step 11: Push whatsapp-service image (if affected)
+  # Step 12: Push whatsapp-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-whatsapp-service'
     waitFor: ['build-whatsapp-service']
@@ -150,7 +179,7 @@ steps:
           echo "whatsapp-service not affected, skipping push."
         fi
 
-  # Step 12: Push api-docs-hub image (if affected)
+  # Step 13: Push api-docs-hub image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-api-docs-hub'
     waitFor: ['build-api-docs-hub']
@@ -166,7 +195,7 @@ steps:
           echo "api-docs-hub not affected, skipping push."
         fi
 
-  # Step 13: Deploy affected services to Cloud Run
+  # Step 14: Deploy affected services to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-affected'
     waitFor:
@@ -185,7 +214,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 14: Sync static assets to GCS bucket (runs in parallel with deploys)
+  # Step 15: Sync static assets to GCS bucket (runs in parallel with deploys)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
     waitFor: ['npm-run-ci']
