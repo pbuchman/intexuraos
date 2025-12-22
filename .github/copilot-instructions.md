@@ -74,6 +74,92 @@ docs/           → All documentation
 // ✅ obj.prop as Type (or runtime check)
 ```
 
+**Strict boolean expressions** — nullable values require explicit checks:
+
+```ts-example
+// ❌ Nullable string in conditional
+{error ? <div>{error}</div> : null}
+
+// ✅ Explicit null/empty check
+{error !== null && error !== '' ? <div>{error}</div> : null}
+
+// ❌ Nullable boolean in conditional
+{status?.connected ? 'Connected' : 'Disconnected'}
+
+// ✅ Explicit boolean comparison
+{status?.connected === true ? 'Connected' : 'Disconnected'}
+```
+
+**Cleanup function return type** — useEffect cleanup must have explicit return type:
+
+```ts-example
+// ❌ Missing return type
+useEffect(() => {
+  document.addEventListener('click', handler);
+  return () => {
+    document.removeEventListener('click', handler);
+  };
+}, []);
+
+// ✅ Explicit void return type
+useEffect(() => {
+  document.addEventListener('click', handler);
+  return (): void => {
+    document.removeEventListener('click', handler);
+  };
+}, []);
+```
+
+**Inline function return types** — all inline functions in objects must have explicit return types:
+
+```ts-example
+// ❌ Missing return types on inline functions
+const value = useMemo(() => ({
+  login: () => { doLogin(); },
+  logout: () => { doLogout(); },
+  getData: async () => { return await fetch(); },
+}), []);
+
+// ✅ Explicit return types
+const value = useMemo(() => ({
+  login: (): void => { doLogin(); },
+  logout: (): void => { doLogout(); },
+  getData: async (): Promise<Data> => { return await fetch(); },
+}), []);
+```
+
+**Template literal expressions** — numbers must be converted to strings:
+
+```ts-example
+// ❌ Number in template literal
+const msg = `Found ${items.length} items`;
+
+// ✅ Explicit string conversion
+const msg = `Found ${String(items.length)} items`;
+```
+
+**Optional props with exactOptionalPropertyTypes** — conditional rendering for optional props:
+
+```ts-example
+// ❌ Passing potentially undefined value to optional prop
+<Component optionalProp={state.value} /> // where value is string | undefined
+
+// ✅ Conditionally include the prop
+{state.value !== undefined ? (
+  <Component optionalProp={state.value} />
+) : (
+  <Component />
+)}
+
+// OR use helper function with type narrowing
+const renderWidget = (): JSX.Element => {
+  if (state.value !== undefined) {
+    return <Component optionalProp={state.value} />;
+  }
+  return <Component />;
+};
+```
+
 **Full pattern table:** See ESLint config. When encountering new pattern, add to this section.
 
 ---

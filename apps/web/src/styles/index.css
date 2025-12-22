@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+/* Custom theme variables */
+:root {
+  --color-primary: theme('colors.blue.600');
+  --color-primary-hover: theme('colors.blue.700');
+  --color-accent: theme('colors.amber.400');
+  --color-accent-hover: theme('colors.amber.500');
+}
+
+/* Base styles */
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Focus styles */
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-blue-600;
+}

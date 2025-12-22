@@ -148,6 +148,18 @@ module "static_assets" {
   depends_on = [google_project_service.apis]
 }
 
+# Web App Bucket (SPA hosting)
+module "web_app" {
+  source = "../../modules/web-app"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  labels      = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
 # Firestore
 module "firestore" {
   source = "../../modules/firestore"
@@ -171,11 +183,12 @@ module "secret_manager" {
 
   secrets = {
     # Auth0 secrets
-    "PRAXOS_AUTH0_DOMAIN"    = "Auth0 tenant domain for Device Authorization Flow"
-    "PRAXOS_AUTH0_CLIENT_ID" = "Auth0 Native app client ID for Device Authorization Flow"
-    "PRAXOS_AUTH_JWKS_URL"   = "Auth0 JWKS URL for JWT verification"
-    "PRAXOS_AUTH_ISSUER"     = "Auth0 issuer URL"
-    "PRAXOS_AUTH_AUDIENCE"   = "Auth0 audience identifier"
+    "PRAXOS_AUTH0_DOMAIN"         = "Auth0 tenant domain for Device Authorization Flow"
+    "PRAXOS_AUTH0_CLIENT_ID"      = "Auth0 Native app client ID for Device Authorization Flow"
+    "PRAXOS_AUTH0_SPA_CLIENT_ID"  = "Auth0 SPA app client ID for web application"
+    "PRAXOS_AUTH_JWKS_URL"        = "Auth0 JWKS URL for JWT verification"
+    "PRAXOS_AUTH_ISSUER"          = "Auth0 issuer URL"
+    "PRAXOS_AUTH_AUDIENCE"        = "Auth0 audience identifier"
     # Token encryption key
     "PRAXOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
@@ -395,3 +408,12 @@ output "static_assets_public_url" {
   value       = module.static_assets.public_base_url
 }
 
+output "web_app_bucket_name" {
+  description = "Web app bucket name"
+  value       = module.web_app.bucket_name
+}
+
+output "web_app_url" {
+  description = "Web app public URL"
+  value       = module.web_app.website_url
+}
