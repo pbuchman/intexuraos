@@ -3,70 +3,93 @@ name: Copilot Refactoring Pass
 on:
   push:
     branches:
-      - development
+      - main
 
 jobs:
   create-refactoring-issue:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
-      - name: Create refactoring issue for Copilot
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Refactoring pass after merge ${context.sha.substring(0, 7)}`,
-              body: `## Task
-
-            Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
-
-            **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
-
-            The prompt contains all instructions for:
-            1. Scanning for code smells
-            2. Prioritizing by impact
-            3. Fixing the single most important smell
-            4. Documenting any new patterns found
-
-            ## Trigger
-
-            - **Commit:** ${context.sha}
-            - **Triggered by:** Push to main
-            `,
-              labels: ['copilot', 'refactoring', 'automated']
-            });
-
-            console.log(`Created issue #${issue.data.number}`);
-
-            // Assign Copilot via agent_assignments endpoint
-            // This is the internal GitHub endpoint used by the UI
-            const response = await fetch(`https://github.com/${context.repo.owner}/${context.repo.repo}/issues/agent_assignments`, {
-              method: 'POST',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-              },
-              body: JSON.stringify({
-                issue_ids: [issue.data.number],
-                repo_name_with_owner: `${context.repo.owner}/${context.repo.repo}`,
-                base_ref: 'main',
-                custom_instructions: '',
-                model: 'claude-opus-4.5'
-              })
-            });
-
-            if (!response.ok) {
-              const text = await response.text();
-              console.log(`Agent assignment response: ${response.status} - ${text}`);
-              // Fallback: the issue is created, user can manually assign Copilot
-              console.log(`Issue created: https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${issue.data.number}`);
-              console.log('Manual Copilot assignment may be required.');
-            } else {
-              console.log(`Assigned Copilot to issue #${issue.data.number} with Claude Opus`);
-            }
+      - name: Create refactoring issue and assign to Copilot
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+
+          # Get repository ID
+          REPO_ID=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) { id }
+            }
+          ' -f owner="$OWNER" -f repo="$REPO" --jq '.data.repository.id')
+
+          echo "Repository ID: $REPO_ID"
+
+          # Get Copilot bot ID
+          BOT_ID=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) {
+                suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 10) {
+                  nodes { login ... on Bot { id } }
+                }
+              }
+            }
+          ' -f owner="$OWNER" -f repo="$REPO" --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id')
+
+          echo "Bot ID: $BOT_ID"
+
+          if [ -z "$BOT_ID" ]; then
+            echo "Error: Copilot coding agent not available in this repository"
+            exit 1
+          fi
+
+          # Create issue and assign to Copilot with Claude Opus model
+          RESULT=$(gh api graphql \
+            -H 'GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection' \
+            -f query='
+              mutation($repoId: ID!, $botId: ID!, $title: String!, $body: String!) {
+                createIssue(input: {
+                  repositoryId: $repoId
+                  title: $title
+                  body: $body
+                  assigneeIds: [$botId]
+                  agentAssignment: {
+                    targetRepositoryId: $repoId
+                    baseRef: "main"
+                    customInstructions: ""
+                    customAgent: ""
+                    model: "claude-opus-4"
+                  }
+                }) {
+                  issue { number url }
+                }
+              }
+            ' \
+            -f repoId="$REPO_ID" \
+            -f botId="$BOT_ID" \
+            -f title="Refactoring pass after merge $SHORT_SHA" \
+            -f body="## Task
+
+          Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
+
+          **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
+
+          The prompt contains all instructions for:
+          1. Scanning for code smells
+          2. Prioritizing by impact
+          3. Fixing the single most important smell
+          4. Documenting any new patterns found
+
+          ## Trigger
+
+          - **Commit:** $SHA
+          - **Triggered by:** Push to main
+          ")
+
+          ISSUE_URL=$(echo "$RESULT" | jq -r '.data.createIssue.issue.url')
+          ISSUE_NUM=$(echo "$RESULT" | jq -r '.data.createIssue.issue.number')
+
+          echo "Created issue #$ISSUE_NUM: $ISSUE_URL"
+          echo "Assigned to Copilot with Claude Opus model"
