@@ -33,7 +33,6 @@ jobs:
 
             // Extract PR commits and generate summary
             const prMatch = context.payload.head_commit.message.match(/Merge pull request #(\d+)/);
-            let commitSummary = '';
             let polishedSummary = '';
 
             if (prMatch) {
@@ -44,7 +43,6 @@ jobs:
               });
 
               const commitMessages = commits.map(c => `- ${c.commit.message.split('\n')[0]}`).join('\n');
-              commitSummary = `## Commits in this merge\n\n${commitMessages}`;
 
               if (process.env.GEMINI_API_KEY && commits.length > 0) {
                 try {
@@ -63,31 +61,7 @@ jobs:
               }
             }
 
-            const body = `## Task
-
-            Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
-
-            **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
-
-            ${polishedSummary}
-
-            ${commitSummary}
-
-            ## Refactoring instructions
-
-            1. Scan for code smells
-            2. Prioritize by impact
-            3. Fix the single most important smell
-            4. Document any new patterns found
-
-            ## Trigger
-
-            - **Commit:** ${sha}
-            - **Triggered by:** PR merge to main
-
-            ---
-            **To start:** Assign this issue to Copilot.
-            `;
+            const body = `Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.\n\n${polishedSummary}\n\n---\n*Commit \`${shortSha}\` · PR merge to main*`;
 
             console.log('--- Issue body ---');
             console.log(body);
