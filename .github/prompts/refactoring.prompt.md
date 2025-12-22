@@ -83,8 +83,9 @@ Pick **one smell** to fix — the highest-impact item that can be fixed safely.
 1. Make the fix.
 2. Run `npm run ci` — must pass.
 3. If this is a **new smell pattern** not in copilot-instructions:
-   - Add it to the "Code Smells (Fix & Document)" section.
-   - Include ❌ bad example and ✅ good example.
+
+- Add it to the "Code Smells (Fix & Document)" section.
+- Include ❌ bad example and ✅ good example.
 
 ---
 
