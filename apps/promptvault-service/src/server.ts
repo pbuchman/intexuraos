@@ -591,6 +591,7 @@ export async function buildServer(): Promise<FastifyInstance> {
       id: { type: 'string', description: 'Unique prompt identifier' },
       title: { type: 'string', description: 'Prompt title' },
       prompt: { type: 'string', description: 'Prompt content' },
+      url: { type: 'string', format: 'uri', description: 'URL to view the prompt in Notion' },
       createdAt: { type: 'string', format: 'date-time', description: 'Creation timestamp' },
       updatedAt: { type: 'string', format: 'date-time', description: 'Last update timestamp' },
     },

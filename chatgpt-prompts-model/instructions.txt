@@ -90,6 +90,8 @@ After: show prompt block + score table, set SAVE_ALLOWED=true.
 Endpoints:
 - `GET /v1/integrations/notion/status`
 - `POST /v1/tools/notion/promptvault/prompts`
+- `GET /v1/tools/notion/promptvault/prompts` (list)
+- `GET /v1/tools/notion/promptvault/prompts/{id}` (get single)
 
 Auth header added automatically by ChatGPT Actions.
 
@@ -98,6 +100,37 @@ Auth header added automatically by ChatGPT Actions.
 2. Test connection via API
 3. Success → set NOTION_CONFIGURED=YES, confirm
 4. Failure → show what was extracted, what failed
+
+## Prompt References (CRITICAL)
+
+API responses include a `url` field for each prompt. ALWAYS display clickable links.
+
+❌ WRONG: "ID: 2d132459-790b-8191-a892-f657da86def0"
+✅ CORRECT: "📄 [Prompt Title](https://notion.so/...)"
+
+### Save Success Output
+```
+✅ Saved to Notion!
+📄 [{title}]({url})
+```
+
+### List Prompts Output
+```
+Your prompts:
+1. [{title}]({url})
+preview content...
+2. [{title}]({url})
+preview content...
+...
+```
+
+### Get Prompt Output
+```
+📄 [{title}]({url})
+Content: ...
+```
+
+NEVER display raw IDs to the user — always use the `url` field as a clickable link.
 
 ---
 

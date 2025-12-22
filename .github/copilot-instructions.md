@@ -174,11 +174,21 @@ Violations:
 
 ---
 
+## Markdown Code Blocks
+
+When adding TypeScript/JavaScript code examples in Markdown files (instructions, docs):
+
+- Use ` ```ts-example ` instead of ` ```typescript ` or ` ```ts `
+- This prevents IDEs from parsing examples as real code and showing false errors
+- The custom language hint still provides syntax highlighting in most renderers
+
+---
+
 ## TypeScript Patterns (ESLint-Compliant)
 
 ### Forbidden: Non-null assertions (`!`)
 
-```typescript
+```ts-example
 // ❌ FORBIDDEN - no-non-null-assertion
 const value = obj.prop!;
 const item = array[0]!;
@@ -186,7 +196,7 @@ const item = array[0]!;
 
 ### Allowed: Type assertions with `as`
 
-```typescript
+```ts-example
 // ✅ ALLOWED - use `as Type` for type narrowing
 const location = response.headers.location as string;
 const body = JSON.parse(response.body) as { error: string };
@@ -194,7 +204,7 @@ const body = JSON.parse(response.body) as { error: string };
 
 ### Allowed: Runtime checks or type guards
 
-```typescript
+```ts-example
 // ✅ PREFERRED - runtime validation
 if (response.headers.location !== undefined) {
   const location = response.headers.location;
@@ -212,16 +222,16 @@ Use `as Type` assertions when you're confident the value exists, or add runtime 
 
 ### Forbidden: Array index access without null check
 
-```typescript
+```ts-example
 // ❌ FORBIDDEN - noUncheckedIndexedAccess makes arr[i] return T | undefined
-const first = chunks[0];           // Type: string | undefined
-const item = chunks[i];            // Type: string | undefined
-someFunction(chunks[0]);           // Error if function expects string
+const first = chunks[0]; // Type: string | undefined
+const item = chunks[i]; // Type: string | undefined
+someFunction(chunks[0]); // Error if function expects string
 ```
 
 ### Allowed: Safe array access
 
-```typescript
+```ts-example
 // ✅ PREFERRED - nullish coalescing for default value
 const first = chunks[0] ?? '';
 const item = chunks[i] ?? defaultValue;
@@ -240,17 +250,17 @@ for (const chunk of chunks) {
 
 ### Forbidden: Setting optional property to undefined
 
-```typescript
+```ts-example
 // ❌ FORBIDDEN with exactOptionalPropertyTypes
 const params: { required: string; optional?: string } = {
   required: 'value',
-  optional: condition ? value : undefined,  // Error!
+  optional: condition ? value : undefined, // Error!
 };
 ```
 
 ### Allowed: Conditionally adding optional properties
 
-```typescript
+```ts-example
 // ✅ PREFERRED - conditionally add property
 const params: { required: string; optional?: string } = {
   required: 'value',
@@ -282,18 +292,18 @@ const params = {
 
 **Known ESLint rules requiring specific patterns:**
 
-| Rule                            | Forbidden                 | Use Instead                              |
-| ------------------------------- | ------------------------- | ---------------------------------------- |
-| `no-non-null-assertion`         | `obj.prop!`               | `obj.prop as Type` or `String(obj.prop)` |
-| `return-await`                  | `return promise`          | `return await promise`                   |
-| `dot-notation`                  | `obj['prop']`             | `obj.prop`                               |
-| `strict-boolean-expressions`    | `if (str)`                | `if (str !== '')`                        |
-| `prefer-nullish-coalescing`     | `x \|\| default`          | `x ?? default`                           |
-| `explicit-function-return-type` | implicit returns          | Add `: ReturnType`                       |
-| `array-type`                    | `Array<T>`                | `T[]`                                    |
-| `noUncheckedIndexedAccess`      | `arr[0]` as `T`           | `arr[0] ?? fallback` or check undefined  |
-| `exactOptionalPropertyTypes`    | `{ opt: undefined }`      | Omit property, don't set to undefined    |
-| `no-unused-vars`                | Declared but unused vars  | Remove the variable                      |
+| Rule                            | Forbidden                | Use Instead                              |
+| ------------------------------- | ------------------------ | ---------------------------------------- |
+| `no-non-null-assertion`         | `obj.prop!`              | `obj.prop as Type` or `String(obj.prop)` |
+| `return-await`                  | `return promise`         | `return await promise`                   |
+| `dot-notation`                  | `obj['prop']`            | `obj.prop`                               |
+| `strict-boolean-expressions`    | `if (str)`               | `if (str !== '')`                        |
+| `prefer-nullish-coalescing`     | `x \|\| default`         | `x ?? default`                           |
+| `explicit-function-return-type` | implicit returns         | Add `: ReturnType`                       |
+| `array-type`                    | `Array<T>`               | `T[]`                                    |
+| `noUncheckedIndexedAccess`      | `arr[0]` as `T`          | `arr[0] ?? fallback` or check undefined  |
+| `exactOptionalPropertyTypes`    | `{ opt: undefined }`     | Omit property, don't set to undefined    |
+| `no-unused-vars`                | Declared but unused vars | Remove the variable                      |
 
 **When you see a NEW ESLint error not in this table:**
 

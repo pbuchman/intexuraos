@@ -138,9 +138,7 @@ export function joinTextChunks(chunks: string[]): string {
   }
 
   // Join with newline if chunks don't already have proper separation
-  const filtered = chunks
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0);
+  const filtered = chunks.map((chunk) => chunk.trim()).filter((chunk) => chunk.length > 0);
 
   return filtered.length > 0 ? filtered.join('\n') : '';
 }
@@ -158,4 +156,3 @@ export function exceedsNotionLimit(text: string): boolean {
 export function getRequiredChunkCount(text: string): number {
   return splitTextIntoChunks(text).length;
 }
-

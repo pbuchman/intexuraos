@@ -116,6 +116,7 @@ export function createNotionPromptRepository(
         id: createdNote.id,
         title: createdNote.title,
         content: input.content,
+        url: createdNote.url,
         createdAt: now,
         updatedAt: now,
       });
@@ -145,6 +146,7 @@ export function createNotionPromptRepository(
             id: pageResult.value.page.id,
             title: pageResult.value.page.title,
             content: pageResult.value.promptContent,
+            url: pageResult.value.page.url,
             createdAt: pageResult.value.createdAt,
             updatedAt: pageResult.value.updatedAt,
           });
@@ -172,6 +174,7 @@ export function createNotionPromptRepository(
         id: pageResult.value.page.id,
         title: pageResult.value.page.title,
         content: pageResult.value.promptContent,
+        url: pageResult.value.page.url,
         createdAt: pageResult.value.createdAt,
         updatedAt: pageResult.value.updatedAt,
       });
@@ -212,6 +215,7 @@ export function createNotionPromptRepository(
         id: updateResult.value.page.id,
         title: updateResult.value.page.title,
         content: updateResult.value.promptContent,
+        url: updateResult.value.page.url,
         createdAt,
         updatedAt: updateResult.value.updatedAt,
       });
