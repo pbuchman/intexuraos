@@ -10,6 +10,7 @@ jobs:
     # Only run on PR merges, not direct pushes
     if: github.event.head_commit.message != '' && contains(github.event.head_commit.message, 'Merge pull request')
     runs-on: ubuntu-latest
+    environment: copilot
     permissions:
       issues: write
       pull-requests: read
@@ -46,7 +47,7 @@ jobs:
               });
 
               console.log(`Found ${commits.length} commits`);
-              const commitMessages = commits.map(c => `- ${c.commit.message.split('\n')[0]}`).join('\n');
+              const commitMessages = commits.map(c => c.commit.message.trim()).join('\n\n---\n\n');
               console.log(`Commit messages:\n${commitMessages}`);
 
               const hasApiKey = !!process.env.GEMINI_API_KEY;
