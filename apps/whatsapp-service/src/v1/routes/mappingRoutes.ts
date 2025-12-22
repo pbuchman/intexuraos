@@ -1,11 +1,15 @@
 /**
- * WhatsApp user mapping routes.
- * JWT-protected endpoints for managing per-user WhatsApp phone number mappings.
+ * WhatsApp User Mapping Routes
+ *
+ * POST   /whatsapp/connect    - Connect/update WhatsApp mapping
+ * GET    /whatsapp/status     - Get mapping status
+ * DELETE /whatsapp/disconnect - Disconnect mapping
  */
+
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '@praxos/common';
-import { getServices } from '../services.js';
+import { getServices } from '../../services.js';
 
 /**
  * Request body schema for connecting WhatsApp mapping.
@@ -17,13 +21,8 @@ const connectRequestSchema = z.object({
 
 type ConnectRequest = z.infer<typeof connectRequestSchema>;
 
-/**
- * WhatsApp mapping routes plugin.
- */
-export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  /**
-   * POST /whatsapp/connect - Connect/update WhatsApp mapping for current user.
-   */
+export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  // POST /whatsapp/connect - Connect/update WhatsApp mapping
   fastify.post<{ Body: ConnectRequest }>(
     '/whatsapp/connect',
     {
@@ -52,7 +51,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
         },
         response: {
           200: {
-            description: 'Mapping created/updated successfully',
+            description: 'Mapping saved or updated successfully',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [true] },
@@ -71,17 +70,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             required: ['success', 'data'],
           },
           400: {
-            description: 'Invalid request body',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { $ref: 'ErrorBody#' },
-              diagnostics: { $ref: 'Diagnostics#' },
-            },
-            required: ['success', 'error'],
-          },
-          401: {
-            description: 'Unauthorized - missing or invalid JWT',
+            description: 'Invalid request',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -91,7 +80,17 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             required: ['success', 'error'],
           },
           409: {
-            description: 'Conflict - phone number already mapped to another user',
+            description: 'Phone number already mapped to another user',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          502: {
+            description: 'Downstream error (storage failure)',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -130,7 +129,12 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
       );
 
       if (!result.ok) {
-        if (result.error.code === 'VALIDATION_ERROR') {
+        // Phone conflict returns VALIDATION_ERROR with details
+        if (
+          result.error.code === 'VALIDATION_ERROR' &&
+          result.error.details !== undefined &&
+          'phoneNumber' in result.error.details
+        ) {
           return await reply.fail(
             'CONFLICT',
             result.error.message,
@@ -138,24 +142,21 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             result.error.details
           );
         }
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
       return await reply.ok(result.value);
     }
   );
 
-  /**
-   * GET /whatsapp/status - Get current WhatsApp mapping for authenticated user.
-   */
+  // GET /whatsapp/status - Get mapping status
   fastify.get(
     '/whatsapp/status',
     {
       schema: {
         operationId: 'getWhatsAppMappingStatus',
         summary: 'Get WhatsApp mapping status',
-        description:
-          'Retrieve the current WhatsApp mapping configuration for the authenticated user.',
+        description: 'Get current WhatsApp phone number mapping status for the authenticated user.',
         tags: ['whatsapp'],
         response: {
           200: {
@@ -182,12 +183,12 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
                   createdAt: {
                     type: 'string',
                     format: 'date-time',
-                    description: 'Creation timestamp',
+                    description: 'Mapping created time',
                   },
                   updatedAt: {
                     type: 'string',
                     format: 'date-time',
-                    description: 'Last update timestamp',
+                    description: 'Last mapping update time',
                   },
                 },
                 nullable: true,
@@ -197,7 +198,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             required: ['success', 'data'],
           },
           401: {
-            description: 'Unauthorized - missing or invalid JWT',
+            description: 'Unauthorized - invalid or missing token',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -219,16 +220,14 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
       const result = await userMappingRepository.getMapping(user.userId);
 
       if (!result.ok) {
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
       return await reply.ok(result.value);
     }
   );
 
-  /**
-   * DELETE /whatsapp/disconnect - Disconnect WhatsApp mapping for authenticated user.
-   */
+  // DELETE /whatsapp/disconnect - Disconnect mapping
   fastify.delete(
     '/whatsapp/disconnect',
     {
@@ -236,8 +235,8 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
         operationId: 'disconnectWhatsAppMapping',
         summary: 'Disconnect WhatsApp mapping',
         description:
-          'Mark the WhatsApp mapping as disconnected for the authenticated user. ' +
-          'This does not delete the mapping, but sets connected=false.',
+          'Remove WhatsApp phone number mapping for the authenticated user. ' +
+          'This will stop processing incoming messages for the mapped phone numbers.',
         tags: ['whatsapp'],
         response: {
           200: {
@@ -260,7 +259,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             required: ['success', 'data'],
           },
           401: {
-            description: 'Unauthorized - missing or invalid JWT',
+            description: 'Unauthorized - invalid or missing token',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -270,7 +269,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
             required: ['success', 'error'],
           },
           404: {
-            description: 'Mapping not found',
+            description: 'No mapping found',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
@@ -295,7 +294,7 @@ export const createWhatsAppMappingRoutes: FastifyPluginCallback = (fastify, _opt
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', result.error.message);
         }
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
       return await reply.ok(result.value);
