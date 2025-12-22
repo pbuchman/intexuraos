@@ -1,47 +1,584 @@
-# PraxOS
+<p align="center">
+  <img src="docs/assets/branding/exports/primary/logo-primary-light.png" alt="PraxOS Logo" width="280">
+</p>
 
-Notion models the world. PraxOS executes.
+<h1 align="center">PraxOS</h1>
 
-## Documentation
+<p align="center">
+  <strong>Notion models the world. PraxOS executes.</strong>
+</p>
 
-- [Architecture & Philosophy](./docs/README.md)
-- [Package Contracts](./docs/architecture/package-contracts.md)
-- [API Contracts](./docs/architecture/api-contracts.md)
-- [Branding](./docs/assets/branding/README.md)
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-22+-5FA04E?logo=node.js&logoColor=white" alt="Node.js 22+">
+  <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.7">
+  <img src="https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white" alt="Fastify">
+  <img src="https://img.shields.io/badge/Google%20Cloud-Run-4285F4?logo=googlecloud&logoColor=white" alt="Cloud Run">
+  <img src="https://img.shields.io/badge/Firestore-Native-FFCA28?logo=firebase&logoColor=black" alt="Firestore">
+  <img src="https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform&logoColor=white" alt="Terraform">
+  <img src="https://img.shields.io/badge/Auth0-OAuth2-EB5424?logo=auth0&logoColor=white" alt="Auth0">
+  <img src="https://img.shields.io/badge/Coverage-89%25+-brightgreen" alt="Coverage 89%+">
+</p>
 
-## API Documentation
+---
 
-Access aggregated API documentation for all PraxOS services via the API Docs Hub:
+## Overview
 
-- **Production**: Available at the `api_docs_hub_url` Terraform output
-- **Local Development**: Run `api-docs-hub` locally with required environment variables
+PraxOS is the execution layer for a personal operating system where **Notion serves as the single source of truth** for goals, projects, actions, and context. It bridges structured planning in Notion with automated execution via LLM-powered agents and integrations.
 
-The API Docs Hub provides a unified Swagger UI interface with a dropdown to select between:
+**Key use cases:**
 
-- Auth Service API
-- PromptVault Service API
+- 🤖 ChatGPT custom GPT actions that read/write to your Notion databases
+- 📱 WhatsApp → Notion inbox for capturing notes, tasks, and ideas on the go
+- 🔐 Secure OAuth2 authentication with Device Authorization Flow for CLI/testing
+- 📋 Prompt template management and versioning via PromptVault
 
-Each service also exposes its own documentation at `/docs` and `/openapi.json`.
+---
 
-For details on the runtime OpenAPI aggregation architecture, see [API Contracts](./docs/architecture/api-contracts.md#runtime-openapi-aggregation).
+## Core Features
 
-## Setup Guides
+- ✅ **Hexagonal architecture** — Clean separation of domain logic, infrastructure adapters, and application services
+- ✅ **Runtime OpenAPI aggregation** — Unified Swagger UI across all services via api-docs-hub
+- ✅ **Notion as source of truth** — All data flows to/from Notion databases
+- ✅ **Result-based error handling** — No thrown exceptions; explicit `Result<T, E>` types everywhere
+- ✅ **No Dummy Success** — Every operation succeeds with verifiable results or fails explicitly
+- ✅ **Idempotent operations** — Safe to retry; no duplicate records or corrupted state
+- ✅ **89%+ test coverage** — Enforced by CI with branch/function thresholds
+- ✅ **Deterministic builds** — Same inputs produce same outputs; reproducible deployments
 
-1. [GCP Project Setup](./docs/setup/01-gcp-project.md)
-2. [Terraform Bootstrap](./docs/setup/02-terraform-bootstrap.md)
-3. [Cloud Build Trigger](./docs/setup/03-cloud-build-trigger.md)
-4. [Cloud Run Services](./docs/setup/04-cloud-run-services.md)
-5. [Local Development](./docs/setup/05-local-dev-with-gcp-deps.md)
-6. [Auth0 Setup](./docs/setup/06-auth0.md)
-7. [WhatsApp Business Cloud API](./docs/setup/07-whatsapp-business-cloud-api.md)
+---
 
-## Infrastructure
+## Architecture
 
-- [Terraform](./terraform/README.md)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Notion (Source of Truth)                   │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      PraxOS (Execution Layer)                   │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
+│  │ auth-service │  │promptvault-service│ │ whatsapp-service │   │
+│  └──────────────┘  └──────────────────┘  └──────────────────┘   │
+│         │                   │                     │              │
+│         └───────────────────┼─────────────────────┘              │
+│                             ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                     Domain Layer                            ││
+│  │  @praxos/domain-identity │ @praxos/domain-promptvault │ ... ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                             │                                    │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   Infrastructure Layer                      ││
+│  │    @praxos/infra-auth0 │ @praxos/infra-notion │ firestore   ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                             │                                    │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                      Common Layer                           ││
+│  │         @praxos/common (Result types, HTTP utils)           ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## Quick Start
+### Layer Responsibilities
+
+| Layer    | Purpose                                  | Dependencies          |
+| -------- | ---------------------------------------- | --------------------- |
+| `apps`   | HTTP handlers, routing, DI               | domain, infra, common |
+| `domain` | Business logic, models, ports            | common only           |
+| `infra`  | External service adapters (SDK wrappers) | domain, common        |
+| `common` | Shared utilities (Result, errors)        | none                  |
+
+Import hierarchy is enforced by `npm run verify:boundaries`.
+
+For detailed contracts, see [Package Contracts](docs/architecture/package-contracts.md).
+
+---
+
+## Authentication Flow
+
+PraxOS supports two OAuth2 flows:
+
+### 1. ChatGPT Actions (Production)
+
+Authorization Code flow for custom GPTs:
+
+1. User activates GPT action → ChatGPT redirects to `/v1/auth/oauth/authorize`
+2. PraxOS redirects to Auth0 Universal Login
+3. User authenticates → Auth0 returns authorization code
+4. ChatGPT exchanges code for tokens via `/v1/auth/oauth/token`
+5. Access token included in all subsequent API calls
+
+### 2. Device Authorization Flow (Testing/CLI)
+
+For Swagger UI and CLI tools:
 
 ```bash
-npm install
-npm run ci
+# 1. Start device flow
+curl -X POST https://your-service/v1/auth/device/start \
+  -H "Content-Type: application/json" \
+  -d '{"scope": "openid profile email offline_access"}'
+
+# 2. User visits verification_uri and enters user_code
+
+# 3. Poll for token
+curl -X POST https://your-service/v1/auth/device/poll \
+  -H "Content-Type: application/json" \
+  -d '{"device_code": "XXXX-XXXX"}'
 ```
+
+**Token Lifetimes:**
+
+| Token         | Lifetime | Notes                                   |
+| ------------- | -------- | --------------------------------------- |
+| Access token  | 1 hour   | Short-lived; refresh when expired       |
+| Refresh token | 15d idle | Stored server-side, encrypted at rest   |
+| Refresh token | 30d max  | Absolute maximum regardless of activity |
+
+**Refresh tokens** are encrypted with AES-256-GCM and stored in Firestore. Clients only receive access tokens.
+
+For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
+
+---
+
+## API Overview
+
+📖 **[Live API Documentation](https://praxos-api-docs-hub-ooafxzbaua-lm.a.run.app/docs)** — Unified Swagger UI
+
+### Services
+
+| Service             | Purpose                              | Base Path        |
+| ------------------- | ------------------------------------ | ---------------- |
+| auth-service        | OAuth2 flows, JWT validation         | `/v1/auth/*`     |
+| promptvault-service | Prompt templates, Notion integration | `/v1/*`          |
+| whatsapp-service    | WhatsApp webhook receiver            | `/v1/whatsapp/*` |
+
+### Security
+
+- **Authentication:** Bearer JWT in `Authorization` header
+- **JWKS validation:** Tokens verified against Auth0 JWKS endpoint
+- **Audience:** `urn:praxos:api`
+- **Request tracing:** `X-Request-Id` header propagated across services
+
+### Pagination
+
+List endpoints return:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [...],
+    "hasMore": true,
+    "nextCursor": "cursor_abc123"
+  }
+}
+```
+
+Pass `cursor` query param to fetch next page.
+
+---
+
+## Error Handling
+
+### Response Format
+
+All errors use a consistent envelope:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Validation failed: email is required",
+    "details": { "field": "email" }
+  },
+  "diagnostics": {
+    "requestId": "550e8400-e29b-41d4-a716-446655440000",
+    "durationMs": 12
+  }
+}
+```
+
+### Error Codes
+
+| Code               | HTTP | Description                       |
+| ------------------ | ---- | --------------------------------- |
+| `INVALID_REQUEST`  | 400  | Malformed or invalid request      |
+| `UNAUTHORIZED`     | 401  | Missing or invalid authentication |
+| `FORBIDDEN`        | 403  | Authenticated but not authorized  |
+| `NOT_FOUND`        | 404  | Resource does not exist           |
+| `CONFLICT`         | 409  | Resource state conflict           |
+| `DOWNSTREAM_ERROR` | 502  | External service failure          |
+| `INTERNAL_ERROR`   | 500  | Unexpected server error           |
+| `MISCONFIGURED`    | 503  | Service misconfiguration          |
+
+### Retry Guidance
+
+- **5xx errors:** Safe to retry with exponential backoff
+- **502 DOWNSTREAM_ERROR:** Retry after 1-5 seconds
+- **409 CONFLICT:** Check state before retrying
+- **4xx errors:** Do not retry; fix request
+
+---
+
+## Data Management
+
+### Storage
+
+| Data                 | Storage               | Retention       |
+| -------------------- | --------------------- | --------------- |
+| Prompts, Notes       | Notion databases      | User-controlled |
+| Refresh tokens       | Firestore (encrypted) | 30 days max     |
+| User-Notion mappings | Firestore             | Until revoked   |
+| Webhook payloads     | Firestore             | 90 days         |
+
+### Schema
+
+Domain models defined in `packages/domain/*/src/models/`:
+
+- `InboxNote` — Captured items from WhatsApp/email
+- `InboxAction` — Derived tasks from inbox notes
+- `Prompt` — Template with metadata and version
+
+See [Notion Inbox Schema](docs/notion-inbox.md) for Notion property mappings.
+
+### PII Handling
+
+- Phone numbers stored for WhatsApp user mapping
+- All secrets redacted in logs (first 4 + last 4 chars only)
+- Tokens encrypted at rest with AES-256-GCM
+
+---
+
+## External Data Sources
+
+### Notion API
+
+- **Integration:** OAuth2 (user-level) or Internal Integration
+- **Usage:** Read/write databases for prompts, inbox, actions
+- **Rate limits:** 3 requests/second average (Notion-imposed)
+
+### Auth0
+
+- **Integration:** Device Authorization Flow, JWKS validation
+- **Usage:** User authentication, token refresh
+- **Rate limits:** Varies by plan; free tier has burst limits
+
+### WhatsApp Business Cloud API
+
+- **Integration:** Webhook receiver + REST API
+- **Usage:** Receive messages → Notion inbox; send notifications
+- **Rate limits:** Tier-based (see Meta docs)
+
+---
+
+## Security
+
+### Endpoint Permissions
+
+| Endpoint Pattern         | Auth Required | Notes                   |
+| ------------------------ | ------------- | ----------------------- |
+| `/health`                | No            | System endpoint         |
+| `/docs`, `/openapi.json` | No            | Documentation           |
+| `/v1/auth/device/*`      | No            | Pre-authentication flow |
+| `/v1/auth/oauth/*`       | No            | OAuth callbacks         |
+| `/v1/*` (other)          | Yes           | Bearer JWT required     |
+
+### Secrets Management
+
+Secrets stored in **GCP Secret Manager** with `PRAXOS_*` prefix:
+
+| Secret                        | Purpose                          |
+| ----------------------------- | -------------------------------- |
+| `PRAXOS_AUTH0_DOMAIN`         | Auth0 tenant domain              |
+| `PRAXOS_AUTH0_CLIENT_ID`      | Native app client ID             |
+| `PRAXOS_AUTH_JWKS_URL`        | JWKS endpoint for JWT validation |
+| `PRAXOS_AUTH_ISSUER`          | Expected JWT issuer              |
+| `PRAXOS_AUTH_AUDIENCE`        | Expected JWT audience            |
+| `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 key for refresh tokens   |
+| `PRAXOS_WHATSAPP_*`           | WhatsApp API credentials         |
+
+### Vulnerability Reports
+
+Report security issues to the repository owner. Do not open public issues for security vulnerabilities.
+
+---
+
+## Setup Guide
+
+### Prerequisites
+
+- Node.js 22+
+- Docker (for Firestore emulator)
+- GCP project with billing enabled
+- Auth0 account (free tier works)
+- Terraform 1.5+
+
+### Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/your-org/praxos.git
+cd praxos
+npm install
+
+# Start Firestore emulator
+npm run emulator:start
+
+# Run tests
+npm run ci
+
+# Start services locally
+cd apps/auth-service && npm run dev
+```
+
+### Environment Variables
+
+Create `.env.local` in repository root:
+
+```bash
+# GCP
+GOOGLE_CLOUD_PROJECT=your-project-id
+
+# Auth (direct values for local dev)
+AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
+AUTH_ISSUER=https://your-tenant.auth0.com/
+AUTH_AUDIENCE=urn:praxos:api
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_CLIENT_ID=your-client-id
+PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-32-byte-key
+
+# Logging
+LOG_LEVEL=debug
+```
+
+### Full Setup Guides
+
+1. [GCP Project Setup](docs/setup/01-gcp-project.md)
+2. [Terraform Bootstrap](docs/setup/02-terraform-bootstrap.md)
+3. [Cloud Build Trigger](docs/setup/03-cloud-build-trigger.md)
+4. [Cloud Run Services](docs/setup/04-cloud-run-services.md)
+5. [Local Development](docs/setup/05-local-dev-with-gcp-deps.md)
+6. [Auth0 Setup](docs/setup/06-auth0.md)
+7. [WhatsApp Business Cloud API](docs/setup/07-whatsapp-business-cloud-api.md)
+
+---
+
+## Testing
+
+### Run Tests
+
+```bash
+npm run test              # Single run
+npm run test:watch        # Watch mode
+npm run test:coverage     # With coverage report
+```
+
+### Coverage Requirements
+
+| Metric     | Threshold |
+| ---------- | --------- |
+| Lines      | 89%       |
+| Branches   | 85%       |
+| Functions  | 90%       |
+| Statements | 89%       |
+
+### Mocking Strategy
+
+- **Firestore:** Emulator for integration tests
+- **Auth0:** Fake client in `@praxos/infra-auth0/testing`
+- **Notion:** Fake adapter in `@praxos/infra-notion/testing`
+- **External HTTP:** No real calls in unit tests
+
+### Test Data
+
+```bash
+# Start emulator with seed data
+npm run emulator:start
+
+# Run tests against emulator
+npm run test
+```
+
+---
+
+## Deployment & CI/CD
+
+### Environments
+
+| Environment | Branch        | URL Pattern                 |
+| ----------- | ------------- | --------------------------- |
+| dev         | `development` | `*-ooafxzbaua-lm.a.run.app` |
+| staging     | `staging`     | (planned)                   |
+| prod        | `main`        | (planned)                   |
+
+### CI Pipeline
+
+1. **GitHub Actions:** Lint, typecheck, test, coverage
+2. **Cloud Build:** Build Docker images, deploy to Cloud Run
+3. **Affected-only builds:** Only changed services rebuilt
+
+```yaml
+# cloudbuild/cloudbuild.yaml
+steps:
+  - npm ci
+  - detect-affected.mjs # Determines which services changed
+  - docker build (per service, if affected)
+  - docker push
+  - gcloud run deploy
+```
+
+### Rollback
+
+```bash
+# List revisions
+gcloud run revisions list --service=auth-service --region=europe-west4
+
+# Rollback to previous revision
+gcloud run services update-traffic auth-service \
+  --to-revisions=auth-service-00001-abc=100 \
+  --region=europe-west4
+```
+
+---
+
+## Observability
+
+### Health Checks
+
+All services expose `GET /health`:
+
+```json
+{
+  "status": "ok",
+  "serviceName": "auth-service",
+  "version": "0.0.1",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "checks": [
+    { "name": "secrets", "status": "ok", "latencyMs": 15 },
+    { "name": "firestore", "status": "ok", "latencyMs": 42 }
+  ]
+}
+```
+
+Status values: `ok` | `degraded` | `down`
+
+### Logging
+
+- **Format:** JSON (structured)
+- **Levels:** `debug`, `info`, `warn`, `error`
+- **Request ID:** Included in all log entries via `X-Request-Id`
+- **Token redaction:** Automatic for sensitive fields
+
+### Metrics
+
+Cloud Run provides built-in metrics:
+
+- Request count, latency, error rate
+- Container instance count
+- Memory/CPU utilization
+
+---
+
+## Versioning & Changelog
+
+### API Versioning
+
+- **Scheme:** URL path prefix (`/v1/`, `/v2/`)
+- **Breaking changes:** New major version
+- **Deprecation:** 6-month notice before removal
+
+### Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+---
+
+## Contributing
+
+### PR Process
+
+1. Fork and create feature branch
+2. Ensure `npm run ci` passes
+3. Write/update tests (maintain coverage)
+4. Submit PR with description of changes
+5. Address review feedback
+6. Squash merge to target branch
+
+### Code Style
+
+Enforced automatically:
+
+- ESLint with strict TypeScript rules
+- Prettier for formatting
+- No `@ts-ignore` or `@ts-expect-error`
+- Explicit return types on exports
+
+```bash
+npm run lint:fix    # Auto-fix lint issues
+npm run format      # Format with Prettier
+```
+
+---
+
+## Copilot Configuration
+
+AI-assisted development is configured via:
+
+- [`.github/copilot-instructions.md`](.github/copilot-instructions.md) — Global rules
+- [`.github/instructions/apps.instructions.md`](.github/instructions/apps.instructions.md) — App-specific rules
+- [`.github/instructions/packages.instructions.md`](.github/instructions/packages.instructions.md) — Package rules
+- [`.github/instructions/terraform.instructions.md`](.github/instructions/terraform.instructions.md) — IaC rules
+
+Key rules:
+
+- `npm run ci` must pass before task completion
+- Use `show_content` for non-trivial output
+- Follow import hierarchy (enforced by boundaries)
+- 89%+ coverage required
+
+---
+
+## Documentation Map
+
+```
+docs/
+├── README.md                          # Architecture & philosophy
+├── architecture/
+│   ├── api-contracts.md               # Response formats, error codes
+│   ├── package-contracts.md           # Layer rules, dependencies
+│   └── static-assets-hosting.md       # CDN configuration
+├── setup/
+│   ├── 01-gcp-project.md              # GCP project setup
+│   ├── 02-terraform-bootstrap.md      # Infrastructure bootstrap
+│   ├── 03-cloud-build-trigger.md      # CI/CD setup
+│   ├── 04-cloud-run-services.md       # Service deployment
+│   ├── 05-local-dev-with-gcp-deps.md  # Local development
+│   ├── 06-auth0.md                    # Authentication setup
+│   └── 07-whatsapp-business-cloud-api.md  # WhatsApp integration
+├── notion-inbox.md                    # Notion database schema
+└── assets/branding/                   # Logo and icon assets
+```
+
+---
+
+## Glossary
+
+| Term             | Definition                                                  |
+| ---------------- | ----------------------------------------------------------- |
+| **Domain**       | Business logic layer; no external dependencies              |
+| **Infra**        | Infrastructure adapters; SDK wrappers for external services |
+| **Port**         | Interface defined in domain; implemented by infra adapters  |
+| **Result**       | `Result<T, E>` type for explicit success/failure handling   |
+| **DAF**          | Device Authorization Flow (OAuth2 for devices)              |
+| **JWKS**         | JSON Web Key Set; used for JWT signature verification       |
+| **Inbox Note**   | Captured item from WhatsApp/email pending processing        |
+| **Inbox Action** | Task derived from processing an inbox note                  |
+
+---
+
+## License
+
+[MIT License](LICENSE) © 2025 Piotr Buchman
