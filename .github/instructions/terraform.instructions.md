@@ -16,7 +16,7 @@ terraform validate                # From /terraform or environment dir
 ## Rules
 
 | Rule                              | Verification                      |
-|-----------------------------------|-----------------------------------|
+| --------------------------------- | --------------------------------- |
 | Formatted                         | `terraform fmt -check -recursive` |
 | Valid syntax                      | `terraform validate`              |
 | No hardcoded secrets              | Manual review                     |

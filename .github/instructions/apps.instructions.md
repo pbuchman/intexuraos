@@ -11,7 +11,7 @@ applyTo: 'apps/**'
 ## Requirements
 
 | Requirement                     | Verification                                           |
-|---------------------------------|--------------------------------------------------------|
+| ------------------------------- | ------------------------------------------------------ |
 | OpenAPI spec at `/openapi.json` | `curl http://localhost:PORT/openapi.json` returns JSON |
 | Swagger UI at `/docs`           | `curl http://localhost:PORT/docs` returns 200/302      |
 | CORS enabled                    | OpenAPI accessible from api-docs-hub                   |

@@ -11,7 +11,7 @@ applyTo: 'packages/**'
 ## Layer Rules
 
 | Layer      | Can Import           | Verification                |
-|------------|----------------------|-----------------------------|
+| ---------- | -------------------- | --------------------------- |
 | `common`   | nothing              | `npm run verify:common`     |
 | `domain/*` | common, other domain | `npm run verify:boundaries` |
 | `infra/*`  | common, domain       | `npm run verify:boundaries` |
@@ -36,7 +36,7 @@ applyTo: 'packages/**'
 ## Layer Purposes
 
 | Layer  | Purpose                    | External Deps                  |
-|--------|----------------------------|--------------------------------|
+| ------ | -------------------------- | ------------------------------ |
 | common | Utilities (Result, guards) | None                           |
 | domain | Business logic             | None                           |
 | infra  | SDK wrappers               | Yes (Firestore, Auth0, Notion) |

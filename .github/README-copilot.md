@@ -24,7 +24,7 @@ This document explains how GitHub Copilot instructions are structured in this re
 GitHub Copilot loads instructions based on the file you're working in:
 
 | Working in                             | Instructions loaded                  |
-|----------------------------------------|--------------------------------------|
+| -------------------------------------- | ------------------------------------ |
 | `apps/auth-service/src/routes.ts`      | Global + `apps.instructions.md`      |
 | `packages/domain/identity/src/user.ts` | Global + `packages.instructions.md`  |
 | `terraform/main.tf`                    | Global + `terraform.instructions.md` |
@@ -78,7 +78,7 @@ Edit `.github/copilot-instructions.md` only for rules that apply everywhere:
 The CI workflow (`.github/workflows/ci.yml`) enforces quality gates:
 
 | Domain    | Checks                                               |
-|-----------|------------------------------------------------------|
+| --------- | ---------------------------------------------------- |
 | Node/TS   | lint, verify scripts, format, typecheck, test, build |
 | Terraform | fmt -check, validate (root, dev)                     |
 
@@ -198,7 +198,7 @@ Keep instructions:
 Documentation follows minimal duplication principles:
 
 | Document         | Single Purpose                   |
-|------------------|----------------------------------|
+| ---------------- | -------------------------------- |
 | Root `README.md` | Project overview and quick start |
 | `docs/`          | All technical documentation      |
 | Package READMEs  | Brief purpose + link to docs     |

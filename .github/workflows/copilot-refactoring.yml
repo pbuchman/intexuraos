@@ -3,94 +3,48 @@ name: Copilot Refactoring Pass
 on:
   push:
     branches:
-      - development
+      - main
 
 jobs:
   create-refactoring-issue:
+    # Only run on PR merges, not direct pushes
+    if: github.event.head_commit.message != '' && contains(github.event.head_commit.message, 'Merge pull request')
     runs-on: ubuntu-latest
-    environment: copilot
+    permissions:
+      issues: write
     steps:
-      - name: Create refactoring issue and assign to Copilot
-        env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
-        run: |
-          OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.event.repository.name }}"
-          SHA="${{ github.sha }}"
-          SHORT_SHA="${SHA:0:7}"
+      - name: Create refactoring issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.sha;
+            const shortSha = sha.substring(0, 7);
 
-          # Get repository ID
-          REPO_ID=$(gh api graphql -f query='
-            query($owner: String!, $repo: String!) {
-              repository(owner: $owner, name: $repo) { id }
-            }
-          ' -f owner="$OWNER" -f repo="$REPO" --jq '.data.repository.id')
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Refactoring pass after merge ${shortSha}`,
+              body: `## Task
 
-          echo "Repository ID: $REPO_ID"
+            Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
 
-          # Get Copilot bot ID
-          BOT_ID=$(gh api graphql -f query='
-            query($owner: String!, $repo: String!) {
-              repository(owner: $owner, name: $repo) {
-                suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 10) {
-                  nodes { login ... on Bot { id } }
-                }
-              }
-            }
-          ' -f owner="$OWNER" -f repo="$REPO" --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id')
+            **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
 
-          echo "Bot ID: $BOT_ID"
+            The prompt contains all instructions for:
+            1. Scanning for code smells
+            2. Prioritizing by impact
+            3. Fixing the single most important smell
+            4. Documenting any new patterns found
 
-          if [ -z "$BOT_ID" ]; then
-            echo "Error: Copilot coding agent not available in this repository"
-            exit 1
-          fi
+            ## Trigger
 
-          # Create issue and assign to Copilot with Claude Opus model
-          RESULT=$(gh api graphql \
-            -H 'GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection' \
-            -f query='
-              mutation($repoId: ID!, $botId: ID!, $title: String!, $body: String!) {
-                createIssue(input: {
-                  repositoryId: $repoId
-                  title: $title
-                  body: $body
-                  assigneeIds: [$botId]
-                  agentAssignment: {
-                    targetRepositoryId: $repoId
-                    baseRef: "main"
-                    customInstructions: ""
-                    customAgent: ""
-                    model: "claude-opus-4"
-                  }
-                }) {
-                  issue { number url }
-                }
-              }
-            ' \
-            -f repoId="$REPO_ID" \
-            -f botId="$BOT_ID" \
-            -f title="Refactoring pass after merge $SHORT_SHA" \
-            -f body="## Task
+            - **Commit:** ${sha}
+            - **Triggered by:** PR merge to main
 
-          Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
+            ---
+            **To start:** Assign this issue to Copilot.
+            `,
+              labels: ['copilot', 'refactoring', 'automated']
+            });
 
-          **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
-
-          The prompt contains all instructions for:
-          1. Scanning for code smells
-          2. Prioritizing by impact
-          3. Fixing the single most important smell
-          4. Documenting any new patterns found
-
-          ## Trigger
-
-          - **Commit:** $SHA
-          - **Triggered by:** Push to main
-          ")
-
-          ISSUE_URL=$(echo "$RESULT" | jq -r '.data.createIssue.issue.url')
-          ISSUE_NUM=$(echo "$RESULT" | jq -r '.data.createIssue.issue.number')
-
-          echo "Created issue #$ISSUE_NUM: $ISSUE_URL"
-          echo "Assigned to Copilot with Claude Opus model"
+            console.log(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
