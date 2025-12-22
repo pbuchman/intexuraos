@@ -110,8 +110,7 @@ export function stopEmulator(): void {
  */
 async function safeFetch(url: string, init: RequestInit): Promise<Response | null> {
   try {
-    const result = await globalThis.fetch(url, init);
-    return result;
+    return await globalThis.fetch(url, init);
   } catch {
     // Network error - emulator might not be running
     return null;

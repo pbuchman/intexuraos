@@ -119,6 +119,29 @@ try {
 }
 ```
 
+**Redundant local variable** — return directly when no transformation needed:
+
+```ts-example
+// ❌ Redundant variable
+async function safeFetch(url: string): Promise<Response | null> {
+  try {
+    const result = await fetch(url);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+// ✅ Direct return
+async function safeFetch(url: string): Promise<Response | null> {
+  try {
+    return await fetch(url);
+  } catch {
+    return null;
+  }
+}
+```
+
 ---
 
 ## Testing
