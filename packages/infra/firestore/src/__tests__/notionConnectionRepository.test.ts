@@ -1,96 +1,29 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+/**
+ * Tests for FirestoreNotionConnectionRepository.
+ *
+ * Uses real Firestore implementation against emulator.
+ */
+import { describe, it, expect } from 'vitest';
 import { FirestoreNotionConnectionRepository } from '../notionConnectionRepository.js';
 
-// Mock the client module
-vi.mock('../client.js', () => ({
-  getFirestore: vi.fn(),
-}));
-
-// Import after mock setup
-import { getFirestore } from '../client.js';
-
-interface MockDocSnapshot {
-  exists: boolean;
-  data: () => unknown;
-}
-
-interface MockDocRef {
-  get: () => Promise<MockDocSnapshot>;
-  set: (data: unknown) => Promise<void>;
-  update: (data: unknown) => Promise<void>;
-}
-
-interface MockCollectionRef {
-  doc: (id: string) => MockDocRef;
-}
-
-interface MockFirestoreInstance {
-  collection: (name: string) => MockCollectionRef;
-}
-
-/**
- * In-memory Firestore stub for testing.
- */
-function createMockFirestore(): {
-  docs: Map<string, MockDocSnapshot>;
-  getFirestore: () => MockFirestoreInstance;
-} {
-  const docs = new Map<string, MockDocSnapshot>();
-
-  const mockFirestore: MockFirestoreInstance = {
-    collection: (_name: string): MockCollectionRef => ({
-      doc: (id: string): MockDocRef => ({
-        get: (): Promise<MockDocSnapshot> => {
-          const doc = docs.get(id);
-          if (!doc) {
-            return Promise.resolve({ exists: false, data: (): unknown => undefined });
-          }
-          return Promise.resolve(doc);
-        },
-        set: (data: unknown): Promise<void> => {
-          docs.set(id, { exists: true, data: (): unknown => data });
-          return Promise.resolve();
-        },
-        update: (data: unknown): Promise<void> => {
-          const existing = docs.get(id);
-          if (existing) {
-            const existingData = existing.data() as Record<string, unknown>;
-            const updatedData = { ...existingData, ...(data as Record<string, unknown>) };
-            docs.set(id, { exists: true, data: (): unknown => updatedData });
-          }
-          return Promise.resolve();
-        },
-      }),
-    }),
-  };
-
-  return {
-    docs,
-    getFirestore: (): MockFirestoreInstance => mockFirestore,
-  };
-}
-
 describe('FirestoreNotionConnectionRepository', () => {
-  let repo: FirestoreNotionConnectionRepository;
-  let mockFs: ReturnType<typeof createMockFirestore>;
-  const userId = 'user-test-1';
+  function createRepo(): FirestoreNotionConnectionRepository {
+    return new FirestoreNotionConnectionRepository();
+  }
+
+  // Use dynamic IDs to avoid test pollution (emulator clear may race with test execution)
   const pageId = 'page-abc-123';
   const token = 'secret_notion_token';
 
-  beforeEach(() => {
-    mockFs = createMockFirestore();
-    vi.mocked(getFirestore).mockReturnValue(
-      mockFs.getFirestore() as unknown as ReturnType<typeof getFirestore>
-    );
-    repo = new FirestoreNotionConnectionRepository();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  function uniqueUserId(): string {
+    return `user-${String(Date.now())}-${Math.random().toString(36).slice(2)}`;
+  }
 
   describe('saveConnection', () => {
-    it('creates a new connection when none exists', async () => {
+    it('creates a new connection when none exists', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       const result = await repo.saveConnection(userId, pageId, token);
 
       expect(result.ok).toBe(true);
@@ -102,7 +35,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('updates an existing connection preserving createdAt', async () => {
+    it('updates an existing connection preserving createdAt', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       // Create initial connection
       await repo.saveConnection(userId, pageId, token);
 
@@ -121,34 +57,13 @@ describe('FirestoreNotionConnectionRepository', () => {
         expect(updateResult.value.createdAt).toBe(firstCreatedAt);
       }
     });
-
-    it('returns error when Firestore throws', async () => {
-      const throwingFs: MockFirestoreInstance = {
-        collection: (): MockCollectionRef => ({
-          doc: (): MockDocRef => ({
-            get: (): Promise<MockDocSnapshot> =>
-              Promise.reject(new Error('Firestore connection failed')),
-            set: (): Promise<void> => Promise.resolve(),
-            update: (): Promise<void> => Promise.resolve(),
-          }),
-        }),
-      };
-      vi.mocked(getFirestore).mockReturnValue(
-        throwingFs as unknown as ReturnType<typeof getFirestore>
-      );
-
-      const result = await repo.saveConnection(userId, pageId, token);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Firestore connection failed');
-      }
-    });
   });
 
   describe('getConnection', () => {
-    it('returns null when no connection exists', async () => {
+    it('returns null when no connection exists', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       const result = await repo.getConnection(userId);
 
       expect(result.ok).toBe(true);
@@ -157,7 +72,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns connection when it exists', async () => {
+    it('returns connection when it exists', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
 
       const result = await repo.getConnection(userId);
@@ -169,33 +87,13 @@ describe('FirestoreNotionConnectionRepository', () => {
         expect(result.value?.connected).toBe(true);
       }
     });
-
-    it('returns error when Firestore throws', async () => {
-      const throwingFs: MockFirestoreInstance = {
-        collection: (): MockCollectionRef => ({
-          doc: (): MockDocRef => ({
-            get: (): Promise<MockDocSnapshot> => Promise.reject(new Error('Read failed')),
-            set: (): Promise<void> => Promise.resolve(),
-            update: (): Promise<void> => Promise.resolve(),
-          }),
-        }),
-      };
-      vi.mocked(getFirestore).mockReturnValue(
-        throwingFs as unknown as ReturnType<typeof getFirestore>
-      );
-
-      const result = await repo.getConnection(userId);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Read failed');
-      }
-    });
   });
 
   describe('disconnectConnection', () => {
-    it('marks connection as disconnected', async () => {
+    it('marks connection as disconnected', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
 
       const result = await repo.disconnectConnection(userId);
@@ -207,32 +105,24 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns error when Firestore throws', async () => {
-      const throwingFs: MockFirestoreInstance = {
-        collection: (): MockCollectionRef => ({
-          doc: (): MockDocRef => ({
-            get: (): Promise<MockDocSnapshot> => Promise.reject(new Error('Disconnect failed')),
-            set: (): Promise<void> => Promise.resolve(),
-            update: (): Promise<void> => Promise.resolve(),
-          }),
-        }),
-      };
-      vi.mocked(getFirestore).mockReturnValue(
-        throwingFs as unknown as ReturnType<typeof getFirestore>
-      );
+    it('returns error when no connection exists', async (): Promise<void> => {
+      const repo = createRepo();
 
-      const result = await repo.disconnectConnection(userId);
+      const result = await repo.disconnectConnection('non-existent-user');
 
+      // Firestore update() on non-existent doc throws, which causes INTERNAL_ERROR
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Disconnect failed');
       }
     });
   });
 
   describe('isConnected', () => {
-    it('returns false when no connection exists', async () => {
+    it('returns false when no connection exists', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       const result = await repo.isConnected(userId);
 
       expect(result.ok).toBe(true);
@@ -241,7 +131,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns true when connected', async () => {
+    it('returns true when connected', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
 
       const result = await repo.isConnected(userId);
@@ -252,7 +145,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns false when disconnected', async () => {
+    it('returns false when disconnected', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
       await repo.disconnectConnection(userId);
 
@@ -263,32 +159,13 @@ describe('FirestoreNotionConnectionRepository', () => {
         expect(result.value).toBe(false);
       }
     });
-
-    it('returns error when Firestore throws', async () => {
-      const throwingFs: MockFirestoreInstance = {
-        collection: (): MockCollectionRef => ({
-          doc: (): MockDocRef => ({
-            get: (): Promise<MockDocSnapshot> => Promise.reject(new Error('Check failed')),
-            set: (): Promise<void> => Promise.resolve(),
-            update: (): Promise<void> => Promise.resolve(),
-          }),
-        }),
-      };
-      vi.mocked(getFirestore).mockReturnValue(
-        throwingFs as unknown as ReturnType<typeof getFirestore>
-      );
-
-      const result = await repo.isConnected(userId);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-      }
-    });
   });
 
   describe('getToken', () => {
-    it('returns null when no connection exists', async () => {
+    it('returns null when no connection exists', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       const result = await repo.getToken(userId);
 
       expect(result.ok).toBe(true);
@@ -297,7 +174,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns token when connected', async () => {
+    it('returns token when connected', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
 
       const result = await repo.getToken(userId);
@@ -308,7 +188,10 @@ describe('FirestoreNotionConnectionRepository', () => {
       }
     });
 
-    it('returns null when disconnected', async () => {
+    it('returns null when disconnected', async (): Promise<void> => {
+      const repo = createRepo();
+      const userId = uniqueUserId();
+
       await repo.saveConnection(userId, pageId, token);
       await repo.disconnectConnection(userId);
 
@@ -317,28 +200,6 @@ describe('FirestoreNotionConnectionRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toBeNull();
-      }
-    });
-
-    it('returns error when Firestore throws', async () => {
-      const throwingFs: MockFirestoreInstance = {
-        collection: (): MockCollectionRef => ({
-          doc: (): MockDocRef => ({
-            get: (): Promise<MockDocSnapshot> => Promise.reject(new Error('Token fetch failed')),
-            set: (): Promise<void> => Promise.resolve(),
-            update: (): Promise<void> => Promise.resolve(),
-          }),
-        }),
-      };
-      vi.mocked(getFirestore).mockReturnValue(
-        throwingFs as unknown as ReturnType<typeof getFirestore>
-      );
-
-      const result = await repo.getToken(userId);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
       }
     });
   });

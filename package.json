@@ -26,6 +26,9 @@
     "verify:package-json": "node scripts/verify-package-json.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:common": "node scripts/verify-common.mjs",
+    "emulator:start": "docker compose -f docker/firestore-emulator.yaml up -d",
+    "emulator:stop": "docker compose -f docker/firestore-emulator.yaml down",
+    "emulator:logs": "docker compose -f docker/firestore-emulator.yaml logs -f",
     "ci": "npm run typecheck && npm run lint && npm run verify:package-json && npm run verify:boundaries && npm run verify:common && npm run format:check && npm run test:coverage && npm run build"
   },
   "devDependencies": {

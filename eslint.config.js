@@ -58,6 +58,9 @@ export default tseslint.config(
       '@typescript-eslint/explicit-module-boundary-types': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
+      // Disable this rule - it conflicts with no-non-null-assertion
+      // It suggests using ! but ! is forbidden by no-non-null-assertion
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
       '@typescript-eslint/prefer-nullish-coalescing': 'error',
       '@typescript-eslint/prefer-optional-chain': 'error',
       '@typescript-eslint/strict-boolean-expressions': 'error',

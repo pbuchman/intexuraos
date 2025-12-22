@@ -4,6 +4,7 @@ import { buildServer } from '../server.js';
 import type { Config } from '../config.js';
 
 interface OpenApiSpec {
+  openapi?: string;
   servers?: { url: string; description?: string }[];
   paths?: Record<
     string,
@@ -25,6 +26,8 @@ describe('whatsapp-service OpenAPI contract', () => {
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    accessToken: 'test-access-token',
+    allowedPhoneNumberIds: ['test-phone-id'],
     port: 8080,
     host: '0.0.0.0',
   };
@@ -33,6 +36,8 @@ describe('whatsapp-service OpenAPI contract', () => {
     // Set required env vars
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
     process.env['VITEST'] = 'true';
 
     app = await buildServer(testConfig);
@@ -47,12 +52,18 @@ describe('whatsapp-service OpenAPI contract', () => {
     await app.close();
     delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
+    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
     delete process.env['VITEST'];
   });
 
   it('has no "Default Response" placeholders', () => {
     const specStr = JSON.stringify(openapiSpec);
     expect(specStr).not.toContain('Default Response');
+  });
+
+  it('uses OpenAPI 3.1.1', () => {
+    expect(openapiSpec.openapi).toBe('3.1.1');
   });
 
   it('has servers array with valid URL', () => {

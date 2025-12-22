@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../server.js';
 
 interface OpenApiSpec {
+  openapi?: string;
   servers?: { url: string; description?: string }[];
   paths?: Record<
     string,
@@ -45,6 +46,10 @@ describe('promptvault-service OpenAPI contract', () => {
   it('has no "Default Response" placeholders', () => {
     const specStr = JSON.stringify(openapiSpec);
     expect(specStr).not.toContain('Default Response');
+  });
+
+  it('uses OpenAPI 3.1.1', () => {
+    expect(openapiSpec.openapi).toBe('3.1.1');
   });
 
   it('has servers array with valid URL', () => {

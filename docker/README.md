@@ -2,6 +2,31 @@
 
 Container configurations for local development.
 
+## Firestore Emulator (for Testing)
+
+For local test execution with real Firestore:
+
+```bash
+# Start emulator (background, persistent)
+npm run emulator:start
+
+# Run tests (auto-detect running emulator)
+npm run test
+
+# Stop emulator
+npm run emulator:stop
+
+# View emulator logs
+npm run emulator:logs
+```
+
+**Key behaviors:**
+
+- Tests auto-detect running emulator via `FIRESTORE_EMULATOR_HOST`
+- If emulator not running, tests start a temporary process (killed after tests)
+- Emulator data cleared between tests for isolation
+- Production code is unaware of emulator - only env vars differ
+
 ## Local Development
 
 ```bash
@@ -29,6 +54,7 @@ docker compose -f docker/docker-compose.yaml down
 | ------------------- | ---------- | ---------------------------- |
 | auth-service        | 8080       | http://localhost:8080/health |
 | promptvault-service | 8081       | http://localhost:8081/health |
+| firestore-emulator  | 8085       | http://localhost:8085/       |
 
 ## See Also
 

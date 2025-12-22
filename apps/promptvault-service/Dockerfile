@@ -11,8 +11,8 @@ COPY package*.json ./
 COPY apps/promptvault-service/package*.json ./apps/promptvault-service/
 COPY packages/common/package*.json ./packages/common/
 COPY packages/domain/identity/package*.json ./packages/domain/identity/
+COPY packages/domain/inbox/package*.json ./packages/domain/inbox/
 COPY packages/domain/promptvault/package*.json ./packages/domain/promptvault/
-COPY packages/domain/actions/package*.json ./packages/domain/actions/
 COPY packages/infra/notion/package*.json ./packages/infra/notion/
 COPY packages/infra/firestore/package*.json ./packages/infra/firestore/
 
@@ -24,8 +24,8 @@ RUN npm ci
 COPY tsconfig*.json ./
 COPY packages/common/ ./packages/common/
 COPY packages/domain/identity/ ./packages/domain/identity/
+COPY packages/domain/inbox/ ./packages/domain/inbox/
 COPY packages/domain/promptvault/ ./packages/domain/promptvault/
-COPY packages/domain/actions/ ./packages/domain/actions/
 COPY packages/infra/notion/ ./packages/infra/notion/
 COPY packages/infra/firestore/ ./packages/infra/firestore/
 COPY apps/promptvault-service/ ./apps/promptvault-service/
@@ -33,8 +33,8 @@ COPY apps/promptvault-service/ ./apps/promptvault-service/
 # Build all packages in dependency order
 RUN npm run build --workspace=@praxos/common
 RUN npm run build --workspace=@praxos/domain-identity
+RUN npm run build --workspace=@praxos/domain-inbox
 RUN npm run build --workspace=@praxos/domain-promptvault
-RUN npm run build --workspace=@praxos/domain-actions
 RUN npm run build --workspace=@praxos/infra-notion
 RUN npm run build --workspace=@praxos/infra-firestore
 RUN npm run build --workspace=@praxos/promptvault-service
@@ -48,9 +48,13 @@ WORKDIR /app
 COPY package*.json ./
 COPY apps/promptvault-service/package*.json ./apps/promptvault-service/
 COPY packages/common/package*.json ./packages/common/
+# Copy package files for all required workspaces
+COPY package*.json ./
+COPY apps/promptvault-service/package*.json ./apps/promptvault-service/
+COPY packages/common/package*.json ./packages/common/
 COPY packages/domain/identity/package*.json ./packages/domain/identity/
+COPY packages/domain/inbox/package*.json ./packages/domain/inbox/
 COPY packages/domain/promptvault/package*.json ./packages/domain/promptvault/
-COPY packages/domain/actions/package*.json ./packages/domain/actions/
 COPY packages/infra/notion/package*.json ./packages/infra/notion/
 COPY packages/infra/firestore/package*.json ./packages/infra/firestore/
 
@@ -58,8 +62,8 @@ COPY packages/infra/firestore/package*.json ./packages/infra/firestore/
 RUN npm ci --omit=dev \
     --workspace=@praxos/common \
     --workspace=@praxos/domain-identity \
+    --workspace=@praxos/domain-inbox \
     --workspace=@praxos/domain-promptvault \
-    --workspace=@praxos/domain-actions \
     --workspace=@praxos/infra-notion \
     --workspace=@praxos/infra-firestore \
     --workspace=@praxos/promptvault-service
@@ -67,8 +71,8 @@ RUN npm ci --omit=dev \
 # Copy built files from all packages
 COPY --from=builder /app/packages/common/dist ./packages/common/dist
 COPY --from=builder /app/packages/domain/identity/dist ./packages/domain/identity/dist
+COPY --from=builder /app/packages/domain/inbox/dist ./packages/domain/inbox/dist
 COPY --from=builder /app/packages/domain/promptvault/dist ./packages/domain/promptvault/dist
-COPY --from=builder /app/packages/domain/actions/dist ./packages/domain/actions/dist
 COPY --from=builder /app/packages/infra/notion/dist ./packages/infra/notion/dist
 COPY --from=builder /app/packages/infra/firestore/dist ./packages/infra/firestore/dist
 COPY --from=builder /app/apps/promptvault-service/dist ./apps/promptvault-service/dist

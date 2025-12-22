@@ -475,6 +475,42 @@ describe('NotionApiAdapter', () => {
       const codeBlock = callArgs.children.find((c) => c.type === 'code');
       expect(codeBlock?.code?.rich_text[0]?.text.content).toBe(verbatimPrompt);
     });
+
+    it('splits long prompts into multiple code blocks', async () => {
+      mockClient.pages.create.mockResolvedValue({
+        id: 'new-page-chunked',
+        url: 'https://notion.so/new-page-chunked',
+      });
+
+      // Create a prompt longer than 2000 chars (Notion limit)
+      const longPrompt = 'A'.repeat(2500);
+
+      const result = await adapter.createPromptVaultNote({
+        token,
+        parentPageId,
+        title,
+        prompt: longPrompt,
+        userId,
+      });
+
+      expect(result.ok).toBe(true);
+
+      // Verify multiple code blocks were created
+      const callArgs = mockClient.pages.create.mock.calls[0]?.[0] as {
+        children: {
+          type: string;
+          code?: { rich_text: { text: { content: string } }[] };
+        }[];
+      };
+      const codeBlocks = callArgs.children.filter((c) => c.type === 'code');
+      expect(codeBlocks.length).toBeGreaterThan(1);
+
+      // Verify all chunks together equal the original content
+      const combinedContent = codeBlocks
+        .map((block) => block.code?.rich_text[0]?.text.content ?? '')
+        .join('');
+      expect(combinedContent).toBe(longPrompt);
+    });
   });
 
   describe('error mapping', () => {
@@ -615,6 +651,57 @@ describe('NotionApiAdapter', () => {
       }
     });
 
+    it('returns concatenated content from multiple code blocks', async () => {
+      mockClient.pages.retrieve.mockResolvedValue({
+        id: 'page-123',
+        properties: {
+          title: {
+            type: 'title',
+            title: [{ plain_text: 'Multi-chunk Prompt' }],
+          },
+        },
+        url: 'https://notion.so/page-123',
+        created_time: '2024-01-01T00:00:00.000Z',
+        last_edited_time: '2024-01-02T00:00:00.000Z',
+      });
+
+      mockClient.blocks.children.list.mockResolvedValue({
+        results: [
+          {
+            type: 'heading_2',
+            heading_2: { rich_text: [{ plain_text: 'Prompt' }] },
+          },
+          {
+            type: 'code',
+            code: {
+              rich_text: [{ plain_text: 'First chunk' }],
+            },
+          },
+          {
+            type: 'code',
+            code: {
+              rich_text: [{ plain_text: 'Second chunk' }],
+            },
+          },
+          {
+            type: 'heading_2',
+            heading_2: { rich_text: [{ plain_text: 'Meta' }] },
+          },
+          {
+            type: 'bulleted_list_item',
+            bulleted_list_item: { rich_text: [{ plain_text: 'Source: GPT' }] },
+          },
+        ],
+      });
+
+      const result = await adapter.getPromptPage('token', 'page-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.promptContent).toBe('First chunk\nSecond chunk');
+      }
+    });
+
     it('returns empty promptContent when no code block', async () => {
       mockClient.pages.retrieve.mockResolvedValue({
         id: 'page-123',
@@ -739,6 +826,174 @@ describe('NotionApiAdapter', () => {
       if (result.ok) {
         expect(result.value.promptContent).toBe('New content');
       }
+    });
+
+    it('handles updating with long content that requires chunking', async () => {
+      // Add delete and append mocks
+      (mockClient.blocks as unknown as { delete: ReturnType<typeof vi.fn> }).delete = vi
+        .fn()
+        .mockResolvedValue({});
+      (mockClient.blocks.children as unknown as { append: ReturnType<typeof vi.fn> }).append = vi
+        .fn()
+        .mockResolvedValue({});
+
+      // First call: get existing blocks (1 code block)
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            id: 'code-block-1',
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'Old short content' }] },
+          },
+        ],
+      });
+
+      (
+        mockClient.blocks as unknown as { update: ReturnType<typeof vi.fn> }
+      ).update.mockResolvedValue({});
+
+      mockClient.pages.retrieve.mockResolvedValue({
+        id: 'page-123',
+        properties: {
+          title: { type: 'title', title: [{ plain_text: 'Title' }] },
+        },
+        url: 'https://notion.so/page-123',
+        last_edited_time: '2024-01-02T00:00:00.000Z',
+      });
+
+      // Second call: get final blocks
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'A'.repeat(1900) }] },
+          },
+          {
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'A'.repeat(600) }] },
+          },
+        ],
+      });
+
+      // Create long content that needs chunking
+      const longContent = 'A'.repeat(2500);
+
+      const result = await adapter.updatePromptPage('token', 'page-123', {
+        promptContent: longContent,
+      });
+
+      expect(result.ok).toBe(true);
+      // Verify append was called for the extra chunk
+      expect(
+        (mockClient.blocks.children as unknown as { append: ReturnType<typeof vi.fn> }).append
+      ).toHaveBeenCalled();
+    });
+
+    it('handles updating with multiple existing code blocks', async () => {
+      (mockClient.blocks as unknown as { delete: ReturnType<typeof vi.fn> }).delete = vi
+        .fn()
+        .mockResolvedValue({});
+
+      // First call: get existing blocks (2 code blocks)
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            id: 'code-block-1',
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'Chunk 1' }] },
+          },
+          {
+            id: 'code-block-2',
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'Chunk 2' }] },
+          },
+        ],
+      });
+
+      (
+        mockClient.blocks as unknown as { update: ReturnType<typeof vi.fn> }
+      ).update.mockResolvedValue({});
+
+      mockClient.pages.retrieve.mockResolvedValue({
+        id: 'page-123',
+        properties: {
+          title: { type: 'title', title: [{ plain_text: 'Title' }] },
+        },
+        url: 'https://notion.so/page-123',
+        last_edited_time: '2024-01-02T00:00:00.000Z',
+      });
+
+      // Second call: get final blocks (short content, only 1 block needed)
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'Short new content' }] },
+          },
+        ],
+      });
+
+      const result = await adapter.updatePromptPage('token', 'page-123', {
+        promptContent: 'Short new content',
+      });
+
+      expect(result.ok).toBe(true);
+      // Verify delete was called to remove extra code block
+      expect(
+        (mockClient.blocks as unknown as { delete: ReturnType<typeof vi.fn> }).delete
+      ).toHaveBeenCalledWith({
+        block_id: 'code-block-2',
+      });
+    });
+
+    it('handles page with Prompt heading but no code blocks', async () => {
+      (mockClient.blocks.children as unknown as { append: ReturnType<typeof vi.fn> }).append = vi
+        .fn()
+        .mockResolvedValue({});
+
+      // First call: get existing blocks (heading but no code block)
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            id: 'heading-1',
+            type: 'heading_2',
+            heading_2: { rich_text: [{ plain_text: 'Prompt' }] },
+          },
+        ],
+      });
+
+      mockClient.pages.retrieve.mockResolvedValue({
+        id: 'page-123',
+        properties: {
+          title: { type: 'title', title: [{ plain_text: 'Title' }] },
+        },
+        url: 'https://notion.so/page-123',
+        last_edited_time: '2024-01-02T00:00:00.000Z',
+      });
+
+      // Second call: get final blocks
+      mockClient.blocks.children.list.mockResolvedValueOnce({
+        results: [
+          {
+            type: 'code',
+            code: { rich_text: [{ plain_text: 'New content' }] },
+          },
+        ],
+      });
+
+      const result = await adapter.updatePromptPage('token', 'page-123', {
+        promptContent: 'New content',
+      });
+
+      expect(result.ok).toBe(true);
+      // Verify append was called to add code block after heading
+      expect(
+        (mockClient.blocks.children as unknown as { append: ReturnType<typeof vi.fn> }).append
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          after: 'heading-1',
+        })
+      );
     });
 
     it('returns NOT_FOUND when page not found', async () => {

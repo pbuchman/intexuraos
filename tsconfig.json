@@ -4,7 +4,6 @@
     { "path": "packages/common" },
     { "path": "packages/domain/identity" },
     { "path": "packages/domain/promptvault" },
-    { "path": "packages/domain/actions" },
     { "path": "packages/infra/auth0" },
     { "path": "packages/infra/notion" },
     { "path": "packages/infra/firestore" },

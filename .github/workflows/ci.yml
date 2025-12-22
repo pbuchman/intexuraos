@@ -22,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
 
+    env:
+      FIRESTORE_EMULATOR_HOST: localhost:8085
+      GCLOUD_PROJECT: test-project
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,8 +39,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Start Firestore emulator
+        run: |
+          docker run -d \
+            --name firestore-emulator \
+            -p 8085:8085 \
+            -e "FIRESTORE_PROJECT_ID=test-project" \
+            google/cloud-sdk:emulators \
+            gcloud emulators firestore start --host-port=0.0.0.0:8085 --project=test-project
+
+      - name: Wait for Firestore emulator
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8085/ > /dev/null 2>&1; then
+              echo "Firestore emulator is ready"
+              exit 0
+            fi
+            echo "Waiting for Firestore emulator... (attempt $i)"
+            sleep 2
+          done
+          echo "Firestore emulator failed to start"
+          docker logs firestore-emulator
+          exit 1
+
       - name: Run CI
         run: npm run ci
+
+      - name: Stop Firestore emulator
+        if: always()
+        run: docker stop firestore-emulator || true
 
   # =============================================================================
   # Terraform: Format, Validate

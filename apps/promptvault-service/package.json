@@ -24,7 +24,6 @@
   "dependencies": {
     "@praxos/common": "*",
     "@praxos/domain-promptvault": "*",
-    "@praxos/domain-actions": "*",
     "@praxos/infra-notion": "*",
     "@praxos/infra-firestore": "*",
     "@fastify/cors": "^10.0.1",

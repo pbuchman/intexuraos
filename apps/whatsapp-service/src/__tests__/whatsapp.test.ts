@@ -3,16 +3,24 @@ import type { FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeWhatsAppWebhookEventRepository } from '@praxos/infra-firestore';
+import {
+  FakeWhatsAppWebhookEventRepository,
+  FakeWhatsAppUserMappingRepository,
+  FakeNotionConnectionRepository,
+} from '@praxos/infra-firestore';
 import type { Config } from '../config.js';
 
 describe('whatsapp-service endpoints', () => {
   let app: FastifyInstance;
   let webhookEventRepository: FakeWhatsAppWebhookEventRepository;
+  let userMappingRepository: FakeWhatsAppUserMappingRepository;
+  let notionConnectionRepository: FakeNotionConnectionRepository;
 
   const testConfig: Config = {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
+    accessToken: 'test-access-token',
+    allowedPhoneNumberIds: ['test-phone-id'],
     port: 8080,
     host: '0.0.0.0',
   };
@@ -73,16 +81,23 @@ describe('whatsapp-service endpoints', () => {
   beforeEach(async () => {
     // Create fresh test adapters
     webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
+    userMappingRepository = new FakeWhatsAppUserMappingRepository();
+    notionConnectionRepository = new FakeNotionConnectionRepository();
 
     // Inject test adapters via DI
     setServices({
       webhookEventRepository,
+      userMappingRepository,
+      notionConnectionRepository,
+      inboxNotesRepository: null,
     });
 
     // Set test environment to skip real Firestore health check
     process.env['VITEST'] = 'true';
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
 
     app = await buildServer(testConfig);
   });
@@ -93,6 +108,8 @@ describe('whatsapp-service endpoints', () => {
     delete process.env['VITEST'];
     delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
+    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
   });
 
   describe('GET /health', () => {
@@ -509,6 +526,8 @@ describe('config validation', () => {
 
     process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
     process.env['PRAXOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
+    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = 'test';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);

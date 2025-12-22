@@ -1,0 +1,323 @@
+NOTION PROMPT VAULT — CONTEXT & TEST CASES
+
+This document provides test cases, edge case specifications, and additional context for the Notion Prompt Vault model. Load this as context reference.
+
+---
+
+# TEST CASES
+
+## A. Review Cases
+
+### A1. Missing prompt
+Command: `/review`
+Expected: Error "Missing prompt payload."
+
+### A2. Too few dimensions
+Input: Only 6 scored dimensions
+Expected: Self-test fails, error "Invalid review — 10 dimensions required."
+
+### A3. Invalid weight
+Input: Weight = 0
+Expected: Error: "Weight must be between 1 and 10."
+
+---
+
+## B. Save Behavior
+
+### B1. Save before review (no param)
+Command: `/save`
+State: `SAVE_ALLOWED = false`, `LAST_REVIEWED_PROMPT = null`
+Expected: Error "Cannot execute `/save` — no reviewed prompt found."
+
+### B2. Save with prompt (not authenticated)
+Command: `/save my awesome prompt`
+State: User not signed in
+Expected:
+1. Model immediately calls API (no permission asked)
+2. OAuth sign-in triggers automatically
+3. After auth, check Notion status
+4. If Notion not configured → prompt for config
+5. If configured → proceed with save
+WRONG: "Would you like me to log you in?" ← NEVER ask, just do it
+WRONG: "no reviewed prompt found" ← prompt WAS provided
+
+### B3. Save with prompt (Notion misconfigured)
+Command: `/save my awesome prompt`
+State: User authenticated, Notion not configured
+Expected:
+1. Model calls API
+2. After auth check, detects Notion not configured
+3. Immediately prompts: "Notion not configured. Please provide your Notion page URL and integration token."
+WRONG: "Cannot save — run /config notion first" ← Should prompt for config inline
+
+### B4. Successful review → save
+- Run: `/review <prompt>`
+- Score = 8.6
+- Ends loop
+- `/save` allowed
+Expected: Save works, shows success URL
+
+---
+
+## C. Auth Flow (OAuth - Automatic)
+
+### C1. First use (not signed in)
+Command: `/save <prompt>`
+State: User has not completed OAuth sign-in
+Expected:
+1. Model immediately calls API (no permission asked)
+2. 401 triggers OAuth automatically
+3. After auth → check Notion status
+4. If Notion not configured → start config flow
+5. If configured → complete original action
+WRONG: "Would you like me to sign you in?" ← NEVER ask
+
+### C2. Post-auth Notion check
+State: User just completed OAuth sign-in
+Expected:
+1. Immediately call `GET /v1/integrations/notion/status`
+2. If `connected: false` → start `/config notion` flow
+3. If `connected: true` → proceed with action
+
+### C3. Session expired
+Command: `/save <prompt>`
+Response: API returns 401
+Expected: OAuth flow triggers automatically to refresh session
+
+---
+
+## D. Edge Logic
+
+### D1. Loop termination via `stop`
+Score = 9.0, user says `stop`
+Expected: Loop ends, allow `/save`
+
+### D2. Max score = 10
+Score = 10.0
+Expected: Exit loop, allow `/save` immediately
+
+### D3. Max iterations reached
+State: `IMPROVEMENT_ITERATIONS = 10`, Score = 7.5
+Expected: Force loop exit, allow `/save`
+
+### D4. Session expired during use
+Command: `/save`
+Response: API returns 401
+Expected: "Session expired. Please sign out and back in." + diagnostics
+
+### D5. Dimension tie-breaker
+State: Goal clarity = 5, Edge cases = 5 (both tied for lowest)
+Expected: Choose Goal clarity (weight 10 > weight 7)
+
+### D6. Save after failed save
+State: `LAST_SAVE_ERROR` is set, `SAVE_ALLOWED = false`
+Command: `/save`
+Expected: Error, must re-run `/review` first
+
+### D7. User declines improvement
+Score = 7.5, user answers "no" to improvement question
+Expected: Loop ends, allow `/save`
+
+### D8. Token refresh triggered
+State: `REFRESH_TOKEN` present, `EXPIRES_AT` in 3 minutes
+Command: `/save`
+Expected: Silent refresh, then proceed with save
+
+### D9. Token refresh fails
+State: `REFRESH_TOKEN` present, refresh API returns error
+Expected: Error "Unauthorized: token expired, run /auth start"
+
+---
+
+## E. API Error Handling
+
+### E1. Rate limited (429)
+Response: HTTP 429
+Expected: Wait indicated time, retry once, fail with diagnostics if still 429
+
+### E2. Server error (5xx)
+Response: HTTP 503
+Expected: Retry with exponential backoff (1s, 2s), fail after 2 retries
+
+### E3. Client error (4xx)
+Response: HTTP 400
+Expected: Fail immediately, no retry, show diagnostics
+
+---
+
+## F. Notion Integration
+
+### F1. Config without auth
+Command: `/config notion`
+State: No `ACCESS_TOKEN`
+Expected: Error "Unauthorized: run /auth start"
+
+### F2. Connection test fails
+Command: `/config notion`
+Response: API returns error
+Expected: Set `NOTION_CONNECTION_OK = NO`, show diagnostics
+
+### F3. Connection test succeeds
+Command: `/config notion`
+Response: API returns parent page info
+Expected: Set `NOTION_CONFIGURED = YES`, `NOTION_CONNECTION_OK = YES`, store page ID/title
+
+---
+
+# DIMENSION WEIGHT REFERENCE
+
+| # | Dimension | Default Weight |
+|---|-----------|----------------|
+| 1 | Goal clarity | 10 |
+| 2 | Output format | 9 |
+| 3 | Constraints & rules | 9 |
+| 4 | Context | 7 |
+| 5 | Role | 8 |
+| 6 | Quality bar | 6 |
+| 7 | Step-by-step guidance | 5 |
+| 8 | Examples | 4 |
+| 9 | Tone | 3 |
+| 10 | Edge cases | 7 |
+
+**Total weight sum:** 68
+
+---
+
+# SCORING FORMULA
+
+```
+Final Score = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+Example:
+- All dimensions score 8 → Final = 8.00
+- Goal clarity (w=10) scores 10, all others score 7 → Final = (10×10 + 7×58) / 68 = 7.44
+
+---
+
+# STATE INITIALIZATION
+
+On session start, all state resets to defaults:
+```
+SAVE_ALLOWED = false
+LAST_REVIEWED_PROMPT = null
+LAST_REVIEW_SCORE = null
+IMPROVEMENT_ITERATIONS = 0
+LAST_SAVE_ERROR = null
+NOTION_CONFIGURED = NO
+NOTION_CONNECTION_OK = NO
+NOTION_PARENT_PAGE_ID = null
+NOTION_PARENT_PAGE_TITLE = null
+```
+
+Note: Authentication state is managed by ChatGPT OAuth, not tracked in model state.
+
+---
+
+# API ENDPOINTS REFERENCE
+
+## Auth Service
+Base: `https://praxos-auth-service-ooafxzbaua-lm.a.run.app`
+- OAuth authorization and token exchange handled by ChatGPT Actions
+- `GET /v1/auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
+- `POST /v1/auth/oauth/token` — Token exchange (used by ChatGPT)
+
+## PromptVault Service
+Base: `https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app`
+- `GET /v1/integrations/notion/status` — Check Notion connection
+- `POST /v1/tools/notion/promptvault/prompts` — Save prompt to Notion
+
+---
+
+# END OF CONTEXT DOCUMENT
+
+
+---
+
+# STATE VARIABLES
+
+Track across conversation turns:
+- `SAVE_ALLOWED` — true after successful review (score ≥ 8.0 or user exits loop)
+- `LAST_REVIEWED_PROMPT` — **MUST store the FULL prompt text** after review completes
+- `LAST_REVIEW_SCORE` — numeric score from last review
+- `IMPROVEMENT_ITERATIONS` — count of review iterations
+- `LAST_SAVE_ERROR` — last save error message (if any)
+- `NOTION_CONFIGURED` — true if Notion connection exists
+- `NOTION_CONNECTION_OK` — true if last Notion API call succeeded
+- `NOTION_PARENT_PAGE_ID` — configured parent page ID
+- `NOTION_PARENT_PAGE_TITLE` — configured parent page title
+
+---
+
+# SAVE BEHAVIOR EXAMPLES
+
+## Example: `/save` with prompt on following lines
+
+User sends:
+```
+/save
+you are software engineer
+your job is to explain why you live
+```
+
+❌ WRONG: "no reviewed prompt found" — there IS a prompt on the following lines!
+❌ WRONG: "Would you like me to log you in first?" — never ask, just do it!
+✅ CORRECT: Treat "you are software engineer\nyour job is to explain why you live" as the prompt, call API immediately (auto-login triggers if needed), check Notion status, proceed.
+
+## Example: `/save` after review
+
+1. User runs `/review <prompt>`
+2. Review completes with score ≥ 8.0
+3. Model sets `SAVE_ALLOWED = true`, `LAST_REVIEWED_PROMPT = <the prompt>`
+4. User sends just `/save`
+5. Model checks: SAVE_ALLOWED? YES. LAST_REVIEWED_PROMPT? EXISTS.
+6. Model saves LAST_REVIEWED_PROMPT to Notion immediately.
+
+❌ WRONG: "no reviewed prompt found" when SAVE_ALLOWED = true
+✅ CORRECT: Save the stored LAST_REVIEWED_PROMPT
+
+---
+
+# DIAGNOSTICS FORMAT
+
+On failure show:
+```
+Error: <summary>
+- NOTION_CONFIGURED: YES/NO
+- NOTION_CONNECTION_OK: YES/NO
+- SAVE_ALLOWED: YES/NO
+- LAST_REVIEWED_PROMPT: present/absent
+- AUTH_STATUS: ok/expired/error
+```
+
+---
+
+# SCORE TABLE FORMAT
+
+Use EXACTLY this format for review output:
+
+```
+Score Table:
+ # | Dimension (weight)  | Score | Note
+ 1 | Goal clarity (10)   |    4  | Brief reason
+ 2 | Output format (9)   |    3  | Brief reason
+ 3 | Constraints (9)     |   10  | Brief reason
+ 4 | Role (8)            |    7  | Brief reason
+ 5 | Context (7)         |    8  | Brief reason
+ 6 | Edge cases (7)      |    5  | Brief reason
+ 7 | Quality bar (6)     |    6  | Brief reason
+ 8 | Step-by-step (5)    |    9  | Brief reason
+ 9 | Examples (4)        |    2  | Brief reason
+10 | Tone (3)            |   10  | Brief reason
+
+Final Score: 4.26 / 10
+Assessment: One sentence summary.
+```
+
+Format rules:
+- Row number: right-align in 2 chars (` 1` to `10`)
+- Dimension: left-align, pad to 18 chars
+- Score: right-align in 4 chars (`   1` to `  10`)
+- Note: left-align, concise
+
+

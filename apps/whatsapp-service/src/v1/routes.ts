@@ -4,6 +4,9 @@ import { webhookVerifyQuerySchema, type WebhookPayload } from './schemas.js';
 import { validateWebhookSignature, SIGNATURE_HEADER } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
+import { ProcessWhatsAppWebhookUseCase } from '@praxos/domain-inbox';
+import { NotionInboxNotesRepository } from '@praxos/infra-notion';
+import { sendWhatsAppMessage } from '../whatsappClient.js';
 
 /**
  * Handle Zod validation errors.
@@ -46,6 +49,91 @@ function extractPhoneNumberId(payload: unknown): string | null {
         const value = (change as { value: { metadata?: { phone_number_id?: string } } }).value;
         if (value.metadata?.phone_number_id !== undefined) {
           return value.metadata.phone_number_id;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract sender phone number from webhook payload if available.
+ */
+function extractSenderPhoneNumber(payload: unknown): string | null {
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'entry' in payload &&
+    Array.isArray((payload as { entry: unknown }).entry)
+  ) {
+    const entry = (payload as { entry: unknown[] }).entry[0];
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      'changes' in entry &&
+      Array.isArray((entry as { changes: unknown }).changes)
+    ) {
+      const change = (entry as { changes: unknown[] }).changes[0];
+      if (
+        typeof change === 'object' &&
+        change !== null &&
+        'value' in change &&
+        typeof (change as { value: unknown }).value === 'object' &&
+        (change as { value: unknown }).value !== null
+      ) {
+        const value = (change as { value: { messages?: { from?: string }[] } }).value;
+        if (
+          value.messages !== undefined &&
+          Array.isArray(value.messages) &&
+          value.messages.length > 0
+        ) {
+          const message = value.messages[0];
+          if (message !== undefined && typeof message.from === 'string') {
+            return message.from;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract message ID from webhook payload if available.
+ * Used for creating message replies (context).
+ */
+function extractMessageId(payload: unknown): string | null {
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'entry' in payload &&
+    Array.isArray((payload as { entry: unknown }).entry)
+  ) {
+    const entry = (payload as { entry: unknown[] }).entry[0];
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      'changes' in entry &&
+      Array.isArray((entry as { changes: unknown }).changes)
+    ) {
+      const change = (entry as { changes: unknown[] }).changes[0];
+      if (
+        typeof change === 'object' &&
+        change !== null &&
+        'value' in change &&
+        typeof (change as { value: unknown }).value === 'object' &&
+        (change as { value: unknown }).value !== null
+      ) {
+        const value = (change as { value: { messages?: { id?: string }[] } }).value;
+        if (
+          value.messages !== undefined &&
+          Array.isArray(value.messages) &&
+          value.messages.length > 0
+        ) {
+          const message = value.messages[0];
+          if (message !== undefined && typeof message.id === 'string') {
+            return message.id;
+          }
         }
       }
     }
@@ -210,19 +298,136 @@ export function createV1Routes(config: Config): FastifyPluginCallback {
         // Extract phone number ID from payload
         const phoneNumberId = extractPhoneNumberId(request.body);
 
-        // Persist webhook event
-        const { webhookEventRepository } = getServices();
+        // Persist webhook event with initial PENDING status
+        const { webhookEventRepository, userMappingRepository, notionConnectionRepository } =
+          getServices();
         const saveResult = await webhookEventRepository.saveEvent({
           payload: request.body,
           signatureValid: true,
           receivedAt: new Date().toISOString(),
           phoneNumberId,
+          status: 'PENDING',
         });
 
         if (!saveResult.ok) {
           // Log error but still return 200 to prevent Meta retries
           request.log.error({ error: saveResult.error }, 'Failed to persist webhook event');
+          return await reply.ok({ received: true });
         }
+
+        const savedEvent = saveResult.value;
+
+        // Process webhook asynchronously (don't block the response)
+        // Fire and forget - errors are logged and stored in the event record
+        void (async (): Promise<void> => {
+          try {
+            // Find user by phone number to get their Notion config
+            const fromNumber = extractSenderPhoneNumber(request.body);
+            if (fromNumber === null) {
+              // No sender phone number, will be handled as IGNORED by use case
+              request.log.debug({ eventId: savedEvent.id }, 'No sender phone number found');
+            }
+
+            // Get user mapping and Notion config
+            let notionToken: string | undefined;
+            let inboxNotesDbId: string | undefined;
+
+            if (fromNumber !== null) {
+              const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
+              if (userIdResult.ok && userIdResult.value !== null) {
+                const userId = userIdResult.value;
+
+                // Get WhatsApp mapping for inbox notes DB ID
+                const mappingResult = await userMappingRepository.getMapping(userId);
+                if (mappingResult.ok && mappingResult.value !== null) {
+                  inboxNotesDbId = mappingResult.value.inboxNotesDbId;
+                }
+
+                // Get Notion token
+                const tokenResult = await notionConnectionRepository.getToken(userId);
+                if (tokenResult.ok && tokenResult.value !== null) {
+                  notionToken = tokenResult.value;
+                }
+              }
+            }
+
+            // Create Notion repository if we have the config
+            let inboxNotesRepo = null;
+            if (notionToken !== undefined && inboxNotesDbId !== undefined) {
+              inboxNotesRepo = new NotionInboxNotesRepository({
+                token: notionToken,
+                databaseId: inboxNotesDbId,
+              });
+            }
+
+            // Create and execute the use case
+            // Note: If inboxNotesRepo is null, the use case will handle it as a FAILED status
+            const useCase = new ProcessWhatsAppWebhookUseCase(
+              { allowedPhoneNumberIds: config.allowedPhoneNumberIds },
+              webhookEventRepository,
+              userMappingRepository,
+              inboxNotesRepo as never // Type assertion needed due to null case
+            );
+
+            const result = await useCase.execute(
+              savedEvent.id,
+              request.body as unknown as Parameters<typeof useCase.execute>[1]
+            );
+
+            if (!result.ok) {
+              request.log.error(
+                { error: result.error, eventId: savedEvent.id },
+                'Webhook processing failed'
+              );
+            } else {
+              request.log.info(
+                { status: result.value.status, eventId: savedEvent.id },
+                'Webhook processed'
+              );
+
+              // Send confirmation message if successfully processed
+              if (result.value.status === 'PROCESSED' && fromNumber !== null) {
+                const originalMessageId = extractMessageId(request.body);
+                const phoneNumberId = extractPhoneNumberId(request.body);
+
+                if (phoneNumberId !== null) {
+                  const sendResult = await sendWhatsAppMessage(
+                    phoneNumberId,
+                    fromNumber,
+                    'Message added to the processing queue',
+                    config.accessToken,
+                    originalMessageId ?? undefined
+                  );
+
+                  if (sendResult.success) {
+                    request.log.info(
+                      {
+                        eventId: savedEvent.id,
+                        messageId: sendResult.messageId,
+                        recipient: fromNumber,
+                      },
+                      'Sent confirmation message'
+                    );
+                  } else {
+                    request.log.error(
+                      {
+                        eventId: savedEvent.id,
+                        error: sendResult.error,
+                        recipient: fromNumber,
+                      },
+                      'Failed to send confirmation message'
+                    );
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            request.log.error(
+              { error, eventId: savedEvent.id },
+              'Unexpected error during webhook processing'
+            );
+          }
+        })();
 
         return await reply.ok({ received: true });
       }

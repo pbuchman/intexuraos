@@ -10,7 +10,6 @@
   "references": [
     { "path": "../../packages/common" },
     { "path": "../../packages/domain/promptvault" },
-    { "path": "../../packages/domain/actions" },
     { "path": "../../packages/infra/notion" },
     { "path": "../../packages/infra/firestore" }
   ]

@@ -3,6 +3,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
+import fastifyFormbody from '@fastify/formbody';
 import { praxosFastifyPlugin } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { v1AuthRoutes } from './v1/routes.js';
@@ -105,6 +106,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
   return {
     openapi: {
+      openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
         description: 'PraxOS Authentication Service - Device Authorization Flow helpers',
@@ -205,6 +207,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     origin: true,
     methods: ['GET', 'HEAD', 'OPTIONS'],
   });
+
+  // Support application/x-www-form-urlencoded (OAuth2 standard)
+  await app.register(fastifyFormbody);
 
   await app.register(praxosFastifyPlugin);
 

@@ -23,6 +23,7 @@
     "@praxos/common": "*",
     "@praxos/domain-identity": "*",
     "@praxos/domain-promptvault": "*",
+    "@praxos/domain-inbox": "*",
     "@google-cloud/firestore": "^7.10.0"
   }
 }

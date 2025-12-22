@@ -56,6 +56,22 @@ export const refreshTokenRequestSchema = z.object({
 export type RefreshTokenRequest = z.infer<typeof refreshTokenRequestSchema>;
 
 /**
+ * POST /v1/auth/oauth/token
+ * OAuth2 token endpoint for ChatGPT Actions (Authorization Code flow).
+ */
+export const oauthTokenRequestSchema = z.object({
+  grant_type: z.enum(['authorization_code', 'refresh_token']),
+  code: z.string().optional(), // Required for authorization_code grant
+  redirect_uri: z.string().url().optional(), // Required for authorization_code grant
+  refresh_token: z.string().optional(), // Required for refresh_token grant
+  client_id: z.string().min(1, 'client_id is required'),
+  client_secret: z.string().min(1, 'client_secret is required'),
+  code_verifier: z.string().optional(), // PKCE support
+});
+
+export type OAuthTokenRequest = z.infer<typeof oauthTokenRequestSchema>;
+
+/**
  * GET /v1/auth/config
  * Non-secret auth configuration for troubleshooting.
  */

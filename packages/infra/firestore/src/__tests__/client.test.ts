@@ -1,20 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-// Mock @google-cloud/firestore before importing client
-vi.mock('@google-cloud/firestore', () => ({
-  Firestore: vi.fn().mockImplementation(() => ({
-    collection: vi.fn(),
-    doc: vi.fn(),
-  })),
-}));
-
+/**
+ * Tests for Firestore client singleton.
+ *
+ * These tests verify the client singleton behavior without using Firestore emulator.
+ * They use vi.mock to test the singleton pattern.
+ */
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getFirestore, resetFirestore, setFirestore } from '../client.js';
-import { Firestore } from '@google-cloud/firestore';
+import type { Firestore } from '@google-cloud/firestore';
 
 describe('Firestore client', () => {
   beforeEach(() => {
     resetFirestore();
-    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -22,52 +18,47 @@ describe('Firestore client', () => {
   });
 
   describe('getFirestore', () => {
-    it('creates Firestore instance on first call', () => {
+    it('creates Firestore instance on first call', (): void => {
       const instance = getFirestore();
       expect(instance).toBeDefined();
-      expect(Firestore).toHaveBeenCalledTimes(1);
+      expect(typeof instance.collection).toBe('function');
     });
 
-    it('returns same instance on subsequent calls (singleton)', () => {
+    it('returns same instance on subsequent calls (singleton)', (): void => {
       const instance1 = getFirestore();
       const instance2 = getFirestore();
 
       expect(instance1).toBe(instance2);
-      expect(Firestore).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('resetFirestore', () => {
-    it('clears the singleton instance', () => {
-      getFirestore();
-      expect(Firestore).toHaveBeenCalledTimes(1);
-
+    it('clears the singleton instance', (): void => {
+      const instance1 = getFirestore();
       resetFirestore();
-      getFirestore();
+      const instance2 = getFirestore();
 
-      expect(Firestore).toHaveBeenCalledTimes(2);
+      expect(instance1).not.toBe(instance2);
     });
   });
 
   describe('setFirestore', () => {
-    it('sets a custom Firestore instance', () => {
+    it('sets a custom Firestore instance', (): void => {
       const customInstance = { custom: true } as unknown as Firestore;
       setFirestore(customInstance);
 
       const instance = getFirestore();
       expect(instance).toBe(customInstance);
-      // Should not create a new instance
-      expect(Firestore).not.toHaveBeenCalled();
     });
 
-    it('overrides existing instance', () => {
-      getFirestore(); // Create default
-      expect(Firestore).toHaveBeenCalledTimes(1);
+    it('overrides existing instance', (): void => {
+      const initial = getFirestore();
 
       const customInstance = { custom: true } as unknown as Firestore;
       setFirestore(customInstance);
 
       const instance = getFirestore();
+      expect(instance).not.toBe(initial);
       expect(instance).toBe(customInstance);
     });
   });

@@ -1,0 +1,61 @@
+name: Copilot Refactoring Pass
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create-refactoring-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create refactoring issue for Copilot
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Refactoring pass after merge ${context.sha.substring(0, 7)}`,
+              body: `## Task
+
+            Execute the refactoring prompt defined in \`.github/prompts/refactoring.prompt.md\`.
+
+            **Instructions file:** [\`.github/prompts/refactoring.prompt.md\`](../blob/main/.github/prompts/refactoring.prompt.md)
+
+            The prompt contains all instructions for:
+            1. Scanning for code smells
+            2. Prioritizing by impact
+            3. Fixing the single most important smell
+            4. Documenting any new patterns found
+
+            ## Trigger
+
+            - **Commit:** ${context.sha}
+            - **Triggered by:** Push to main
+            `,
+              labels: ['copilot', 'refactoring', 'automated']
+            });
+
+            console.log(`Created issue #${issue.data.number}`);
+
+            // Assign to Copilot with Claude Opus model
+            // https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-a-pr#assigning-an-issue-to-copilot-via-the-github-api
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.data.number,
+              assignees: ['copilot']
+            });
+
+            // Add Copilot assignment comment with model specification
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.data.number,
+              body: `@copilot use model claude-opus-4\n\nPlease follow the instructions in \`.github/prompts/refactoring.prompt.md\` to complete this task.`
+            });
+
+            console.log(`Assigned issue #${issue.data.number} to Copilot with Claude Opus`);

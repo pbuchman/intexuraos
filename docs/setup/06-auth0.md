@@ -1,6 +1,9 @@
-# Auth0 Setup Guide (Updated 2025-12-19)
+# Auth0 Setup Guide (Updated 2025-12-22)
 
-This guide covers setting up Auth0 for PraxOS authentication using the Device Authorization Flow (DAF) with refresh token support for daily usage scenarios.
+This guide covers setting up Auth0 for PraxOS authentication:
+
+1. **ChatGPT Actions OAuth** — Authorization Code flow for ChatGPT custom GPTs (primary)
+2. **Device Authorization Flow** — For testing with Swagger UI and CLI tools
 
 ## Prerequisites
 
@@ -8,19 +11,23 @@ This guide covers setting up Auth0 for PraxOS authentication using the Device Au
 - `gcloud` CLI installed and authenticated
 - GCP project with Secret Manager enabled
 
-## Overview: Device Flow + Refresh Tokens
+## Overview: Two Authentication Flows
 
-PraxOS uses OAuth2 Device Authorization Flow for authentication, which is ideal for:
+### ChatGPT Actions (Production)
 
+Uses OAuth2 Authorization Code flow:
+
+- User signs in via Auth0 when first using the GPT
+- ChatGPT handles token management automatically
+- Tokens passed in Authorization header on each API call
+
+### Device Flow (Testing/Development)
+
+Uses OAuth2 Device Authorization Flow for:
+
+- Testing APIs via Swagger UI
 - CLI applications
-- IoT devices
-- API consumers that cannot easily handle browser redirects
-
-To support **daily usage without re-authentication**, we implement:
-
-- **Refresh tokens** - Long-lived tokens stored securely server-side
-- **Token rotation** - Automatic refresh token rotation for enhanced security
-- **Encrypted storage** - AES-256-GCM encryption in Firestore
+- Development and debugging
 
 ## 1. Create Auth0 Tenant
 
@@ -53,12 +60,16 @@ After creation, configure:
 
 > **Note**: Enabling "Allow Offline Access" is essential for refresh tokens. Without this, the `offline_access` scope will be ignored.
 
-## 3. Create Native Application for Device Authorization Flow
+## 3. Create Native Application (for Testing/Swagger UI)
+
+This application is for **testing APIs via Swagger UI** and CLI tools using Device Authorization Flow.
+
+> **Note**: For ChatGPT Actions, skip to Section 3b.
 
 1. Go to **Applications** → **Applications**
 2. Click **Create Application**
 3. Configure:
-   - **Name**: `PraxOS CLI`
+   - **Name**: `PraxOS CLI / Swagger UI`
    - **Type**: `Native`
 4. Click **Create**
 
@@ -102,9 +113,95 @@ There is no separate tenant-level setting required. If you enabled "Device Code"
 
 To verify:
 
-1. Go to **Applications** → **Applications** → **PraxOS CLI**
+1. Go to **Applications** → **Applications** → **PraxOS CLI / Swagger UI**
 2. Go to **Settings** → **Advanced Settings** → **Grant Types**
 3. Confirm **Device Code** is checked
+
+## 3b. Create Regular Web Application (for ChatGPT Actions)
+
+This application enables OAuth for ChatGPT custom GPTs.
+
+1. Go to **Applications** → **Applications**
+2. Click **Create Application**
+3. Configure:
+   - **Name**: `ChatGPT Notion Prompt Vault` (or your GPT name)
+   - **Type**: `Regular Web Application`
+4. Click **Create**
+
+### Application Settings
+
+1. Go to **Settings** tab
+2. Note the **Client ID** and **Client Secret** (needed for ChatGPT)
+3. Scroll to **Application URIs**:
+   - **Allowed Callback URLs**: `https://chat.openai.com/aip/g-YOURGPTID/oauth/callback`
+   - **Allowed Logout URLs**: `https://chat.openai.com`
+   - **Allowed Web Origins**: `https://chat.openai.com`
+
+> **Note**: Replace `g-YOURGPTID` with your actual GPT ID. You can find this after creating your GPT in ChatGPT.
+
+4. Scroll to **Credentials**:
+   - **Token Endpoint Authentication Method**: `Post` (required for ChatGPT)
+
+5. Scroll to **Advanced Settings** → **Grant Types**
+6. Enable:
+   - [x] **Authorization Code**
+   - [x] **Refresh Token**
+7. Click **Save Changes**
+
+### Configure ChatGPT Action Authentication
+
+In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
+
+| Field                     | Value                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| **Authentication Type**   | `OAuth`                                                                       |
+| **Client ID**             | From Auth0 → Your App → Settings → Client ID                                  |
+| **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                              |
+| **Authorization URL**     | `https://praxos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
+| **Token URL**             | `https://praxos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/token`     |
+| **Scope**                 | `openid profile email offline_access`                                         |
+| **Token Exchange Method** | `Default (POST request)`                                                      |
+
+> **Important**: Both Authorization URL and Token URL must be on the same root domain as your API.
+> The auth-service `/authorize` endpoint redirects to Auth0 to satisfy ChatGPT's domain requirement.
+
+### Update Callback URL After GPT Creation
+
+After creating your GPT:
+
+1. Copy the callback URL from ChatGPT's OAuth configuration
+2. Go back to Auth0 → Your ChatGPT Application → Settings
+3. Update **Allowed Callback URLs** with the actual URL
+4. Save changes
+
+> **Getting the Callback URL from ChatGPT:**
+>
+> 1. In GPT Builder, go to **Configure** → **Actions**
+> 2. Click on your action's **Authentication** settings
+> 3. After selecting OAuth and filling in the fields, ChatGPT shows the callback URL
+> 4. It looks like: `https://chat.openai.com/aip/g-XXXXXXXXX/oauth/callback`
+> 5. Copy this exact URL to Auth0's Allowed Callback URLs
+
+### Troubleshooting: "Callback URL mismatch"
+
+If you see this error from Auth0:
+
+```
+Callback URL mismatch.
+The provided redirect_uri is not in the list of allowed callback URLs.
+```
+
+**Fix:**
+
+1. Go to Auth0 Dashboard → Applications → Your ChatGPT Application
+2. In **Settings** → **Application URIs** → **Allowed Callback URLs**
+3. Add the exact callback URL from ChatGPT (see above)
+4. Common formats:
+   - `https://chat.openai.com/aip/g-XXXXXXXXX/oauth/callback`
+   - `https://chatgpt.com/aip/g-XXXXXXXXX/oauth/callback`
+5. You can add multiple URLs (one per line) if needed
+6. Click **Save Changes**
+7. Retry the OAuth flow in ChatGPT
 
 ## 5. Find Issuer and JWKS URL
 
@@ -545,14 +642,20 @@ Before going to production:
 - [ ] Test full flow: auth → daily refresh → idle expiry
 - [ ] Document token revocation process for security incidents
 
-## 15. References (2025-12-19)
+## 15. References (2025-12-22)
 
 Official Auth0 documentation references:
 
-- [Device Authorization Flow](https://auth0.com/docs/get-started/authentication-and-authorization-flow/device-authorization-flow) - Latest device flow implementation
+- [Authorization Code Flow](https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow) - OAuth flow for ChatGPT Actions
+- [Device Authorization Flow](https://auth0.com/docs/get-started/authentication-and-authorization-flow/device-authorization-flow) - Device flow for testing/CLI
 - [Refresh Tokens](https://auth0.com/docs/secure/tokens/refresh-tokens) - Refresh token concepts and best practices
 - [Refresh Token Rotation](https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation) - Automatic rotation for enhanced security
-- [Native Applications](https://auth0.com/docs/get-started/applications/application-types#native-applications) - Native app (no client secret)
+- [Regular Web Applications](https://auth0.com/docs/get-started/applications/application-types#regular-web-applications) - Web app (with client secret) for ChatGPT
+- [Native Applications](https://auth0.com/docs/get-started/applications/application-types#native-applications) - Native app (no client secret) for testing
 - [offline_access Scope](https://auth0.com/docs/get-started/apis/scopes/openid-connect-scopes#offline-access) - Required for refresh tokens
 
-All references verified as current on 2025-12-19.
+ChatGPT Actions references:
+
+- [ChatGPT Actions OAuth](https://platform.openai.com/docs/actions/authentication/oauth) - Official ChatGPT OAuth documentation
+
+All references verified as current on 2025-12-22.

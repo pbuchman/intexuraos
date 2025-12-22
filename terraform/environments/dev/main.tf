@@ -282,8 +282,10 @@ module "whatsapp_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
 
   secrets = {
-    PRAXOS_WHATSAPP_VERIFY_TOKEN = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_VERIFY_TOKEN"]
-    PRAXOS_WHATSAPP_APP_SECRET   = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_APP_SECRET"]
+    PRAXOS_WHATSAPP_VERIFY_TOKEN    = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_VERIFY_TOKEN"]
+    PRAXOS_WHATSAPP_APP_SECRET      = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_APP_SECRET"]
+    PRAXOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_ACCESS_TOKEN"]
+    PRAXOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_PHONE_NUMBER_ID"]
   }
 
   depends_on = [

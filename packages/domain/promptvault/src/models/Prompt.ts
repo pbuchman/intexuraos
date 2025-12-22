@@ -18,6 +18,8 @@ export interface Prompt {
   title: string;
   /** The prompt content/text */
   content: string;
+  /** URL to view the prompt in the storage system (e.g., Notion) */
+  url?: string | undefined;
   /** ISO timestamp when created (if available) */
   createdAt?: string | undefined;
   /** ISO timestamp when last updated (if available) */

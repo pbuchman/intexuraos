@@ -40,7 +40,7 @@ Operations should be safe to retry. Running the same action twice with the same 
 │  └─────────────┘  └─────────────┘  └─────────────────┘  │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │                 Domain Layer                        ││
-│  │  identity │ promptvault │ actions                   ││
+│  │  identity │ promptvault │ inbox                     ││
 │  └─────────────────────────────────────────────────────┘│
 │  ┌─────────────────────────────────────────────────────┐│
 │  │              Infrastructure Layer                   ││

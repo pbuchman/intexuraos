@@ -54,10 +54,14 @@ export class FirestoreAuthTokenRepository implements AuthTokenRepository {
         userId,
         refreshToken: encryptedRefreshToken,
         expiresAt,
-        scope: tokens.scope,
         createdAt: existingData?.createdAt ?? now,
         updatedAt: now,
       };
+
+      // Only add scope if defined (Firestore doesn't accept undefined values)
+      if (tokens.scope !== undefined) {
+        doc.scope = tokens.scope;
+      }
 
       await docRef.set(doc);
 

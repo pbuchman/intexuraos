@@ -1,84 +1,127 @@
-You are performing a **repository-wide refactoring pass**.
+You are performing a **code smell detection and fix pass**.
 
-================================================================================
-PREREQUISITES
-================================================================================
+---
 
-**You MUST read these files first — they contain all coding rules:**
+## Goal
 
-- `.github/copilot-instructions.md` — global rules
-- `.github/instructions/apps.instructions.md` — apps (e.g., auth-service, notion-gpt-service) rules
-- `.github/instructions/packages.instructions.md` — packages (common/domain/infra) rules
-- `.github/instructions/terraform.instructions.md` — terraform rules
+Detect code smells in the codebase, prioritize by impact, and fix the single most important one.
 
-This prompt provides **execution strategy only**. Do not duplicate rules from above files.
+---
 
-================================================================================
-EXECUTION STRATEGY
-================================================================================
+## Prerequisites
 
-## Phase 1: Analysis (do first)
+**Read `.github/copilot-instructions.md` first.** It contains:
 
-1. Run coverage: `npm run test:coverage`
-2. Identify files with <50% coverage or 0% coverage.
-3. List duplicated patterns across files.
-4. Note any boundary violations or architectural inconsistencies.
+- **Code Smells (Fix & Document)** section — known bad patterns to scan for
+- Architecture and import hierarchy rules
+- TypeScript patterns to enforce
 
-## Phase 2: Prioritization
+This prompt adds detection strategy. Do not duplicate rules from copilot-instructions.
 
-Refactor in this order (highest impact first):
+---
 
-1. **Dead code removal** — quick wins, reduces noise.
-2. **Duplicated logic extraction** — consolidate before adding tests.
-3. **Test coverage gaps** — focus on business logic, domain, infra.
-4. **Boundary violations** — enforce layer separation (common/domain/infra/apps).
-5. **Pattern inconsistencies** — service organization, error handling.
+## Phase 1: Scan for Code Smells
 
-## Phase 3: Execution
+Scan the codebase for these smell categories (in priority order):
 
-For each change:
+| Priority | Smell Category             | Detection Method                                         |
+| -------- | -------------------------- | -------------------------------------------------------- |
+| P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"    |
+| P1       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code |
+| P2       | **Duplicated logic**       | Same logic in 2+ places (copy-paste)                     |
+| P3       | **Boundary violations**    | Domain importing infra, common importing domain          |
+| P4       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers     |
+| P5       | **Missing error handling** | Unhandled promise rejections, empty catch blocks         |
+| P6       | **Inconsistent patterns**  | Mixed styles for same concern across files               |
 
-1. Make the change.
-2. Run `npm run typecheck && npm run lint && npm run test`.
-3. If tests fail, fix before proceeding.
-4. Commit logical units separately.
-
-## Phase 4: Verification
-
-**MANDATORY before claiming task complete:**
+**Scan commands:**
 
 ```bash
-npm run ci   # runs all checks: lint, verify scripts, format, typecheck, test, build
+npm run lint                    # ESLint catches many smells
+npm run verify:boundaries       # Boundary violations
+npm run test:coverage           # Low coverage may indicate dead code
 ```
 
-**Do not claim "done" until `npm run ci` passes.**
-
-For Terraform (if touched):
+**Manual grep patterns:**
 
 ```bash
-cd terraform && terraform fmt -check -recursive && terraform validate
+grep -rn "catch {}" packages/ apps/           # Empty catch
+grep -rn "@ts-ignore" packages/ apps/         # Suppressed errors
+grep -rn "// TODO" packages/ apps/            # Deferred work
+grep -rn "as any" packages/ apps/             # Type escapes
 ```
 
-================================================================================
-DECISION RULES
-================================================================================
+---
 
-When uncertain:
+## Phase 2: Prioritize Findings
 
-| Situation                       | Decision                                                   |
-| ------------------------------- | ---------------------------------------------------------- |
-| Extract utility or keep inline? | Extract if used 2+ times                                   |
-| Add test or skip?               | Add if logic has branches or error paths                   |
-| Fix now or defer?               | Fix if <5 min, otherwise create TODO with issue reference  |
-| Which layer for logic?          | Domain for business logic, Infra for external integrations |
+Create a prioritized list:
 
-================================================================================
-OUTPUT
-================================================================================
+```markdown
+## Code Smell Findings
 
-After completing refactoring, summarize:
+| #   | Priority | File:Line | Smell                       | Impact | Fix Effort |
+| --- | -------- | --------- | --------------------------- | ------ | ---------- |
+| 1   | P0       | path:123  | Silent catch without reason | High   | 5 min      |
+| 2   | P1       | path:456  | Unused export               | Medium | 2 min      |
 
-1. **Changes made** — list of refactored areas
-2. **Coverage delta** — before/after comparison
-3. **Deferred items** — TODOs created with issue references
-4. **Risks** — anything requiring follow-up attention
+...
+```
+
+**Prioritization criteria:**
+
+1. **Impact**: How much does it hurt maintainability/correctness?
+2. **Effort**: How long to fix properly?
+3. **Risk**: Could the fix introduce bugs?
+
+Pick **one smell** to fix — the highest-impact item that can be fixed safely.
+
+---
+
+## Phase 3: Fix the Top Smell
+
+1. Make the fix.
+2. Run `npm run ci` — must pass.
+3. If this is a **new smell pattern** not in copilot-instructions:
+   - Add it to the "Code Smells (Fix & Document)" section.
+   - Include ❌ bad example and ✅ good example.
+
+---
+
+## Phase 4: Output
+
+Use `show_content` tool with this structure:
+
+```markdown
+## Code Smell Report
+
+### Scan Summary
+
+- Files scanned: X
+- Smells found: Y
+- Top priority: [description]
+
+### Prioritized Findings
+
+[table from Phase 2]
+
+### Fixed
+
+- **Smell**: [name]
+- **Location**: [file:line]
+- **Fix**: [brief description]
+- **New pattern added**: Yes/No (if yes, link to copilot-instructions update)
+
+### Remaining (for future passes)
+
+[list top 3 unfixed items]
+```
+
+---
+
+## Rules
+
+- Fix **one smell per pass** — keeps changes reviewable.
+- **Always update copilot-instructions** when fixing a new pattern type.
+- **Never claim done** until `npm run ci` passes.
+- If no smells found, report clean scan.
