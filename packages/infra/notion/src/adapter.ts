@@ -14,6 +14,7 @@ import type {
   NotionErrorCode,
   CreatePromptVaultNoteParams,
 } from '@praxos/domain-promptvault';
+import { splitTextIntoChunks, joinTextChunks } from './textChunker.js';
 
 /**
  * Logger interface for Notion API calls.
@@ -323,6 +324,19 @@ export class NotionApiAdapter implements NotionApiPort {
     try {
       const client = createNotionClient(token, this.logger);
 
+      // Split prompt into chunks that fit within Notion's 2000-char limit
+      const promptChunks = splitTextIntoChunks(prompt);
+
+      // Build code blocks for each chunk
+      const codeBlocks = promptChunks.map((chunk) => ({
+        object: 'block' as const,
+        type: 'code' as const,
+        code: {
+          rich_text: [{ type: 'text' as const, text: { content: chunk } }],
+          language: 'markdown' as const,
+        },
+      }));
+
       const response = await client.pages.create({
         parent: { page_id: parentPageId },
         properties: {
@@ -338,14 +352,7 @@ export class NotionApiAdapter implements NotionApiPort {
               rich_text: [{ type: 'text', text: { content: 'Prompt' } }],
             },
           },
-          {
-            object: 'block',
-            type: 'code',
-            code: {
-              rich_text: [{ type: 'text', text: { content: prompt } }],
-              language: 'markdown',
-            },
-          },
+          ...codeBlocks,
           {
             object: 'block',
             type: 'heading_2',
@@ -451,24 +458,53 @@ export class NotionApiAdapter implements NotionApiPort {
         url,
       };
 
-      // Get blocks to extract prompt content from code block
+      // Get blocks to extract prompt content from code block(s)
       const blocksResponse = await client.blocks.children.list({
         block_id: pageId,
         page_size: 50,
       });
 
-      let promptContent = '';
+      // Collect all code blocks (prompt may be split across multiple blocks)
+      const codeBlockContents: string[] = [];
+      let foundHeading = false;
+      let passedPromptHeading = false;
 
-      // Find the code block and extract its content
       for (const block of blocksResponse.results) {
-        if (isBlockWithType(block) && block.type === 'code') {
-          const codeBlock = block.code as { rich_text?: { plain_text?: string }[] };
-          if (codeBlock.rich_text !== undefined) {
-            promptContent = codeBlock.rich_text.map((t) => t.plain_text ?? '').join('');
-            break; // Take the first code block
+        if (isBlockWithType(block)) {
+          // Track if we've passed the "Prompt" heading
+          if (block.type === 'heading_2') {
+            const heading = block.heading_2 as { rich_text?: { plain_text?: string }[] };
+            const headingText = heading.rich_text?.map((t) => t.plain_text ?? '').join('') ?? '';
+            if (headingText === 'Prompt') {
+              foundHeading = true;
+              passedPromptHeading = true;
+              continue;
+            }
+            // Stop collecting if we hit another heading (e.g., "Meta")
+            if (passedPromptHeading && headingText !== 'Prompt') {
+              break;
+            }
+          }
+
+          // Collect code blocks after "Prompt" heading (or all code blocks if no heading found)
+          if (block.type === 'code') {
+            const codeBlock = block.code as { rich_text?: { plain_text?: string }[] };
+            if (codeBlock.rich_text !== undefined) {
+              const content = codeBlock.rich_text.map((t) => t.plain_text ?? '').join('');
+              if (content.length > 0) {
+                codeBlockContents.push(content);
+              }
+            }
+            // If we haven't found a heading structure, just take first code block
+            if (!foundHeading) {
+              break;
+            }
           }
         }
       }
+
+      // Join all code block contents back together
+      const promptContent = joinTextChunks(codeBlockContents);
 
       return ok({
         page,
@@ -503,30 +539,124 @@ export class NotionApiAdapter implements NotionApiPort {
 
       // Update code block content if provided
       if (update.promptContent !== undefined) {
-        // Get blocks to find the code block
+        // Get blocks to find existing code blocks
         const blocksResponse = await client.blocks.children.list({
           block_id: pageId,
           page_size: 50,
         });
 
-        let codeBlockId: string | null = null;
+        // Find all existing code block IDs and the position to insert new blocks
+        const codeBlockIds: string[] = [];
+        let promptHeadingId: string | null = null;
 
         for (const block of blocksResponse.results) {
-          if (isBlockWithType(block) && block.type === 'code') {
-            codeBlockId = block.id;
-            break;
+          if (isBlockWithType(block)) {
+            if (block.type === 'heading_2') {
+              const heading = block.heading_2 as { rich_text?: { plain_text?: string }[] };
+              const headingText = heading.rich_text?.map((t) => t.plain_text ?? '').join('') ?? '';
+              if (headingText === 'Prompt') {
+                promptHeadingId = block.id;
+              }
+              // Note: "Meta" heading is used to know when to stop reading code blocks,
+              // but we don't need to track its ID for updates
+            } else if (block.type === 'code') {
+              codeBlockIds.push(block.id);
+            }
           }
         }
 
-        if (codeBlockId !== null) {
-          // Update existing code block
-          await client.blocks.update({
-            block_id: codeBlockId,
-            code: {
-              rich_text: [{ type: 'text', text: { content: update.promptContent } }],
-              language: 'markdown',
-            },
-          });
+        // Split the new content into chunks
+        const newChunks = splitTextIntoChunks(update.promptContent);
+        const firstChunk = newChunks[0] ?? '';
+
+        // Strategy: Update first block, delete extra old blocks, append new blocks if needed
+        if (codeBlockIds.length > 0) {
+          const firstBlockId = codeBlockIds[0];
+          if (firstBlockId !== undefined) {
+            // Update the first code block with first chunk
+            await client.blocks.update({
+              block_id: firstBlockId,
+              code: {
+                rich_text: [{ type: 'text', text: { content: firstChunk } }],
+                language: 'markdown',
+              },
+            });
+          }
+
+          // Delete extra old code blocks if we have fewer chunks now
+          for (let i = 1; i < codeBlockIds.length; i++) {
+            const blockId = codeBlockIds[i];
+            if (blockId === undefined) continue;
+
+            if (i >= newChunks.length) {
+              await client.blocks.delete({ block_id: blockId });
+            } else {
+              const chunkContent = newChunks[i] ?? '';
+              // Update existing block with new chunk
+              await client.blocks.update({
+                block_id: blockId,
+                code: {
+                  rich_text: [{ type: 'text', text: { content: chunkContent } }],
+                  language: 'markdown',
+                },
+              });
+            }
+          }
+
+          // Append new code blocks if we have more chunks than existing blocks
+          if (newChunks.length > codeBlockIds.length) {
+            const lastCodeBlockId = codeBlockIds[codeBlockIds.length - 1];
+            for (let i = codeBlockIds.length; i < newChunks.length; i++) {
+              const chunkContent = newChunks[i] ?? '';
+              const appendParams: {
+                block_id: string;
+                children: {
+                  object: 'block';
+                  type: 'code';
+                  code: {
+                    rich_text: { type: 'text'; text: { content: string } }[];
+                    language: 'markdown';
+                  };
+                }[];
+                after?: string;
+              } = {
+                block_id: pageId,
+                children: [
+                  {
+                    object: 'block',
+                    type: 'code',
+                    code: {
+                      rich_text: [{ type: 'text', text: { content: chunkContent } }],
+                      language: 'markdown',
+                    },
+                  },
+                ],
+              };
+              // Only add 'after' if we have a valid block ID to insert after
+              if (i === codeBlockIds.length && lastCodeBlockId !== undefined) {
+                appendParams.after = lastCodeBlockId;
+              }
+              await client.blocks.children.append(appendParams);
+            }
+          }
+        } else if (promptHeadingId !== null) {
+          // No existing code blocks, but we have a Prompt heading - append after it
+          for (const chunk of newChunks) {
+            await client.blocks.children.append({
+              block_id: pageId,
+              children: [
+                {
+                  object: 'block',
+                  type: 'code',
+                  code: {
+                    rich_text: [{ type: 'text', text: { content: chunk } }],
+                    language: 'markdown',
+                  },
+                },
+              ],
+              after: promptHeadingId,
+            });
+          }
         }
       }
 
@@ -545,22 +675,26 @@ export class NotionApiAdapter implements NotionApiPort {
       const updatedAt =
         'last_edited_time' in pageResponse ? pageResponse.last_edited_time : undefined;
 
-      // Get current prompt content
-      const blocksResponse = await client.blocks.children.list({
+      // Get current prompt content (re-read all code blocks)
+      const finalBlocksResponse = await client.blocks.children.list({
         block_id: pageId,
         page_size: 50,
       });
 
-      let promptContent = '';
-      for (const block of blocksResponse.results) {
+      const codeBlockContents: string[] = [];
+      for (const block of finalBlocksResponse.results) {
         if (isBlockWithType(block) && block.type === 'code') {
           const codeBlock = block.code as { rich_text?: { plain_text?: string }[] };
           if (codeBlock.rich_text !== undefined) {
-            promptContent = codeBlock.rich_text.map((t) => t.plain_text ?? '').join('');
-            break;
+            const content = codeBlock.rich_text.map((t) => t.plain_text ?? '').join('');
+            if (content.length > 0) {
+              codeBlockContents.push(content);
+            }
           }
         }
       }
+
+      const promptContent = joinTextChunks(codeBlockContents);
 
       return ok({
         page: { id: pageResponse.id, title, url },

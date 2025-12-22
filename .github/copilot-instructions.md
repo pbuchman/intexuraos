@@ -210,6 +210,62 @@ The rule `@typescript-eslint/no-non-null-assertion` is enabled to prevent runtim
 The conflicting rule `@typescript-eslint/non-nullable-type-assertion-style` is disabled.
 Use `as Type` assertions when you're confident the value exists, or add runtime checks.
 
+### Forbidden: Array index access without null check
+
+```typescript
+// ❌ FORBIDDEN - noUncheckedIndexedAccess makes arr[i] return T | undefined
+const first = chunks[0];           // Type: string | undefined
+const item = chunks[i];            // Type: string | undefined
+someFunction(chunks[0]);           // Error if function expects string
+```
+
+### Allowed: Safe array access
+
+```typescript
+// ✅ PREFERRED - nullish coalescing for default value
+const first = chunks[0] ?? '';
+const item = chunks[i] ?? defaultValue;
+
+// ✅ PREFERRED - explicit undefined check
+const first = chunks[0];
+if (first !== undefined) {
+  // first is narrowed to string here
+}
+
+// ✅ PREFERRED - for loops with defined variable
+for (const chunk of chunks) {
+  // chunk is string, not string | undefined
+}
+```
+
+### Forbidden: Setting optional property to undefined
+
+```typescript
+// ❌ FORBIDDEN with exactOptionalPropertyTypes
+const params: { required: string; optional?: string } = {
+  required: 'value',
+  optional: condition ? value : undefined,  // Error!
+};
+```
+
+### Allowed: Conditionally adding optional properties
+
+```typescript
+// ✅ PREFERRED - conditionally add property
+const params: { required: string; optional?: string } = {
+  required: 'value',
+};
+if (condition && value !== undefined) {
+  params.optional = value;
+}
+
+// ✅ PREFERRED - spread with conditional
+const params = {
+  required: 'value',
+  ...(condition && value !== undefined && { optional: value }),
+};
+```
+
 ---
 
 ## ESLint Error Learning Protocol
@@ -226,14 +282,18 @@ Use `as Type` assertions when you're confident the value exists, or add runtime 
 
 **Known ESLint rules requiring specific patterns:**
 
-| Rule                            | Forbidden        | Use Instead                              |
-| ------------------------------- | ---------------- | ---------------------------------------- |
-| `no-non-null-assertion`         | `obj.prop!`      | `obj.prop as Type` or `String(obj.prop)` |
-| `return-await`                  | `return promise` | `return await promise`                   |
-| `dot-notation`                  | `obj['prop']`    | `obj.prop`                               |
-| `strict-boolean-expressions`    | `if (str)`       | `if (str !== '')`                        |
-| `prefer-nullish-coalescing`     | `x \|\| default` | `x ?? default`                           |
-| `explicit-function-return-type` | implicit returns | Add `: ReturnType`                       |
+| Rule                            | Forbidden                 | Use Instead                              |
+| ------------------------------- | ------------------------- | ---------------------------------------- |
+| `no-non-null-assertion`         | `obj.prop!`               | `obj.prop as Type` or `String(obj.prop)` |
+| `return-await`                  | `return promise`          | `return await promise`                   |
+| `dot-notation`                  | `obj['prop']`             | `obj.prop`                               |
+| `strict-boolean-expressions`    | `if (str)`                | `if (str !== '')`                        |
+| `prefer-nullish-coalescing`     | `x \|\| default`          | `x ?? default`                           |
+| `explicit-function-return-type` | implicit returns          | Add `: ReturnType`                       |
+| `array-type`                    | `Array<T>`                | `T[]`                                    |
+| `noUncheckedIndexedAccess`      | `arr[0]` as `T`           | `arr[0] ?? fallback` or check undefined  |
+| `exactOptionalPropertyTypes`    | `{ opt: undefined }`      | Omit property, don't set to undefined    |
+| `no-unused-vars`                | Declared but unused vars  | Remove the variable                      |
 
 **When you see a NEW ESLint error not in this table:**
 
