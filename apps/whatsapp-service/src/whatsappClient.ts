@@ -3,6 +3,8 @@
  * Implements the WhatsApp Business Cloud API for outbound messaging.
  */
 
+import { getErrorMessage } from '@praxos/common';
+
 /**
  * Send a text message via WhatsApp Graph API.
  *
@@ -71,10 +73,9 @@ export async function sendWhatsAppMessage(
       ...(messageId !== undefined && { messageId }),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
     return {
       success: false,
-      error: `Failed to send WhatsApp message: ${message}`,
+      error: `Failed to send WhatsApp message: ${getErrorMessage(error)}`,
     };
   }
 }

@@ -4,7 +4,7 @@
  */
 import { Client, isNotionClientError, APIErrorCode, LogLevel } from '@notionhq/client';
 import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints.js';
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage } from '@praxos/common';
 import type {
   NotionApiPort,
   NotionPage,
@@ -186,10 +186,9 @@ function mapNotionError(error: unknown): NotionError {
     };
   }
 
-  const message = error instanceof Error ? error.message : 'Unknown Notion API error';
   return {
     code: 'INTERNAL_ERROR',
-    message,
+    message: getErrorMessage(error, 'Unknown Notion API error'),
   };
 }
 
