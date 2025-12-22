@@ -4,7 +4,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
-import { praxosFastifyPlugin } from '@praxos/common';
+import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { v1AuthRoutes } from './v1/routes.js';
 
@@ -212,6 +212,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyFormbody);
 
   await app.register(praxosFastifyPlugin);
+  await app.register(fastifyAuthPlugin);
 
   // Ensure Fastify validation errors are returned in PraxOS envelope
   app.setErrorHandler(async (error, request, reply) => {

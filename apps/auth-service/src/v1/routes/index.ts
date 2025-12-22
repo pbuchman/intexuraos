@@ -8,11 +8,13 @@ import { deviceRoutes } from './deviceRoutes.js';
 import { tokenRoutes } from './tokenRoutes.js';
 import { configRoutes } from './configRoutes.js';
 import { oauthRoutes } from './oauthRoutes.js';
+import { frontendRoutes } from './frontendRoutes.js';
 
 export const v1AuthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.register(deviceRoutes);
   fastify.register(tokenRoutes);
   fastify.register(configRoutes);
   fastify.register(oauthRoutes);
+  fastify.register(frontendRoutes);
   done();
 };

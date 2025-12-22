@@ -9,6 +9,9 @@
  * GET  /v1/auth/config           → ./routes/configRoutes.ts
  * POST /v1/auth/oauth/token      → ./routes/oauthRoutes.ts
  * GET  /v1/auth/oauth/authorize  → ./routes/oauthRoutes.ts
+ * GET  /v1/auth/login            → ./routes/frontendRoutes.ts
+ * GET  /v1/auth/logout           → ./routes/frontendRoutes.ts
+ * GET  /v1/auth/me               → ./routes/frontendRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 
