@@ -25,7 +25,7 @@ This prompt adds detection strategy. Do not duplicate rules from copilot-instruc
 Scan the codebase for these smell categories (in priority order):
 
 | Priority | Smell Category             | Detection Method                                         |
-| -------- | -------------------------- | -------------------------------------------------------- |
+|----------|----------------------------|----------------------------------------------------------|
 | P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"    |
 | P1       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code |
 | P2       | **Duplicated logic**       | Same logic in 2+ places (copy-paste)                     |
@@ -83,8 +83,8 @@ Pick **one smell** to fix — the highest-impact item that can be fixed safely.
 1. Make the fix.
 2. Run `npm run ci` — must pass.
 3. If this is a **new smell pattern** not in copilot-instructions:
-   - Add it to the "Code Smells (Fix & Document)" section.
-   - Include ❌ bad example and ✅ good example.
+  - Add it to the "Code Smells (Fix & Document)" section.
+  - Include ❌ bad example and ✅ good example.
 
 ---
 

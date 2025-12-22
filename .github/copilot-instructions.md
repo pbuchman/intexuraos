@@ -40,7 +40,7 @@ docs/           → All documentation
 ## Code Rules
 
 | Rule                                | Verification            |
-| ----------------------------------- | ----------------------- |
+|-------------------------------------|-------------------------|
 | Zero `tsc` errors                   | `npm run typecheck`     |
 | Zero ESLint warnings                | `npm run lint`          |
 | 89%+ test coverage                  | `npm run test:coverage` |
@@ -156,7 +156,8 @@ async function safeFetch(url: string): Promise<Response | null> {
 
 ## Output Rules
 
-**MANDATORY:** Use `show_content` tool for non-trivial output. Never print summaries, explanations, or results directly in conversation.
+**MANDATORY:** Use `show_content` tool for non-trivial output. Never print summaries, explanations, or results directly
+in conversation.
 
 Examples of non-trivial output:
 
@@ -177,7 +178,7 @@ Use ` ```ts-example ` (not ` ```typescript `) to prevent IDE parsing errors.
 ## Path-Specific Rules
 
 | Path           | Instructions                                     | Key Verification                                    |
-| -------------- | ------------------------------------------------ | --------------------------------------------------- |
+|----------------|--------------------------------------------------|-----------------------------------------------------|
 | `apps/**`      | `.github/instructions/apps.instructions.md`      | OpenAPI at `/openapi.json`, Terraform module exists |
 | `packages/**`  | `.github/instructions/packages.instructions.md`  | Boundary rules pass                                 |
 | `terraform/**` | `.github/instructions/terraform.instructions.md` | `terraform fmt -check && terraform validate`        |
