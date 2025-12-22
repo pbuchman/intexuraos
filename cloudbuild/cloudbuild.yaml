@@ -1,5 +1,6 @@
 # PraxOS Cloud Build Configuration
 # Builds and deploys affected services on push to development branch.
+# CI checks (lint, typecheck, test) run in GitHub Actions before this.
 #
 # Substitutions are provided by the Cloud Build trigger (Terraform):
 # - _REGION: GCP region
@@ -7,71 +8,23 @@
 # - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
-  # Step 1: Show Node.js version
-  - name: 'node:22-slim'
-    id: 'node-version'
-    entrypoint: 'node'
-    args: ['--version']
-
-  # Step 2: Install dependencies
+  # Step 1: Install dependencies (needed for build)
   - name: 'node:22-slim'
     id: 'npm-ci'
     entrypoint: 'npm'
     args: ['ci']
 
-  # Step 3: Start Firestore emulator (background sidecar for tests)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'start-firestore-emulator'
-    waitFor: ['npm-ci']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        docker run -d --name firestore-emulator \
-          --network cloudbuild \
-          google/cloud-sdk:emulators \
-          gcloud emulators firestore start --host-port=0.0.0.0:8085 --project=test-project
-        # Wait for emulator to be ready
-        echo "Waiting for Firestore emulator to start..."
-        for i in {1..30}; do
-          if docker exec firestore-emulator curl -sf http://localhost:8085/ > /dev/null 2>&1; then
-            echo "Firestore emulator is ready."
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "Firestore emulator failed to start within 30s"
-        docker logs firestore-emulator
-        exit 1
-
-  # Step 4: Run CI checks (lint, typecheck, test, build)
-  # Run inside Docker on cloudbuild network to reach the Firestore emulator container
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'npm-run-ci'
-    waitFor: ['start-firestore-emulator']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        docker run --rm \
-          --network cloudbuild \
-          -v /workspace:/workspace \
-          -w /workspace \
-          -e FIRESTORE_EMULATOR_HOST=firestore-emulator:8085 \
-          -e GCLOUD_PROJECT=test-project \
-          node:22-slim \
-          npm run ci
-
-  # Step 5: Detect affected services (uses full node image for git)
+  # Step 2: Detect affected services (uses full node image for git)
   - name: 'node:22'
     id: 'detect-affected'
+    waitFor: ['npm-ci']
     entrypoint: 'node'
     args: ['cloudbuild/scripts/detect-affected.mjs']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
 
-  # Step 6: Build auth-service Docker image (if affected)
+  # Step 3: Build auth-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-auth-service'
     waitFor: ['detect-affected']
@@ -222,10 +175,10 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 15: Sync static assets to GCS bucket (runs in parallel with deploys)
+  # Step 12: Sync static assets to GCS bucket (runs in parallel with builds)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
-    waitFor: ['npm-run-ci']
+    waitFor: ['npm-ci']
     entrypoint: 'bash'
     args:
       - '-c'

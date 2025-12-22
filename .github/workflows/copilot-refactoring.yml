@@ -41,16 +41,9 @@ jobs:
 
             console.log(`Created issue #${issue.data.number}`);
 
-            // Assign to Copilot with Claude Opus model
-            // https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-a-pr#assigning-an-issue-to-copilot-via-the-github-api
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.data.number,
-              assignees: ['copilot']
-            });
-
-            // Add Copilot assignment comment with model specification
+            // Trigger Copilot Coding Agent via comment
+            // Note: assignees API doesn't support 'copilot' - use @copilot mention instead
+            // https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-a-pr
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -58,4 +51,4 @@ jobs:
               body: `@copilot use model claude-opus-4\n\nPlease follow the instructions in \`.github/prompts/refactoring.prompt.md\` to complete this task.`
             });
 
-            console.log(`Assigned issue #${issue.data.number} to Copilot with Claude Opus`);
+            console.log(`Triggered Copilot on issue #${issue.data.number} with Claude Opus`);
