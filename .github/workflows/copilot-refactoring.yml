@@ -59,4 +59,3 @@ jobs:
             });
 
             console.log(`Assigned issue #${issue.data.number} to Copilot with Claude Opus`);
-
