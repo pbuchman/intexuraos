@@ -25,17 +25,17 @@ This prompt adds detection strategy. Do not duplicate rules from copilot-instruc
 
 Scan the codebase for these smell categories (in priority order):
 
-| Priority | Smell Category                | Detection Method                                              |
-| -------- | ----------------------------- | ------------------------------------------------------------- |
-| P0       | **Known smells**              | Patterns listed in copilot-instructions "Code Smells"         |
-| P1       | **Duplicated logic**          | Same function in 2+ apps → extract to `@praxos/common`        |
-| P2       | **Large files**               | Files >300 lines or >5 routes → split by resource/concern     |
-| P3       | **Schema/boilerplate dup**    | Repetitive response schemas, error mappings → create helpers  |
-| P4       | **Dead/unreachable code**     | Unused exports, unreachable branches, commented-out code      |
-| P5       | **Boundary violations**       | Domain importing infra, common importing domain               |
-| P6       | **Complex conditionals**      | Nested ternaries, long if-else chains, magic numbers          |
-| P7       | **Missing error handling**    | Unhandled promise rejections, empty catch blocks              |
-| P8       | **Inconsistent patterns**     | Mixed styles for same concern across files                    |
+| Priority | Smell Category             | Detection Method                                             |
+| -------- | -------------------------- | ------------------------------------------------------------ |
+| P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"        |
+| P1       | **Duplicated logic**       | Same function in 2+ apps → extract to `@praxos/common`       |
+| P2       | **Large files**            | Files >300 lines or >5 routes → split by resource/concern    |
+| P3       | **Schema/boilerplate dup** | Repetitive response schemas, error mappings → create helpers |
+| P4       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code     |
+| P5       | **Boundary violations**    | Domain importing infra, common importing domain              |
+| P6       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers         |
+| P7       | **Missing error handling** | Unhandled promise rejections, empty catch blocks             |
+| P8       | **Inconsistent patterns**  | Mixed styles for same concern across files                   |
 
 ### Common Duplication Patterns to Watch For
 
