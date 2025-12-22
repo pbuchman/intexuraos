@@ -6,7 +6,6 @@ import fastifyCors from '@fastify/cors';
 import { praxosFastifyPlugin, fastifyAuthPlugin } from '@praxos/common';
 import { getFirestore } from '@praxos/infra-firestore';
 import { createV1Routes } from './v1/routes.js';
-import { createWhatsAppMappingRoutes } from './v1/whatsappMappingRoutes.js';
 import { validateConfigEnv, type Config } from './config.js';
 
 const SERVICE_NAME = 'whatsapp-service';
@@ -233,9 +232,6 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   // Register v1 routes
   await app.register(createV1Routes(config));
-
-  // Register WhatsApp mapping routes
-  await app.register(createWhatsAppMappingRoutes);
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
   app.get(
