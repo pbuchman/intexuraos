@@ -60,32 +60,14 @@ export async function verifyJwt(token: string, config: JwtConfig): Promise<Verif
 
   const jwks = getJwksClient(config.jwksUrl);
 
+  let payload: jose.JWTPayload;
   try {
-    const { payload } = await jose.jwtVerify(token, jwks, {
+    const result = await jose.jwtVerify(token, jwks, {
       issuer: config.issuer,
       audience: config.audience,
     });
-
-    const sub = payload.sub;
-    if (sub === undefined || sub === '') {
-      throw new PraxOSError('UNAUTHORIZED', 'Token missing sub claim');
-    }
-
-    // Extract all claims as a plain object
-    const claims: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(payload)) {
-      claims[key] = value;
-    }
-
-    return {
-      sub,
-      claims,
-    };
+    payload = result.payload;
   } catch (error) {
-    if (error instanceof PraxOSError) {
-      throw error;
-    }
-
     if (error instanceof jose.errors.JWTExpired) {
       throw new PraxOSError('UNAUTHORIZED', 'Token has expired');
     }
@@ -104,4 +86,21 @@ export async function verifyJwt(token: string, config: JwtConfig): Promise<Verif
 
     throw new PraxOSError('UNAUTHORIZED', 'Token verification failed');
   }
+
+  // Validate sub claim after try-catch to avoid throw-inside-catch anti-pattern
+  const sub = payload.sub;
+  if (sub === undefined || sub === '') {
+    throw new PraxOSError('UNAUTHORIZED', 'Token missing sub claim');
+  }
+
+  // Extract all claims as a plain object
+  const claims: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    claims[key] = value;
+  }
+
+  return {
+    sub,
+    claims,
+  };
 }
