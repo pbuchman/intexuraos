@@ -37,6 +37,7 @@ steps:
   # Step 5: Build auth-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-auth-service'
+    waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -53,6 +54,7 @@ steps:
   # Step 6: Build promptvault-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-promptvault-service'
+    waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -69,6 +71,7 @@ steps:
   # Step 7: Build whatsapp-service Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-whatsapp-service'
+    waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -85,6 +88,7 @@ steps:
   # Step 8: Build api-docs-hub Docker image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-api-docs-hub'
+    waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -101,6 +105,7 @@ steps:
   # Step 9: Push auth-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-auth-service'
+    waitFor: ['build-auth-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -116,6 +121,7 @@ steps:
   # Step 10: Push promptvault-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-promptvault-service'
+    waitFor: ['build-promptvault-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -131,6 +137,7 @@ steps:
   # Step 11: Push whatsapp-service image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-whatsapp-service'
+    waitFor: ['build-whatsapp-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -146,6 +153,7 @@ steps:
   # Step 12: Push api-docs-hub image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-api-docs-hub'
+    waitFor: ['build-api-docs-hub']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -161,6 +169,7 @@ steps:
   # Step 13: Deploy affected services to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-affected'
+    waitFor: ['push-auth-service', 'push-promptvault-service', 'push-whatsapp-service', 'push-api-docs-hub']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-affected.sh']
     env:
@@ -170,9 +179,10 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 14: Sync static assets to GCS bucket (always run)
+  # Step 14: Sync static assets to GCS bucket (runs in parallel with deploys)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
+    waitFor: ['npm-run-ci']
     entrypoint: 'bash'
     args:
       - '-c'
