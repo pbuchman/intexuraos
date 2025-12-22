@@ -179,7 +179,8 @@ const value = result.value;
 
 ## Output Rules
 
-**MANDATORY:** Use `show_content` tool for non-trivial output. Never print summaries, explanations, or results directly in conversation.
+**MANDATORY:** Use `show_content` tool for non-trivial output. Never print summaries, explanations, or results directly
+in conversation.
 
 Examples of non-trivial output:
 
