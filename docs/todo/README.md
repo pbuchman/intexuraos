@@ -18,12 +18,12 @@ Based on coverage analysis from December 2025:
 | ---------------------------- | ------- | ------ | ----- | ---------- |
 | tokenRoutes.ts               | 53.9%   | 90%+   | 36.1% | Pending    |
 | processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%  | Improved ✓ |
-| UpdatePromptUseCase.ts       | 52.72%  | 85%+   | 32.3% | Pending    |
-| GetPromptUseCase.ts          | 63.63%  | 85%+   | 21.4% | Pending    |
+| UpdatePromptUseCase.ts       | 100%    | 85%+   | 0%    | Done ✓     |
+| GetPromptUseCase.ts          | 100%    | 85%+   | 0%    | Done ✓     |
 | whatsapp mappingRoutes.ts    | 76.89%  | 90%+   | 13.1% | Pending    |
 | whatsapp webhookRoutes.ts    | 72.37%  | 90%+   | 17.6% | Pending    |
-| notion-service shared.ts     | 20%     | 85%+   | 65%   | Pending    |
-| auth-service shared.ts       | 75%     | 90%+   | 15%   | Pending    |
+| notion-service shared.ts     | 100%    | 85%+   | 0%    | Done ✓     |
+| auth-service shared.ts       | 100%    | 90%+   | 0%    | Done ✓     |
 | auth-service deviceRoutes.ts | 81.67%  | 90%+   | 8.3%  | Pending    |
 
 ## Completed Issues
@@ -31,6 +31,9 @@ Based on coverage analysis from December 2025:
 - [x] 0-0-review-exclusions.md - Exclusion patterns reviewed and documented
 - [x] 0-1-test-utility-improvements.md - Test utilities reviewed
 - [x] 1-1-whatsapp-webhook-usecase.md - Coverage improved from 27% to 79.55%
+- [x] 1-2-promptvault-usecases.md - All usecases at 100%
+- [x] 1-4-notion-service-shared.md - shared.ts at 100%
+- [x] 1-5-auth-service-remaining.md (partial) - shared.ts at 100%, deviceRoutes pending
 
 ## Dependency Structure
 
