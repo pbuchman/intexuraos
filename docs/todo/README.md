@@ -16,7 +16,7 @@ Based on coverage analysis from December 2025:
 
 | File/Area                    | Current | Target | Gap   | Status     |
 | ---------------------------- | ------- | ------ | ----- | ---------- |
-| tokenRoutes.ts               | 53.9%   | 90%+   | 36.1% | Pending    |
+| tokenRoutes.ts               | 97.12%  | 90%+   | 0%    | Done ✓     |
 | processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%  | Improved ✓ |
 | UpdatePromptUseCase.ts       | 100%    | 85%+   | 0%    | Done ✓     |
 | GetPromptUseCase.ts          | 100%    | 85%+   | 0%    | Done ✓     |
@@ -31,6 +31,7 @@ Based on coverage analysis from December 2025:
 
 - [x] 0-0-review-exclusions.md - Exclusion patterns reviewed and documented
 - [x] 0-1-test-utility-improvements.md - Test utilities reviewed
+- [x] 1-0-token-routes-coverage.md - Coverage improved from 53.9% to 97.12%
 - [x] 1-1-whatsapp-webhook-usecase.md - Coverage improved from 27% to 79.55%
 - [x] 1-2-promptvault-usecases.md - All usecases at 100%
 - [x] 1-3-whatsapp-routes.md - mappingRoutes 93.18%, shared.ts 100%, webhookRoutes 94.94%
