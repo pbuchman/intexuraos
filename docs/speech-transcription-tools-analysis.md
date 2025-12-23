@@ -35,6 +35,7 @@ The following speech transcription solutions were analyzed:
 6. Deepgram
 7. Rev.ai
 8. ElevenLabs Scribe
+9. Speechmatics
 
 ---
 
@@ -45,6 +46,7 @@ The following speech transcription solutions were analyzed:
 | Tool              | Polish        | English   | Polish WER\* | English WER\* |
 | ----------------- | ------------- | --------- | ------------ | ------------- |
 | ElevenLabs Scribe | ✅ Native     | ✅ Native | 3-5%         | 3-4%          |
+| Speechmatics      | ✅ Native     | ✅ Native | 5%           | 4-5%          |
 | OpenAI Whisper    | ✅ Native     | ✅ Native | 10-15%       | 8-12%         |
 | Deepgram Nova-3   | ✅ Native     | ✅ Native | 10-14%       | 8-11%         |
 | AssemblyAI        | ✅ 50+ langs  | ✅ Native | 12-17%       | 10-14%        |
@@ -75,13 +77,14 @@ For the context of loose thoughts and notes, key factors are:
 **Accuracy ranking for informal speech (Polish):**
 
 1. **ElevenLabs Scribe** - ⭐⭐⭐⭐⭐ (lowest WER, excellent noise and accent handling)
-2. **OpenAI Whisper** - ⭐⭐⭐⭐⭐ (excellent noise and informality handling)
-3. **Deepgram Nova-3** - ⭐⭐⭐⭐⭐ (specially tuned for spontaneous speech)
-4. **AssemblyAI** - ⭐⭐⭐⭐ (very good for multi-speaker)
-5. **Azure Speech** - ⭐⭐⭐⭐ (solid, but requires tuning)
-6. **Google STT** - ⭐⭐⭐ (quality drops with noise)
-7. **Amazon Transcribe** - ⭐⭐⭐ (decent, but less precise)
-8. **Rev.ai** - ⭐⭐⭐ (basic capabilities)
+2. **Speechmatics** - ⭐⭐⭐⭐⭐ (very low WER, excellent dialect handling)
+3. **OpenAI Whisper** - ⭐⭐⭐⭐⭐ (excellent noise and informality handling)
+4. **Deepgram Nova-3** - ⭐⭐⭐⭐⭐ (specially tuned for spontaneous speech)
+5. **AssemblyAI** - ⭐⭐⭐⭐ (very good for multi-speaker)
+6. **Azure Speech** - ⭐⭐⭐⭐ (solid, but requires tuning)
+7. **Google STT** - ⭐⭐⭐ (quality drops with noise)
+8. **Amazon Transcribe** - ⭐⭐⭐ (decent, but less precise)
+9. **Rev.ai** - ⭐⭐⭐ (basic capabilities)
 
 **Sources:**
 
@@ -98,12 +101,14 @@ For the context of loose thoughts and notes, key factors are:
 | Tool                     | Cost/min | Cost/600 min/mo | Free tier                |
 | ------------------------ | -------- | --------------- | ------------------------ |
 | **AssemblyAI Universal** | $0.0025  | **$1.50**       | 185h pre-recorded/mo     |
+| **Speechmatics (std)**   | $0.004   | **$2.40**       | 480 min/mo (8h)          |
 | **Rev.ai (foreign)**     | $0.005   | **$3.00**       | Credits for new accounts |
 | **OpenAI Whisper**       | $0.006   | **$3.60**       | None (pay-as-you-go)     |
 | **Azure Speech (batch)** | $0.006   | **$3.60**       | 5h/mo                    |
+| **Speechmatics (enh)**   | $0.0067  | **$4.02**       | 480 min/mo (8h)          |
 | **Deepgram Nova-3**      | $0.0077  | **$4.62**       | $200 credits (~45k min)  |
-| **ElevenLabs Scribe**    | $0.0175  | **$10.50**      | 10,000 credits/mo        |
 | **Google STT V2**        | $0.016   | **$9.60**       | 60 min/mo                |
+| **ElevenLabs Scribe**    | $0.0175  | **$10.50**      | 10,000 credits/mo        |
 | **Amazon Transcribe**    | $0.024   | **$14.40**      | 60 min/mo (12 months)    |
 
 ### 3.2 Annual Calculation
@@ -113,9 +118,11 @@ Assuming 600 minutes monthly (300 messages × 2 min):
 | Tool                     | Monthly Cost | Annual Cost |
 | ------------------------ | ------------ | ----------- |
 | **AssemblyAI Universal** | $1.50        | **$18.00**  |
+| **Speechmatics (std)**   | $2.40        | **$28.80**  |
 | **Rev.ai**               | $3.00        | **$36.00**  |
 | **OpenAI Whisper**       | $3.60        | **$43.20**  |
 | **Azure Speech**         | $3.60        | **$43.20**  |
+| **Speechmatics (enh)**   | $4.02        | **$48.24**  |
 | **Deepgram Nova-3**      | $4.62        | **$55.44**  |
 | **Google STT**           | $9.60        | **$115.20** |
 | **ElevenLabs Scribe**    | $10.50       | **$126.00** |
@@ -131,6 +138,7 @@ Assuming 600 minutes monthly (300 messages × 2 min):
 - Amazon Transcribe Pricing: https://aws.amazon.com/transcribe/pricing/
 - Rev.ai Pricing: https://www.rev.ai/pricing
 - ElevenLabs API Pricing: https://elevenlabs.io/pricing/api
+- Speechmatics Pricing: https://www.speechmatics.com/pricing
 
 **Credibility:** Very high - official vendor pricing pages, as of December 2025.
 
@@ -150,6 +158,7 @@ Assuming 600 minutes monthly (300 messages × 2 min):
 | **OpenAI Whisper**    | ⚠️ Limited | Prompt engineering               | ⭐⭐⭐     |
 | **Rev.ai**            | ✅ Yes     | Custom vocabulary                | ⭐⭐⭐     |
 | **ElevenLabs Scribe** | ❌ No      | None (enterprise only)           | ⭐⭐       |
+| **Speechmatics**      | ✅ Yes     | Custom dictionary (1000 words)   | ⭐⭐⭐⭐⭐ |
 
 ### 4.2 Fine-tuning / Learning from User Data
 
@@ -163,6 +172,7 @@ Assuming 600 minutes monthly (300 messages × 2 min):
 | **AssemblyAI**                   | ❌ Not public           | Custom pricing      | N/A                       |
 | **Rev.ai**                       | ❌ No                   | N/A                 | N/A                       |
 | **ElevenLabs Scribe**            | ❌ No (enterprise only) | Custom pricing      | N/A                       |
+| **Speechmatics**                 | ❌ No                   | N/A                 | N/A                       |
 
 **Key Note:** Fine-tuning requires preparing a dataset with recordings and transcriptions. For 300 messages monthly, collecting sufficient data will take ~3-6 months.
 
@@ -477,6 +487,8 @@ async function transcribeAudio(filePath: string): Promise<string> {
 | Deepgram Learning      | https://deepgram.com/learn/speech-to-text-benchmarks                                                                      | ⭐⭐⭐⭐    | API benchmarking guide                                    |
 | ElevenLabs Polish STT  | https://elevenlabs.io/speech-to-text/polish                                                                               | ⭐⭐⭐⭐⭐  | Official Scribe benchmarks for Polish language            |
 | ElevenLabs Scribe Blog | https://elevenlabs.io/blog/meet-scribe                                                                                    | ⭐⭐⭐⭐⭐  | Official blog about Scribe capabilities                   |
+| Speechmatics Polish    | https://www.speechmatics.com/speech-to-text/polish                                                                        | ⭐⭐⭐⭐⭐  | Official benchmarks for Polish language                   |
+| Speechmatics Accuracy  | https://docs.speechmatics.com/speech-to-text/accuracy-benchmarking                                                        | ⭐⭐⭐⭐⭐  | Official documentation on benchmarks                      |
 
 ### Pricing
 
@@ -490,6 +502,7 @@ async function transcribeAudio(filePath: string): Promise<string> {
 | AWS Pricing               | https://aws.amazon.com/transcribe/pricing/                                            | ⭐⭐⭐⭐⭐  | Official pricing page          |
 | Rev.ai Pricing            | https://www.rev.ai/pricing                                                            | ⭐⭐⭐⭐⭐  | Official pricing page          |
 | ElevenLabs API Pricing    | https://elevenlabs.io/pricing/api                                                     | ⭐⭐⭐⭐⭐  | Official pricing page          |
+| Speechmatics Pricing      | https://www.speechmatics.com/pricing                                                  | ⭐⭐⭐⭐⭐  | Official pricing page          |
 
 ### Customization and Fine-tuning
 
