@@ -52,14 +52,14 @@ Tier 2 (Depends on ALL Tier 0 + Tier 1)
 | File                                    | Target    | Description                      | Status      |
 | --------------------------------------- | --------- | -------------------------------- | ----------- |
 | `1-0-auth-service-token-routes.md`      | 43% → 85% | Token refresh routes             | [completed] |
-| `1-1-auth-service-device-routes.md`     | 77% → 90% | Device authorization routes      |             |
-| `1-2-auth-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client |             |
-| `1-3-promptvault-usecases.md`           | 45% → 85% | Domain use cases                 |             |
-| `1-4-whatsapp-webhook-usecase.md`       | 27% → 80% | Webhook processing logic         |             |
-| `1-5-whatsapp-routes.md`                | 66% → 90% | WhatsApp routes                  |             |
+| `1-1-auth-service-device-routes.md`     | 77% → 90% | Device authorization routes      | [completed] |
+| `1-2-auth-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client | [completed] |
+| `1-3-promptvault-usecases.md`           | 45% → 85% | Domain use cases                 | [completed] |
+| `1-4-whatsapp-webhook-usecase.md`       | 27% → 80% | Webhook processing logic         | [completed] |
+| `1-5-whatsapp-routes.md`                | 66% → 90% | WhatsApp routes                  | [completed] |
 | `1-6-whatsapp-config-signature.md`      | 70% → 95% | Config and signature validation  | [completed] |
-| `1-7-notion-service-coverage.md`        | 20% → 90% | Notion service routes            |             |
-| `1-8-server-initialization.md`          | 90% → 95% | Server startup paths             |             |
+| `1-7-notion-service-coverage.md`        | 20% → 90% | Notion service routes            | [completed] |
+| `1-8-server-initialization.md`          | 90% → 95% | Server startup paths             | [completed] |
 
 ### Tier 2 - Infrastructure & Finalization (2 issues, depend on ALL prior)
 
