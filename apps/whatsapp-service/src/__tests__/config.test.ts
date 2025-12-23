@@ -62,4 +62,39 @@ describe('config validation', () => {
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
   });
+
+  it('treats empty string as missing', async () => {
+    const { validateConfigEnv } = await import('../config.js');
+
+    process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = '';
+    process.env['PRAXOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
+    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = 'test';
+
+    const missing = validateConfigEnv();
+    expect(missing).toContain('PRAXOS_WHATSAPP_VERIFY_TOKEN');
+  });
+
+  it('loadConfig throws when required vars are missing', async () => {
+    const { loadConfig } = await import('../config.js');
+
+    delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
+    delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
+    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it('loadConfig parses comma-separated phone number IDs', async () => {
+    const { loadConfig } = await import('../config.js');
+
+    process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = 'test';
+    process.env['PRAXOS_WHATSAPP_APP_SECRET'] = 'test';
+    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = 'test';
+    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = '123,456,789';
+
+    const config = loadConfig();
+    expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
+  });
 });

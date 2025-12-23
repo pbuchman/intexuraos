@@ -1,5 +1,11 @@
 /**
  * Fake repositories for testing notion-service.
+ *
+ * These fakes implement the same interfaces as the real Firestore/Notion adapters
+ * but use in-memory storage. They are designed to be exercised by route tests.
+ *
+ * Coverage note: Some methods may show low coverage until all Tier 1 test issues
+ * are completed (see docs/todo/1-7-notion-service-coverage.md).
  */
 import type { Result } from '@praxos/common';
 import { ok, err } from '@praxos/common';

@@ -20,30 +20,47 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts'],
       exclude: [
+        // Test files (no coverage for tests themselves)
         '**/*.test.ts',
-        '**/testing/**',
         '**/*.spec.ts',
+        '**/testing/**',
+
+        // Index/barrel files (re-exports only, no logic)
         '**/index.ts',
+
+        // Type definition files
         '**/*.d.ts',
-        // Exclude type-only files (no runtime code)
+
+        // Type-only files with no runtime code (JUSTIFIED)
         '**/domain/**/models/**',
         '**/domain/**/ports/**',
-        // Exclude colocated infra (external service adapters) - TODO: add tests later
+
+        // Colocated infra adapters - external service wrappers
+        // TODO(2-0): Add tests for infra adapters
         '**/infra/**',
-        // Exclude web app - TODO: add E2E tests later
+
+        // Web app - React frontend needs E2E tests (out of scope for unit coverage)
+        // JUSTIFIED: Different testing strategy needed
         'apps/web/**',
-        // Exclude common infra clients - tested via integration
+
+        // Common SDK client wrappers - thin wrappers around external SDKs
+        // TODO(0-1): Add unit tests for mapNotionError and createNotionClient
         '**/notion.ts',
+        // JUSTIFIED: Pure singleton getter, no logic to test
         '**/firestore.ts',
-        // Exclude api-docs-hub (aggregator, no tests)
+
+        // API docs hub - static aggregator service with minimal logic
+        // JUSTIFIED: No business logic, just config and static serving
         'apps/api-docs-hub/**',
-        // Exclude whatsapp client
+
+        // WhatsApp SDK wrapper - external SDK integration
+        // TODO(2-0): Add tests as part of infra coverage
         '**/whatsappClient.ts',
         '**/adapters.ts',
       ],
       thresholds: {
-        // Temporarily lowered due to colocated infra refactoring
-        // TODO: Restore to 89/85/90/89 after adding infra tests
+        // Current: 65/70/45/65, Target: 89/85/90/89
+        // See docs/todo/README.md for coverage improvement plan
         lines: 65,
         branches: 70,
         functions: 45,

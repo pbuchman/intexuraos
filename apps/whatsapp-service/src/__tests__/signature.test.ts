@@ -49,4 +49,22 @@ describe('signature validation', () => {
 
     expect(validateWebhookSignature('modified payload', signature, secret)).toBe(false);
   });
+
+  it('rejects signature with invalid hex characters', async () => {
+    const { validateWebhookSignature } = await import('../signature.js');
+    const payload = 'test payload';
+    const secret = 'test-secret';
+
+    // 'xyz' is not valid hex
+    expect(validateWebhookSignature(payload, 'sha256=xyz', secret)).toBe(false);
+  });
+
+  it('rejects signature with wrong length', async () => {
+    const { validateWebhookSignature } = await import('../signature.js');
+    const payload = 'test payload';
+    const secret = 'test-secret';
+
+    // Valid hex but wrong length (too short)
+    expect(validateWebhookSignature(payload, 'sha256=abc123', secret)).toBe(false);
+  });
 });

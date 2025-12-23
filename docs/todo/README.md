@@ -41,25 +41,25 @@ Tier 2 (Depends on ALL Tier 0 + Tier 1)
 
 ### Tier 0 - Foundational (3 issues, independent of each other)
 
-| File                                | Description                                |
-| ----------------------------------- | ------------------------------------------ |
-| `0-0-narrow-coverage-exclusions.md` | Analyze and narrow overly broad exclusions |
-| `0-1-common-package-coverage.md`    | Add tests for packages/common utilities    |
-| `0-2-standardize-test-utilities.md` | Review and document test utility patterns  |
+| File                                | Description                                | Status      |
+| ----------------------------------- | ------------------------------------------ | ----------- |
+| `0-0-narrow-coverage-exclusions.md` | Analyze and narrow overly broad exclusions | [completed] |
+| `0-1-common-package-coverage.md`    | Add tests for packages/common utilities    | [completed] |
+| `0-2-standardize-test-utilities.md` | Review and document test utility patterns  | [completed] |
 
 ### Tier 1 - Feature Coverage (9 issues, depend on ALL Tier 0)
 
-| File                                    | Target    | Description                      |
-| --------------------------------------- | --------- | -------------------------------- |
-| `1-0-auth-service-token-routes.md`      | 43% → 85% | Token refresh routes             |
-| `1-1-auth-service-device-routes.md`     | 77% → 90% | Device authorization routes      |
-| `1-2-auth-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client |
-| `1-3-promptvault-usecases.md`           | 45% → 85% | Domain use cases                 |
-| `1-4-whatsapp-webhook-usecase.md`       | 27% → 80% | Webhook processing logic         |
-| `1-5-whatsapp-routes.md`                | 66% → 90% | WhatsApp routes                  |
-| `1-6-whatsapp-config-signature.md`      | 70% → 95% | Config and signature validation  |
-| `1-7-notion-service-coverage.md`        | 20% → 90% | Notion service routes            |
-| `1-8-server-initialization.md`          | 90% → 95% | Server startup paths             |
+| File                                    | Target    | Description                      | Status      |
+| --------------------------------------- | --------- | -------------------------------- | ----------- |
+| `1-0-auth-service-token-routes.md`      | 43% → 85% | Token refresh routes             | [completed] |
+| `1-1-auth-service-device-routes.md`     | 77% → 90% | Device authorization routes      |             |
+| `1-2-auth-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client |             |
+| `1-3-promptvault-usecases.md`           | 45% → 85% | Domain use cases                 |             |
+| `1-4-whatsapp-webhook-usecase.md`       | 27% → 80% | Webhook processing logic         |             |
+| `1-5-whatsapp-routes.md`                | 66% → 90% | WhatsApp routes                  |             |
+| `1-6-whatsapp-config-signature.md`      | 70% → 95% | Config and signature validation  | [completed] |
+| `1-7-notion-service-coverage.md`        | 20% → 90% | Notion service routes            |             |
+| `1-8-server-initialization.md`          | 90% → 95% | Server startup paths             |             |
 
 ### Tier 2 - Infrastructure & Finalization (2 issues, depend on ALL prior)
 
@@ -69,10 +69,11 @@ Tier 2 (Depends on ALL Tier 0 + Tier 1)
 | `2-1-raise-coverage-thresholds.md` | Restore 90% thresholds after all tests complete |
 
 ## How to Execute
+
 1. **Any issue marked [completed] is considered done.**
-2  **Start with Tier 0** - Complete all three 0-\* issues in any order
-3  **Then Tier 1** - Complete all nine 1-\* issues (can be done in parallel)
-4  **Then Tier 2** - Complete 2-0 first, then 2-1 as the final step
+   2 **Start with Tier 0** - Complete all three 0-\* issues in any order
+   3 **Then Tier 1** - Complete all nine 1-\* issues (can be done in parallel)
+   4 **Then Tier 2** - Complete 2-0 first, then 2-1 as the final step
 
 Each issue file is self-contained. To execute:
 
