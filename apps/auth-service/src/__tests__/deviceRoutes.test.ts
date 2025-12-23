@@ -315,6 +315,46 @@ describe('Device Authorization Flow', () => {
         expect(body.error.code).toBe('DOWNSTREAM_ERROR');
         expect(body.error.message).toContain('expired');
       });
+
+      it('handles non-Auth0 error response', async () => {
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(500, 'Internal Server Error');
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      });
+
+      it('handles network error', async () => {
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').replyWithError('Connection refused');
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      });
     });
   });
 });
