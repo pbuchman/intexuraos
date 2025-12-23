@@ -392,11 +392,13 @@ module "cloud_build" {
 
   artifact_registry_url = module.artifact_registry.repository_url
   static_assets_bucket  = module.static_assets.bucket_name
+  web_app_bucket        = module.web_app.bucket_name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
     module.static_assets,
+    module.web_app,
   ]
 }
 

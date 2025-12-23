@@ -85,6 +85,12 @@ resource "google_storage_bucket_iam_member" "cloud_build_storage_admin" {
   member = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+resource "google_storage_bucket_iam_member" "cloud_build_web_storage_admin" {
+  bucket = var.web_app_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Webhook Trigger for Development Branch
 # -----------------------------------------------------------------------------
