@@ -25,9 +25,11 @@ applyTo: 'apps/**'
 
 ## Architecture
 
-- Apps are thin orchestrators — business logic in `domain`, integrations in `infra`
-- Auth uses `@praxos/domain-identity`
-- External services via `@praxos/infra-*` adapters
+- Apps contain domain logic in `src/domain/**` and app-specific adapters in `src/infra/**`
+- Apps depend on `@praxos/common` only (no cross-app imports)
+- Structure: `src/domain/` (business logic) → `src/infra/` (adapters) → `src/v1/routes/` (transport)
+- Auth uses colocated `src/domain/identity` (in auth-service)
+- External services via colocated `src/infra/*` adapters (Firestore, Notion, Auth0)
 - Secrets: `PRAXOS_*` prefix, via env vars or Secret Manager
 
 ---

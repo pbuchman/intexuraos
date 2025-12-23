@@ -1,11 +1,17 @@
 # Domain Colocation — Ownership Map
 
+> **STATUS: COMPLETED**  
+> This document is historical. The refactoring described here has been completed.  
+> Domain and infra code is now colocated in apps (`apps/*/src/domain/` and `apps/*/src/infra/`).  
+> See [package-contracts.md](./package-contracts.md) for current architecture.
+
 **Created:** 2024-12-23  
+**Completed:** 2024-12-23  
 **Branch:** `refactor/colocate-domain`
 
 ---
 
-## Target Architecture
+## Target Architecture (COMPLETED)
 
 After migration, each app owns its domain logic in `src/domain/` and app-specific infra in `src/infra/`.
 
