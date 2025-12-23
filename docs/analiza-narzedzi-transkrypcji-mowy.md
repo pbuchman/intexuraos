@@ -34,6 +34,7 @@ Przeanalizowano następujące rozwiązania transkrypcji mowy:
 5. AssemblyAI
 6. Deepgram
 7. Rev.ai
+8. ElevenLabs Scribe
 
 ---
 
@@ -43,6 +44,7 @@ Przeanalizowano następujące rozwiązania transkrypcji mowy:
 
 | Narzędzie         | Polski          | Angielski  | WER Polski\* | WER Angielski\* |
 | ----------------- | --------------- | ---------- | ------------ | --------------- |
+| ElevenLabs Scribe | ✅ Natywne      | ✅ Natywne | 3-5%         | 3-4%            |
 | OpenAI Whisper    | ✅ Natywne      | ✅ Natywne | 10-15%       | 8-12%           |
 | Deepgram Nova-3   | ✅ Natywne      | ✅ Natywne | 10-14%       | 8-11%           |
 | AssemblyAI        | ✅ 50+ języków  | ✅ Natywne | 12-17%       | 10-14%          |
@@ -72,13 +74,14 @@ Dla kontekstu luźnych myśli i notatek, kluczowe są:
 
 **Ranking dokładności dla nieformalnej mowy (polski):**
 
-1. **OpenAI Whisper** - ⭐⭐⭐⭐⭐ (doskonałe radzenie sobie z szumem i nieformalnością)
-2. **Deepgram Nova-3** - ⭐⭐⭐⭐⭐ (specjalnie dostrojone do spontanicznej mowy)
-3. **AssemblyAI** - ⭐⭐⭐⭐ (bardzo dobre dla wielomówców)
-4. **Azure Speech** - ⭐⭐⭐⭐ (solidne, ale wymaga dostrojenia)
-5. **Google STT** - ⭐⭐⭐ (spada jakość przy szumie)
-6. **Amazon Transcribe** - ⭐⭐⭐ (przyzwoite, ale mniej precyzyjne)
-7. **Rev.ai** - ⭐⭐⭐ (podstawowe możliwości)
+1. **ElevenLabs Scribe** - ⭐⭐⭐⭐⭐ (najniższy WER, doskonała obsługa szumu i akcentów)
+2. **OpenAI Whisper** - ⭐⭐⭐⭐⭐ (doskonałe radzenie sobie z szumem i nieformalnością)
+3. **Deepgram Nova-3** - ⭐⭐⭐⭐⭐ (specjalnie dostrojone do spontanicznej mowy)
+4. **AssemblyAI** - ⭐⭐⭐⭐ (bardzo dobre dla wielomówców)
+5. **Azure Speech** - ⭐⭐⭐⭐ (solidne, ale wymaga dostrojenia)
+6. **Google STT** - ⭐⭐⭐ (spada jakość przy szumie)
+7. **Amazon Transcribe** - ⭐⭐⭐ (przyzwoite, ale mniej precyzyjne)
+8. **Rev.ai** - ⭐⭐⭐ (podstawowe możliwości)
 
 **Źródła:**
 
@@ -94,13 +97,14 @@ Dla kontekstu luźnych myśli i notatek, kluczowe są:
 
 | Narzędzie                 | Koszt/min | Koszt/600 min/mies. | Darmowy tier                |
 | ------------------------- | --------- | ------------------- | --------------------------- |
-| **OpenAI Whisper**        | $0.006    | **$3.60**           | Brak (pay-as-you-go)        |
-| **Deepgram Nova-3**       | $0.0077   | **$4.62**           | $200 w kredytach (~45k min) |
 | **AssemblyAI Universal**  | $0.0025   | **$1.50**           | 185h pre-recorded/mies.     |
-| **Google STT V2**         | $0.016    | **$9.60**           | 60 min/mies.                |
-| **Azure Speech (batch)**  | $0.006    | **$3.60**           | 5h/mies.                    |
-| **Amazon Transcribe**     | $0.024    | **$14.40**          | 60 min/mies. (12 mies.)     |
 | **Rev.ai (foreign lang)** | $0.005    | **$3.00**           | Kredyty dla nowych kont     |
+| **OpenAI Whisper**        | $0.006    | **$3.60**           | Brak (pay-as-you-go)        |
+| **Azure Speech (batch)**  | $0.006    | **$3.60**           | 5h/mies.                    |
+| **Deepgram Nova-3**       | $0.0077   | **$4.62**           | $200 w kredytach (~45k min) |
+| **ElevenLabs Scribe**     | $0.0175   | **$10.50**          | 10,000 kredytów/mies.       |
+| **Google STT V2**         | $0.016    | **$9.60**           | 60 min/mies.                |
+| **Amazon Transcribe**     | $0.024    | **$14.40**          | 60 min/mies. (12 mies.)     |
 
 ### 3.2 Kalkulacja Roczna
 
@@ -114,6 +118,7 @@ Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
 | **Azure Speech**         | $3.60            | **$43.20**   |
 | **Deepgram Nova-3**      | $4.62            | **$55.44**   |
 | **Google STT**           | $9.60            | **$115.20**  |
+| **ElevenLabs Scribe**    | $10.50           | **$126.00**  |
 | **Amazon Transcribe**    | $14.40           | **$172.80**  |
 
 **Źródła:**
@@ -125,6 +130,7 @@ Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
 - Azure Speech Pricing: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/
 - Amazon Transcribe Pricing: https://aws.amazon.com/transcribe/pricing/
 - Rev.ai Pricing: https://www.rev.ai/pricing
+- ElevenLabs API Pricing: https://elevenlabs.io/pricing/api
 
 **Wiarygodność:** Bardzo wysoka - oficjalne strony cenników dostawców, stan na grudzień 2025.
 
@@ -143,6 +149,7 @@ Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
 | **AssemblyAI**        | ✅ Tak         | Word boost                       | ⭐⭐⭐⭐   |
 | **OpenAI Whisper**    | ⚠️ Ograniczone | Prompt engineering               | ⭐⭐⭐     |
 | **Rev.ai**            | ✅ Tak         | Custom vocabulary                | ⭐⭐⭐     |
+| **ElevenLabs Scribe** | ❌ Brak        | Brak (tylko enterprise)          | ⭐⭐       |
 
 ### 4.2 Fine-tuning / Uczenie na Danych Użytkownika
 
@@ -155,6 +162,7 @@ Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
 | **Deepgram**                     | ❌ Brak (tylko enterprise) | Custom pricing       | N/A                    |
 | **AssemblyAI**                   | ❌ Brak publicznie         | Custom pricing       | N/A                    |
 | **Rev.ai**                       | ❌ Brak                    | N/A                  | N/A                    |
+| **ElevenLabs Scribe**            | ❌ Brak (tylko enterprise) | Custom pricing       | N/A                    |
 
 **Kluczowa uwaga:** Fine-tuning wymaga przygotowania datasetu z nagraniami i transkrypcjami. Dla 300 wiadomości miesięcznie, gromadzenie wystarczającej ilości danych zajmie ~3-6 miesięcy.
 
@@ -171,15 +179,16 @@ Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
 
 ## 5. Funkcjonalności Dodatkowe
 
-| Funkcja             | Whisper | Deepgram         | AssemblyAI    | Google | Azure | AWS | Rev.ai |
-| ------------------- | ------- | ---------------- | ------------- | ------ | ----- | --- | ------ |
-| Diaryzacja mówców   | ❌      | ✅ (+$0.002/min) | ✅            | ✅     | ✅    | ✅  | ✅     |
-| Wykrywanie języka   | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     |
-| Timestampy          | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     |
-| Analiza sentymentu  | ❌      | ❌               | ✅ (+$0.12/h) | ❌     | ❌    | ❌  | ❌     |
-| Podsumowanie        | ❌      | ❌               | ✅ (+$0.06/h) | ❌     | ❌    | ❌  | ❌     |
-| Real-time streaming | ❌      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     |
-| Redakcja PII        | ❌      | ✅ (+$0.002/min) | ✅ (+$0.20/h) | ✅     | ✅    | ✅  | ❌     |
+| Funkcja             | Whisper | Deepgram         | AssemblyAI    | Google | Azure | AWS | Rev.ai | ElevenLabs |
+| ------------------- | ------- | ---------------- | ------------- | ------ | ----- | --- | ------ | ---------- |
+| Diaryzacja mówców   | ❌      | ✅ (+$0.002/min) | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
+| Wykrywanie języka   | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
+| Timestampy          | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
+| Analiza sentymentu  | ❌      | ❌               | ✅ (+$0.12/h) | ❌     | ❌    | ❌  | ❌     | ❌         |
+| Podsumowanie        | ❌      | ❌               | ✅ (+$0.06/h) | ❌     | ❌    | ❌  | ❌     | ❌         |
+| Real-time streaming | ❌      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
+| Redakcja PII        | ❌      | ✅ (+$0.002/min) | ✅ (+$0.20/h) | ✅     | ✅    | ✅  | ❌     | ❌         |
+| Audio event tagging | ❌      | ❌               | ❌            | ❌     | ❌    | ❌  | ❌     | ✅         |
 
 ---
 
@@ -399,6 +408,21 @@ async function transcribeAudio(filePath: string): Promise<string> {
 
 ---
 
+### ❌ ElevenLabs Scribe
+
+**Powody:**
+
+- **Najwyższy koszt** ($10.50/mies.) dla 600 minut
+- **Brak custom vocabulary** - nie można dodać własnego słownictwa
+- **Brak fine-tuningu** (tylko dla enterprise)
+- **Droższe niż konkurencja** przy podobnej lub niższej dokładności dla przypadku użycia
+
+**Uwaga:** Mimo że Scribe osiąga **najniższy WER (3-5% dla polskiego)** w testach benchmarkowych, **wyższa cena** ($10.50/mies. vs $3.60 dla Whisper) i **brak kastomizacji** sprawiają, że nie jest optymalnym wyborem dla tego przypadku użycia. W testach na czystym audio Scribe jest doskonały, ale dla luźnych notatek głosowych i nieformalnej mowy, różnica w dokładności między Scribe a Whisper nie uzasadnia 3x wyższej ceny.
+
+**Kiedy rozważyć:** Jeśli najwyższa możliwa dokładność jest absolutnym priorytetem i budżet nie jest ograniczeniem, lub jeśli potrzebujesz audio event tagging (śmiech, aplauz, muzyka).
+
+---
+
 ## 9. Podsumowanie Porównawcze
 
 ### Ranking Ogólny (dla przypadku użycia PraxOS)
@@ -408,10 +432,11 @@ async function transcribeAudio(filePath: string): Promise<string> {
 | 🥇      | **OpenAI Whisper**  | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐   | ⭐⭐⭐       | ⭐⭐⭐⭐⭐ | **20/25** |
 | 🥈      | **Deepgram Nova-3** | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐   | ⭐⭐⭐⭐     | ⭐⭐⭐⭐⭐ | **19/25** |
 | 🥉      | **AssemblyAI**      | ⭐⭐⭐⭐      | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐     | ⭐⭐⭐⭐⭐ | **18/25** |
-| 4       | Azure Speech        | ⭐⭐⭐⭐      | ⭐⭐⭐⭐   | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 16/25     |
-| 5       | Rev.ai              | ⭐⭐⭐        | ⭐⭐⭐⭐   | ⭐⭐⭐       | ⭐⭐⭐⭐   | 14/25     |
-| 6       | Google STT          | ⭐⭐⭐        | ⭐⭐       | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 13/25     |
-| 7       | Amazon Transcribe   | ⭐⭐⭐        | ⭐         | ⭐⭐⭐⭐     | ⭐⭐⭐     | 11/25     |
+| 4       | ElevenLabs Scribe   | ⭐⭐⭐⭐⭐    | ⭐⭐       | ⭐           | ⭐⭐⭐⭐⭐ | 17/25     |
+| 5       | Azure Speech        | ⭐⭐⭐⭐      | ⭐⭐⭐⭐   | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 16/25     |
+| 6       | Rev.ai              | ⭐⭐⭐        | ⭐⭐⭐⭐   | ⭐⭐⭐       | ⭐⭐⭐⭐   | 14/25     |
+| 7       | Google STT          | ⭐⭐⭐        | ⭐⭐       | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 13/25     |
+| 8       | Amazon Transcribe   | ⭐⭐⭐        | ⭐         | ⭐⭐⭐⭐     | ⭐⭐⭐     | 11/25     |
 
 ---
 
@@ -451,6 +476,8 @@ async function transcribeAudio(filePath: string): Promise<string> {
 | Deepgram Benchmarks    | https://research.aimultiple.com/speech-to-text/                                                                           | ⭐⭐⭐⭐     | Porównanie Deepgram vs Whisper                    |
 | AssemblyAI Accuracy    | https://www.assemblyai.com/blog/how-accurate-speech-to-text                                                               | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja z metodyką WER             |
 | Deepgram Learning      | https://deepgram.com/learn/speech-to-text-benchmarks                                                                      | ⭐⭐⭐⭐     | Poradnik benchmarkowania API                      |
+| ElevenLabs Polish STT  | https://elevenlabs.io/speech-to-text/polish                                                                               | ⭐⭐⭐⭐⭐   | Oficjalne benchmarki Scribe dla języka polskiego  |
+| ElevenLabs Scribe Blog | https://elevenlabs.io/blog/meet-scribe                                                                                    | ⭐⭐⭐⭐⭐   | Oficjalny blog o możliwościach Scribe             |
 
 ### Ceny
 
@@ -463,6 +490,7 @@ async function transcribeAudio(filePath: string): Promise<string> {
 | Azure Pricing             | https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/ | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
 | AWS Pricing               | https://aws.amazon.com/transcribe/pricing/                                            | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
 | Rev.ai Pricing            | https://www.rev.ai/pricing                                                            | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
+| ElevenLabs API Pricing    | https://elevenlabs.io/pricing/api                                                     | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
 
 ### Kastomizacja i Fine-tuning
 
