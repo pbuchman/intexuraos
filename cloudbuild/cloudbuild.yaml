@@ -8,7 +8,7 @@
 # - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
-  # Step 1: Install dependencies (needed for build)
+  # Step 1: Install dependencies (needed for builds)
   - name: 'node:22-slim'
     id: 'npm-ci'
     entrypoint: 'npm'
@@ -24,7 +24,7 @@ steps:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
 
-  # Step 3: Build auth-service Docker image (if affected)
+  # ===== auth-service pipeline =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-auth-service'
     waitFor: ['detect-affected']
@@ -32,7 +32,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
           echo "Building auth-service..."
           docker build -t ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA \
             -t ${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
@@ -41,7 +41,41 @@ steps:
           echo "auth-service not affected, skipping build."
         fi
 
-  # Step 7: Build promptvault-service Docker image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-auth-service'
+    waitFor: ['build-auth-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing auth-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:latest
+        else
+          echo "auth-service not affected, skipping push."
+        fi
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-auth-service'
+    waitFor: ['push-auth-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-auth-service.sh
+        else
+          echo "auth-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # ===== promptvault-service pipeline =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-promptvault-service'
     waitFor: ['detect-affected']
@@ -49,7 +83,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
           echo "Building promptvault-service..."
           docker build -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
             -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
@@ -58,7 +92,92 @@ steps:
           echo "promptvault-service not affected, skipping build."
         fi
 
-  # Step 8: Build whatsapp-service Docker image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-promptvault-service'
+    waitFor: ['build-promptvault-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing promptvault-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
+        else
+          echo "promptvault-service not affected, skipping push."
+        fi
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-promptvault-service'
+    waitFor: ['push-promptvault-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-promptvault-service.sh
+        else
+          echo "promptvault-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # ===== notion-service pipeline =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-notion-service'
+    waitFor: ['detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building notion-service..."
+          docker build -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+            -f apps/notion-service/Dockerfile .
+        else
+          echo "notion-service not affected, skipping build."
+        fi
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-notion-service'
+    waitFor: ['build-notion-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing notion-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
+        else
+          echo "notion-service not affected, skipping push."
+        fi
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notion-service'
+    waitFor: ['push-notion-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-notion-service.sh
+        else
+          echo "notion-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # ===== whatsapp-service pipeline =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-whatsapp-service'
     waitFor: ['detect-affected']
@@ -66,7 +185,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
           echo "Building whatsapp-service..."
           docker build -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
             -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
@@ -75,7 +194,41 @@ steps:
           echo "whatsapp-service not affected, skipping build."
         fi
 
-  # Step 9: Build api-docs-hub Docker image (if affected)
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-whatsapp-service'
+    waitFor: ['build-whatsapp-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Pushing whatsapp-service..."
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
+        else
+          echo "whatsapp-service not affected, skipping push."
+        fi
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-whatsapp-service'
+    waitFor: ['push-whatsapp-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-whatsapp-service.sh
+        else
+          echo "whatsapp-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # ===== api-docs-hub pipeline =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-api-docs-hub'
     waitFor: ['detect-affected']
@@ -83,7 +236,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
           echo "Building api-docs-hub..."
           docker build -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
             -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
@@ -92,55 +245,6 @@ steps:
           echo "api-docs-hub not affected, skipping build."
         fi
 
-  # Step 10: Push auth-service image (if affected)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-auth-service'
-    waitFor: ['build-auth-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing auth-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:latest
-        else
-          echo "auth-service not affected, skipping push."
-        fi
-
-  # Step 11: Push promptvault-service image (if affected)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-promptvault-service'
-    waitFor: ['build-promptvault-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing promptvault-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
-        else
-          echo "promptvault-service not affected, skipping push."
-        fi
-
-  # Step 12: Push whatsapp-service image (if affected)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-whatsapp-service'
-    waitFor: ['build-whatsapp-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing whatsapp-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
-        else
-          echo "whatsapp-service not affected, skipping push."
-        fi
-
-  # Step 13: Push api-docs-hub image (if affected)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-api-docs-hub'
     waitFor: ['build-api-docs-hub']
@@ -148,7 +252,7 @@ steps:
     args:
       - '-c'
       - |
-        if grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
           echo "Pushing api-docs-hub..."
           docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
           docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
@@ -156,18 +260,18 @@ steps:
           echo "api-docs-hub not affected, skipping push."
         fi
 
-  # Step 14: Deploy affected services to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-affected'
-    waitFor:
-      [
-        'push-auth-service',
-        'push-promptvault-service',
-        'push-whatsapp-service',
-        'push-api-docs-hub',
-      ]
+    id: 'deploy-api-docs-hub'
+    waitFor: ['push-api-docs-hub']
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-affected.sh']
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-api-docs-hub.sh
+        else
+          echo "api-docs-hub not affected, skipping deploy."
+        fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -175,15 +279,15 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 15: Build and deploy web app to Cloud Storage (if affected)
+  # ===== web pipeline =====
   - name: 'node:22-slim'
-    id: 'build-and-deploy-web'
+    id: 'build-web'
     waitFor: ['npm-ci', 'detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "Building web app..."
           npm run --workspace=@praxos/web build
           echo "Web app build complete."
@@ -191,38 +295,33 @@ steps:
           echo "web not affected, skipping build."
         fi
 
-  # Step 16: Deploy web app to Cloud Storage (if affected)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-web'
-    waitFor: ['build-and-deploy-web']
+    waitFor: ['build-web']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if grep -q '"web"' /workspace/affected.json 2>/dev/null; then
-          echo "Deploying web app to Cloud Storage..."
-          BUCKET="praxos-web-${_ENVIRONMENT}"
-          echo "Bucket name: $$BUCKET"
-          gsutil -m rsync -r -d apps/web/dist/ "gs://$$BUCKET/"
-          echo "Web app deployment complete."
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-web.sh
         else
           echo "web not affected, skipping deploy."
         fi
+    env:
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
 
-  # Step 17: Sync static assets to GCS bucket (runs in parallel with builds)
+  # ===== static assets sync =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
     waitFor: ['npm-ci']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "Syncing static assets to GCS bucket..."
-        BUCKET="praxos-static-assets-${_ENVIRONMENT}"
-        echo "Bucket name: $$BUCKET"
-        echo "Syncing docs/assets/** to gs://$$BUCKET/"
-        gsutil -m rsync -r -d docs/assets/ "gs://$$BUCKET/"
-        echo "Static assets sync complete."
+    args: ['-c', 'bash cloudbuild/scripts/deploy-static-assets.sh']
+    env:
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
 # No substitutions block here - all substitutions come from the Terraform-managed
 # Cloud Build trigger. This ensures single source of truth.

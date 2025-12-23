@@ -26,9 +26,9 @@ PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets in
    - Role: `roles/storage.objectViewer`
 
 3. **Cloud Build Sync** (`cloudbuild/cloudbuild.yaml`)
-   - Automatically syncs `docs/assets/**` to bucket
-   - Triggered ONLY when files in `docs/assets/**` change
+   - Dedicated `sync-static-assets` step
    - Uses `gsutil rsync` for efficient synchronization
+   - Runs independently of service builds (no affected gating)
 
 ## Access
 
@@ -71,15 +71,11 @@ terraform apply
 
 2. The bucket is created automatically with public read access.
 
-3. Initial sync happens on the first Cloud Build run that detects changes to `docs/assets/**`.
+3. Initial sync happens on the first Cloud Build run after the trigger executes.
 
 ### Continuous Deployment
 
-Cloud Build automatically syncs assets when:
-
-- Changes are pushed to `docs/assets/**`
-- The development branch trigger runs
-- The `detect-affected.mjs` script marks `staticAssets: true`
+Cloud Build automatically syncs assets on every pipeline run via the `sync-static-assets` step. The step is independent from service deployments and does not wait on Docker builds.
 
 ### Manual Sync (if needed)
 
@@ -181,9 +177,8 @@ curl https://storage.googleapis.com/storage/v1/b/praxos-static-assets-dev/o
 ### Assets Not Syncing
 
 1. Check Cloud Build logs for `sync-static-assets` step
-2. Verify `affected.json` contains `"staticAssets": true`
-3. Check bucket name matches environment
-4. Verify Cloud Build service account has storage.objects.create permission
+2. Check bucket name matches environment
+3. Verify Cloud Build service account has storage.objects.create permission
 
 ### 404 Errors
 
