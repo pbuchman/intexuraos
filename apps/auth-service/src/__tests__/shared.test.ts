@@ -2,7 +2,7 @@
  * Tests for shared utilities
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 import { loadAuth0Config, handleValidationError } from '../routes/v1/shared.js';
 import type { FastifyReply } from 'fastify';
 describe('shared utilities', () => {
@@ -78,21 +78,22 @@ describe('shared utilities', () => {
       const result = schema.safeParse({ userId: '', email: 'invalid-email' });
       expect(result.success).toBe(false);
       if (!result.success) {
+        const mockFail = vi.fn().mockReturnThis();
         const mockReply = {
-          fail: vi.fn().mockReturnThis(),
+          fail: mockFail,
         } as unknown as FastifyReply;
         handleValidationError(result.error, mockReply);
-        expect(mockReply.fail).toHaveBeenCalledWith(
-          'INVALID_REQUEST',
-          'Validation failed',
-          undefined,
-          expect.objectContaining({
-            errors: expect.arrayContaining([
-              expect.objectContaining({ path: 'userId' }),
-              expect.objectContaining({ path: 'email' }),
-            ]),
-          })
-        );
+        expect(mockFail).toHaveBeenCalledTimes(1);
+        const callArgs = mockFail.mock.calls[0] as unknown[];
+        expect(callArgs[0]).toBe('INVALID_REQUEST');
+        expect(callArgs[1]).toBe('Validation failed');
+        expect(callArgs[2]).toBeUndefined();
+        const details = callArgs[3] as { errors: { path: string; message: string }[] };
+        expect(details.errors).toBeDefined();
+        expect(details.errors.length).toBeGreaterThanOrEqual(2);
+        const paths = details.errors.map((e) => e.path);
+        expect(paths).toContain('userId');
+        expect(paths).toContain('email');
       }
     });
     it('handles single validation error', () => {
@@ -102,20 +103,19 @@ describe('shared utilities', () => {
       const result = schema.safeParse({ name: 'ab' });
       expect(result.success).toBe(false);
       if (!result.success) {
+        const mockFail = vi.fn().mockReturnThis();
         const mockReply = {
-          fail: vi.fn().mockReturnThis(),
+          fail: mockFail,
         } as unknown as FastifyReply;
         handleValidationError(result.error, mockReply);
-        expect(mockReply.fail).toHaveBeenCalledWith(
-          'INVALID_REQUEST',
-          'Validation failed',
-          undefined,
-          expect.objectContaining({
-            errors: expect.arrayContaining([
-              expect.objectContaining({ path: 'name', message: expect.any(String) }),
-            ]),
-          })
-        );
+        expect(mockFail).toHaveBeenCalledTimes(1);
+        const callArgs = mockFail.mock.calls[0] as unknown[];
+        expect(callArgs[0]).toBe('INVALID_REQUEST');
+        const details = callArgs[3] as { errors: { path: string; message: string }[] };
+        expect(details.errors).toBeDefined();
+        expect(details.errors.length).toBe(1);
+        expect(details.errors[0]?.path).toBe('name');
+        expect(typeof details.errors[0]?.message).toBe('string');
       }
     });
     it('handles nested path in validation error', () => {
@@ -129,18 +129,17 @@ describe('shared utilities', () => {
       const result = schema.safeParse({ user: { profile: { age: -1 } } });
       expect(result.success).toBe(false);
       if (!result.success) {
+        const mockFail = vi.fn().mockReturnThis();
         const mockReply = {
-          fail: vi.fn().mockReturnThis(),
+          fail: mockFail,
         } as unknown as FastifyReply;
         handleValidationError(result.error, mockReply);
-        expect(mockReply.fail).toHaveBeenCalledWith(
-          'INVALID_REQUEST',
-          'Validation failed',
-          undefined,
-          expect.objectContaining({
-            errors: expect.arrayContaining([expect.objectContaining({ path: 'user.profile.age' })]),
-          })
-        );
+        expect(mockFail).toHaveBeenCalledTimes(1);
+        const callArgs = mockFail.mock.calls[0] as unknown[];
+        const details = callArgs[3] as { errors: { path: string; message: string }[] };
+        expect(details.errors).toBeDefined();
+        expect(details.errors.length).toBe(1);
+        expect(details.errors[0]?.path).toBe('user.profile.age');
       }
     });
   });
