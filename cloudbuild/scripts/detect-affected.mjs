@@ -74,6 +74,7 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
+  web: ['apps/web/', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.base.json'],
 };
 
 /**

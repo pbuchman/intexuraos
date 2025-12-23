@@ -175,7 +175,41 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 12: Sync static assets to GCS bucket (runs in parallel with builds)
+  # Step 15: Build and deploy web app to Cloud Storage (if affected)
+  - name: 'node:22-slim'
+    id: 'build-and-deploy-web'
+    waitFor: ['npm-ci', 'detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+          echo "Building web app..."
+          npm run --workspace=@praxos/web build
+          echo "Web app build complete."
+        else
+          echo "web not affected, skipping build."
+        fi
+
+  # Step 16: Deploy web app to Cloud Storage (if affected)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-web'
+    waitFor: ['build-and-deploy-web']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+          echo "Deploying web app to Cloud Storage..."
+          BUCKET="praxos-web-${_ENVIRONMENT}"
+          echo "Bucket name: $$BUCKET"
+          gsutil -m rsync -r -d apps/web/dist/ "gs://$$BUCKET/"
+          echo "Web app deployment complete."
+        else
+          echo "web not affected, skipping deploy."
+        fi
+
+  # Step 17: Sync static assets to GCS bucket (runs in parallel with builds)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
     waitFor: ['npm-ci']
