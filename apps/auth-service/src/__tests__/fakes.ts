@@ -1,0 +1,160 @@
+/**
+ * Fake repositories for auth-service testing.
+ *
+ * These fakes implement domain port interfaces with in-memory storage.
+ */
+import type { Result } from '@praxos/common';
+import { ok, err } from '@praxos/common';
+import type {
+  AuthTokenRepository,
+  AuthTokens,
+  AuthTokensPublic,
+  AuthError,
+  Auth0Client,
+  RefreshResult,
+} from '../domain/identity/index.js';
+
+/**
+ * Fake Auth token repository for testing.
+ */
+export class FakeAuthTokenRepository implements AuthTokenRepository {
+  private tokens = new Map<string, AuthTokens>();
+  private shouldFailGetRefreshToken = false;
+  private shouldFailSaveTokens = false;
+
+  /**
+   * Configure the fake to fail the next getRefreshToken call.
+   */
+  setFailNextGetRefreshToken(fail: boolean): void {
+    this.shouldFailGetRefreshToken = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next saveTokens call.
+   */
+  setFailNextSaveTokens(fail: boolean): void {
+    this.shouldFailSaveTokens = fail;
+  }
+
+  /**
+   * Store tokens directly (for test setup).
+   */
+  setTokens(userId: string, tokens: AuthTokens): void {
+    this.tokens.set(userId, tokens);
+  }
+
+  saveTokens(userId: string, tokens: AuthTokens): Promise<Result<AuthTokensPublic, AuthError>> {
+    if (this.shouldFailSaveTokens) {
+      this.shouldFailSaveTokens = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
+    }
+    this.tokens.set(userId, tokens);
+    const now = new Date().toISOString();
+    return Promise.resolve(
+      ok({
+        userId,
+        hasRefreshToken: true,
+        expiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
+        scope: tokens.scope,
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+  }
+
+  getTokenMetadata(userId: string): Promise<Result<AuthTokensPublic | null, AuthError>> {
+    const tokens = this.tokens.get(userId);
+    if (tokens === undefined) return Promise.resolve(ok(null));
+    const now = new Date().toISOString();
+    return Promise.resolve(
+      ok({
+        userId,
+        hasRefreshToken: true,
+        expiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
+        scope: tokens.scope,
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+  }
+
+  getRefreshToken(userId: string): Promise<Result<string | null, AuthError>> {
+    if (this.shouldFailGetRefreshToken) {
+      this.shouldFailGetRefreshToken = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated Firestore error' }));
+    }
+    const tokens = this.tokens.get(userId);
+    return Promise.resolve(ok(tokens?.refreshToken ?? null));
+  }
+
+  hasRefreshToken(userId: string): Promise<Result<boolean, AuthError>> {
+    const tokens = this.tokens.get(userId);
+    return Promise.resolve(ok(tokens !== undefined));
+  }
+
+  deleteTokens(userId: string): Promise<Result<void, AuthError>> {
+    this.tokens.delete(userId);
+    return Promise.resolve(ok(undefined));
+  }
+
+  /**
+   * Clear all tokens (for test cleanup).
+   */
+  clear(): void {
+    this.tokens.clear();
+  }
+
+  /**
+   * Get tokens (for test verification).
+   */
+  getStoredTokens(userId: string): AuthTokens | undefined {
+    return this.tokens.get(userId);
+  }
+}
+
+/**
+ * Fake Auth0 client for testing.
+ */
+export class FakeAuth0Client implements Auth0Client {
+  private nextResult: Result<RefreshResult, AuthError> | null = null;
+  private shouldThrow = false;
+
+  /**
+   * Set the result to return on next call.
+   */
+  setNextResult(result: Result<RefreshResult, AuthError>): void {
+    this.nextResult = result;
+  }
+
+  /**
+   * Configure the fake to throw an exception on next call.
+   */
+  setThrowOnNextCall(shouldThrow: boolean): void {
+    this.shouldThrow = shouldThrow;
+  }
+
+  refreshAccessToken(_refreshToken: string): Promise<Result<RefreshResult, AuthError>> {
+    if (this.shouldThrow) {
+      this.shouldThrow = false;
+      throw new Error('Simulated Auth0 error');
+    }
+
+    if (this.nextResult !== null) {
+      const result = this.nextResult;
+      this.nextResult = null;
+      return Promise.resolve(result);
+    }
+
+    // Default: return a successful refresh
+    return Promise.resolve(
+      ok({
+        accessToken: 'new-access-token',
+        tokenType: 'Bearer',
+        expiresIn: 3600,
+        scope: 'openid profile email',
+        idToken: 'new-id-token',
+        refreshToken: undefined,
+      })
+    );
+  }
+}
