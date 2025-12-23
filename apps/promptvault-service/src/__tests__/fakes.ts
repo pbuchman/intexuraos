@@ -1,5 +1,11 @@
 /**
  * Fake repositories for testing promptvault-service.
+ *
+ * These fakes implement the same interfaces as the real Firestore/Notion adapters
+ * but use in-memory storage. They are designed to be exercised by route tests.
+ *
+ * Coverage note: Some methods may show low coverage until all Tier 1 test issues
+ * are completed (see docs/todo/1-3-promptvault-usecases.md).
  */
 import type { Result } from '@praxos/common';
 import { ok, err } from '@praxos/common';

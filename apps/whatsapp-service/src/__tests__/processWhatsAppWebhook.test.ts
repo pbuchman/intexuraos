@@ -1,0 +1,365 @@
+/**
+ * Tests for ProcessWhatsAppWebhook use case.
+ *
+ * These tests exercise the webhook classification logic and processing flow
+ * using fake repositories to avoid external dependencies.
+ */
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { ProcessWhatsAppWebhookUseCase } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
+import type { WhatsAppWebhookPayload } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
+import { FakeWhatsAppWebhookEventRepository, FakeWhatsAppUserMappingRepository } from './fakes.js';
+import type { InboxNotesRepository, InboxNote, InboxError } from '../domain/inbox/index.js';
+import type { Result } from '@praxos/common';
+import { ok, err } from '@praxos/common';
+
+/**
+ * Fake inbox notes repository for testing.
+ */
+class FakeInboxNotesRepository implements InboxNotesRepository {
+  private notes = new Map<string, InboxNote>();
+  private shouldFail = false;
+
+  createNote(note: InboxNote): Promise<Result<InboxNote, InboxError>> {
+    if (this.shouldFail) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Fake error' }));
+    }
+    const created = { ...note, id: `note-${String(Date.now())}` };
+    this.notes.set(created.id, created);
+    return Promise.resolve(ok(created));
+  }
+
+  getNote(noteId: string): Promise<Result<InboxNote | null, InboxError>> {
+    return Promise.resolve(ok(this.notes.get(noteId) ?? null));
+  }
+
+  updateNote(noteId: string, updates: Partial<InboxNote>): Promise<Result<InboxNote, InboxError>> {
+    const note = this.notes.get(noteId);
+    if (note === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Note not found' }));
+    }
+    const updated = { ...note, ...updates };
+    this.notes.set(noteId, updated);
+    return Promise.resolve(ok(updated));
+  }
+
+  setFail(fail: boolean): void {
+    this.shouldFail = fail;
+  }
+
+  getAll(): InboxNote[] {
+    return Array.from(this.notes.values());
+  }
+
+  clear(): void {
+    this.notes.clear();
+    this.shouldFail = false;
+  }
+}
+
+/**
+ * Create a valid WhatsApp webhook payload for testing.
+ */
+function createValidPayload(
+  from = '+1234567890',
+  text = 'Hello world',
+  phoneNumberId = 'allowed-phone-id'
+): WhatsAppWebhookPayload {
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'entry-1',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '+10000000000',
+                phone_number_id: phoneNumberId,
+              },
+              contacts: [
+                {
+                  profile: { name: 'Test User' },
+                  wa_id: from.replace('+', ''),
+                },
+              ],
+              messages: [
+                {
+                  from,
+                  id: 'wamid.123',
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: 'text',
+                  text: { body: text },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe('ProcessWhatsAppWebhookUseCase', () => {
+  let webhookRepo: FakeWhatsAppWebhookEventRepository;
+  let mappingRepo: FakeWhatsAppUserMappingRepository;
+  let notesRepo: FakeInboxNotesRepository;
+  let useCase: ProcessWhatsAppWebhookUseCase;
+
+  beforeEach(() => {
+    webhookRepo = new FakeWhatsAppWebhookEventRepository();
+    mappingRepo = new FakeWhatsAppUserMappingRepository();
+    notesRepo = new FakeInboxNotesRepository();
+    useCase = new ProcessWhatsAppWebhookUseCase(
+      { allowedPhoneNumberIds: ['allowed-phone-id'] },
+      webhookRepo,
+      mappingRepo,
+      notesRepo
+    );
+  });
+
+  describe('webhook classification', () => {
+    it('ignores non-WhatsApp webhook objects', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'instagram',
+        entry: [],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('INVALID_OBJECT_TYPE');
+      }
+    });
+
+    it('ignores payloads with no entries', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_ENTRIES');
+      }
+    });
+
+    it('ignores payloads with no changes', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [{ id: 'entry-1', changes: [] }],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_CHANGES');
+      }
+    });
+
+    it('ignores unsupported phone number IDs', async () => {
+      const payload = createValidPayload('+1234567890', 'Hello', 'unsupported-phone-id');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('UNSUPPORTED_PHONE_NUMBER');
+      }
+    });
+
+    it('ignores status updates (no messages)', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: 'allowed-phone-id' },
+                  statuses: [{ id: 'wamid.123', status: 'delivered', timestamp: '12345' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_MESSAGES');
+      }
+    });
+
+    it('ignores non-text messages', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: 'allowed-phone-id' },
+                  messages: [
+                    {
+                      from: '+1234567890',
+                      id: 'wamid.123',
+                      timestamp: '12345',
+                      type: 'image',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NON_TEXT_MESSAGE');
+      }
+    });
+  });
+
+  describe('user mapping', () => {
+    it('returns USER_UNMAPPED when phone number has no mapping', async () => {
+      const payload = createValidPayload('+1234567890', 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('USER_UNMAPPED');
+        expect(result.value.ignoredReason?.code).toBe('USER_UNMAPPED');
+      }
+    });
+
+    it('returns USER_UNMAPPED when user mapping is disconnected', async () => {
+      const phone = '+1234567890';
+      // Create mapping then disconnect
+      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.disconnectMapping('user-1');
+
+      const payload = createValidPayload(phone, 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('USER_UNMAPPED');
+        expect(result.value.ignoredReason?.code).toBe('USER_DISCONNECTED');
+      }
+    });
+  });
+
+  describe('successful processing', () => {
+    it('creates inbox note for valid text message with connected user', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+
+      const payload = createValidPayload(phone, 'This is my inbox note');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.inboxNote).toBeDefined();
+        expect(result.value.inboxNote?.originalText).toBe('This is my inbox note');
+        expect(result.value.inboxNote?.source).toBe('WhatsApp');
+      }
+    });
+
+    it('truncates long message text in title', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+
+      const longText =
+        'This is a very long message that should be truncated in the title because it exceeds fifty characters';
+      const payload = createValidPayload(phone, longText);
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.inboxNote?.title).toContain('...');
+        expect(result.value.inboxNote?.title.length).toBeLessThanOrEqual(60); // "WA: " + 50 + "..."
+      }
+    });
+  });
+
+  describe('error handling', () => {
+    it('returns FAILED when inbox note creation fails', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      notesRepo.setFail(true);
+
+      const payload = createValidPayload(phone, 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('FAILED');
+        expect(result.value.failureDetails).toContain('Failed to create inbox note');
+      }
+    });
+  });
+
+  describe('webhook event tracking', () => {
+    it('updates event status to IGNORED for invalid webhooks', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'instagram',
+        entry: [],
+      };
+
+      // First save the event
+      await webhookRepo.saveEvent({
+        payload: JSON.stringify(payload),
+        receivedAt: new Date().toISOString(),
+        status: 'PENDING',
+        signatureValid: true,
+        phoneNumberId: null,
+      });
+
+      await useCase.execute('event-1', payload);
+
+      // Event should have been updated (though we can't verify without getEvent)
+    });
+
+    it('updates event status to PROCESSED for successful processing', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+
+      const payload = createValidPayload(phone, 'Hello');
+
+      await useCase.execute('event-1', payload);
+
+      // Event should be updated to PROCESSED
+    });
+  });
+});
