@@ -10,7 +10,7 @@ import {
   getFirestore,
   type NotionLogger,
 } from '@praxos/common';
-import { v1Routes } from './v1/routes.js';
+import { v1Routes } from './routes/v1/routes.js';
 import { getServices } from './services.js';
 
 const SERVICE_NAME = 'notion-service';

@@ -23,7 +23,7 @@ apps/           → Fastify services with colocated domain & infra
   <app>/src/
     domain/     → App-specific business logic, models, usecases
     infra/      → App-specific adapters (firestore, notion, auth0)
-    v1/         → HTTP routes (transport layer)
+    routes/v1/  → HTTP routes (transport layer)
 packages/
   common/       → Shared utilities only (no domain logic)
 terraform/      → Infrastructure as code
@@ -40,7 +40,7 @@ docs/           → All documentation
 
 - `src/domain/**` — business logic, models, ports, usecases (no external deps)
 - `src/infra/**` — adapters for external services (Firestore, Notion, Auth0)
-- `src/v1/routes/**` — HTTP transport layer
+- `src/routes/v1/**` — HTTP transport layer
 - `src/services.ts` — dependency injection / service container
 
 ---
