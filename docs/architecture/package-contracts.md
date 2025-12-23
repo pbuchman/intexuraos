@@ -13,7 +13,7 @@ apps/
     src/
       domain/       # Business logic, models, usecases
       infra/        # Adapters (Firestore, Notion, Auth0)
-      v1/routes/    # HTTP transport layer
+      routes/v1/    # HTTP transport layer
       services.ts   # Service container / DI
 packages/
   common/           # Only shared utilities
@@ -103,7 +103,7 @@ infra/
 **Forbidden contents:**
 
 - Business logic (belongs in domain)
-- HTTP handlers (belongs in v1/routes)
+- HTTP handlers (belongs in routes/v1)
 - Imports from other apps
 
 **Dependencies:**
@@ -111,7 +111,7 @@ infra/
 - `@praxos/common` ✓
 - Same-app `src/domain/` ✓
 
-### apps/\*/src/v1/routes/
+### apps/\*/src/routes/v1/
 
 **Purpose:** HTTP transport layer.
 

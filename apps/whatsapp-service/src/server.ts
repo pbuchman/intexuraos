@@ -9,7 +9,7 @@ import {
   getErrorMessage,
   getFirestore,
 } from '@praxos/common';
-import { createV1Routes } from './v1/routes.js';
+import { createV1Routes } from './routes/v1/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
 
 const SERVICE_NAME = 'whatsapp-service';

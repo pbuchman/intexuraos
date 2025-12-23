@@ -10,7 +10,7 @@ import {
   getErrorMessage,
   getFirestore,
 } from '@praxos/common';
-import { v1AuthRoutes } from './v1/routes.js';
+import { v1AuthRoutes } from './routes/v1/routes.js';
 
 const SERVICE_NAME = 'auth-service';
 const SERVICE_VERSION = '0.0.1';
