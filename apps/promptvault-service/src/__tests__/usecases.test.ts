@@ -3,10 +3,22 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ok, err, isErr, type Result } from '@praxos/common';
-import { createPrompt } from '../domain/promptvault/usecases/CreatePromptUseCase.js';
-import { getPrompt } from '../domain/promptvault/usecases/GetPromptUseCase.js';
-import { listPrompts } from '../domain/promptvault/usecases/ListPromptsUseCase.js';
-import { updatePrompt } from '../domain/promptvault/usecases/UpdatePromptUseCase.js';
+import {
+  createPrompt,
+  createCreatePromptUseCase,
+} from '../domain/promptvault/usecases/CreatePromptUseCase.js';
+import {
+  getPrompt,
+  createGetPromptUseCase,
+} from '../domain/promptvault/usecases/GetPromptUseCase.js';
+import {
+  listPrompts,
+  createListPromptsUseCase,
+} from '../domain/promptvault/usecases/ListPromptsUseCase.js';
+import {
+  updatePrompt,
+  createUpdatePromptUseCase,
+} from '../domain/promptvault/usecases/UpdatePromptUseCase.js';
 import type { PromptRepository } from '../domain/promptvault/ports/index.js';
 import type { Prompt, PromptVaultError } from '../domain/promptvault/models/index.js';
 
@@ -115,6 +127,31 @@ describe('createPrompt use case', () => {
       expect(result.error.message).toContain('200');
     }
   });
+  it('returns error when content exceeds max length', async () => {
+    const repo = createMockRepository();
+    const result = await createPrompt(repo, {
+      userId: 'user-1',
+      title: 'Test Title',
+      content: 'a'.repeat(100001),
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('100000');
+    }
+  });
+  it('returns error when content is whitespace only', async () => {
+    const repo = createMockRepository();
+    const result = await createPrompt(repo, {
+      userId: 'user-1',
+      title: 'Test Title',
+      content: '   ',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
 });
 describe('getPrompt use case', () => {
   it('returns prompt when found', async () => {
@@ -139,6 +176,23 @@ describe('getPrompt use case', () => {
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+  it('returns error when promptId is empty', async () => {
+    const repo = createMockRepository();
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: '' });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('promptId');
+    }
+  });
+  it('returns error when promptId is whitespace only', async () => {
+    const repo = createMockRepository();
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: '   ' });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
     }
   });
 });
@@ -197,5 +251,195 @@ describe('updatePrompt use case', () => {
       title: '',
     });
     expect(isErr(result)).toBe(true);
+  });
+  it('returns error when promptId is empty', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: '',
+      title: 'New Title',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+  it('returns error when neither title nor content provided', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('at least one');
+    }
+  });
+  it('returns error when title exceeds max length', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      title: 'a'.repeat(201),
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('200');
+    }
+  });
+  it('returns error when content is empty', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      content: '',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+  it('returns error when content is whitespace only', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      content: '   ',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+  it('returns error when content exceeds max length', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      content: 'a'.repeat(100001),
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+      expect(result.error.message).toContain('100000');
+    }
+  });
+  it('updates prompt with only content', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      content: 'New Content',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.content).toBe('New Content');
+    }
+  });
+  it('updates prompt with both title and content', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      title: 'New Title',
+      content: 'New Content',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.title).toBe('New Title');
+      expect(result.value.content).toBe('New Content');
+    }
+  });
+  it('returns error when title is whitespace only', async () => {
+    const repo = createMockRepository([
+      { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+    ]);
+    const result = await updatePrompt(repo, {
+      userId: 'user-1',
+      promptId: 'p1',
+      title: '   ',
+    });
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+});
+describe('factory functions', () => {
+  describe('createCreatePromptUseCase', () => {
+    it('creates a bound use case that works like the original', async () => {
+      const repo = createMockRepository();
+      const boundCreatePrompt = createCreatePromptUseCase(repo);
+      const result = await boundCreatePrompt({
+        userId: 'user-1',
+        title: 'Factory Test',
+        content: 'Content',
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.title).toBe('Factory Test');
+      }
+    });
+  });
+  describe('createGetPromptUseCase', () => {
+    it('creates a bound use case that works like the original', async () => {
+      const repo = createMockRepository([
+        { id: 'p1', title: 'Test', content: 'C', createdAt: '', updatedAt: '' },
+      ]);
+      const boundGetPrompt = createGetPromptUseCase(repo);
+      const result = await boundGetPrompt({ userId: 'user-1', promptId: 'p1' });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.id).toBe('p1');
+      }
+    });
+  });
+  describe('createListPromptsUseCase', () => {
+    it('creates a bound use case that works like the original', async () => {
+      const repo = createMockRepository([
+        { id: 'p1', title: 'P1', content: 'C1', createdAt: '', updatedAt: '' },
+      ]);
+      const boundListPrompts = createListPromptsUseCase(repo);
+      const result = await boundListPrompts({ userId: 'user-1' });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+      }
+    });
+  });
+  describe('createUpdatePromptUseCase', () => {
+    it('creates a bound use case that works like the original', async () => {
+      const repo = createMockRepository([
+        { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
+      ]);
+      const boundUpdatePrompt = createUpdatePromptUseCase(repo);
+      const result = await boundUpdatePrompt({
+        userId: 'user-1',
+        promptId: 'p1',
+        title: 'Updated',
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.title).toBe('Updated');
+      }
+    });
   });
 });
