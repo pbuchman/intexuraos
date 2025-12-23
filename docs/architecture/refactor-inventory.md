@@ -1,11 +1,17 @@
 # Domain Colocation Refactoring — Dependency Inventory
 
+> **STATUS: COMPLETED**  
+> This document is historical. The refactoring described here has been completed.  
+> Domain and infra code is now colocated in apps (`apps/*/src/domain/` and `apps/*/src/infra/`).  
+> See [package-contracts.md](./package-contracts.md) for current architecture.
+
 **Created:** 2024-12-23  
+**Completed:** 2024-12-23  
 **Branch:** `refactor/colocate-domain`
 
 ---
 
-## Domain Package Inventory
+## Domain Package Inventory (HISTORICAL)
 
 ### `@praxos/domain-identity`
 

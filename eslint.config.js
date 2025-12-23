@@ -71,6 +71,7 @@ export default tseslint.config(
       '@typescript-eslint/return-await': ['error', 'always'],
       // Block deep imports into other packages' /src/ directories
       // Cross-package imports should use the public entrypoint (index.ts)
+      // Also block cross-app imports (apps should not import from other apps)
       'no-restricted-imports': [
         'error',
         {
@@ -79,6 +80,30 @@ export default tseslint.config(
               group: ['@praxos/*/src/*', '@praxos/*/src/**'],
               message:
                 'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@praxos/auth-service', '@praxos/auth-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@praxos/promptvault-service', '@praxos/promptvault-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@praxos/notion-service', '@praxos/notion-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@praxos/whatsapp-service', '@praxos/whatsapp-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@praxos/api-docs-hub', '@praxos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@praxos/web', '@praxos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
         },

@@ -1,11 +1,27 @@
 # Package Contracts
 
-This document defines the architectural contracts for all packages in PraxOS.
-These rules are enforced by ESLint, CI scripts, and code review.
+This document defines the architectural contracts for PraxOS.
+These rules are enforced by ESLint boundaries, CI scripts, and code review.
+
+## Architecture Overview
+
+PraxOS uses **app-first colocation**: each app owns its domain logic and infrastructure adapters.
+
+```
+apps/
+  <app>/
+    src/
+      domain/       # Business logic, models, usecases
+      infra/        # Adapters (Firestore, Notion, Auth0)
+      v1/routes/    # HTTP transport layer
+      services.ts   # Service container / DI
+packages/
+  common/           # Only shared utilities
+```
 
 ## Layer Definitions
 
-### common
+### packages/common
 
 **Purpose:** Cross-cutting technical utilities only.
 
@@ -13,303 +29,135 @@ These rules are enforced by ESLint, CI scripts, and code review.
 
 - Result/Either types
 - Error base classes
-- Crypto primitives
-- Logging types and interfaces
-- Generic type utilities
-- Configuration loaders (non-domain-specific)
+- HTTP response helpers
+- Redaction utilities
+- JWT/auth utilities
+- Firestore/Notion client wrappers (shared initialization only)
 
 **Forbidden contents:**
 
 - Domain models (User, Action, Prompt, etc.)
 - Business logic
-- External service references (Auth0, Notion, Firestore)
-- Anything that implies a specific bounded context
+- App-specific code
 
 **Dependencies:** None (leaf package).
 
-### domain
+**Verification:** `npm run verify:common`
 
-**Purpose:** Business logic, domain models, use cases, and policies.
+### apps/\*/src/domain/
 
-Each domain package represents a bounded context:
+**Purpose:** App-specific business logic, domain models, use cases.
 
-- `identity` - User identity, authentication state, access control models
-- `promptvault` - Prompt templates, versioning, metadata
-- `actions` - Executable actions, scheduling, execution state
+**Structure:**
+
+```
+domain/
+  <context>/
+    models/      # Domain types (optional)
+    ports/       # Interfaces for infra (optional)
+    usecases/    # Business logic
+```
 
 **Allowed contents:**
 
-- Domain models (`src/models/`)
-- Ports/interfaces for external dependencies (`src/ports/`)
-- Use cases / application services (`src/usecases/`)
-- Domain policies and validation (`src/policies/`)
+- Domain models and types
+- Use cases / application services
+- Domain validation and policies
+- Port interfaces for infrastructure
 
 **Forbidden contents:**
 
 - Direct external service calls
 - Infrastructure implementation details
 - HTTP/transport layer concerns
+- Imports from other apps
 
 **Dependencies:**
 
-- `common` ✓
-- Other `domain` packages ✓ (with care)
-- `infra` ✗
-- `apps` ✗
+- `@praxos/common` ✓
+- Same-app `src/infra/` via ports only ✗ (domain should not import infra directly)
 
-### infra
+### apps/\*/src/infra/
 
-**Purpose:** Adapters that implement domain ports using external services.
+**Purpose:** App-specific adapters for external services.
 
-Each infra package wraps a specific external dependency:
+**Structure:**
 
-- `auth0` - Auth0 client wrapper
-- `notion` - Notion API client wrapper
-- `firestore` - Firestore client wrapper
+```
+infra/
+  firestore/
+    *Repository.ts    # Firestore implementations
+  notion/
+    *Api.ts          # Notion API adapters
+  auth0/
+    client.ts        # Auth0 client (auth-service only)
+```
 
 **Allowed contents:**
 
-- Adapter implementations (`src/adapters/`)
-- Client configuration
-- External SDK wrappers
+- Adapter implementations
+- External SDK usage
 - Mapping logic (external → domain types)
+- Client configuration
 
 **Forbidden contents:**
 
-- Business logic
-- Domain models (import from domain instead)
-- Direct HTTP handlers
+- Business logic (belongs in domain)
+- HTTP handlers (belongs in v1/routes)
+- Imports from other apps
 
 **Dependencies:**
 
-- `common` ✓
-- `domain` ✓
-- Other `infra` packages ✓ (with care)
-- `apps` ✗
+- `@praxos/common` ✓
+- Same-app `src/domain/` ✓
 
-### apps
+### apps/\*/src/v1/routes/
 
-**Purpose:** Deployable services that compose domain and infra.
+**Purpose:** HTTP transport layer.
 
 **Allowed contents:**
 
-- HTTP handlers / routes
-- Service configuration
-- Dependency injection / wiring
-- Health checks, metrics endpoints
+- Route handlers
+- Request/response schemas
+- Input validation
+- Error mapping to HTTP codes
 
 **Dependencies:**
 
-- `common` ✓
-- `domain` ✓
-- `infra` ✓
+- Same-app `src/domain/` ✓
+- Same-app `src/infra/` ✓ (via services.ts)
+- `@praxos/common` ✓
 
-## Dependency Graph
+## Import Rules
 
-```
-┌─────────┐
-│  apps   │
-└────┬────┘
-     │ imports
-     ▼
-┌─────────┐     ┌─────────┐
-│  infra  │────▶│ domain  │
-└────┬────┘     └────┬────┘
-     │               │
-     └───────┬───────┘
-             ▼
-       ┌─────────┐
-       │ common  │
-       └─────────┘
-```
+| From                    | Can Import                        |
+| ----------------------- | --------------------------------- |
+| `packages/common`       | nothing                           |
+| `apps/<app>/src/domain` | `@praxos/common`                  |
+| `apps/<app>/src/infra`  | `@praxos/common`, same-app domain |
+| `apps/<app>/src/v1`     | `@praxos/common`, same-app all    |
 
-## Public API Rules
+**Forbidden:**
 
-### Index Exports Only
-
-Every package exposes its public API through `src/index.ts`.
-
-```typescript
-// ✓ Correct: import from package entrypoint
-import { ok, err } from '@praxos/common';
-
-// ✗ Forbidden: deep import into package internals
-import { ok } from '@praxos/common/src/result';
-```
-
-### No Deep Imports Across Packages
-
-ESLint enforces that cross-package imports must use the public entrypoint.
-
-Importing from another package's `/src/` path is forbidden:
-
-```typescript
-// ✗ Forbidden
-import { X } from '@praxos/domain-identity/src/models/user';
-
-// ✓ Correct
-import { X } from '@praxos/domain-identity';
-```
-
-Within the same package, relative imports are allowed:
-
-```typescript
-// ✓ Allowed (same package)
-import { Result } from './result';
-import { BaseError } from '../errors/base';
-```
-
-## Testing Requirements
-
-### common
-
-- Unit tests for all utilities
-- No mocking required (pure functions)
-- 100% coverage target
-
-### domain
-
-- Unit tests for models and policies
-- Use case tests with port mocks
-- No external dependencies in tests
-- Contract tests for ports (optional, for documentation)
-
-### infra
-
-- Adapter tests with mocked external clients
-- Contract tests verifying adapter implements port correctly
-- Integration tests (optional, run separately)
-
-### apps
-
-- Route handler tests with mocked domain/infra
-- Integration tests (separate CI job)
+- ❌ Any app importing from another app
+- ❌ `packages/common` importing from apps
+- ❌ Deep imports into package internals
 
 ## Naming Conventions
 
-### Package Names
+| Type           | Pattern                  | Example                  |
+| -------------- | ------------------------ | ------------------------ |
+| Shared package | `@praxos/common`         | `@praxos/common`         |
+| App            | `@praxos/<name>-service` | `@praxos/auth-service`   |
+| Repository     | `*Repository.ts`         | `authTokenRepository.ts` |
+| Use case       | `*UseCase.ts`            | `createPromptUseCase.ts` |
+| API adapter    | `*Api.ts`                | `promptApi.ts`           |
 
-- `@praxos/common` - shared utilities
-- `@praxos/domain-{context}` - domain packages (e.g., `@praxos/domain-identity`)
-- `@praxos/infra-{service}` - infra packages (e.g., `@praxos/infra-auth0`)
-- `@praxos/{service}-service` - apps (e.g., `@praxos/auth-service`)
+## Verification
 
-### Directory Structure
-
+```bash
+npm run verify:boundaries  # ESLint boundaries check
+npm run verify:common      # Common package purity check
+npm run lint               # Full ESLint including boundaries
+npm run ci                 # All checks
 ```
-packages/{layer}/{name}/
-├── package.json
-├── tsconfig.json
-└── src/
-    ├── index.ts          # Public exports only
-    ├── models/           # (domain only) Domain entities
-    ├── ports/            # (domain only) Interfaces for external deps
-    ├── usecases/         # (domain only) Application services
-    ├── policies/         # (domain only) Validation, business rules
-    ├── adapters/         # (infra only) Port implementations
-    └── __tests__/        # Co-located tests
-```
-
-### File Naming
-
-- Models: `{entity}.ts` (e.g., `user.ts`, `action.ts`)
-- Ports: `{service}.port.ts` (e.g., `auth.port.ts`)
-- Adapters: `{service}.adapter.ts` (e.g., `auth0.adapter.ts`)
-- Use cases: `{action}.usecase.ts` (e.g., `create-user.usecase.ts`)
-- Tests: `{file}.test.ts`
-
-## Anti-Patterns
-
-### Common Dumping
-
-**Definition:** Placing domain-specific code in `common` to avoid proper dependency management.
-
-**Symptoms:**
-
-- Domain model names in common (User, Action, Prompt)
-- Service-specific types in common (NotionPage, Auth0Token)
-- Business logic in common
-- common growing faster than other packages
-
-**Prevention:**
-
-- CI script scans common for forbidden keywords
-- Code review checklist
-- Regular architecture review
-
-**Example violation:**
-
-```typescript
-// packages/common/src/user.ts
-// ✗ FORBIDDEN: User is a domain concept
-export interface User {
-  id: string;
-  email: string;
-}
-```
-
-**Correct approach:**
-
-```typescript
-// packages/domain/identity/src/models/user.ts
-// ✓ Domain model in domain package
-export interface User {
-  id: string;
-  email: string;
-}
-```
-
-### Domain Depending on Infra
-
-**Definition:** Domain package importing from infra package.
-
-**Why forbidden:** Domain must remain pure and testable without external dependencies.
-
-**Example violation:**
-
-```typescript
-// apps/auth-service/src/domain/identity/usecases/login.ts
-// ✗ FORBIDDEN: domain importing external APIs directly
-import { ManagementClient } from 'auth0';
-```
-
-**Correct approach:**
-
-```typescript
-// apps/auth-service/src/domain/identity/ports/auth.port.ts
-export interface AuthPort {
-  validateToken(token: string): Promise<Result<TokenPayload, AuthError>>;
-}
-
-// apps/auth-service/src/domain/identity/usecases/login.ts
-// ✓ Domain uses port interface
-import type { AuthPort } from '../ports/auth.port';
-```
-
-### Bypassing Public API
-
-**Definition:** Importing internal modules directly instead of through index.ts.
-
-**Why forbidden:** Breaks encapsulation, creates fragile dependencies.
-
-**Prevention:** ESLint rule blocks `/src/` in cross-package imports.
-
-## Enforcement
-
-| Rule              | Mechanism                      |
-| ----------------- | ------------------------------ |
-| Dependency graph  | eslint-plugin-boundaries       |
-| No deep imports   | ESLint no-restricted-imports   |
-| No common dumping | scripts/verify-common.mjs + CI |
-| Public API only   | ESLint + code review           |
-| Test coverage     | Vitest coverage thresholds     |
-
-## Exceptions
-
-Exceptions require:
-
-1. Documented justification in code comment
-2. Approval in code review
-3. Tracked issue for remediation
-
-No permanent exceptions. All exceptions are tech debt.
