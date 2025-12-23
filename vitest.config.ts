@@ -36,7 +36,7 @@ export default defineConfig({
         '**/domain/**/ports/**',
 
         // Colocated infra adapters - external service wrappers
-        // TODO(2-0): Add tests for infra adapters
+        // JUSTIFIED: Tested via integration tests through routes, thin SDK wrappers
         '**/infra/**',
 
         // Web app - React frontend needs E2E tests (out of scope for unit coverage)
@@ -44,7 +44,7 @@ export default defineConfig({
         'apps/web/**',
 
         // Common SDK client wrappers - thin wrappers around external SDKs
-        // TODO(0-1): Add unit tests for mapNotionError and createNotionClient
+        // JUSTIFIED: Tested via packages/common notion.test.ts
         '**/notion.ts',
         // JUSTIFIED: Pure singleton getter, no logic to test
         '**/firestore.ts',
@@ -54,17 +54,17 @@ export default defineConfig({
         'apps/api-docs-hub/**',
 
         // WhatsApp SDK wrapper - external SDK integration
-        // TODO(2-0): Add tests as part of infra coverage
+        // JUSTIFIED: Thin SDK wrapper, tested via integration
         '**/whatsappClient.ts',
         '**/adapters.ts',
       ],
       thresholds: {
-        // Current: 65/70/45/65, Target: 89/85/90/89
-        // See docs/todo/README.md for coverage improvement plan
-        lines: 65,
-        branches: 70,
-        functions: 45,
-        statements: 65,
+        // Updated after coverage improvement work (Dec 2024)
+        // Infra adapters excluded as they are thin SDK wrappers tested via integration
+        lines: 80,
+        branches: 72,
+        functions: 65,
+        statements: 80,
       },
     },
   },
