@@ -10,7 +10,7 @@ import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,
   FakeNotionConnectionRepository,
-} from '@praxos/infra-firestore';
+} from './fakes.js';
 import type { Config } from '../config.js';
 
 export const testConfig: Config = {
@@ -102,7 +102,6 @@ export function setupTestContext(): TestContext {
       webhookEventRepository: context.webhookEventRepository,
       userMappingRepository: context.userMappingRepository,
       notionConnectionRepository: context.notionConnectionRepository,
-      inboxNotesRepository: null,
     });
 
     process.env['VITEST'] = 'true';

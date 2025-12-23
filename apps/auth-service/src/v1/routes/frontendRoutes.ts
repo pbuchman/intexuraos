@@ -8,7 +8,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@praxos/common';
-import { FirestoreAuthTokenRepository } from '@praxos/infra-firestore';
+import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import { loadAuth0Config } from './shared.js';
 
 export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {

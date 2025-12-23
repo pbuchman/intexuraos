@@ -26,8 +26,6 @@ export default tseslint.config(
     settings: {
       'boundaries/elements': [
         { type: 'common', pattern: ['packages/common/src/**'] },
-        { type: 'domain', pattern: ['packages/domain/*/src/**'] },
-        { type: 'infra', pattern: ['packages/infra/*/src/**'] },
         { type: 'apps', pattern: ['apps/*/src/**'] },
       ],
       'boundaries/ignore': ['**/*.test.ts', '**/*.spec.ts'],
@@ -39,10 +37,10 @@ export default tseslint.config(
         {
           default: 'disallow',
           rules: [
+            // common can only import from common
             { from: 'common', allow: ['common'] },
-            { from: 'domain', allow: ['common', 'domain'] },
-            { from: 'infra', allow: ['common', 'domain', 'infra'] },
-            { from: 'apps', allow: ['common', 'domain', 'infra', 'apps'] },
+            // apps can import from common (apps own their domain and infra)
+            { from: 'apps', allow: ['common', 'apps'] },
           ],
         },
       ],

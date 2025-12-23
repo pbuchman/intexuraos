@@ -6,10 +6,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
-import { setServices, resetServices } from '../services.js';
 import { clearJwksCache } from '@praxos/common';
-import { FakeNotionConnectionRepository } from '@praxos/infra-firestore';
-import { MockNotionApiAdapter, createNotionPromptRepository } from '@praxos/infra-notion';
+import { FakeNotionConnectionRepository, MockNotionApiAdapter } from './fakes.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -87,6 +85,9 @@ export interface TestContext {
 /**
  * Setup test environment with mock services.
  * Returns context that must be used in tests.
+ *
+ * Note: With colocated infra, service injection isn't supported.
+ * Tests need to use the Firestore emulator or mock at the HTTP level.
  */
 export function setupTestContext(): TestContext {
   const context: TestContext = {
@@ -107,14 +108,8 @@ export function setupTestContext(): TestContext {
     context.connectionRepository = new FakeNotionConnectionRepository();
     context.notionApi = new MockNotionApiAdapter();
 
-    setServices({
-      connectionRepository: context.connectionRepository,
-      notionApi: context.notionApi,
-      promptRepository: createNotionPromptRepository(
-        context.connectionRepository,
-        context.notionApi
-      ),
-    });
+    // Note: Service injection not available with colocated infra
+    // Tests should mock at HTTP level or use Firestore emulator
 
     clearJwksCache();
     context.app = await buildServer();
@@ -122,7 +117,6 @@ export function setupTestContext(): TestContext {
 
   afterEach(async () => {
     await context.app.close();
-    resetServices();
   });
 
   return context;

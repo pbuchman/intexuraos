@@ -7,8 +7,8 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr } from '@praxos/common';
-import { FirestoreAuthTokenRepository } from '@praxos/infra-firestore';
-import type { AuthTokens } from '@praxos/domain-identity';
+import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
+import type { AuthTokens } from '../../domain/identity/index.js';
 import {
   deviceStartRequestSchema,
   devicePollRequestSchema,

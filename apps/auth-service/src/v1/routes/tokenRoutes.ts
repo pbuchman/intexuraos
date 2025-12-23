@@ -6,9 +6,12 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr } from '@praxos/common';
-import { Auth0ClientImpl, loadAuth0Config as loadAuth0ConfigFromInfra } from '@praxos/infra-auth0';
-import { FirestoreAuthTokenRepository } from '@praxos/infra-firestore';
-import type { AuthTokens } from '@praxos/domain-identity';
+import {
+  Auth0ClientImpl,
+  loadAuth0Config as loadAuth0ConfigFromInfra,
+} from '../../infra/auth0/index.js';
+import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
+import type { AuthTokens } from '../../domain/identity/index.js';
 import { refreshTokenRequestSchema } from '../schemas.js';
 import { loadAuth0Config, handleValidationError } from './shared.js';
 

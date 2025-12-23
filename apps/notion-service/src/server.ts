@@ -3,9 +3,13 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { praxosFastifyPlugin, fastifyAuthPlugin, getErrorMessage } from '@praxos/common';
-import { getFirestore } from '@praxos/infra-firestore';
-import type { NotionLogger } from '@praxos/infra-notion';
+import {
+  praxosFastifyPlugin,
+  fastifyAuthPlugin,
+  getErrorMessage,
+  getFirestore,
+  type NotionLogger,
+} from '@praxos/common';
 import { v1Routes } from './v1/routes.js';
 import { getServices } from './services.js';
 

@@ -8,9 +8,7 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/*",
-    "packages/domain/*",
-    "packages/infra/*"
+    "packages/*"
   ],
   "scripts": {
     "lint": "eslint .",

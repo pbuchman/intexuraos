@@ -10,7 +10,12 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { requireAuth } from '@praxos/common';
-import { createPrompt, listPrompts, getPrompt, updatePrompt } from '@praxos/domain-promptvault';
+import {
+  createPrompt,
+  listPrompts,
+  getPrompt,
+  updatePrompt,
+} from '../../domain/promptvault/index.js';
 import { createPromptRequestSchema, updatePromptRequestSchema } from '../schemas.js';
 import { getServices } from '../../services.js';
 import { handleValidationError, mapDomainErrorCode } from './shared.js';

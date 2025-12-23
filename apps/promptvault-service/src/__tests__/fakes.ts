@@ -1,0 +1,404 @@
+/**
+ * Fake repositories for testing promptvault-service.
+ */
+import type { Result } from '@praxos/common';
+import { ok, err } from '@praxos/common';
+
+export interface NotionConnectionPublic {
+  promptVaultPageId: string;
+  connected: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotionError {
+  code: string;
+  message: string;
+}
+
+/**
+ * Fake Notion connection repository for testing.
+ */
+export class FakeNotionConnectionRepository {
+  private connections = new Map<
+    string,
+    {
+      token: string;
+      promptVaultPageId: string;
+      connected: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }
+  >();
+
+  async saveConnection(
+    userId: string,
+    promptVaultPageId: string,
+    notionToken: string
+  ): Promise<Result<NotionConnectionPublic, NotionError>> {
+    const now = new Date().toISOString();
+    const existing = this.connections.get(userId);
+    this.connections.set(userId, {
+      token: notionToken,
+      promptVaultPageId,
+      connected: true,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    return ok({
+      promptVaultPageId,
+      connected: true,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+  }
+
+  async getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>> {
+    const conn = this.connections.get(userId);
+    if (!conn) return ok(null);
+    return ok({
+      promptVaultPageId: conn.promptVaultPageId,
+      connected: conn.connected,
+      createdAt: conn.createdAt,
+      updatedAt: conn.updatedAt,
+    });
+  }
+
+  async getToken(userId: string): Promise<Result<string | null, NotionError>> {
+    const conn = this.connections.get(userId);
+    if (!conn?.connected) return ok(null);
+    return ok(conn.token);
+  }
+
+  async isConnected(userId: string): Promise<Result<boolean, NotionError>> {
+    const conn = this.connections.get(userId);
+    return ok(conn?.connected ?? false);
+  }
+
+  async disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+    const conn = this.connections.get(userId);
+    if (!conn) {
+      return err({ code: 'NOT_FOUND', message: 'Not found' });
+    }
+    conn.connected = false;
+    conn.updatedAt = new Date().toISOString();
+    return ok({
+      promptVaultPageId: conn.promptVaultPageId,
+      connected: false,
+      createdAt: conn.createdAt,
+      updatedAt: conn.updatedAt,
+    });
+  }
+
+  // Test helpers
+  setConnection(userId: string, token: string, promptVaultPageId: string, connected = true): void {
+    const now = new Date().toISOString();
+    this.connections.set(userId, {
+      token,
+      promptVaultPageId,
+      connected,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  clear(): void {
+    this.connections.clear();
+  }
+}
+
+/**
+ * Mock Notion API adapter for testing.
+ */
+export class MockNotionApiAdapter {
+  private pages = new Map<string, { title: string; content: string; url: string }>();
+  private childPages = new Map<string, string[]>();
+
+  async validateToken(_token: string): Promise<Result<boolean, NotionError>> {
+    return ok(true);
+  }
+
+  async getPageWithPreview(
+    _token: string,
+    pageId: string
+  ): Promise<
+    Result<
+      {
+        page: { id: string; title: string; url: string };
+        blocks: { type: string; content: string }[];
+      },
+      NotionError
+    >
+  > {
+    const page = this.pages.get(pageId);
+    if (!page) {
+      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    }
+    return ok({
+      page: { id: pageId, title: page.title, url: page.url },
+      blocks: [{ type: 'paragraph', content: page.content }],
+    });
+  }
+
+  async createPromptVaultNote(params: {
+    token: string;
+    parentPageId: string;
+    title: string;
+    prompt: string;
+    userId: string;
+  }): Promise<Result<{ id: string; url: string; title: string }, NotionError>> {
+    const id = `page-${Date.now()}`;
+    this.pages.set(id, {
+      title: params.title,
+      content: params.prompt,
+      url: `https://notion.so/${id}`,
+    });
+    const children = this.childPages.get(params.parentPageId) ?? [];
+    children.push(id);
+    this.childPages.set(params.parentPageId, children);
+    return ok({ id, url: `https://notion.so/${id}`, title: params.title });
+  }
+
+  async listChildPages(
+    _token: string,
+    parentPageId: string
+  ): Promise<Result<{ id: string; title: string; url: string }[], NotionError>> {
+    const children = this.childPages.get(parentPageId) ?? [];
+    const pages = children
+      .map((id) => {
+        const page = this.pages.get(id);
+        return page ? { id, title: page.title, url: page.url } : null;
+      })
+      .filter((p): p is { id: string; title: string; url: string } => p !== null);
+    return ok(pages);
+  }
+
+  async getPromptPage(
+    _token: string,
+    pageId: string
+  ): Promise<
+    Result<
+      {
+        page: { id: string; title: string; url: string };
+        promptContent: string;
+        createdAt?: string;
+        updatedAt?: string;
+      },
+      NotionError
+    >
+  > {
+    const page = this.pages.get(pageId);
+    if (!page) {
+      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    }
+    return ok({
+      page: { id: pageId, title: page.title, url: page.url },
+      promptContent: page.content,
+    });
+  }
+
+  async updatePromptPage(
+    _token: string,
+    pageId: string,
+    update: { title?: string; promptContent?: string }
+  ): Promise<
+    Result<
+      {
+        page: { id: string; title: string; url: string };
+        promptContent: string;
+        updatedAt?: string;
+      },
+      NotionError
+    >
+  > {
+    const page = this.pages.get(pageId);
+    if (!page) {
+      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    }
+    if (update.title !== undefined) page.title = update.title;
+    if (update.promptContent !== undefined) page.content = update.promptContent;
+    return ok({
+      page: { id: pageId, title: page.title, url: page.url },
+      promptContent: page.content,
+    });
+  }
+
+  // Test helpers
+  setPage(id: string, title: string, content: string): void {
+    this.pages.set(id, { title, content, url: `https://notion.so/${id}` });
+  }
+
+  addChildPage(parentId: string, childId: string): void {
+    const children = this.childPages.get(parentId) ?? [];
+    children.push(childId);
+    this.childPages.set(parentId, children);
+  }
+
+  clear(): void {
+    this.pages.clear();
+    this.childPages.clear();
+  }
+}
+
+/**
+ * Factory to create a fake prompt repository for testing.
+ */
+export function createFakePromptRepository(
+  connectionRepo: FakeNotionConnectionRepository,
+  notionApi: MockNotionApiAdapter
+): {
+  createPrompt: (
+    userId: string,
+    input: { title: string; content: string }
+  ) => Promise<
+    Result<
+      {
+        id: string;
+        title: string;
+        content: string;
+        url?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      },
+      { code: string; message: string }
+    >
+  >;
+  listPrompts: (
+    userId: string
+  ) => Promise<
+    Result<
+      { id: string; title: string; content: string; url?: string }[],
+      { code: string; message: string }
+    >
+  >;
+  getPrompt: (
+    userId: string,
+    promptId: string
+  ) => Promise<
+    Result<
+      { id: string; title: string; content: string; url?: string },
+      { code: string; message: string }
+    >
+  >;
+  updatePrompt: (
+    userId: string,
+    promptId: string,
+    input: { title?: string; content?: string }
+  ) => Promise<
+    Result<
+      { id: string; title: string; content: string; url?: string },
+      { code: string; message: string }
+    >
+  >;
+} {
+  return {
+    async createPrompt(userId, input) {
+      const connectedResult = await connectionRepo.isConnected(userId);
+      if (!connectedResult.ok || !connectedResult.value) {
+        return err({ code: 'NOT_CONNECTED', message: 'Not connected' });
+      }
+      const tokenResult = await connectionRepo.getToken(userId);
+      if (!tokenResult.ok || tokenResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No token' });
+      }
+      const configResult = await connectionRepo.getConnection(userId);
+      if (!configResult.ok || configResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No config' });
+      }
+      const result = await notionApi.createPromptVaultNote({
+        token: tokenResult.value,
+        parentPageId: configResult.value.promptVaultPageId,
+        title: input.title,
+        prompt: input.content,
+        userId,
+      });
+      if (!result.ok) return err({ code: 'DOWNSTREAM_ERROR', message: result.error.message });
+      const now = new Date().toISOString();
+      return ok({
+        id: result.value.id,
+        title: input.title,
+        content: input.content,
+        url: result.value.url,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+    async listPrompts(userId) {
+      const connectedResult = await connectionRepo.isConnected(userId);
+      if (!connectedResult.ok || !connectedResult.value) {
+        return err({ code: 'NOT_CONNECTED', message: 'Not connected' });
+      }
+      const tokenResult = await connectionRepo.getToken(userId);
+      if (!tokenResult.ok || tokenResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No token' });
+      }
+      const configResult = await connectionRepo.getConnection(userId);
+      if (!configResult.ok || configResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No config' });
+      }
+      const listResult = await notionApi.listChildPages(
+        tokenResult.value,
+        configResult.value.promptVaultPageId
+      );
+      if (!listResult.ok)
+        return err({ code: 'DOWNSTREAM_ERROR', message: listResult.error.message });
+
+      const prompts = [];
+      for (const page of listResult.value) {
+        const pageResult = await notionApi.getPromptPage(tokenResult.value, page.id);
+        if (pageResult.ok) {
+          prompts.push({
+            id: page.id,
+            title: page.title,
+            content: pageResult.value.promptContent,
+            url: page.url,
+          });
+        }
+      }
+      return ok(prompts);
+    },
+    async getPrompt(userId, promptId) {
+      const tokenResult = await connectionRepo.getToken(userId);
+      if (!tokenResult.ok || tokenResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No token' });
+      }
+      const result = await notionApi.getPromptPage(tokenResult.value, promptId);
+      if (!result.ok)
+        return err({
+          code: result.error.code === 'NOT_FOUND' ? 'NOT_FOUND' : 'DOWNSTREAM_ERROR',
+          message: result.error.message,
+        });
+      return ok({
+        id: result.value.page.id,
+        title: result.value.page.title,
+        content: result.value.promptContent,
+        url: result.value.page.url,
+      });
+    },
+    async updatePrompt(userId, promptId, input) {
+      const tokenResult = await connectionRepo.getToken(userId);
+      if (!tokenResult.ok || tokenResult.value === null) {
+        return err({ code: 'NOT_CONNECTED', message: 'No token' });
+      }
+      const updatePayload: { title?: string; promptContent?: string } = {};
+      if (input.title !== undefined) {
+        updatePayload.title = input.title;
+      }
+      if (input.content !== undefined) {
+        updatePayload.promptContent = input.content;
+      }
+      const result = await notionApi.updatePromptPage(tokenResult.value, promptId, updatePayload);
+      if (!result.ok)
+        return err({
+          code: result.error.code === 'NOT_FOUND' ? 'NOT_FOUND' : 'DOWNSTREAM_ERROR',
+          message: result.error.message,
+        });
+      return ok({
+        id: result.value.page.id,
+        title: result.value.page.title,
+        content: result.value.promptContent,
+        url: result.value.page.url,
+      });
+    },
+  };
+}

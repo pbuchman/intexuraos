@@ -1,6 +1,6 @@
 import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
-import type { PromptVaultErrorCode } from '@praxos/domain-promptvault';
+import type { PromptVaultErrorCode } from '../../domain/promptvault/index.js';
 
 /**
  * Handle Zod validation errors.

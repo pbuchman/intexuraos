@@ -268,20 +268,20 @@ export interface User {
 **Example violation:**
 
 ```typescript
-// packages/domain/identity/src/usecases/login.ts
-// ✗ FORBIDDEN: domain importing infra
-import { Auth0Client } from '@praxos/infra-auth0';
+// apps/auth-service/src/domain/identity/usecases/login.ts
+// ✗ FORBIDDEN: domain importing external APIs directly
+import { ManagementClient } from 'auth0';
 ```
 
 **Correct approach:**
 
 ```typescript
-// packages/domain/identity/src/ports/auth.port.ts
+// apps/auth-service/src/domain/identity/ports/auth.port.ts
 export interface AuthPort {
   validateToken(token: string): Promise<Result<TokenPayload, AuthError>>;
 }
 
-// packages/domain/identity/src/usecases/login.ts
+// apps/auth-service/src/domain/identity/usecases/login.ts
 // ✓ Domain uses port interface
 import type { AuthPort } from '../ports/auth.port';
 ```

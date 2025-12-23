@@ -10,8 +10,10 @@ import { webhookVerifyQuerySchema, type WebhookPayload } from '../schemas.js';
 import { validateWebhookSignature, SIGNATURE_HEADER } from '../../signature.js';
 import { getServices } from '../../services.js';
 import type { Config } from '../../config.js';
-import { ProcessWhatsAppWebhookUseCase } from '@praxos/domain-inbox';
-import { NotionInboxNotesRepository } from '@praxos/infra-notion';
+import { ProcessWhatsAppWebhookUseCase } from '../../domain/inbox/index.js';
+import { createInboxNote } from '../../infra/notion/index.js';
+import type { InboxNote, InboxNotesRepository, InboxError } from '../../domain/inbox/index.js';
+import type { Result } from '@praxos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
 import {
   handleValidationError,
@@ -236,13 +238,26 @@ async function processWebhookAsync(
       }
     }
 
-    // Create Notion repository if we have the config
-    let inboxNotesRepo = null;
+    // Create Notion repository adapter if we have the config
+    let inboxNotesRepo: InboxNotesRepository | null = null;
     if (notionToken !== undefined && inboxNotesDbId !== undefined) {
-      inboxNotesRepo = new NotionInboxNotesRepository({
-        token: notionToken,
-        databaseId: inboxNotesDbId,
-      });
+      const token = notionToken;
+      const dbId = inboxNotesDbId;
+      inboxNotesRepo = {
+        createNote: async (note: InboxNote): Promise<Result<InboxNote, InboxError>> => {
+          const result = await createInboxNote(token, dbId, note);
+          if (!result.ok) {
+            return { ok: false, error: { code: 'INTERNAL_ERROR', message: result.error.message } };
+          }
+          return result;
+        },
+        getNote: (): Promise<Result<InboxNote | null, InboxError>> => {
+          return Promise.reject(new Error('Not implemented'));
+        },
+        updateNote: (): Promise<Result<InboxNote, InboxError>> => {
+          return Promise.reject(new Error('Not implemented'));
+        },
+      };
     }
 
     // Create and execute the use case
