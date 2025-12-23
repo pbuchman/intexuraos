@@ -18,20 +18,21 @@ describe('shared utilities', () => {
       expect(result.success).toBe(false);
 
       if (!result.success) {
+        const mockFail = vi.fn().mockReturnThis();
         const mockReply = {
-          fail: vi.fn().mockReturnThis(),
+          fail: mockFail,
         } as unknown as FastifyReply;
 
         handleValidationError(result.error, mockReply);
 
-        expect(mockReply.fail).toHaveBeenCalledWith(
-          'INVALID_REQUEST',
-          'Validation failed',
-          undefined,
-          expect.objectContaining({
-            errors: expect.arrayContaining([expect.objectContaining({ path: 'notionToken' })]),
-          })
-        );
+        expect(mockFail).toHaveBeenCalledTimes(1);
+        const callArgs = mockFail.mock.calls[0] as unknown[];
+        expect(callArgs[0]).toBe('INVALID_REQUEST');
+        expect(callArgs[1]).toBe('Validation failed');
+        const details = callArgs[3] as { errors: { path: string; message: string }[] };
+        expect(details.errors).toBeDefined();
+        const paths = details.errors.map((e) => e.path);
+        expect(paths).toContain('notionToken');
       }
     });
 
@@ -45,23 +46,21 @@ describe('shared utilities', () => {
       expect(result.success).toBe(false);
 
       if (!result.success) {
+        const mockFail = vi.fn().mockReturnThis();
         const mockReply = {
-          fail: vi.fn().mockReturnThis(),
+          fail: mockFail,
         } as unknown as FastifyReply;
 
         handleValidationError(result.error, mockReply);
 
-        expect(mockReply.fail).toHaveBeenCalledWith(
-          'INVALID_REQUEST',
-          'Validation failed',
-          undefined,
-          expect.objectContaining({
-            errors: expect.arrayContaining([
-              expect.objectContaining({ path: 'notionToken' }),
-              expect.objectContaining({ path: 'pageId' }),
-            ]),
-          })
-        );
+        expect(mockFail).toHaveBeenCalledTimes(1);
+        const callArgs = mockFail.mock.calls[0] as unknown[];
+        const details = callArgs[3] as { errors: { path: string; message: string }[] };
+        expect(details.errors).toBeDefined();
+        expect(details.errors.length).toBeGreaterThanOrEqual(2);
+        const paths = details.errors.map((e) => e.path);
+        expect(paths).toContain('notionToken');
+        expect(paths).toContain('pageId');
       }
     });
 

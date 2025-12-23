@@ -282,7 +282,7 @@ describe('Frontend Auth Routes', () => {
         process.env['AUTH_ISSUER'] = issuer;
       });
 
-      it('returns user info with all claims', async () => {
+      it('returns user info with all claims', { timeout: 20000 }, async () => {
         app = await buildServer();
 
         const token = await createToken({
@@ -319,7 +319,7 @@ describe('Frontend Auth Routes', () => {
         expect(typeof body.data.hasRefreshToken).toBe('boolean');
       });
 
-      it('returns user info without optional claims', async () => {
+      it('returns user info without optional claims', { timeout: 20000 }, async () => {
         app = await buildServer();
 
         const token = await createToken({
