@@ -3,10 +3,14 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { praxosFastifyPlugin, fastifyAuthPlugin, getErrorMessage } from '@praxos/common';
-import { getFirestore } from '@praxos/infra-firestore';
-import type { NotionLogger } from '@praxos/infra-notion';
-import { v1Routes } from './v1/routes.js';
+import {
+  praxosFastifyPlugin,
+  fastifyAuthPlugin,
+  getErrorMessage,
+  getFirestore,
+  type NotionLogger,
+} from '@praxos/common';
+import { v1Routes } from './routes/v1/routes.js';
 import { getServices } from './services.js';
 
 const SERVICE_NAME = 'promptvault-service';
@@ -115,15 +119,15 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  // Exactly two servers: local development and Cloud Run deployment
+  // Exactly two servers: Cloud Run deployment and local development
   const servers = [
-    { url: 'http://localhost:8081', description: 'Local' },
     {
       // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
       // The Cloud Run service name change requires a manual redeployment.
       url: 'https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development) - Legacy URL',
     },
+    { url: 'http://localhost:8081', description: 'Local' },
   ];
 
   return {
@@ -195,49 +199,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               downstreamStatus: { type: 'integer' },
               downstreamRequestId: { type: 'string' },
               endpointCalled: { type: 'string' },
-            },
-          },
-          ConnectRequest: {
-            type: 'object',
-            required: ['notionToken', 'promptVaultPageId'],
-            properties: {
-              notionToken: {
-                type: 'string',
-                minLength: 1,
-                description: 'Notion integration token (never returned in responses)',
-              },
-              promptVaultPageId: {
-                type: 'string',
-                minLength: 1,
-                description: 'Notion page ID for the Prompt Vault',
-              },
-            },
-          },
-          ConnectResponse: {
-            type: 'object',
-            properties: {
-              connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string' },
-              createdAt: { type: 'string', format: 'date-time' },
-              updatedAt: { type: 'string', format: 'date-time' },
-            },
-          },
-          StatusResponse: {
-            type: 'object',
-            properties: {
-              configured: { type: 'boolean' },
-              connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string', nullable: true },
-              createdAt: { type: 'string', format: 'date-time', nullable: true },
-              updatedAt: { type: 'string', format: 'date-time', nullable: true },
-            },
-          },
-          DisconnectResponse: {
-            type: 'object',
-            properties: {
-              connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string' },
-              updatedAt: { type: 'string', format: 'date-time' },
             },
           },
           MainPageResponse: {
@@ -343,12 +304,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               },
             },
           },
-          WebhookResponse: {
-            type: 'object',
-            properties: {
-              received: { type: 'boolean' },
-            },
-          },
           HealthResponse: {
             type: 'object',
             required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
@@ -377,9 +332,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       },
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },
-        { name: 'integrations', description: 'Notion integration management' },
-        { name: 'tools', description: 'GPT Action tools' },
-        { name: 'webhooks', description: 'Webhook receivers' },
+        { name: 'tools', description: 'GPT Action tools for prompt CRUD' },
       ],
     },
   };
@@ -499,59 +452,6 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   app.addSchema({
-    $id: 'ConnectRequest',
-    type: 'object',
-    required: ['notionToken', 'promptVaultPageId'],
-    properties: {
-      notionToken: {
-        type: 'string',
-        minLength: 1,
-        description: 'Notion integration token (never returned in responses)',
-      },
-      promptVaultPageId: {
-        type: 'string',
-        minLength: 1,
-        description: 'Notion page ID for the Prompt Vault',
-      },
-    },
-  });
-
-  app.addSchema({
-    $id: 'ConnectResponse',
-    type: 'object',
-    properties: {
-      connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string' },
-      pageTitle: { type: 'string', description: 'Title of the validated Notion page' },
-      pageUrl: { type: 'string', description: 'URL of the validated Notion page' },
-      createdAt: { type: 'string', format: 'date-time' },
-      updatedAt: { type: 'string', format: 'date-time' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'StatusResponse',
-    type: 'object',
-    properties: {
-      configured: { type: 'boolean' },
-      connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string', nullable: true },
-      createdAt: { type: 'string', format: 'date-time', nullable: true },
-      updatedAt: { type: 'string', format: 'date-time', nullable: true },
-    },
-  });
-
-  app.addSchema({
-    $id: 'DisconnectResponse',
-    type: 'object',
-    properties: {
-      connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string' },
-      updatedAt: { type: 'string', format: 'date-time' },
-    },
-  });
-
-  app.addSchema({
     $id: 'MainPageResponse',
     type: 'object',
     properties: {
@@ -656,14 +556,6 @@ export async function buildServer(): Promise<FastifyInstance> {
         type: 'array',
         items: { $ref: 'Prompt#' },
       },
-    },
-  });
-
-  app.addSchema({
-    $id: 'WebhookResponse',
-    type: 'object',
-    properties: {
-      received: { type: 'boolean' },
     },
   });
 

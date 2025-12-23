@@ -59,11 +59,11 @@ describe('auth-service OpenAPI contract', () => {
     expect(servers).toBeDefined();
     expect(servers?.length).toBe(2);
 
-    expect(servers?.[0]?.url).toBe('http://localhost:8080');
-    expect(servers?.[0]?.description).toBe('Local');
+    expect(servers?.[0]?.url).toBe('https://praxos-auth-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('https://praxos-auth-service-ooafxzbaua-lm.a.run.app');
-    expect(servers?.[1]?.description).toBe('Cloud (Development)');
+    expect(servers?.[1]?.url).toBe('http://localhost:8080');
+    expect(servers?.[1]?.description).toBe('Local');
   });
 
   it('every path+method has an operationId', () => {

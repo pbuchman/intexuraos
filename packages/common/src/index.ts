@@ -25,3 +25,17 @@ export { type AuthUser, requireAuth, fastifyAuthPlugin } from './auth/fastifyAut
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+// Firestore client
+export { getFirestore, resetFirestore, setFirestore } from './firestore.js';
+
+// Notion client
+export {
+  type NotionLogger,
+  type NotionErrorCode,
+  type NotionError,
+  mapNotionError,
+  createNotionClient,
+  NotionClient,
+  type BlockObjectResponse,
+} from './notion.js';

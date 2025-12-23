@@ -3,10 +3,13 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { praxosFastifyPlugin, fastifyAuthPlugin, getErrorMessage } from '@praxos/common';
-import { getFirestore } from '@praxos/infra-firestore';
-import { createV1Routes } from './v1/routes.js';
-import { createWhatsAppMappingRoutes } from './v1/whatsappMappingRoutes.js';
+import {
+  praxosFastifyPlugin,
+  fastifyAuthPlugin,
+  getErrorMessage,
+  getFirestore,
+} from '@praxos/common';
+import { createV1Routes } from './routes/v1/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
 
 const SERVICE_NAME = 'whatsapp-service';
@@ -87,13 +90,13 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  // Exactly two servers: local development and Cloud Run deployment
+  // Exactly two servers: Cloud Run deployment and local development
   const servers = [
-    { url: 'http://localhost:8082', description: 'Local' },
     {
       url: 'https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
     },
+    { url: 'http://localhost:8082', description: 'Local' },
   ];
 
   return {
@@ -216,10 +219,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     },
   });
 
-  // CORS for cross-origin OpenAPI access (api-docs-hub)
+  // CORS for cross-origin API access (web app + api-docs-hub)
   await app.register(fastifyCors, {
     origin: true,
-    methods: ['GET', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
   await app.register(fastifySwagger, buildOpenApiOptions());
@@ -232,9 +235,6 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   // Register v1 routes
   await app.register(createV1Routes(config));
-
-  // Register WhatsApp mapping routes
-  await app.register(createWhatsAppMappingRoutes);
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
   app.get(

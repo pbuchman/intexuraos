@@ -203,6 +203,8 @@ PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │ AUTH_SERVICE_OPENAPI_URL → Auth Service /openapi.json       ││
 │  │ PROMPTVAULT_SERVICE_OPENAPI_URL → PromptVault /openapi.json ││
+│  │ NOTION_SERVICE_OPENAPI_URL → Notion Service /openapi.json   ││
+│  │ WHATSAPP_SERVICE_OPENAPI_URL → WhatsApp Service /openapi.json│
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -221,6 +223,8 @@ PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates
 | --------------------------------- | --------------------------------------- |
 | `AUTH_SERVICE_OPENAPI_URL`        | URL to auth-service OpenAPI JSON        |
 | `PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
+| `NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
+| `WHATSAPP_SERVICE_OPENAPI_URL`    | URL to whatsapp-service OpenAPI JSON    |
 
 These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
 

@@ -8,10 +8,11 @@ This document describes the Cloud Run service configuration and operations.
 | ------------------- | ---------------------------- | ---- | --------------- |
 | Auth Service        | `praxos-auth-service`        | 8080 | `/health`       |
 | PromptVault Service | `praxos-promptvault-service` | 8080 | `/health`       |
+| Notion Service      | `praxos-notion-service`      | 8080 | `/health`       |
 
 ## Service Configuration
 
-Both services are configured with:
+All services are configured with:
 
 - **Min instances**: 0 (scale to zero)
 - **Max instances**: 2 (dev environment limit)
@@ -76,10 +77,13 @@ AUTH_URL=$(gcloud run services describe praxos-auth-service \
   --region=europe-central2 --format="value(status.url)")
 PROMPTVAULT_URL=$(gcloud run services describe praxos-promptvault-service \
   --region=europe-central2 --format="value(status.url)")
+NOTION_URL=$(gcloud run services describe praxos-notion-service \
+  --region=europe-central2 --format="value(status.url)")
 
 # Check health endpoints
 curl -s $AUTH_URL/health | jq
 curl -s $PROMPTVAULT_URL/health | jq
+curl -s $NOTION_URL/health | jq
 ```
 
 Expected response:
@@ -103,11 +107,13 @@ Each service exposes Swagger UI:
 
 - Auth Service: `$AUTH_URL/docs`
 - PromptVault Service: `$PROMPTVAULT_URL/docs`
+- Notion Service: `$NOTION_URL/docs`
 
 OpenAPI spec:
 
 - Auth Service: `$AUTH_URL/openapi.json`
 - PromptVault Service: `$PROMPTVAULT_URL/openapi.json`
+- Notion Service: `$NOTION_URL/openapi.json`
 
 ## Manual Deployment
 
@@ -123,6 +129,12 @@ gcloud run deploy praxos-auth-service \
 # Deploy promptvault-service
 gcloud run deploy praxos-promptvault-service \
   --image=europe-central2-docker.pkg.dev/PROJECT_ID/praxos-dev/promptvault-service:latest \
+  --region=europe-central2 \
+  --platform=managed
+
+# Deploy notion-service
+gcloud run deploy praxos-notion-service \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/praxos-dev/notion-service:latest \
   --region=europe-central2 \
   --platform=managed
 ```

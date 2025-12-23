@@ -4,12 +4,7 @@
  *
  * Rules:
  * - packages/common/** affects all services
- * - packages/domain/** affects all services (except api-docs-hub)
- * - packages/infra/** affects all services (except api-docs-hub)
- * - apps/auth-service/** affects auth-service
- * - apps/promptvault-service/** affects promptvault-service
- * - apps/whatsapp-service/** affects whatsapp-service
- * - apps/api-docs-hub/** affects api-docs-hub
+ * - apps/<service>/** affects that service (owns domain + infra)
  *
  * Output: /workspace/affected.json
  * Format: {
@@ -24,13 +19,11 @@ import { join } from 'node:path';
 const WORKSPACE = process.env.WORKSPACE || '/workspace';
 const OUTPUT_FILE = join(WORKSPACE, 'affected.json');
 
-// Service dependencies
+// Service dependencies - each app owns its domain and infra
 const SERVICE_DEPS = {
   'auth-service': [
     'apps/auth-service/',
     'packages/common/',
-    'packages/domain/',
-    'packages/infra/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -39,8 +32,14 @@ const SERVICE_DEPS = {
   'promptvault-service': [
     'apps/promptvault-service/',
     'packages/common/',
-    'packages/domain/',
-    'packages/infra/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
+  'notion-service': [
+    'apps/notion-service/',
+    'packages/common/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -49,8 +48,6 @@ const SERVICE_DEPS = {
   'whatsapp-service': [
     'apps/whatsapp-service/',
     'packages/common/',
-    'packages/domain/',
-    'packages/infra/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -64,6 +61,7 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
+  web: ['apps/web/', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.base.json'],
 };
 
 /**

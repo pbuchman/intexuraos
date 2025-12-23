@@ -22,6 +22,9 @@ async function main(): Promise<void> {
   await app.listen({ port: config.port, host: config.host });
 }
 
-main().catch(() => {
+main().catch((error: unknown) => {
+  process.stderr.write(
+    `Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`
+  );
   process.exit(1);
 });

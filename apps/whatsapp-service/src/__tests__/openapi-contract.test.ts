@@ -75,16 +75,16 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).not.toBe('');
   });
 
-  it('has exactly two servers (local + cloud)', () => {
+  it('has exactly two servers (cloud + local)', () => {
     const servers = openapiSpec.servers;
     expect(servers).toBeDefined();
     expect(servers?.length).toBe(2);
 
-    expect(servers?.[0]?.url).toBe('http://localhost:8082');
-    expect(servers?.[0]?.description).toBe('Local');
+    expect(servers?.[0]?.url).toBe('https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app');
-    expect(servers?.[1]?.description).toBe('Cloud (Development)');
+    expect(servers?.[1]?.url).toBe('http://localhost:8082');
+    expect(servers?.[1]?.description).toBe('Local');
   });
 
   it('every path+method has an operationId', () => {
@@ -102,9 +102,9 @@ describe('whatsapp-service OpenAPI contract', () => {
     }
   });
 
-  it('GET /webhooks/whatsapp 200 response is text/plain', () => {
+  it('GET /v1/webhooks/whatsapp 200 response is text/plain', () => {
     const paths = openapiSpec.paths;
-    const getWebhook = paths?.['/webhooks/whatsapp']?.['get'];
+    const getWebhook = paths?.['/v1/webhooks/whatsapp']?.['get'];
     expect(getWebhook).toBeDefined();
 
     const response200 = getWebhook?.responses?.['200'];
@@ -116,13 +116,13 @@ describe('whatsapp-service OpenAPI contract', () => {
   it('has required endpoints documented', () => {
     const paths = openapiSpec.paths;
 
-    expect(paths?.['/webhooks/whatsapp']).toBeDefined();
+    expect(paths?.['/v1/webhooks/whatsapp']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
 
-  it('POST /webhooks/whatsapp documents signature header', () => {
+  it('POST /v1/webhooks/whatsapp documents signature header', () => {
     const paths = openapiSpec.paths;
-    const postWebhook = paths?.['/webhooks/whatsapp']?.['post'];
+    const postWebhook = paths?.['/v1/webhooks/whatsapp']?.['post'];
     expect(postWebhook).toBeDefined();
     // Signature is documented in headers schema
   });

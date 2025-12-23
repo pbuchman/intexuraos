@@ -1,17 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
     "rootDir": "src",
     "outDir": "dist",
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../../packages/common" },
-    { "path": "../../packages/domain/inbox" },
-    { "path": "../../packages/domain/identity" },
-    { "path": "../../packages/infra/firestore" },
-    { "path": "../../packages/infra/notion" }
-  ]
+  "references": [{ "path": "../../packages/common" }]
 }

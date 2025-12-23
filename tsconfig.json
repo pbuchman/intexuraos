@@ -2,13 +2,11 @@
   "files": [],
   "references": [
     { "path": "packages/common" },
-    { "path": "packages/domain/identity" },
-    { "path": "packages/domain/promptvault" },
-    { "path": "packages/infra/auth0" },
-    { "path": "packages/infra/notion" },
-    { "path": "packages/infra/firestore" },
     { "path": "apps/auth-service" },
     { "path": "apps/promptvault-service" },
-    { "path": "apps/whatsapp-service" }
+    { "path": "apps/whatsapp-service" },
+    { "path": "apps/notion-service" },
+    { "path": "apps/api-docs-hub" },
+    { "path": "apps/web" }
   ]
 }

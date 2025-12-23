@@ -1,0 +1,85 @@
+/**
+ * Tests for webhook verification:
+ * - GET /v1/webhooks/whatsapp (Meta webhook verification)
+ */
+import { describe, it, expect, setupTestContext, testConfig } from './testUtils.js';
+
+describe('GET /v1/webhooks/whatsapp (webhook verification)', () => {
+  const ctx = setupTestContext();
+
+  it('returns challenge when verify token matches', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whatsapp',
+      query: {
+        'hub.mode': 'subscribe',
+        'hub.verify_token': testConfig.verifyToken,
+        'hub.challenge': 'challenge-12345',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('challenge-12345');
+    expect(response.headers['content-type']).toContain('text/plain');
+  });
+
+  it('returns 403 when verify token does not match', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whatsapp',
+      query: {
+        'hub.mode': 'subscribe',
+        'hub.verify_token': 'wrong-token',
+        'hub.challenge': 'challenge-12345',
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('returns 400 when hub.mode is not subscribe', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whatsapp',
+      query: {
+        'hub.mode': 'unsubscribe',
+        'hub.verify_token': testConfig.verifyToken,
+        'hub.challenge': 'challenge-12345',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when verify token is missing', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whatsapp',
+      query: {
+        'hub.mode': 'subscribe',
+        'hub.challenge': 'challenge-12345',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when challenge is missing', async () => {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whatsapp',
+      query: {
+        'hub.mode': 'subscribe',
+        'hub.verify_token': testConfig.verifyToken,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+});

@@ -4,9 +4,13 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
-import { praxosFastifyPlugin, getErrorMessage } from '@praxos/common';
-import { getFirestore } from '@praxos/infra-firestore';
-import { v1AuthRoutes } from './v1/routes.js';
+import {
+  praxosFastifyPlugin,
+  fastifyAuthPlugin,
+  getErrorMessage,
+  getFirestore,
+} from '@praxos/common';
+import { v1AuthRoutes } from './routes/v1/routes.js';
 
 const SERVICE_NAME = 'auth-service';
 const SERVICE_VERSION = '0.0.1';
@@ -94,13 +98,13 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  // Exactly two servers: local development and Cloud Run deployment
+  // Exactly two servers: Cloud Run deployment and local development
   const servers = [
-    { url: 'http://localhost:8080', description: 'Local' },
     {
       url: 'https://praxos-auth-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
     },
+    { url: 'http://localhost:8080', description: 'Local' },
   ];
 
   return {
@@ -211,6 +215,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyFormbody);
 
   await app.register(praxosFastifyPlugin);
+  await app.register(fastifyAuthPlugin);
 
   // Ensure Fastify validation errors are returned in PraxOS envelope
   app.setErrorHandler(async (error, request, reply) => {
