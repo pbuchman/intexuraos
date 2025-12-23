@@ -1,9 +1,9 @@
 # Firestore Emulator for Testing
 #
 # Usage:
-#   Start:   docker compose -f docker/firestore-emulator.yaml up -d
-#   Stop:    docker compose -f docker/firestore-emulator.yaml down
-#   Logs:    docker compose -f docker/firestore-emulator.yaml logs -f
+#   Start:   docker compose -f docker/firestore/docker-compose.yaml up -d
+#   Stop:    docker compose -f docker/firestore/docker-compose.yaml down
+#   Logs:    docker compose -f docker/firestore/docker-compose.yaml logs -f
 #
 # The emulator persists in background for fast test iteration.
 # Tests auto-detect running emulator and skip starting their own.

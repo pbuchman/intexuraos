@@ -57,9 +57,6 @@ export const updatePromptRequestSchema = z
 
 export type UpdatePromptRequest = z.infer<typeof updatePromptRequestSchema>;
 
-/**
- * POST /v1/webhooks/notion
- */
 export const webhookRequestSchema = z.record(z.unknown());
 
 export type WebhookRequest = z.infer<typeof webhookRequestSchema>;

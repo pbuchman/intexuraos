@@ -2,7 +2,7 @@
  * Tests for Notion integration routes:
  * - POST /v1/integrations/notion/connect
  * - GET /v1/integrations/notion/status
- * - POST /v1/integrations/notion/disconnect
+ * - DELETE /v1/integrations/notion/disconnect
  */
 import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
 
@@ -177,7 +177,7 @@ describe('Notion Integration Routes', () => {
     });
   });
 
-  describe('POST /v1/integrations/notion/disconnect', () => {
+  describe('DELETE /v1/integrations/notion/disconnect', () => {
     it('disconnects successfully', async () => {
       const token = await createToken({ sub: 'user-789' });
 
@@ -194,7 +194,7 @@ describe('Notion Integration Routes', () => {
 
       // Then disconnect
       const response = await ctx.app.inject({
-        method: 'POST',
+        method: 'DELETE',
         url: '/v1/integrations/notion/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });

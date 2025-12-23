@@ -1,8 +1,8 @@
 /**
  * WhatsApp Webhook Routes
  *
- * GET  /webhooks/whatsapp - Webhook verification endpoint
- * POST /webhooks/whatsapp - Webhook event receiver
+ * GET  /v1/webhooks/whatsapp - Webhook verification endpoint
+ * POST /v1/webhooks/whatsapp - Webhook event receiver
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
@@ -25,9 +25,9 @@ import {
  */
 export function createWebhookRoutes(config: Config): FastifyPluginCallback {
   return (fastify, _opts, done) => {
-    // GET /webhooks/whatsapp - Webhook verification endpoint
+    // GET /v1/webhooks/whatsapp - Webhook verification endpoint
     fastify.get(
-      '/webhooks/whatsapp',
+      '/v1/webhooks/whatsapp',
       {
         schema: {
           operationId: 'verifyWhatsAppWebhook',
@@ -95,9 +95,9 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
       }
     );
 
-    // POST /webhooks/whatsapp - Webhook event receiver
+    // POST /v1/webhooks/whatsapp - Webhook event receiver
     fastify.post(
-      '/webhooks/whatsapp',
+      '/v1/webhooks/whatsapp',
       {
         schema: {
           operationId: 'receiveWhatsAppWebhook',

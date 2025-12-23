@@ -28,9 +28,13 @@ export async function apiRequest<T>(
   const url = `${baseUrl}${path}`;
   const requestHeaders: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
     ...headers,
   };
+
+  // Only set Content-Type for requests with a body
+  if (body !== undefined) {
+    requestHeaders['Content-Type'] = 'application/json';
+  }
 
   const fetchOptions: RequestInit = {
     method,

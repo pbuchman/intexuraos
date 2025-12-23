@@ -1,6 +1,6 @@
 /**
  * Tests for webhook event receiver:
- * - POST /webhooks/whatsapp
+ * - POST /v1/webhooks/whatsapp
  */
 import { createHmac } from 'node:crypto';
 import {
@@ -13,7 +13,7 @@ import {
   createWebhookPayload,
 } from './testUtils.js';
 
-describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
+describe('POST /v1/webhooks/whatsapp (webhook event receiver)', () => {
   const ctx = setupTestContext();
 
   it('accepts valid webhook payload with correct signature', async () => {
@@ -23,7 +23,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -47,7 +47,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -67,7 +67,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
       },
@@ -89,7 +89,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': 'sha256=invalid-signature',
@@ -114,7 +114,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': hash, // Missing sha256= prefix
@@ -132,7 +132,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,
@@ -148,7 +148,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': '',
@@ -164,7 +164,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': 'sha256=invalid',
@@ -211,7 +211,7 @@ describe('POST /webhooks/whatsapp (webhook event receiver)', () => {
 
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/webhooks/whatsapp',
+      url: '/v1/webhooks/whatsapp',
       headers: {
         'content-type': 'application/json',
         'x-hub-signature-256': signature,

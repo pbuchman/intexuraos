@@ -1,9 +1,9 @@
 /**
  * Notion Integration Routes
  *
- * POST /v1/integrations/notion/connect    - Connect Notion integration
- * GET  /v1/integrations/notion/status     - Get integration status
- * POST /v1/integrations/notion/disconnect - Disconnect integration
+ * POST   /v1/integrations/notion/connect    - Connect Notion integration
+ * GET    /v1/integrations/notion/status     - Get integration status
+ * DELETE /v1/integrations/notion/disconnect - Disconnect integration
  */
 
 import type { FastifyPluginCallback } from 'fastify';
@@ -196,8 +196,8 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     }
   );
 
-  // POST /v1/integrations/notion/disconnect
-  fastify.post(
+  // DELETE /v1/integrations/notion/disconnect
+  fastify.delete(
     '/v1/integrations/notion/disconnect',
     {
       schema: {

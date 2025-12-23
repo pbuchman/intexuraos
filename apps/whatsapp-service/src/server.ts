@@ -86,13 +86,13 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  // Exactly two servers: local development and Cloud Run deployment
+  // Exactly two servers: Cloud Run deployment and local development
   const servers = [
-    { url: 'http://localhost:8082', description: 'Local' },
     {
       url: 'https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
     },
+    { url: 'http://localhost:8082', description: 'Local' },
   ];
 
   return {
@@ -215,10 +215,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     },
   });
 
-  // CORS for cross-origin OpenAPI access (api-docs-hub)
+  // CORS for cross-origin API access (web app + api-docs-hub)
   await app.register(fastifyCors, {
     origin: true,
-    methods: ['GET', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
   await app.register(fastifySwagger, buildOpenApiOptions());

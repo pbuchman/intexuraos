@@ -1,9 +1,9 @@
 /**
  * WhatsApp User Mapping Routes
  *
- * POST   /whatsapp/connect    - Connect/update WhatsApp mapping
- * GET    /whatsapp/status     - Get mapping status
- * DELETE /whatsapp/disconnect - Disconnect mapping
+ * POST   /v1/whatsapp/connect    - Connect/update WhatsApp mapping
+ * GET    /v1/whatsapp/status     - Get mapping status
+ * DELETE /v1/whatsapp/disconnect - Disconnect mapping
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
@@ -22,9 +22,9 @@ const connectRequestSchema = z.object({
 type ConnectRequest = z.infer<typeof connectRequestSchema>;
 
 export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /whatsapp/connect - Connect/update WhatsApp mapping
+  // POST /v1/whatsapp/connect - Connect/update WhatsApp mapping
   fastify.post<{ Body: ConnectRequest }>(
-    '/whatsapp/connect',
+    '/v1/whatsapp/connect',
     {
       schema: {
         operationId: 'connectWhatsAppMapping',
@@ -149,9 +149,9 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /whatsapp/status - Get mapping status
+  // GET /v1/whatsapp/status - Get mapping status
   fastify.get(
-    '/whatsapp/status',
+    '/v1/whatsapp/status',
     {
       schema: {
         operationId: 'getWhatsAppMappingStatus',
@@ -227,9 +227,9 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // DELETE /whatsapp/disconnect - Disconnect mapping
+  // DELETE /v1/whatsapp/disconnect - Disconnect mapping
   fastify.delete(
-    '/whatsapp/disconnect',
+    '/v1/whatsapp/disconnect',
     {
       schema: {
         operationId: 'disconnectWhatsAppMapping',

@@ -18,8 +18,8 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist .tsbuildinfo",
-    "start": "node dist/index.js",
-    "dev": "node --watch dist/index.js"
+    "start": "DOTENV_CONFIG_PATH=.env node -r dotenv/config dist/index.js",
+    "dev": "DOTENV_CONFIG_PATH=.env node --watch -r dotenv/config dist/index.js"
   },
   "dependencies": {
     "@praxos/common": "*",

@@ -35,6 +35,6 @@ export async function disconnectNotion(accessToken: string): Promise<void> {
     config.promptVaultServiceUrl,
     '/v1/integrations/notion/disconnect',
     accessToken,
-    { method: 'POST' }
+    { method: 'DELETE' }
   );
 }

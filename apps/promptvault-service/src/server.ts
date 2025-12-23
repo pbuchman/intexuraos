@@ -115,15 +115,15 @@ function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  // Exactly two servers: local development and Cloud Run deployment
+  // Exactly two servers: Cloud Run deployment and local development
   const servers = [
-    { url: 'http://localhost:8081', description: 'Local' },
     {
       // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
       // The Cloud Run service name change requires a manual redeployment.
       url: 'https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development) - Legacy URL',
     },
+    { url: 'http://localhost:8081', description: 'Local' },
   ];
 
   return {
