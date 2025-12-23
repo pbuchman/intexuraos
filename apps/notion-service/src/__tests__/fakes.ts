@@ -76,7 +76,28 @@ export class FakeNotionConnectionRepository {
 
   isConnected(userId: string): Promise<Result<boolean, NotionError>> {
     const conn = this.connections.get(userId);
-    return Promise.resolve(ok(conn?.connected === true));
+    return Promise.resolve(ok(conn?.connected ?? false));
+  }
+
+  disconnect(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+    const conn = this.connections.get(userId);
+    if (conn === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Connection not found' }));
+    }
+    conn.connected = false;
+    conn.updatedAt = new Date().toISOString();
+    return Promise.resolve(
+      ok({
+        promptVaultPageId: conn.promptVaultPageId,
+        connected: conn.connected,
+        createdAt: conn.createdAt,
+        updatedAt: conn.updatedAt,
+      })
+    );
+  }
+
+  disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+    return this.disconnect(userId);
   }
 
   // Test helpers

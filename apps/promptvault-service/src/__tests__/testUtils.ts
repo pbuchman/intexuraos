@@ -7,7 +7,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@praxos/common';
-import { FakeNotionConnectionRepository, MockNotionApiAdapter } from './fakes.js';
+import {
+  FakeNotionConnectionRepository,
+  MockNotionApiAdapter,
+  createFakePromptRepository,
+} from './fakes.js';
+import { setServices, resetServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -108,8 +113,16 @@ export function setupTestContext(): TestContext {
     context.connectionRepository = new FakeNotionConnectionRepository();
     context.notionApi = new MockNotionApiAdapter();
 
-    // Note: Service injection not available with colocated infra
-    // Tests should mock at HTTP level or use Firestore emulator
+    // Inject fake services for testing
+    const fakePromptRepository = createFakePromptRepository(
+      context.connectionRepository,
+      context.notionApi
+    );
+    setServices({
+      connectionRepository: context.connectionRepository as never,
+      notionApi: context.notionApi as never,
+      promptRepository: fakePromptRepository as never,
+    });
 
     clearJwksCache();
     context.app = await buildServer();
@@ -117,6 +130,7 @@ export function setupTestContext(): TestContext {
 
   afterEach(async () => {
     await context.app.close();
+    resetServices();
   });
 
   return context;

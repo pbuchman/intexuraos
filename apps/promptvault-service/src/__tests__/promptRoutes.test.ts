@@ -25,6 +25,12 @@ async function setupConnection(
   pageId = 'vault-page-id'
 ): Promise<void> {
   await ctx.connectionRepository.saveConnection(userId, pageId, 'secret-token');
+  // Also set up the page in the mock Notion API
+  ctx.notionApi.setPage(
+    pageId,
+    pageId === 'vault-page-id' ? 'Prompt Vault' : 'Test Page',
+    'Block 1\n\nBlock 2\n\nBlock 3\n\nBlock 4'
+  );
 }
 
 describe('Prompt Routes', () => {

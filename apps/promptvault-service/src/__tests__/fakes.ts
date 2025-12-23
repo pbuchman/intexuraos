@@ -76,10 +76,10 @@ export class FakeNotionConnectionRepository {
 
   isConnected(userId: string): Promise<Result<boolean, NotionError>> {
     const conn = this.connections.get(userId);
-    return Promise.resolve(ok(conn?.connected === true));
+    return Promise.resolve(ok(conn?.connected ?? false));
   }
 
-  disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+  disconnect(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
     const conn = this.connections.get(userId);
     if (conn === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Not found' }));
@@ -94,6 +94,10 @@ export class FakeNotionConnectionRepository {
         updatedAt: conn.updatedAt,
       })
     );
+  }
+
+  disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+    return this.disconnect(userId);
   }
 
   // Test helpers
@@ -140,10 +144,15 @@ export class MockNotionApiAdapter {
     if (page === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
     }
+    // Split content by double newlines to create multiple blocks
+    const blocks = page.content
+      .split('\n\n')
+      .filter((c) => c.trim().length > 0)
+      .map((content) => ({ type: 'paragraph', content }));
     return Promise.resolve(
       ok({
         page: { id: pageId, title: page.title, url: page.url },
-        blocks: [{ type: 'paragraph', content: page.content }],
+        blocks,
       })
     );
   }

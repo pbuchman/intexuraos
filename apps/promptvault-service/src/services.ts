@@ -164,6 +164,18 @@ export function getNotionLogger(): NotionLogger | undefined {
 }
 
 /**
+ * Set custom services (for testing).
+ */
+export function setServices(services: Partial<ServiceContainer>): void {
+  container = {
+    logger: services.logger ?? notionLogger,
+    connectionRepository: services.connectionRepository ?? createConnectionRepository(),
+    notionApi: services.notionApi ?? createNotionApiAdapter(),
+    promptRepository: services.promptRepository ?? createPromptRepository(),
+  };
+}
+
+/**
  * Reset services (for testing).
  */
 export function resetServices(): void {
