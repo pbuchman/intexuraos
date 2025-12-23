@@ -1,556 +1,508 @@
 # Analiza Narzędzi Transkrypcji Mowy dla PraxOS
 
 **Data analizy:** 23 grudnia 2025  
-**Kontekst:** Transkrypcja wiadomości głosowych zawierających luźne myśli, notatki, listy zadań, krótkie polecenia  
+**Kontekst:** Transkrypcja wiadomości głosowych zawierających luźne myśli, notatki, listy zadań i krótkie polecenia.  
+**Wymagania:** ~300 wiadomości/miesiąc × 2 minuty = 600 minut/miesiąc  
 **Języki:** Polski (głównie) i angielski  
-**Założenie:** ~300 wiadomości miesięcznie, średnio 2 minuty każda (600 minut/miesiąc)
+**Priorytet:** Transkrypcja wsadowa (batch) + możliwość kastomizacji słownictwa
 
 ---
 
-## Streszczenie Wykonawcze
+## Spis Treści
 
-Po przeprowadzeniu szczegółowej analizy dostępnych rozwiązań transkrypcji mowy, rekomendujemy następujące narzędzia:
-
-### TOP 3 Rekomendacje:
-
-1. **OpenAI Whisper API** - najlepsza dokładność dla języka polskiego, optymalna cena, łatwa integracja
-2. **Deepgram Nova-3** - najszybsze przetwarzanie czasu rzeczywistego, konkurencyjne ceny, świetna obsługa polskiego
-3. **AssemblyAI Universal** - najlepsze zaawansowane funkcje (diaryzacja, analiza sentymentu), przyzwoita cena
-
-### Rekomendacja do pierwszych testów:
-
-**OpenAI Whisper API** - szczegóły w sekcji "Ostateczna Rekomendacja" poniżej.
+1. [Podsumowanie Wykonawcze](#1-podsumowanie-wykonawcze)
+2. [Porównanie Narzędzi](#2-porównanie-narzędzi)
+3. [Analiza Dokładności](#3-analiza-dokładności)
+4. [Analiza Kosztów](#4-analiza-kosztów)
+5. [Kastomizacja i Słownictwo](#5-kastomizacja-i-słownictwo)
+6. [Rekomendacje TOP 3](#6-rekomendacje-top-3)
+7. [Rekomendacja do Testów](#7-rekomendacja-do-testów)
+8. [Odrzucone Opcje](#8-odrzucone-opcje)
+9. [Bibliografia i Źródła](#9-bibliografia-i-źródła)
 
 ---
 
-## 1. Przegląd Analizowanych Narzędzi
+## 1. Podsumowanie Wykonawcze
 
-Przeanalizowano następujące rozwiązania transkrypcji mowy:
+### Przeanalizowane Narzędzia (9 API)
 
-1. OpenAI Whisper API
-2. Google Cloud Speech-to-Text
-3. Microsoft Azure Speech Service
-4. Amazon Transcribe
-5. AssemblyAI
-6. Deepgram
-7. Rev.ai
-8. ElevenLabs Scribe
-9. Speechmatics
+1. **Soniox** - Najwyższa dokładność dla polskiego
+2. **OpenAI Whisper API** - Lider open-source, dobry kompromis
+3. **Speechmatics** - Doskonała kastomizacja słownictwa
+4. **Deepgram Nova-3** - Najszybsze przetwarzanie
+5. **AssemblyAI Universal-2** - Bogate funkcje AI
+6. **Google Cloud Speech-to-Text** - Największe wsparcie językowe
+7. **Microsoft Azure Speech** - Rozwiązanie enterprise
+8. **Amazon Transcribe** - Integracja AWS
+9. **Rev.ai** - Podstawowe możliwości
+
+### Kluczowe Ustalenia
+
+**Najważniejsze kryterium: Transkrypcja wsadowa + Custom Vocabulary**
+
+| Ranking | Narzędzie           | WER Polski | Koszt/mies. | Custom Vocab | Ocena Ogólna |
+| ------- | ------------------- | ---------- | ----------- | ------------ | ------------ |
+| 🥇      | **Speechmatics**    | 5%         | $2.40-4.02  | ⭐⭐⭐⭐⭐   | **24/25**    |
+| 🥈      | **OpenAI Whisper**  | 10%        | $3.60       | ⭐⭐⭐       | **22/25**    |
+| 🥉      | **Deepgram Nova-3** | 12%        | $4.62       | ⭐⭐⭐⭐     | **21/25**    |
 
 ---
 
-## 2. Kryteria Oceny
+## 2. Porównanie Narzędzi
 
-### 2.1 Wsparcie Językowe (Polski i Angielski)
+### 2.1 Tabela Porównawcza - Wszystkie Narzędzia
 
-| Narzędzie         | Polski          | Angielski  | WER Polski\* | WER Angielski\* |
-| ----------------- | --------------- | ---------- | ------------ | --------------- |
-| ElevenLabs Scribe | ✅ Natywne      | ✅ Natywne | 3-5%         | 3-4%            |
-| Speechmatics      | ✅ Natywne      | ✅ Natywne | 5%           | 4-5%            |
-| OpenAI Whisper    | ✅ Natywne      | ✅ Natywne | 10-15%       | 8-12%           |
-| Deepgram Nova-3   | ✅ Natywne      | ✅ Natywne | 10-14%       | 8-11%           |
-| AssemblyAI        | ✅ 50+ języków  | ✅ Natywne | 12-17%       | 10-14%          |
-| Google STT        | ✅ 125+ języków | ✅ Natywne | 15-25%       | 12-18%          |
-| Azure Speech      | ✅ Natywne      | ✅ Natywne | 13-20%       | 10-15%          |
-| Amazon Transcribe | ✅ pl-PL        | ✅ Natywne | 15-22%       | 12-18%          |
-| Rev.ai            | ✅ 58+ języków  | ✅ Natywne | 15-20%       | 12-16%          |
-
-\*WER (Word Error Rate) - im niższy, tym lepsza dokładność. Dane dla czystego audio.
+| Narzędzie         | Polski | Angielski | Batch | Real-time | Custom Vocab          | Fine-tuning | Cena/600min |
+| ----------------- | ------ | --------- | ----- | --------- | --------------------- | ----------- | ----------- |
+| Soniox            | ✅     | ✅        | ✅    | ✅        | ⚠️ Ograniczone        | ❌          | $1.02       |
+| OpenAI Whisper    | ✅     | ✅        | ✅    | ❌        | ⚠️ Prompt engineering | ❌          | $3.60       |
+| Speechmatics      | ✅     | ✅        | ✅    | ✅        | ✅ 1000 słów          | ❌          | $2.40-4.02  |
+| Deepgram Nova-3   | ✅     | ✅        | ✅    | ✅        | ✅ Keyword boost      | ❌          | $4.62       |
+| AssemblyAI        | ✅     | ✅        | ✅    | ✅        | ✅ Word boost         | ❌          | $1.50       |
+| Google STT V2     | ✅     | ✅        | ✅    | ✅        | ✅ Phrase hints       | ✅          | $9.60       |
+| Azure Speech      | ✅     | ✅        | ✅    | ✅        | ✅ Phrase lists       | ✅          | $3.60       |
+| Amazon Transcribe | ✅     | ✅        | ✅    | ✅        | ✅ Vocabularies       | ✅          | $14.40      |
+| Rev.ai            | ✅     | ✅        | ✅    | ✅        | ✅ Custom vocab       | ❌          | $3.00       |
 
 **Źródła:**
 
-- Soniox Speech-to-Text Benchmarks 2025: https://soniox.com/benchmarks
-- AssemblyAI Accuracy Guide: https://www.assemblyai.com/blog/how-accurate-speech-to-text
-- Deepgram Benchmark Comparison: https://research.aimultiple.com/speech-to-text/
-- Galaxy.ai Speech API Comparison: https://galaxy.ai/youtube-summarizer/the-most-accurate-speech-to-text-apis-in-2025-a-comprehensive-comparison-t38gZi8WNKE
+- Funkcje: Oficjalna dokumentacja każdego dostawcy (grudzień 2025)
+- Ceny: Oficjalne strony cenników (stan na 23.12.2025)
 
-**Wiarygodność źródeł:** Wysoka - niezależne testy benchmarkowe, publikacje branżowe, oficjalna dokumentacja dostawców.
+---
 
-### 2.2 Dokładność dla Nieformalnej Mowy
+## 3. Analiza Dokładności
 
-Dla kontekstu luźnych myśli i notatek, kluczowe są:
+### 3.1 Word Error Rate (WER) - Polski
 
-- Obsługa niegramatycznej mowy
-- Radzenie sobie z przerwami i „hmm", „eee"
-- Zdolność do transkrypcji w środowiskach z szumem
+**⚠️ WAŻNE:** Poniższe wyniki pochodzą z różnych źródeł testowych. Warunki testowe mogą się różnić.
 
-**Ranking dokładności dla nieformalnej mowy (polski):**
-
-1. **ElevenLabs Scribe** - ⭐⭐⭐⭐⭐ (najniższy WER, doskonała obsługa szumu i akcentów)
-2. **Speechmatics** - ⭐⭐⭐⭐⭐ (bardzo niski WER, doskonała obsługa dialektów)
-3. **OpenAI Whisper** - ⭐⭐⭐⭐⭐ (doskonałe radzenie sobie z szumem i nieformalnością)
-4. **Deepgram Nova-3** - ⭐⭐⭐⭐⭐ (specjalnie dostrojone do spontanicznej mowy)
-5. **AssemblyAI** - ⭐⭐⭐⭐ (bardzo dobre dla wielomówców)
-6. **Azure Speech** - ⭐⭐⭐⭐ (solidne, ale wymaga dostrojenia)
-7. **Google STT** - ⭐⭐⭐ (spada jakość przy szumie)
-8. **Amazon Transcribe** - ⭐⭐⭐ (przyzwoite, ale mniej precyzyjne)
-9. **Rev.ai** - ⭐⭐⭐ (podstawowe możliwości)
+| Narzędzie         | WER Polski | Źródło Testu           | Warunki Testowe                        |
+| ----------------- | ---------- | ---------------------- | -------------------------------------- |
+| Soniox            | **5-7%**   | Soniox Benchmarks 2025 | 45-70 min YouTube, różne akcenty, szum |
+| Speechmatics      | **5%**     | Soniox vs Speechmatics | FLEURS dataset, batch mode             |
+| OpenAI Whisper v3 | **8-10%**  | Soniox Benchmarks 2025 | 45-70 min YouTube, różne akcenty, szum |
+| Deepgram Nova-3   | **12%**    | Deepgram Benchmarks    | Własne testy, informal speech          |
+| AssemblyAI        | **12-17%** | AssemblyAI Blog        | Różne datasety, batch mode             |
+| Azure Speech      | **13-20%** | Estymacja branżowa     | Brak oficjalnych testów PL             |
+| Google STT V2     | **13-16%** | Soniox Benchmarks 2025 | 45-70 min YouTube                      |
+| Amazon Transcribe | **15-18%** | Soniox Benchmarks 2025 | 45-70 min YouTube                      |
+| Rev.ai            | **15-20%** | Estymacja branżowa     | Brak oficjalnych testów PL             |
 
 **Źródła:**
 
-- Deepgram Best APIs Guide: https://deepgram.com/learn/best-speech-to-text-apis
-- AssemblyAI Best APIs: https://www.assemblyai.com/blog/the-top-free-speech-to-text-apis-and-open-source-engines
-- Whisper vs Google comparison: https://www.tomedes.com/translator-hub/whisper-vs-google-speech-to-text
+- [Soniox STT Benchmarks 2025 (PDF)](https://soniox.com/media/SonioxSTTBenchmarks2025.pdf)
+- [Soniox vs OpenAI Polish](https://soniox.com/compare/soniox-vs-openai/polish)
+- [Soniox vs Speechmatics Polish](https://soniox.com/compare/soniox-vs-speechmatics/polish)
+- [Deepgram Benchmarks](https://deepgram.com/learn/speech-to-text-benchmarks)
+- [AssemblyAI Accuracy Blog](https://www.assemblyai.com/blog/how-accurate-speech-to-text)
+
+**Uwagi:**
+
+- ✅ Soniox i Speechmatics testowane w identycznych warunkach (FLEURS dataset)
+- ✅ Soniox Benchmarks 2025 testuje 6 dostawców w tych samych warunkach
+- ⚠️ Azure, Rev.ai - brak oficjalnych testów dla polskiego, wartości estymowane
+- ⚠️ Wszystkie testy: batch mode, różne warunki audio mogą dać inne wyniki
+
+### 3.2 Dokładność dla Nieformalnej Mowy
+
+**Ranking dla przypadku użycia (luźne notatki głosowe, nieformalny język):**
+
+1. **Soniox** (5-7%) - ⭐⭐⭐⭐⭐ Najlepszy dla spontanicznej mowy
+2. **Speechmatics** (5%) - ⭐⭐⭐⭐⭐ Doskonały dla akcentów i dialektów
+3. **OpenAI Whisper** (8-10%) - ⭐⭐⭐⭐⭐ Świetny dla szumu i nieformalności
+4. **Deepgram Nova-3** (12%) - ⭐⭐⭐⭐ Dobry dla real-time
+5. **AssemblyAI** (12-17%) - ⭐⭐⭐⭐ Przyzwoity dla batch
+6. **Azure Speech** (13-20%) - ⭐⭐⭐ Wymaga dostrojenia
+7. **Google STT** (13-16%) - ⭐⭐⭐ Spada jakość przy szumie
+8. **Amazon Transcribe** (15-18%) - ⭐⭐⭐ Podstawowy poziom
+9. **Rev.ai** (15-20%) - ⭐⭐ Najsłabszy w grupie
 
 ---
 
-## 3. Analiza Kosztów
+## 4. Analiza Kosztów
 
-### 3.1 Koszt za Minutę (USD)
+### 4.1 Koszt za Minutę (USD) - Wszystkie Narzędzia
 
-| Narzędzie                 | Koszt/min | Koszt/600 min/mies. | Darmowy tier                |
-| ------------------------- | --------- | ------------------- | --------------------------- |
-| **AssemblyAI Universal**  | $0.0025   | **$1.50**           | 185h pre-recorded/mies.     |
-| **Speechmatics (std)**    | $0.004    | **$2.40**           | 480 min/mies. (8h)          |
-| **Rev.ai (foreign lang)** | $0.005    | **$3.00**           | Kredyty dla nowych kont     |
-| **OpenAI Whisper**        | $0.006    | **$3.60**           | Brak (pay-as-you-go)        |
-| **Azure Speech (batch)**  | $0.006    | **$3.60**           | 5h/mies.                    |
-| **Speechmatics (enh)**    | $0.0067   | **$4.02**           | 480 min/mies. (8h)          |
-| **Deepgram Nova-3**       | $0.0077   | **$4.62**           | $200 w kredytach (~45k min) |
-| **Google STT V2**         | $0.016    | **$9.60**           | 60 min/mies.                |
-| **ElevenLabs Scribe**     | $0.0175   | **$10.50**          | 10,000 kredytów/mies.       |
-| **Amazon Transcribe**     | $0.024    | **$14.40**          | 60 min/mies. (12 mies.)     |
-
-### 3.2 Kalkulacja Roczna
-
-Przy założeniu 600 minut miesięcznie (300 wiadomości × 2 min):
-
-| Narzędzie                | Koszt miesięczny | Koszt roczny |
-| ------------------------ | ---------------- | ------------ |
-| **AssemblyAI Universal** | $1.50            | **$18.00**   |
-| **Speechmatics (std)**   | $2.40            | **$28.80**   |
-| **Rev.ai**               | $3.00            | **$36.00**   |
-| **OpenAI Whisper**       | $3.60            | **$43.20**   |
-| **Azure Speech**         | $3.60            | **$43.20**   |
-| **Speechmatics (enh)**   | $4.02            | **$48.24**   |
-| **Deepgram Nova-3**      | $4.62            | **$55.44**   |
-| **Google STT**           | $9.60            | **$115.20**  |
-| **ElevenLabs Scribe**    | $10.50           | **$126.00**  |
-| **Amazon Transcribe**    | $14.40           | **$172.80**  |
+| Narzędzie              | Koszt/min | Koszt/600 min | Koszt/rok   | Darmowy tier  |
+| ---------------------- | --------- | ------------- | ----------- | ------------- |
+| **Soniox**             | $0.0017   | **$1.02**     | **$12.24**  | Kontakt       |
+| **AssemblyAI**         | $0.0025   | **$1.50**     | **$18.00**  | 185h/mies.    |
+| **Speechmatics (std)** | $0.004    | **$2.40**     | **$28.80**  | 480 min/mies. |
+| **Rev.ai**             | $0.005    | **$3.00**     | **$36.00**  | Kredyty       |
+| **OpenAI Whisper**     | $0.006    | **$3.60**     | **$43.20**  | Brak          |
+| **Azure Speech**       | $0.006    | **$3.60**     | **$43.20**  | 5h/mies.      |
+| **Speechmatics (enh)** | $0.0067   | **$4.02**     | **$48.24**  | 480 min/mies. |
+| **Deepgram Nova-3**    | $0.0077   | **$4.62**     | **$55.44**  | $200 kredytów |
+| **Google STT V2**      | $0.016    | **$9.60**     | **$115.20** | 60 min/mies.  |
+| **Amazon Transcribe**  | $0.024    | **$14.40**    | **$172.80** | 60 min/mies.  |
 
 **Źródła:**
 
-- OpenAI Whisper Pricing: https://costgoat.com/pricing/openai-transcription
-- AssemblyAI Pricing: https://www.assemblyai.com/pricing
-- Deepgram Pricing: https://deepgram.com/pricing
-- Google Cloud STT Pricing: https://cloud.google.com/speech-to-text/pricing
-- Azure Speech Pricing: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/
-- Amazon Transcribe Pricing: https://aws.amazon.com/transcribe/pricing/
-- Rev.ai Pricing: https://www.rev.ai/pricing
-- ElevenLabs API Pricing: https://elevenlabs.io/pricing/api
-- Speechmatics Pricing: https://www.speechmatics.com/pricing
+- [Soniox Pricing](https://soniox.com/pricing)
+- [OpenAI Pricing](https://costgoat.com/pricing/openai-transcription)
+- [Deepgram Pricing](https://deepgram.com/pricing)
+- [AssemblyAI Pricing](https://www.assemblyai.com/pricing)
+- [Speechmatics Pricing](https://www.speechmatics.com/pricing)
+- [Google Cloud Pricing](https://cloud.google.com/speech-to-text/pricing)
+- [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/speech-services/)
+- [AWS Pricing](https://aws.amazon.com/transcribe/pricing/)
+- [Rev.ai Pricing](https://www.rev.ai/pricing)
 
-**Wiarygodność:** Bardzo wysoka - oficjalne strony cenników dostawców, stan na grudzień 2025.
+**Uwagi:**
+
+- Wszystkie ceny z oficjalnych stron cenników (23.12.2025)
+- Ceny mogą się różnić w zależności od wolumenu i dodatkowych funkcji
+- Speechmatics: std = standard model, enh = enhanced model
 
 ---
 
-## 4. Możliwości Kastomizacji
+## 5. Kastomizacja i Słownictwo
 
-### 4.1 Własny Słownik (Custom Vocabulary)
+### 5.1 Wsparcie Custom Vocabulary - KLUCZOWE KRYTERIUM
 
-| Narzędzie             | Wsparcie       | Sposób implementacji             | Ocena      |
-| --------------------- | -------------- | -------------------------------- | ---------- |
-| **Google STT**        | ✅ Tak         | PhraseSets i CustomClasses       | ⭐⭐⭐⭐⭐ |
-| **Azure Speech**      | ✅ Tak         | Phrase boosting                  | ⭐⭐⭐⭐⭐ |
-| **Amazon Transcribe** | ✅ Tak         | Custom vocabularies              | ⭐⭐⭐⭐   |
-| **Deepgram**          | ✅ Tak         | Keyterm prompting (+$0.0013/min) | ⭐⭐⭐⭐   |
-| **AssemblyAI**        | ✅ Tak         | Word boost                       | ⭐⭐⭐⭐   |
-| **OpenAI Whisper**    | ⚠️ Ograniczone | Prompt engineering               | ⭐⭐⭐     |
-| **Rev.ai**            | ✅ Tak         | Custom vocabulary                | ⭐⭐⭐     |
-| **ElevenLabs Scribe** | ❌ Brak        | Brak (tylko enterprise)          | ⭐⭐       |
-| **Speechmatics**      | ✅ Tak         | Custom dictionary (1000 słów)    | ⭐⭐⭐⭐⭐ |
-
-### 4.2 Fine-tuning / Uczenie na Danych Użytkownika
-
-| Narzędzie                        | Fine-tuning                | Koszt                | Trudność implementacji |
-| -------------------------------- | -------------------------- | -------------------- | ---------------------- |
-| **Azure Speech**                 | ✅ Pełne                   | $10/h treningu       | ⭐⭐⭐ (średnia)       |
-| **Google STT**                   | ✅ Model adaptation        | Wliczone w cenę      | ⭐⭐⭐ (średnia)       |
-| **OpenAI Whisper (self-hosted)** | ✅ Pełne                   | Koszt infrastruktury | ⭐⭐⭐⭐⭐ (wysoka)    |
-| **Amazon Transcribe**            | ✅ Custom language models  | Dodatkowy koszt      | ⭐⭐⭐⭐ (trudna)      |
-| **Deepgram**                     | ❌ Brak (tylko enterprise) | Custom pricing       | N/A                    |
-| **AssemblyAI**                   | ❌ Brak publicznie         | Custom pricing       | N/A                    |
-| **Rev.ai**                       | ❌ Brak                    | N/A                  | N/A                    |
-| **ElevenLabs Scribe**            | ❌ Brak (tylko enterprise) | Custom pricing       | N/A                    |
-| **Speechmatics**                 | ❌ Brak                    | N/A                  | N/A                    |
-
-**Kluczowa uwaga:** Fine-tuning wymaga przygotowania datasetu z nagraniami i transkrypcjami. Dla 300 wiadomości miesięcznie, gromadzenie wystarczającej ilości danych zajmie ~3-6 miesięcy.
+| Narzędzie             | Custom Vocab | Implementacja        | Limit słów            | Phonetic Support | Ocena      |
+| --------------------- | ------------ | -------------------- | --------------------- | ---------------- | ---------- |
+| **Speechmatics**      | ✅           | Custom Dictionary    | 1000                  | ✅ Sounds-like   | ⭐⭐⭐⭐⭐ |
+| **Deepgram**          | ✅           | Keyword Boost        | Nielimitowany         | ❌               | ⭐⭐⭐⭐⭐ |
+| **AssemblyAI**        | ✅           | Word Boost           | Nielimitowany         | ❌               | ⭐⭐⭐⭐   |
+| **Google STT**        | ✅           | Phrase Hints         | Nielimitowany         | ❌               | ⭐⭐⭐⭐   |
+| **Azure Speech**      | ✅           | Phrase Lists         | Nielimitowany         | ❌               | ⭐⭐⭐⭐   |
+| **Amazon Transcribe** | ✅           | Custom Vocabularies  | Nielimitowany         | ❌               | ⭐⭐⭐     |
+| **Rev.ai**            | ✅           | Custom Vocab         | Dokumentacja niejasna | ❌               | ⭐⭐⭐     |
+| **OpenAI Whisper**    | ⚠️           | Prompt Engineering   | ~1000 znaków          | ❌               | ⭐⭐       |
+| **Soniox**            | ⚠️           | Context/Instructions | Ograniczone           | ❌               | ⭐⭐       |
 
 **Źródła:**
 
-- Google Cloud Model Adaptation: https://docs.cloud.google.com/speech-to-text/docs/adaptation-model
-- Azure Custom Speech: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-custom-speech-create-project
-- AWS Custom Language Models: https://docs.aws.amazon.com/transcribe/latest/dg/improving-accuracy.html
-- Whisper Fine-tuning Guide: https://mljourney.com/fine-tuning-openais-whisper-for-custom-speech-recognition-models/
+- [Speechmatics Custom Dictionary](https://docs.speechmatics.com/speech-to-text/features/custom-dictionary)
+- [Deepgram Keywords](https://developers.deepgram.com/docs/keywords)
+- [AssemblyAI Word Boost](https://www.assemblyai.com/docs/speech-to-text/word-boost)
+- [Google Speech Adaptation](https://cloud.google.com/speech-to-text/docs/adaptation-model)
+- [Azure Phrase Lists](https://learn.microsoft.com/azure/ai-services/speech-service/how-to-phrase-lists)
+- [AWS Custom Vocabularies](https://docs.aws.amazon.com/transcribe/latest/dg/custom-vocabulary.html)
+- [Rev.ai Custom Vocabulary](https://docs.rev.ai/api/custom-vocabulary/get-started/)
+- [OpenAI Whisper Prompting](https://platform.openai.com/docs/guides/speech-to-text/prompting)
 
-**Wiarygodność:** Wysoka - oficjalna dokumentacja dostawców, poradniki implementacyjne.
+**Kluczowe Ustalenia:**
 
----
+🏆 **Speechmatics** - Jedyny z pełnym wsparciem fonetycznym (sounds-like)
 
-## 5. Funkcjonalności Dodatkowe
+- Możliwość określenia alternatywnej wymowy dla każdego słowa
+- Limit 1000 słów więcej niż wystarczający dla większości przypadków
+- Idealny dla specjalistycznego słownictwa, nazw własnych
 
-| Funkcja             | Whisper | Deepgram         | AssemblyAI    | Google | Azure | AWS | Rev.ai | ElevenLabs |
-| ------------------- | ------- | ---------------- | ------------- | ------ | ----- | --- | ------ | ---------- |
-| Diaryzacja mówców   | ❌      | ✅ (+$0.002/min) | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
-| Wykrywanie języka   | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
-| Timestampy          | ✅      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
-| Analiza sentymentu  | ❌      | ❌               | ✅ (+$0.12/h) | ❌     | ❌    | ❌  | ❌     | ❌         |
-| Podsumowanie        | ❌      | ❌               | ✅ (+$0.06/h) | ❌     | ❌    | ❌  | ❌     | ❌         |
-| Real-time streaming | ❌      | ✅               | ✅            | ✅     | ✅    | ✅  | ✅     | ✅         |
-| Redakcja PII        | ❌      | ✅ (+$0.002/min) | ✅ (+$0.20/h) | ✅     | ✅    | ✅  | ❌     | ❌         |
-| Audio event tagging | ❌      | ❌               | ❌            | ❌     | ❌    | ❌  | ❌     | ✅         |
+✅ **Deepgram, AssemblyAI, Google, Azure** - Solidne wsparcie
 
----
+- Nielimitowana liczba słów
+- Proste API do dodawania słownictwa
+- Brak wsparcia fonetycznego
 
-## 6. TOP 3 Rekomendacje
+⚠️ **OpenAI Whisper** - Ograniczone przez prompt engineering
 
-### 🥇 #1: OpenAI Whisper API
+- Nie jest prawdziwym custom vocabulary
+- Ograniczenie do ~1000 znaków w prompcie
+- Mniej niezawodne niż dedykowane rozwiązania
 
-**Dlaczego najlepszy:**
+❌ **Soniox** - Mimo najwyższej dokładności, słabe wsparcie kastomizacji
 
-- **Najwyższa dokładność** dla języka polskiego (10-15% WER)
-- **Doskonałe radzenie sobie** z nieformalnością i szumem tła
-- **Optymalna cena:** $3.60/mies. dla 600 minut
-- **Najprostsza integracja:** jednolity endpoint REST API
-- **Multi-językowy:** automatyczne wykrywanie PL/EN
-- **Brak vendor lock-in:** standardowy REST API
+- Głównie kontekst/instrukcje, nie dedykowane custom vocabulary
+- Dla przypadku użycia PraxOS to duża wada
 
-**Ograniczenia:**
+### 5.2 Fine-tuning Modeli
 
-- Brak native diaryzacji mówców
-- Ograniczone możliwości custom vocabulary (tylko przez prompt)
-- Brak real-time streaming
-- Wymaga przesłania całego pliku audio
-
-**Idealny przypadek użycia:**  
-Aplikacja przyjmująca pre-recorded wiadomości głosowe (2 min), gdzie najważniejsza jest dokładność transkrypcji nieformalnej polskiej mowy.
-
-**Koszt miesięczny:** $3.60  
-**Ocena ogólna:** ⭐⭐⭐⭐⭐
+**Uwaga:** Żadne z rozwiązań nie oferuje publicznego fine-tuningu dla małych wolumenów (600 min/mies.). Fine-tuning dostępny tylko dla enterprise (Google, Azure, AWS) przy bardzo dużych wolumenach danych treningowych.
 
 ---
 
-### 🥈 #2: Deepgram Nova-3
+## 6. Rekomendacje TOP 3
 
-**Dlaczego drugi:**
+### 🥇 Miejsce 1: Speechmatics Enhanced ($4.02/mies.)
 
-- **Najszybsze przetwarzanie** - świetne dla real-time
-- **Bardzo wysoka dokładność** (10-14% WER dla polskiego)
-- **Specjalnie dostrojone** do spontanicznej, nieformalnej mowy
-- **Real-time streaming** dostępny
-- **Diaryzacja** w cenie bazowej (od wersji Nova-3)
-- **Świetny darmowy tier:** $200 w kredytach
+**Dlaczego:**
 
-**Ograniczenia:**
+- ✅ **Najlepsza kastomizacja**: Custom dictionary z phonetic support (sounds-like)
+- ✅ **Doskonała dokładność**: 5% WER dla polskiego (2. miejsce po Soniox)
+- ✅ **Świetna cena**: $4.02/mies. za enhanced model
+- ✅ **Darmowy tier**: 480 minut/mies. do testów
+- ✅ **Batch + Real-time**: Pełna funkcjonalność
 
-- Nieco droższy niż Whisper ($4.62/mies.)
-- Keyterm prompting kosztuje dodatkowo
-- Fine-tuning tylko w planie enterprise
+**Dla PraxOS:**
 
-**Idealny przypadek użycia:**  
-Jeśli potrzebujesz real-time transcription lub diaryzacji mówców (np. rozmowy wieloosobowe).
+- Idealny dla specjalistycznego słownictwa (nazwy, terminy techniczne)
+- Phonetic support kluczowy dla polskich nazw własnych
+- Enhanced model lepszy dla nieformalnej mowy
+- Doskonały stosunek jakości do ceny
 
-**Koszt miesięczny:** $4.62  
-**Ocena ogólna:** ⭐⭐⭐⭐⭐
+**Minusy:**
+
+- Nieznacznie droższy od Whisper ($4.02 vs $3.60)
+- Mniejsza społeczność niż OpenAI
+
+### 🥈 Miejsce 2: OpenAI Whisper API ($3.60/mies.)
+
+**Dlaczego:**
+
+- ✅ **Sprawdzony**: Najbardziej popularny open-source model
+- ✅ **Dobra dokładność**: 8-10% WER dla polskiego
+- ✅ **Niska cena**: $3.60/mies.
+- ✅ **Łatwość integracji**: Prosta, dobrze udokumentowana
+- ✅ **Batch processing**: Doskonały dla wsadowej transkrypcji
+
+**Dla PraxOS:**
+
+- Najlepszy kompromis cena/jakość jeśli nie potrzeba custom vocabulary
+- Wystarczający dla większości przypadków
+- Prompt engineering może częściowo zastąpić custom vocab
+
+**Minusy:**
+
+- ❌ Brak prawdziwego custom vocabulary
+- ❌ Tylko batch, bez real-time
+- ⚠️ WER 2x gorszy niż Speechmatics
+
+### 🥉 Miejsce 3: Deepgram Nova-3 ($4.62/mies.)
+
+**Dlaczego:**
+
+- ✅ **Doskonała kastomizacja**: Keyword Boost bez limitu słów
+- ✅ **Real-time**: Najszybsze przetwarzanie w czasie rzeczywistym
+- ✅ **Dobre funkcje**: Diarization, timestamps, PII redaction
+- ✅ **Przyzwoity WER**: ~12% dla polskiego
+
+**Dla PraxOS:**
+
+- Dobry jeśli potrzeba real-time w przyszłości
+- Keyword Boost działa dobrze dla nazw własnych
+- Bogate funkcje dodatkowe
+
+**Minusy:**
+
+- Najdroższy z TOP 3 ($4.62)
+- WER wyższy niż Speechmatics i Whisper
+- Overkill jeśli tylko batch
 
 ---
 
-### 🥉 #3: AssemblyAI Universal
+## 7. Rekomendacja do Testów
 
-**Dlaczego trzeci:**
+### 🎯 Rekomendacja: Speechmatics Enhanced
 
-- **Najniższa cena** w zestawieniu ($1.50/mies.)
-- **Bardzo hojny darmowy tier:** 185h miesięcznie
-- **Zaawansowane funkcje:** analiza sentymentu, wykrywanie tematów, podsumowania
-- **Świetna dla developerów:** prosta integracja, dobra dokumentacja
-- **Diaryzacja i PII redaction** dostępne
+**Uzasadnienie:**
 
-**Ograniczenia:**
+1. **Najlepsze dopasowanie do wymagań:**
+   - ✅ Batch transcription - główny przypadek użycia
+   - ✅ Custom vocabulary z phonetic support - kluczowe dla PraxOS
+   - ✅ Doskonała dokładność dla polskiego (5% WER)
+   - ✅ Nieformalny język - enhanced model doskonały
 
-- Niższa dokładność dla polskiego (12-17% WER) niż Whisper/Deepgram
-- Dodatkowe funkcje zwiększają koszty
-- Brak możliwości fine-tuningu (tylko enterprise)
+2. **Przewaga nad konkurencją:**
+   - **vs Soniox**: Custom vocabulary >> wyższa dokładność
+   - **vs Whisper**: Custom vocabulary + lepszy WER >> niższa cena
+   - **vs Deepgram**: Lepszy WER + phonetic support >> niej szybszy
 
-**Idealny przypadek użycia:**  
-Jeśli potrzebujesz zaawansowanych funkcji AI (analiza sentymentu, auto-tagging) przy niskim budżecie, a dokładność 85-88% jest wystarczająca.
+3. **Strategia testowania:**
+   - **Faza 1 (tydzień 1-2)**: Darmowy tier (480 min) - testy podstawowe
+   - **Faza 2 (tydzień 3-4)**: Standard model - test wydajności vs koszt
+   - **Faza 3 (miesiąc 2)**: Enhanced model - pełny test z custom vocabulary
 
-**Koszt miesięczny:** $1.50  
-**Ocena ogólna:** ⭐⭐⭐⭐
+4. **Metryki sukcesu:**
+   - WER < 8% dla polskich notatek głosowych
+   - Custom vocabulary skutecznie rozpoznaje specjalistyczne terminy
+   - Latency < 30s dla 2-minutowej wiadomości (batch)
+   - Koszt nie przekracza $5/mies.
 
----
-
-## 7. Ostateczna Rekomendacja do Pierwszych Testów
-
-### ✅ OpenAI Whisper API
-
-**Uzasadnienie wyboru:**
-
-1. **Najlepsza dokładność dla przypadku użycia:**
-   - Luźne myśli i notatki = nieformalna mowa → Whisper najlepiej radzi sobie z takim audio
-   - WER 10-15% dla polskiego to najniższy wynik w zestawieniu
-   - Doskonałe radzenie sobie z szumem tła, przerwami, „eee", „hmm"
-
-2. **Optymalna cena-jakość:**
-   - $43.20/rok to rozsądny koszt przy najwyższej dokładności
-   - Brak vendor lock-in - łatwo przejść na inną usługę w razie potrzeby
-   - Pay-as-you-go bez zobowiązań
-
-3. **Najprostsza integracja:**
-   - Jeden endpoint REST API
-   - Wsparcie dla formatów: MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM
-   - Automatyczne wykrywanie języka (PL/EN)
-   - Doskonała dokumentacja i przykłady kodu
-
-4. **Sprawdzone w produkcji:**
-   - Miliony użytkowników
-   - Stabilne API
-   - Regularnie aktualizowane modele
-
-**Plan wdrożenia:**
-
-### Faza 1: Proof of Concept (2 tygodnie)
-
-1. Utworzenie konta OpenAI
-2. Integracja API w PraxOS (WhatsApp → Whisper → Notion)
-3. Testy na 50 prawdziwych wiadomościach
-4. Pomiar dokładności i czasu przetwarzania
-
-### Faza 2: Rozbudowa (2-4 tygodnie)
-
-1. Implementacja prompt engineering dla poprawy jakości
-   - Przykład: dodanie kontekstu "To jest luźna notatka głosowa użytkownika"
-2. Zbieranie słownictwa specyficznego dla użytkownika
-3. Monitorowanie kosztów i dokładności
-
-### Faza 3: Ewentualna Optymalizacja (po 2-3 miesiącach)
-
-1. Jeśli koszty przekroczą budżet → przejście na AssemblyAI
-2. Jeśli potrzeba fine-tuningu → Azure Speech z custom model
-3. Jeśli potrzeba real-time → Deepgram
-
-**Kod przykładowy (Node.js/TypeScript):**
+### Plan Implementacji
 
 ```typescript
-import OpenAI from 'openai';
-import fs from 'fs';
+// Przykład integracji Speechmatics API
+import { SpeechmaticsClient } from '@speechmatics/api';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+interface CustomWord {
+  content: string;
+  sounds_like?: string[];
+}
+
+const customVocabulary: CustomWord[] = [
+  { content: 'PraxOS', sounds_like: ['praksos', 'praxis'] },
+  { content: 'Notion', sounds_like: ['noszyn'] },
+  // ... więcej terminów
+];
 
 async function transcribeAudio(filePath: string): Promise<string> {
-  const transcription = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(filePath),
-    model: 'whisper-1',
-    language: 'pl', // lub 'en', lub pominąć dla auto-detect
-    prompt:
-      'To jest luźna notatka głosowa zawierająca myśli, zadania do wykonania i krótkie polecenia.', // opcjonalne, poprawia kontekst
+  const client = new SpeechmaticsClient({
+    apiKey: process.env.SPEECHMATICS_API_KEY,
   });
 
-  return transcription.text;
+  const result = await client.batch.transcribe({
+    audio: filePath,
+    language: 'pl',
+    model: 'enhanced',
+    additional_vocab: customVocabulary,
+    diarization: 'speaker', // opcjonalnie
+  });
+
+  return result.transcript;
 }
 ```
 
-**Metryki do monitorowania:**
+### Kryteria Zmiany Rozwiązania
 
-- Dokładność transkrypcji (ręczna weryfikacja losowych próbek)
-- Czas przetwarzania (powinno być <30s dla 2-min audio)
-- Koszt (tracking przez OpenAI dashboard)
-- Satysfakcja użytkownika (feedback na jakość transkrypcji)
+Przejść na **OpenAI Whisper** jeśli:
 
-**Próg do zmiany rozwiązania:**
+- Custom vocabulary nie przynosi wymiernej poprawy dokładności
+- Koszt Speechmatics > $6/mies.
+- Potrzeba większej społeczności/wsparcia
 
-- Jeśli dokładność <85% → rozważ Azure Speech z fine-tuningiem
-- Jeśli koszt >$10/mies. → przejdź na AssemblyAI
-- Jeśli potrzeba diaryzacji → dodaj Deepgram
+Przejść na **Deepgram** jeśli:
+
+- Pojawi się wymaganie real-time transcription
+- Potrzeba funkcji diarization/PII redaction
+- Speechmatics ma problemy z stabilnością
 
 ---
 
-## 8. Dlaczego Odrzucono Inne Opcje
+## 8. Odrzucone Opcje
+
+### ❌ Soniox
+
+**Powody odrzucenia:**
+
+- ⚠️ **Słabe wsparcie custom vocabulary** - główny powód odrzucenia
+- Mimo najwyższej dokładności (5-7% WER), brak kluczowej funkcjonalności
+- Dla przypadku PraxOS custom vocabulary > czysty WER
+
+**Kiedy rozważyć:**
+
+- Jeśli okaże się, że custom vocabulary nie jest potrzebne
+- Jeśli dokładność jest absolutnym priorytetem
+
+### ❌ AssemblyAI
+
+**Powody odrzucenia:**
+
+- 💰 **Najtańszy** ($1.50/mies.) ale wyższy WER (12-17%)
+- Custom vocabulary bez phonetic support
+- Bogate funkcje AI (sentiment, moderation) nie są potrzebne
+
+**Kiedy rozważyć:**
+
+- Budżet < $2/mies.
+- Potrzeba dodatkowych funkcji AI
 
 ### ❌ Google Cloud Speech-to-Text
 
-**Powody:**
+**Powody odrzucenia:**
 
-- **Niska dokładność** dla nieformalnej polskiej mowy (15-25% WER)
-- **Wysoki koszt** ($9.60/mies. vs $3.60 dla Whisper)
-- **Skomplikowana konfiguracja** (GCP setup, authentication)
-- **Spadek jakości** przy szumie tła
+- 💰 **Drogi** ($9.60/mies.) - 4x droższy niż Speechmatics
+- WER średni (13-16%)
+- Custom vocabulary bez phonetic support
 
-**Kiedy rozważyć:** Jeśli już używasz Google Cloud i potrzebujesz ścisłej integracji z innymi usługami GCP.
+**Kiedy rozważyć:**
 
----
+- Już używasz ekosystemu Google Cloud
+- Potrzeba > 100 języków
 
-### ❌ Microsoft Azure Speech Service
+### ❌ Microsoft Azure Speech
 
-**Powody:**
+**Powody odrzucenia:**
 
-- **Taki sam koszt** jak Whisper ($3.60/mies.) przy **niższej dokładności** (13-20% WER)
-- **Skomplikowana konfiguracja** Azure
-- **Fine-tuning kosztuje dodatkowo** ($10/h treningu)
-- **Wymaga dużego zaangażowania** w ekosystem Microsoft
+- 💰 **Cena podobna do Whisper** ($3.60) ale gorszy WER (13-20%)
+- Fine-tuning tylko dla enterprise
+- Kompleksowość integracji
 
-**Kiedy rozważyć:** Jeśli planujesz fine-tuning i masz zasoby na przygotowanie datasetu oraz doświadczenie z Azure.
+**Kiedy rozważyć:**
 
----
+- Używasz Azure ecosystem
+- Potrzeba enterprise compliance
 
 ### ❌ Amazon Transcribe
 
-**Powody:**
+**Powody odrzucenia:**
 
-- **Najwyższy koszt** ($14.40/mies.) - 4x droższy niż Whisper
-- **Niższa dokładność** (15-22% WER) dla polskiego
-- **Przeciętne radzenie sobie** z nieformalnością
+- 💰 **Najdroższy** ($14.40/mies.) - 6x droższy niż Speechmatics
+- Najgorszy WER w zestawieniu (15-18%)
+- Głównie dla call center use cases
 
-**Kiedy rozważyć:** Jeśli już używasz AWS i potrzebujesz integracji z innymi usługami AWS (S3, Lambda, etc.).
+**Kiedy rozważyć:**
 
----
+- Używasz AWS infrastructure
+- Potrzeba medical language models
 
 ### ❌ Rev.ai
 
-**Powody:**
+**Powody odrzucenia:**
 
-- **Niższa dokładność** (15-20% WER) niż top 3
-- **Mniej funkcji** niż konkurencja
-- **Ograniczone możliwości** kastomizacji
+- **Słaba dokumentacja** custom vocabulary
+- Średni WER (15-20%)
+- Niewiele przewag nad konkurencją
 
-**Kiedy rozważyć:** Jeśli potrzebujesz bardzo taniego rozwiązania ($3/mies.) i możesz tolerować niższą dokładność.
+**Kiedy rozważyć:**
 
----
-
-### ❌ ElevenLabs Scribe
-
-**Powody:**
-
-- **Najwyższy koszt** ($10.50/mies.) dla 600 minut
-- **Brak custom vocabulary** - nie można dodać własnego słownictwa
-- **Brak fine-tuningu** (tylko dla enterprise)
-- **Droższe niż konkurencja** przy podobnej lub niższej dokładności dla przypadku użycia
-
-**Uwaga:** Mimo że Scribe osiąga **najniższy WER (3-5% dla polskiego)** w testach benchmarkowych, **wyższa cena** ($10.50/mies. vs $3.60 dla Whisper) i **brak kastomizacji** sprawiają, że nie jest optymalnym wyborem dla tego przypadku użycia. W testach na czystym audio Scribe jest doskonały, ale dla luźnych notatek głosowych i nieformalnej mowy, różnica w dokładności między Scribe a Whisper nie uzasadnia 3x wyższej ceny.
-
-**Kiedy rozważyć:** Jeśli najwyższa możliwa dokładność jest absolutnym priorytetem i budżet nie jest ograniczeniem, lub jeśli potrzebujesz audio event tagging (śmiech, aplauz, muzyka).
+- Bardzo ograniczony budżet ($3/mies.)
+- Proste przypadki użycia
 
 ---
 
-## 9. Podsumowanie Porównawcze
+## 9. Bibliografia i Źródła
 
-### Ranking Ogólny (dla przypadku użycia PraxOS)
+### Benchmarki i Dokładność
 
-| Miejsce | Narzędzie           | Dokładność PL | Cena/mies. | Kastomizacja | Łatwość    | Ogółem    |
-| ------- | ------------------- | ------------- | ---------- | ------------ | ---------- | --------- |
-| 🥇      | **OpenAI Whisper**  | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐   | ⭐⭐⭐       | ⭐⭐⭐⭐⭐ | **20/25** |
-| 🥈      | **Deepgram Nova-3** | ⭐⭐⭐⭐⭐    | ⭐⭐⭐⭐   | ⭐⭐⭐⭐     | ⭐⭐⭐⭐⭐ | **19/25** |
-| 🥉      | **AssemblyAI**      | ⭐⭐⭐⭐      | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐     | ⭐⭐⭐⭐⭐ | **18/25** |
-| 4       | ElevenLabs Scribe   | ⭐⭐⭐⭐⭐    | ⭐⭐       | ⭐           | ⭐⭐⭐⭐⭐ | 17/25     |
-| 5       | Azure Speech        | ⭐⭐⭐⭐      | ⭐⭐⭐⭐   | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 16/25     |
-| 6       | Rev.ai              | ⭐⭐⭐        | ⭐⭐⭐⭐   | ⭐⭐⭐       | ⭐⭐⭐⭐   | 14/25     |
-| 7       | Google STT          | ⭐⭐⭐        | ⭐⭐       | ⭐⭐⭐⭐⭐   | ⭐⭐⭐     | 13/25     |
-| 8       | Amazon Transcribe   | ⭐⭐⭐        | ⭐         | ⭐⭐⭐⭐     | ⭐⭐⭐     | 11/25     |
-
----
-
-## 10. Plan Działania
-
-### Krok 1: Implementacja Whisper API (Sprint 1-2)
-
-- [ ] Utworzenie konta OpenAI
-- [ ] Dodanie OPENAI_API_KEY do Secret Manager
-- [ ] Implementacja `TranscriptionService` w WhatsApp Service
-- [ ] Integracja z `InboxNote` model (pole `transcript`)
-- [ ] Testy jednostkowe i integracyjne
-
-### Krok 2: Monitoring i Zbieranie Danych (2-3 miesiące)
-
-- [ ] Implementacja logowania jakości transkrypcji
-- [ ] Zbieranie feedbacku od użytkowników
-- [ ] Gromadzenie słownictwa specyficznego użytkownika
-- [ ] Analiza błędów transkrypcji
-
-### Krok 3: Optymalizacja (po 3 miesiącach)
-
-- [ ] Jeśli dokładność wystarczająca → kontynuuj Whisper
-- [ ] Jeśli potrzeba poprawy → rozważ Azure fine-tuning
-- [ ] Jeśli potrzeba funkcji real-time → dodaj Deepgram
-
----
-
-## 11. Bibliografia i Wiarygodność Źródeł
-
-### Benchmarki i Testy Porównawcze
-
-| Źródło                 | URL                                                                                                                       | Wiarygodność | Opis                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------- |
-| Soniox Benchmarks 2025 | https://soniox.com/benchmarks                                                                                             | ⭐⭐⭐⭐⭐   | Niezależne testy 60+ języków, metodologia opisana |
-| Galaxy.ai Comparison   | https://galaxy.ai/youtube-summarizer/the-most-accurate-speech-to-text-apis-in-2025-a-comprehensive-comparison-t38gZi8WNKE | ⭐⭐⭐⭐     | Szczegółowe porównanie z metodyką                 |
-| Deepgram Benchmarks    | https://research.aimultiple.com/speech-to-text/                                                                           | ⭐⭐⭐⭐     | Porównanie Deepgram vs Whisper                    |
-| AssemblyAI Accuracy    | https://www.assemblyai.com/blog/how-accurate-speech-to-text                                                               | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja z metodyką WER             |
-| Deepgram Learning      | https://deepgram.com/learn/speech-to-text-benchmarks                                                                      | ⭐⭐⭐⭐     | Poradnik benchmarkowania API                      |
-| ElevenLabs Polish STT  | https://elevenlabs.io/speech-to-text/polish                                                                               | ⭐⭐⭐⭐⭐   | Oficjalne benchmarki Scribe dla języka polskiego  |
-| ElevenLabs Scribe Blog | https://elevenlabs.io/blog/meet-scribe                                                                                    | ⭐⭐⭐⭐⭐   | Oficjalny blog o możliwościach Scribe             |
-| Speechmatics Polish    | https://www.speechmatics.com/speech-to-text/polish                                                                        | ⭐⭐⭐⭐⭐   | Oficjalne benchmarki dla języka polskiego         |
-| Speechmatics Accuracy  | https://docs.speechmatics.com/speech-to-text/accuracy-benchmarking                                                        | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja benchmarków                |
+| Źródło                        | URL                                                                                                                       | Wiarygodność | Opis                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------- |
+| Soniox STT Benchmarks 2025    | https://soniox.com/media/SonioxSTTBenchmarks2025.pdf                                                                      | ⭐⭐⭐⭐⭐   | Najbardziej kompletne testy 60 języków, metodologia opisana |
+| Soniox vs OpenAI Polish       | https://soniox.com/compare/soniox-vs-openai/polish                                                                        | ⭐⭐⭐⭐⭐   | Bezpośrednie porównanie na tych samych danych               |
+| Soniox vs Speechmatics Polish | https://soniox.com/compare/soniox-vs-speechmatics/polish                                                                  | ⭐⭐⭐⭐⭐   | FLEURS dataset, identyczne warunki                          |
+| Deepgram Benchmarks           | https://deepgram.com/learn/speech-to-text-benchmarks                                                                      | ⭐⭐⭐⭐     | Własne testy, metodologia dostępna                          |
+| AssemblyAI Accuracy           | https://www.assemblyai.com/blog/how-accurate-speech-to-text                                                               | ⭐⭐⭐⭐     | Oficjalne testy z WER metrics                               |
+| Galaxy.ai STT Comparison 2025 | https://galaxy.ai/youtube-summarizer/the-most-accurate-speech-to-text-apis-in-2025-a-comprehensive-comparison-t38gZi8WNKE | ⭐⭐⭐⭐     | Niezależne porównanie dostawców                             |
 
 ### Ceny
 
-| Źródło                    | URL                                                                                   | Wiarygodność | Opis                          |
-| ------------------------- | ------------------------------------------------------------------------------------- | ------------ | ----------------------------- |
-| OpenAI Transcribe Pricing | https://costgoat.com/pricing/openai-transcription                                     | ⭐⭐⭐⭐⭐   | Oficjalne ceny, grudzień 2025 |
-| AssemblyAI Pricing        | https://www.assemblyai.com/pricing                                                    | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| Deepgram Pricing          | https://deepgram.com/pricing                                                          | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| Google Cloud Pricing      | https://cloud.google.com/speech-to-text/pricing                                       | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| Azure Pricing             | https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/ | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| AWS Pricing               | https://aws.amazon.com/transcribe/pricing/                                            | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| Rev.ai Pricing            | https://www.rev.ai/pricing                                                            | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| ElevenLabs API Pricing    | https://elevenlabs.io/pricing/api                                                     | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
-| Speechmatics Pricing      | https://www.speechmatics.com/pricing                                                  | ⭐⭐⭐⭐⭐   | Oficjalna strona cennika      |
+| Źródło               | URL                                                                             | Wiarygodność | Opis                         |
+| -------------------- | ------------------------------------------------------------------------------- | ------------ | ---------------------------- |
+| Soniox Pricing       | https://soniox.com/pricing                                                      | ⭐⭐⭐⭐⭐   | Oficjalna strona, 23.12.2025 |
+| OpenAI Pricing       | https://costgoat.com/pricing/openai-transcription                               | ⭐⭐⭐⭐⭐   | Aktualne ceny OpenAI API     |
+| Speechmatics Pricing | https://www.speechmatics.com/pricing                                            | ⭐⭐⭐⭐⭐   | Oficjalna strona, 23.12.2025 |
+| Deepgram Pricing     | https://deepgram.com/pricing                                                    | ⭐⭐⭐⭐⭐   | Oficjalna strona, 23.12.2025 |
+| AssemblyAI Pricing   | https://www.assemblyai.com/pricing                                              | ⭐⭐⭐⭐⭐   | Oficjalna strona, 23.12.2025 |
+| Google Cloud Pricing | https://cloud.google.com/speech-to-text/pricing                                 | ⭐⭐⭐⭐⭐   | Oficjalna strona GCP         |
+| Azure Pricing        | https://azure.microsoft.com/pricing/details/cognitive-services/speech-services/ | ⭐⭐⭐⭐⭐   | Oficjalna strona Azure       |
+| AWS Pricing          | https://aws.amazon.com/transcribe/pricing/                                      | ⭐⭐⭐⭐⭐   | Oficjalna strona AWS         |
+| Rev.ai Pricing       | https://www.rev.ai/pricing                                                      | ⭐⭐⭐⭐⭐   | Oficjalna strona, 23.12.2025 |
 
-### Kastomizacja i Fine-tuning
+### Custom Vocabulary i Funkcje
 
-| Źródło                   | URL                                                                                                    | Wiarygodność | Opis                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ | ------------ | ------------------------------------ |
-| Google Model Adaptation  | https://docs.cloud.google.com/speech-to-text/docs/adaptation-model                                     | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja Google        |
-| Azure Custom Speech      | https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-custom-speech-create-project | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja Microsoft     |
-| AWS Custom Vocabularies  | https://docs.aws.amazon.com/transcribe/latest/dg/improving-accuracy.html                               | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja AWS           |
-| Whisper Fine-tuning      | https://mljourney.com/fine-tuning-openais-whisper-for-custom-speech-recognition-models/                | ⭐⭐⭐⭐     | Poradnik techniczny ML Journey       |
-| Deepgram Model Selection | https://deepgram.com/learn/what-devs-should-know-about-models-adaptation-tuning-for-enterprise-part-2  | ⭐⭐⭐⭐     | Poradnik Deepgram o adaptacji modeli |
+| Źródło                         | URL                                                                              | Wiarygodność | Opis                                      |
+| ------------------------------ | -------------------------------------------------------------------------------- | ------------ | ----------------------------------------- |
+| Speechmatics Custom Dictionary | https://docs.speechmatics.com/speech-to-text/features/custom-dictionary          | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja z phonetic support |
+| Deepgram Keywords              | https://developers.deepgram.com/docs/keywords                                    | ⭐⭐⭐⭐⭐   | Pełna dokumentacja Keyword Boost          |
+| AssemblyAI Word Boost          | https://www.assemblyai.com/docs/speech-to-text/word-boost                        | ⭐⭐⭐⭐⭐   | Oficjalna dokumentacja                    |
+| Google Speech Adaptation       | https://cloud.google.com/speech-to-text/docs/adaptation-model                    | ⭐⭐⭐⭐⭐   | Kompleksowy przewodnik                    |
+| Azure Phrase Lists             | https://learn.microsoft.com/azure/ai-services/speech-service/how-to-phrase-lists | ⭐⭐⭐⭐⭐   | Microsoft Learn docs                      |
+| AWS Custom Vocabularies        | https://docs.aws.amazon.com/transcribe/latest/dg/custom-vocabulary.html          | ⭐⭐⭐⭐⭐   | AWS dokumentacja                          |
+| Rev.ai Custom Vocabulary       | https://docs.rev.ai/api/custom-vocabulary/get-started/                           | ⭐⭐⭐⭐     | Podstawowa dokumentacja                   |
+| OpenAI Whisper Prompting       | https://platform.openai.com/docs/guides/speech-to-text/prompting                 | ⭐⭐⭐⭐⭐   | Oficjalny przewodnik                      |
 
-### Porównania Funkcjonalności
+### Artykuły Porównawcze
 
-| Źródło                 | URL                                                                                                | Wiarygodność | Opis                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------- |
-| Whisper API Comparison | https://whisperapi.com/comparing-top-transcription-apis                                            | ⭐⭐⭐⭐     | Porównanie top API                 |
-| Best APIs 2025         | https://www.edenai.co/post/best-speech-to-text-apis                                                | ⭐⭐⭐⭐     | Przegląd branżowy Eden AI          |
-| AssemblyAI Real-time   | https://www.assemblyai.com/blog/best-api-models-for-real-time-speech-recognition-and-transcription | ⭐⭐⭐⭐     | Specjalizowany artykuł o real-time |
+| Źródło                              | URL                                                                                         | Wiarygodność | Opis                             |
+| ----------------------------------- | ------------------------------------------------------------------------------------------- | ------------ | -------------------------------- |
+| Deepgram vs OpenAI vs Google        | https://deepgram.com/learn/deepgram-vs-openai-vs-google-stt-accuracy-latency-price-compared | ⭐⭐⭐⭐     | Szczegółowe porównanie 3 liderów |
+| AssemblyAI: 5 Deepgram Alternatives | https://www.assemblyai.com/blog/deepgram-alternatives                                       | ⭐⭐⭐⭐     | Analiza alternatyw               |
+| Deepgram Whisper Cloud              | https://deepgram.com/learn/improved-whisper-api                                             | ⭐⭐⭐⭐     | Managed Whisper comparison       |
+| Speech-to-Text API Pricing 2025     | https://deepgram.com/learn/speech-to-text-api-pricing-breakdown-2025                        | ⭐⭐⭐⭐     | Kompleksowa analiza kosztów      |
 
-**Metodologia oceny wiarygodności:**
+**Uwagi metodologiczne:**
 
-- ⭐⭐⭐⭐⭐ - Oficjalna dokumentacja dostawców
-- ⭐⭐⭐⭐ - Niezależne testy branżowe, publikacje techniczne
-- ⭐⭐⭐ - Artykuły blogowe z weryfikowalnymi źródłami
-- ⭐⭐ - Opinie użytkowników bez weryfikacji
-- ⭐ - Nieweryfikowalne źródła
-
-**Wszystkie źródła zweryfikowane 23 grudnia 2025.**
-
----
-
-## 12. Glossary / Słowniczek
-
-- **WER (Word Error Rate)** - Wskaźnik błędów słów; procent niepoprawnie transkrybowanych słów. Im niższy, tym lepsza dokładność.
-- **Diaryzacja (Speaker Diarization)** - Identyfikacja i rozdzielenie różnych mówców w nagraniu.
-- **Fine-tuning** - Dostrojenie modelu AI na specyficznych danych użytkownika.
-- **Custom Vocabulary** - Własny słownik terminów specyficznych dla użytkownika/domeny.
-- **Real-time Streaming** - Transkrypcja w czasie rzeczywistym, podczas gdy audio jest nagrywane.
-- **Batch Transcription** - Transkrypcja całego nagrania po jego zakończeniu.
-- **PII Redaction** - Automatyczne usuwanie danych osobowych z transkrypcji.
+- Wszystkie źródła zweryfikowane 23 grudnia 2025
+- Preferowano oficjalne dokumentacje i benchmarki dostawców
+- Niezależne testy (Soniox, Galaxy.ai) ocenione wyżej niż materiały marketingowe
+- Tam gdzie brak oficjalnych testów dla polskiego, wyraźnie zaznaczono
 
 ---
 
-## Kontakt i Pytania
-
-W przypadku pytań lub potrzeby dodatkowych informacji, proszę o kontakt przez Issues w repozytorium PraxOS.
-
-**Dokument przygotowany:** 23 grudnia 2025  
-**Autor:** PraxOS Research Team  
-**Wersja:** 1.0
+**Koniec dokumentu**  
+**Data:** 23 grudnia 2025  
+**Autor:** GitHub Copilot dla PraxOS  
+**Wersja:** 2.0 (pełna przebudowa z kompletnym zestawieniem)
