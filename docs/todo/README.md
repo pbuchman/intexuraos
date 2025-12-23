@@ -25,7 +25,7 @@ Based on coverage analysis from December 2025:
 | whatsapp shared.ts           | 100%    | 85%+   | 0%    | Done ✓     |
 | notion-service shared.ts     | 100%    | 85%+   | 0%    | Done ✓     |
 | auth-service shared.ts       | 100%    | 90%+   | 0%    | Done ✓     |
-| auth-service deviceRoutes.ts | 81.67%  | 90%+   | 8.3%  | Pending    |
+| auth-service deviceRoutes.ts | 98.47%  | 90%+   | 0%    | Done ✓     |
 
 ## Completed Issues
 
@@ -35,7 +35,7 @@ Based on coverage analysis from December 2025:
 - [x] 1-2-promptvault-usecases.md - All usecases at 100%
 - [x] 1-3-whatsapp-routes.md (partial) - mappingRoutes 93.18%, shared.ts 100%, webhookRoutes pending
 - [x] 1-4-notion-service-shared.md - shared.ts at 100%
-- [x] 1-5-auth-service-remaining.md (partial) - shared.ts at 100%, deviceRoutes pending
+- [x] 1-5-auth-service-remaining.md - shared.ts at 100%, deviceRoutes at 98.47%
 
 ## Dependency Structure
 
