@@ -69,13 +69,13 @@ cat apps/notion-service/src/routes/v1/shared.ts
 3. Determine how the shared utilities are used:
 
 ===
-grep -r "from.*shared" apps/notion-service/src/routes/
+grep -r "from.\*shared" apps/notion-service/src/routes/
 ===
 
 4. Read existing tests to see if shared.ts is indirectly tested:
 
 ===
-cat apps/notion-service/src/__tests__/*.test.ts
+cat apps/notion-service/src/**tests**/\*.test.ts
 ===
 
 5. Create test coverage:
@@ -110,22 +110,20 @@ npm run test:coverage 2>&1 | grep "shared.ts"
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep "notion.*shared.ts"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep "notion.\*shared.ts"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If shared.ts contains only simple re-exports:
+
 1. Consider if 85% coverage is achievable
 2. Document why certain lines can't be covered
 3. Potentially mark justified exclusion in vitest.config.ts
-

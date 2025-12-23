@@ -26,6 +26,7 @@
 ## Problem Statement
 
 `apps/auth-service/src/routes/v1/tokenRoutes.ts` has only 53.9% line coverage. The uncovered lines (85-147, 155-173) contain:
+
 - Token refresh logic
 - Error handling paths
 - Auth0 client interactions
@@ -74,7 +75,7 @@ cat apps/auth-service/src/routes/v1/tokenRoutes.ts
 2. Read existing tests:
 
 ===
-cat apps/auth-service/src/__tests__/tokenRoutes.test.ts
+cat apps/auth-service/src/**tests**/tokenRoutes.test.ts
 ===
 
 3. Identify untested branches (lines 85-147, 155-173):
@@ -121,22 +122,20 @@ cat apps/auth-service/src/__tests__/tokenRoutes.test.ts
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep "tokenRoutes.ts"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep "tokenRoutes.ts"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If tests become flaky:
+
 1. Check for async timing issues
 2. Ensure mocks are reset between tests
 3. If persistent issues, skip flaky tests with `it.skip` and document the issue
-

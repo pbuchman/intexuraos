@@ -31,6 +31,7 @@
 The promptvault domain usecases have varying coverage levels, with UpdatePromptUseCase at only 52.72%. These usecases contain business logic for CRUD operations on prompts.
 
 Uncovered areas:
+
 - UpdatePromptUseCase (52.72%): lines 51, 56-65, 92-95
 - GetPromptUseCase (63.63%): lines 22-23, 36-37, 46-49
 - ListPromptsUseCase (66.66%): lines 29-32
@@ -81,14 +82,14 @@ cat apps/promptvault-service/src/domain/promptvault/usecases/UpdatePromptUseCase
 2. Read existing tests:
 
 ===
-ls apps/promptvault-service/src/__tests__/*.test.ts
-cat apps/promptvault-service/src/__tests__/usecases.test.ts 2>/dev/null || echo "No usecases.test.ts"
+ls apps/promptvault-service/src/**tests**/\*.test.ts
+cat apps/promptvault-service/src/**tests**/usecases.test.ts 2>/dev/null || echo "No usecases.test.ts"
 ===
 
 3. Read the fakes:
 
 ===
-cat apps/promptvault-service/src/__tests__/fakes.ts
+cat apps/promptvault-service/src/**tests**/fakes.ts
 ===
 
 4. Create/extend test file `usecases.test.ts` with cases for:
@@ -140,21 +141,19 @@ npm run test:coverage 2>&1 | grep "UseCase"
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep -E "UseCase|usecases"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep -E "UseCase|usecases"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If tests fail due to interface mismatches:
+
 1. Update fakes to match current repository interfaces
 2. Verify the fake implementations return correct types
-

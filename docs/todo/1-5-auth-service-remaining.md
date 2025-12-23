@@ -73,7 +73,7 @@ cat apps/auth-service/src/routes/v1/deviceRoutes.ts
 2. Read existing tests:
 
 ===
-cat apps/auth-service/src/__tests__/deviceRoutes.test.ts
+cat apps/auth-service/src/**tests**/deviceRoutes.test.ts
 ===
 
 3. Identify uncovered paths in deviceRoutes.ts (lines 160-261, 280-320):
@@ -120,22 +120,20 @@ npm run test:coverage 2>&1 | grep -E "shared.ts|deviceRoutes.ts"
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep -E "auth.*shared|deviceRoutes"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep -E "auth.\*shared|deviceRoutes"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If Auth0 mock complexity is too high:
+
 1. Focus on the most common paths (start, successful poll)
 2. Document edge cases that need mock improvements
 3. Consider using nock for HTTP-level mocking
-

@@ -28,6 +28,7 @@
 ## Problem Statement
 
 The whatsapp-service routes have coverage below 90%:
+
 - `mappingRoutes.ts` (76.89%): lines 114-227, 285-301
 - `webhookRoutes.ts` (72.37%): lines 193-297, 303-333
 - `shared.ts` (66.66%): lines 50-51, 100-136
@@ -80,14 +81,14 @@ cat apps/whatsapp-service/src/routes/v1/shared.ts
 2. Read existing tests:
 
 ===
-cat apps/whatsapp-service/src/__tests__/webhookReceiver.test.ts
-cat apps/whatsapp-service/src/__tests__/webhookVerification.test.ts
+cat apps/whatsapp-service/src/**tests**/webhookReceiver.test.ts
+cat apps/whatsapp-service/src/**tests**/webhookVerification.test.ts
 ===
 
 3. Read testUtils to understand app setup:
 
 ===
-cat apps/whatsapp-service/src/__tests__/testUtils.ts
+cat apps/whatsapp-service/src/**tests**/testUtils.ts
 ===
 
 4. Add test cases for mappingRoutes.ts:
@@ -149,22 +150,20 @@ npm run test:coverage 2>&1 | grep -E "mappingRoutes|webhookRoutes|shared.ts"
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep -E "mappingRoutes|webhookRoutes|shared"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep -E "mappingRoutes|webhookRoutes|shared"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If signature validation tests are complex:
+
 1. Focus on happy path first
 2. Add signature edge cases incrementally
 3. Consider extracting signature logic to a testable unit
-

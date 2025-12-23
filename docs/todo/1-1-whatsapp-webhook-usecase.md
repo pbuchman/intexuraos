@@ -28,6 +28,7 @@
 `apps/whatsapp-service/src/domain/inbox/usecases/processWhatsAppWebhook.ts` has only 27.11% line coverage. This is the core business logic for processing WhatsApp webhooks and creating inbox notes.
 
 The uncovered sections include:
+
 - Webhook payload parsing
 - Message type handling (text, image, audio, etc.)
 - User mapping lookups
@@ -79,13 +80,13 @@ cat apps/whatsapp-service/src/domain/inbox/usecases/processWhatsAppWebhook.ts
 2. Read existing test file if any:
 
 ===
-cat apps/whatsapp-service/src/__tests__/processWhatsAppWebhook.test.ts 2>/dev/null || echo "File not found"
+cat apps/whatsapp-service/src/**tests**/processWhatsAppWebhook.test.ts 2>/dev/null || echo "File not found"
 ===
 
 3. Read the fakes to understand available mock implementations:
 
 ===
-cat apps/whatsapp-service/src/__tests__/fakes.ts
+cat apps/whatsapp-service/src/**tests**/fakes.ts
 ===
 
 4. Create test file with the following test cases:
@@ -137,22 +138,20 @@ npm run test:coverage 2>&1 | grep "processWhatsAppWebhook"
 
 ## Verification Commands
 
-Check specific file coverage:
-===
-npm run test:coverage 2>&1 | grep "processWhatsAppWebhook\|AppWebhook"
-===
+# Check specific file coverage:
 
-Run full CI:
-===
-npm run ci
-===
+# npm run test:coverage 2>&1 | grep "processWhatsAppWebhook\|AppWebhook"
+
+# Run full CI:
+
+# npm run ci
 
 ---
 
 ## Rollback Plan
 
 If tests become flaky or hard to maintain:
+
 1. Focus on the most critical paths (text message processing)
 2. Document edge cases that are too complex to test
 3. Consider refactoring the usecase if it's too monolithic
-

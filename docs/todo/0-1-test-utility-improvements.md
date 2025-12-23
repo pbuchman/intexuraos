@@ -28,6 +28,7 @@
 To achieve 90% coverage efficiently, we need robust shared test utilities. The current test utilities in each app's `__tests__` folder have varying patterns:
 
 Current test utility files:
+
 - `apps/auth-service/src/__tests__/` - uses testUtils for JWT/JWKS mocking
 - `apps/notion-service/src/__tests__/fakes.ts` - 73.38% covered
 - `apps/promptvault-service/src/__tests__/fakes.ts` - 71.19% covered
@@ -67,13 +68,13 @@ The whatsapp-service fakes have particularly low coverage (48.57%), indicating u
 1. Read each app's test utility files:
 
 ===
-cat apps/auth-service/src/__tests__/testUtils.ts
-cat apps/notion-service/src/__tests__/fakes.ts
-cat apps/notion-service/src/__tests__/testUtils.ts
-cat apps/promptvault-service/src/__tests__/fakes.ts
-cat apps/promptvault-service/src/__tests__/testUtils.ts
-cat apps/whatsapp-service/src/__tests__/fakes.ts
-cat apps/whatsapp-service/src/__tests__/testUtils.ts
+cat apps/auth-service/src/**tests**/testUtils.ts
+cat apps/notion-service/src/**tests**/fakes.ts
+cat apps/notion-service/src/**tests**/testUtils.ts
+cat apps/promptvault-service/src/**tests**/fakes.ts
+cat apps/promptvault-service/src/**tests**/testUtils.ts
+cat apps/whatsapp-service/src/**tests**/fakes.ts
+cat apps/whatsapp-service/src/**tests**/testUtils.ts
 ===
 
 2. Identify common patterns used across apps:
@@ -85,7 +86,7 @@ cat apps/whatsapp-service/src/__tests__/testUtils.ts
 3. For each fake file, check which methods are actually called in tests:
 
 ===
-grep -r "FakeNotionConnectionRepository\|FakePromptRepository\|FakeWhatsAppWebhookEventRepository" apps/*/src/__tests__/*.test.ts
+grep -r "FakeNotionConnectionRepository\|FakePromptRepository\|FakeWhatsAppWebhookEventRepository" apps/_/src/**tests**/_.test.ts
 ===
 
 4. Remove unused fake methods or document why they're needed for upcoming tests
@@ -117,16 +118,15 @@ npm run test:coverage
 npm run ci
 ===
 
-Check fake coverage specifically:
-===
-npm run test:coverage 2>&1 | grep "fakes.ts"
-===
+# Check fake coverage specifically:
+
+# npm run test:coverage 2>&1 | grep "fakes.ts"
 
 ---
 
 ## Rollback Plan
 
 If cleanup breaks tests:
+
 1. Revert changes to fakes.ts files
 2. Keep unused methods but add `// Used by upcoming tests` comment
-

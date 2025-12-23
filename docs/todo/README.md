@@ -4,7 +4,7 @@ This directory contains LLM-executable issue prompts for raising test coverage f
 
 ## Current State
 
-- **Current coverage**: 83.67% lines, 75.36% branches, 67.17% functions
+- **Current coverage**: 86.3% lines, 77.74% branches, 69.19% functions
 - **Current thresholds**: 80/72/65/80 (lines/branches/functions/statements)
 - **Target thresholds**: 90/85/85/90
 - **Test runner**: Vitest with v8 coverage provider
@@ -14,17 +14,23 @@ This directory contains LLM-executable issue prompts for raising test coverage f
 
 Based on coverage analysis from December 2025:
 
-| File/Area                   | Current | Target | Gap    |
-| --------------------------- | ------- | ------ | ------ |
-| tokenRoutes.ts              | 53.9%   | 90%+   | 36.1%  |
-| processWhatsAppWebhook.ts   | 27.11%  | 85%+   | 57.9%  |
-| UpdatePromptUseCase.ts      | 52.72%  | 85%+   | 32.3%  |
-| GetPromptUseCase.ts         | 63.63%  | 85%+   | 21.4%  |
-| whatsapp mappingRoutes.ts   | 76.89%  | 90%+   | 13.1%  |
-| whatsapp webhookRoutes.ts   | 72.37%  | 90%+   | 17.6%  |
-| notion-service shared.ts    | 20%     | 85%+   | 65%    |
-| auth-service shared.ts      | 75%     | 90%+   | 15%    |
-| auth-service deviceRoutes.ts| 81.67%  | 90%+   | 8.3%   |
+| File/Area                    | Current | Target | Gap    | Status      |
+| ---------------------------- | ------- | ------ | ------ | ----------- |
+| tokenRoutes.ts               | 53.9%   | 90%+   | 36.1%  | Pending     |
+| processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%   | Improved ✓  |
+| UpdatePromptUseCase.ts       | 52.72%  | 85%+   | 32.3%  | Pending     |
+| GetPromptUseCase.ts          | 63.63%  | 85%+   | 21.4%  | Pending     |
+| whatsapp mappingRoutes.ts    | 76.89%  | 90%+   | 13.1%  | Pending     |
+| whatsapp webhookRoutes.ts    | 72.37%  | 90%+   | 17.6%  | Pending     |
+| notion-service shared.ts     | 20%     | 85%+   | 65%    | Pending     |
+| auth-service shared.ts       | 75%     | 90%+   | 15%    | Pending     |
+| auth-service deviceRoutes.ts | 81.67%  | 90%+   | 8.3%   | Pending     |
+
+## Completed Issues
+
+- [x] 0-0-review-exclusions.md - Exclusion patterns reviewed and documented
+- [x] 0-1-test-utility-improvements.md - Test utilities reviewed
+- [x] 1-1-whatsapp-webhook-usecase.md - Coverage improved from 27% to 79.55%
 
 ## Dependency Structure
 
@@ -70,4 +76,3 @@ Run after completing each issue:
 npm run test:coverage
 npm run ci
 ===
-

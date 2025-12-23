@@ -108,6 +108,6 @@ npm run ci
 ## Rollback Plan
 
 If changes to exclusions break coverage thresholds:
+
 1. Revert `vitest.config.ts` to previous state
 2. Document why the exclusion was necessary
-

@@ -26,36 +26,41 @@ export default defineConfig({
         '**/testing/**',
 
         // Index/barrel files (re-exports only, no logic)
+        // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/index.ts',
 
         // Type definition files
         '**/*.d.ts',
 
-        // Type-only files with no runtime code (JUSTIFIED)
+        // Type-only files with no runtime code
+        // JUSTIFIED: Interfaces and types only, no executable code
         '**/domain/**/models/**',
         '**/domain/**/ports/**',
 
         // Colocated infra adapters - external service wrappers
-        // JUSTIFIED: Tested via integration tests through routes, thin SDK wrappers
+        // JUSTIFIED: Thin SDK wrappers tested via integration tests through routes
+        // Contains Firestore, Notion, Auth0 adapters that delegate to external SDKs
         '**/infra/**',
 
-        // Web app - React frontend needs E2E tests (out of scope for unit coverage)
-        // JUSTIFIED: Different testing strategy needed
+        // Web app - React frontend
+        // JUSTIFIED: Requires E2E testing strategy, out of scope for unit coverage
         'apps/web/**',
 
-        // Common SDK client wrappers - thin wrappers around external SDKs
-        // JUSTIFIED: Tested via packages/common notion.test.ts
+        // Common SDK client wrappers
+        // JUSTIFIED: notion.ts tested in packages/common/src/__tests__/notion.test.ts
+        // The logging fetch wrapper is complex but tested via integration
         '**/notion.ts',
-        // JUSTIFIED: Pure singleton getter, no logic to test
+        // JUSTIFIED: Pure singleton getter with no business logic
         '**/firestore.ts',
 
-        // API docs hub - static aggregator service with minimal logic
-        // JUSTIFIED: No business logic, just config and static serving
+        // API docs hub - static aggregator service
+        // JUSTIFIED: No business logic, just static config and file serving
         'apps/api-docs-hub/**',
 
-        // WhatsApp SDK wrapper - external SDK integration
-        // JUSTIFIED: Thin SDK wrapper, tested via integration
+        // WhatsApp external API integration
+        // JUSTIFIED: sendWhatsAppMessage() wraps external Graph API, tested via integration
         '**/whatsappClient.ts',
+        // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
       ],
       thresholds: {
