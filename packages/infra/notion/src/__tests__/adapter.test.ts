@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Common from '@praxos/common';
 import { NotionApiAdapter } from '../adapter.js';
+
+const originalFetch = globalThis.fetch;
 
 // Track which errors should be treated as Notion client errors
 const notionClientErrors = new WeakSet<Error>();
@@ -73,6 +76,7 @@ describe('NotionApiAdapter', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     vi.clearAllMocks();
   });
 
@@ -124,6 +128,49 @@ describe('NotionApiAdapter', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toBe('Network error');
       }
+    });
+  });
+
+  describe('logging fetch wrapper', () => {
+    it('uses getErrorMessage when logging network failures', async () => {
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      let capturedFetch: typeof fetch | undefined;
+
+      vi.mocked(Client).mockImplementation((options?: unknown) => {
+        capturedFetch = (options as { fetch?: typeof fetch }).fetch;
+        return mockClient as unknown as InstanceType<typeof Client>;
+      });
+
+      const getErrorMessageSpy = vi.spyOn(Common, 'getErrorMessage');
+
+      mockClient.users.me.mockResolvedValue({ id: 'user-123', type: 'person' });
+
+      adapter = new NotionApiAdapter(logger);
+      await adapter.validateToken('token');
+
+      if (capturedFetch === undefined) {
+        throw new Error('Expected fetch to be captured');
+      }
+
+      const fetchError = 'socket hang up';
+      const fetchMock = vi.fn().mockRejectedValue(fetchError);
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      await expect(capturedFetch('https://example.com')).rejects.toBe(fetchError);
+
+      expect(getErrorMessageSpy).toHaveBeenCalledWith(fetchError, fetchError);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Notion API network error',
+        expect.objectContaining({
+          error: 'socket hang up',
+        })
+      );
+
+      getErrorMessageSpy.mockRestore();
     });
   });
 
