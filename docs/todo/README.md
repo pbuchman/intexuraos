@@ -20,7 +20,7 @@ Based on coverage analysis from December 2025:
 | processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%  | Improved ✓ |
 | UpdatePromptUseCase.ts       | 100%    | 85%+   | 0%    | Done ✓     |
 | GetPromptUseCase.ts          | 100%    | 85%+   | 0%    | Done ✓     |
-| whatsapp mappingRoutes.ts    | 76.89%  | 90%+   | 13.1% | Pending    |
+| whatsapp mappingRoutes.ts    | 93.18%  | 90%+   | 0%    | Done ✓     |
 | whatsapp webhookRoutes.ts    | 72.37%  | 90%+   | 17.6% | Pending    |
 | notion-service shared.ts     | 100%    | 85%+   | 0%    | Done ✓     |
 | auth-service shared.ts       | 100%    | 90%+   | 0%    | Done ✓     |
@@ -32,6 +32,7 @@ Based on coverage analysis from December 2025:
 - [x] 0-1-test-utility-improvements.md - Test utilities reviewed
 - [x] 1-1-whatsapp-webhook-usecase.md - Coverage improved from 27% to 79.55%
 - [x] 1-2-promptvault-usecases.md - All usecases at 100%
+- [x] 1-3-whatsapp-routes.md (partial) - mappingRoutes at 93.18%, webhookRoutes pending
 - [x] 1-4-notion-service-shared.md - shared.ts at 100%
 - [x] 1-5-auth-service-remaining.md (partial) - shared.ts at 100%, deviceRoutes pending
 
