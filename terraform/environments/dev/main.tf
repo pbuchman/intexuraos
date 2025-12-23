@@ -83,6 +83,13 @@ locals {
       min_scale = 0
       max_scale = 2
     }
+    notion_service = {
+      name      = "praxos-notion-service"
+      app_path  = "apps/notion-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 2
+    }
     whatsapp_service = {
       name      = "praxos-whatsapp-service"
       app_path  = "apps/whatsapp-service"
@@ -148,6 +155,18 @@ module "static_assets" {
   depends_on = [google_project_service.apis]
 }
 
+# Web App Bucket (SPA hosting)
+module "web_app" {
+  source = "../../modules/web-app"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  labels      = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
 # Firestore
 module "firestore" {
   source = "../../modules/firestore"
@@ -171,11 +190,12 @@ module "secret_manager" {
 
   secrets = {
     # Auth0 secrets
-    "PRAXOS_AUTH0_DOMAIN"    = "Auth0 tenant domain for Device Authorization Flow"
-    "PRAXOS_AUTH0_CLIENT_ID" = "Auth0 Native app client ID for Device Authorization Flow"
-    "PRAXOS_AUTH_JWKS_URL"   = "Auth0 JWKS URL for JWT verification"
-    "PRAXOS_AUTH_ISSUER"     = "Auth0 issuer URL"
-    "PRAXOS_AUTH_AUDIENCE"   = "Auth0 audience identifier"
+    "PRAXOS_AUTH0_DOMAIN"        = "Auth0 tenant domain for Device Authorization Flow"
+    "PRAXOS_AUTH0_CLIENT_ID"     = "Auth0 Native app client ID for Device Authorization Flow"
+    "PRAXOS_AUTH0_SPA_CLIENT_ID" = "Auth0 SPA app client ID for web application"
+    "PRAXOS_AUTH_JWKS_URL"       = "Auth0 JWKS URL for JWT verification"
+    "PRAXOS_AUTH_ISSUER"         = "Auth0 issuer URL"
+    "PRAXOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
     # Token encryption key
     "PRAXOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
@@ -265,6 +285,35 @@ module "promptvault_service" {
   ]
 }
 
+# Notion Service - Notion integration management and webhooks
+module "notion_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.notion_service.name
+  service_account = module.iam.service_accounts["notion_service"]
+  port            = local.services.notion_service.port
+  min_scale       = local.services.notion_service.min_scale
+  max_scale       = local.services.notion_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
+
+  secrets = {
+    AUTH_JWKS_URL = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER   = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # WhatsApp Service - WhatsApp Business Cloud API webhooks
 module "whatsapp_service" {
   source = "../../modules/cloud-run-service"
@@ -315,6 +364,7 @@ module "api_docs_hub" {
   env_vars = {
     AUTH_SERVICE_OPENAPI_URL        = "${module.auth_service.service_url}/openapi.json"
     PROMPTVAULT_SERVICE_OPENAPI_URL = "${module.promptvault_service.service_url}/openapi.json"
+    NOTION_SERVICE_OPENAPI_URL      = "${module.notion_service.service_url}/openapi.json"
     WHATSAPP_SERVICE_OPENAPI_URL    = "${module.whatsapp_service.service_url}/openapi.json"
   }
 
@@ -323,6 +373,7 @@ module "api_docs_hub" {
     module.iam,
     module.auth_service,
     module.promptvault_service,
+    module.notion_service,
     module.whatsapp_service,
   ]
 }
@@ -365,6 +416,11 @@ output "promptvault_service_url" {
   value       = module.promptvault_service.service_url
 }
 
+output "notion_service_url" {
+  description = "Notion Service URL"
+  value       = module.notion_service.service_url
+}
+
 output "whatsapp_service_url" {
   description = "WhatsApp Service URL"
   value       = module.whatsapp_service.service_url
@@ -395,3 +451,12 @@ output "static_assets_public_url" {
   value       = module.static_assets.public_base_url
 }
 
+output "web_app_bucket_name" {
+  description = "Web app bucket name"
+  value       = module.web_app.bucket_name
+}
+
+output "web_app_url" {
+  description = "Web app public URL"
+  value       = module.web_app.website_url
+}

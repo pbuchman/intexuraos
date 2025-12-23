@@ -6,10 +6,12 @@ This document describes the Cloud Build CI/CD pipeline and trigger configuration
 
 PraxOS uses Cloud Build (2nd gen) to:
 
-1. Run CI checks (lint, typecheck, test)
-2. Detect which services are affected by changes
-3. Build Docker images for affected services
-4. Deploy affected services to Cloud Run
+1. Detect which services are affected by changes
+2. Build Docker images for affected services
+3. Push images to Artifact Registry
+4. Deploy affected services to Cloud Run (one pipeline per service)
+
+CI checks (lint, typecheck, tests) run in GitHub Actions before the Cloud Build trigger starts.
 
 ## Architecture
 
@@ -109,17 +111,20 @@ Terraform will:
 
 ## Build Pipeline Steps
 
-The pipeline (`cloudbuild/cloudbuild.yaml`) executes:
+The pipeline (`cloudbuild/cloudbuild.yaml`) now runs **independent per-service chains** after the shared setup:
 
-| Step                | Description                             | Duration |
-| ------------------- | --------------------------------------- | -------- |
-| 1. node-version     | Print Node.js version                   | ~1s      |
-| 2. npm-ci           | Install dependencies                    | ~30s     |
-| 3. npm-run-ci       | Run lint, typecheck, tests              | ~60s     |
-| 4. detect-affected  | Determine which services changed        | ~2s      |
-| 5. build-\*-service | Build Docker images (if affected)       | ~60s     |
-| 6. push-\*-service  | Push to Artifact Registry (if affected) | ~30s     |
-| 7. deploy-affected  | Deploy to Cloud Run                     | ~60s     |
+1. `npm-ci` (node:22-slim) — installs dependencies
+2. `detect-affected` (node:22) — writes `/workspace/affected.json`
+3. Per-service pipelines (each waits only on `detect-affected` → build → push → deploy):
+   - `auth-service`: `build-auth-service` → `push-auth-service` → `deploy-auth-service`
+   - `promptvault-service`: `build-promptvault-service` → `push-promptvault-service` → `deploy-promptvault-service`
+   - `notion-service`: `build-notion-service` → `push-notion-service` → `deploy-notion-service`
+   - `whatsapp-service`: `build-whatsapp-service` → `push-whatsapp-service` → `deploy-whatsapp-service`
+   - `api-docs-hub`: `build-api-docs-hub` → `push-api-docs-hub` → `deploy-api-docs-hub`
+4. Web app: `build-web` → `deploy-web` (gated by `affected.json` or `_FORCE_DEPLOY=true`)
+5. Static assets: `sync-static-assets` (runs independently; not gated by affected services)
+
+Each pipeline stage is gated in `cloudbuild.yaml` using `/workspace/affected.json` (or `_FORCE_DEPLOY=true` to override). Deployment scripts no longer contain skip logic; the Cloud Build steps decide whether to run. There is **no shared deploy step** and no cross-service `waitFor` dependencies.
 
 ## Affected Detection Logic
 
@@ -127,13 +132,13 @@ The `detect-affected.mjs` script determines which services need deployment:
 
 ```
 packages/common/** → all services
-packages/domain/** → all services
-packages/infra/** → all services
 apps/auth-service/** → auth-service only
 apps/promptvault-service/** → promptvault-service only
+apps/notion-service/** → notion-service only (reserved)
 apps/whatsapp-service/** → whatsapp-service only
 apps/api-docs-hub/** → api-docs-hub only
-package.json, package-lock.json → all services
+apps/web/** → web only
+package.json, package-lock.json, tsconfig*.json → all services
 ```
 
 ## View Build Logs

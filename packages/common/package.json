@@ -20,6 +20,8 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^7.10.0",
+    "@notionhq/client": "^2.2.15",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
     "jose": "^5.9.6"

@@ -8,9 +8,7 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/*",
-    "packages/domain/*",
-    "packages/infra/*"
+    "packages/*"
   ],
   "scripts": {
     "lint": "eslint .",
@@ -26,9 +24,9 @@
     "verify:package-json": "node scripts/verify-package-json.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:common": "node scripts/verify-common.mjs",
-    "emulator:start": "docker compose -f docker/firestore-emulator.yaml up -d",
-    "emulator:stop": "docker compose -f docker/firestore-emulator.yaml down",
-    "emulator:logs": "docker compose -f docker/firestore-emulator.yaml logs -f",
+    "emulator:start": "docker compose -f docker/firestore/docker-compose.yaml up -d",
+    "emulator:stop": "docker compose -f docker/firestore/docker-compose.yaml down",
+    "emulator:logs": "docker compose -f docker/firestore/docker-compose.yaml logs -f",
     "ci": "npm run typecheck && npm run lint && npm run verify:package-json && npm run verify:boundaries && npm run verify:common && npm run format:check && npm run test:coverage && npm run build"
   },
   "devDependencies": {
@@ -42,5 +40,8 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
   }
 }
