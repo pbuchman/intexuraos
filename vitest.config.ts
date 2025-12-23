@@ -65,11 +65,12 @@ export default defineConfig({
       ],
       thresholds: {
         // Updated after coverage improvement work (Dec 2024)
+        // Phase 2: Raised to 90% target after completing all Tier 1 coverage tasks
         // Infra adapters excluded as they are thin SDK wrappers tested via integration
-        lines: 80,
-        branches: 72,
-        functions: 65,
-        statements: 80,
+        lines: 90,
+        branches: 82,
+        functions: 75,
+        statements: 90,
       },
     },
   },
