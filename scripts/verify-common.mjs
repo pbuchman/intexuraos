@@ -24,7 +24,7 @@ const FORBIDDEN_KEYWORDS = [
   'Identity',
   // External services (should be in infra)
   'Auth0',
-  'Notion',
+  // 'Notion' - removed: now a service name, checked via boundary rules
   'Firestore',
   'Firebase',
   // Domain-specific concepts

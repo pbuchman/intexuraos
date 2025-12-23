@@ -48,6 +48,24 @@ docs/           → All documentation
 | Explicit return types on exports    | `npm run lint`          |
 | No `@ts-ignore`, `@ts-expect-error` | `npm run lint`          |
 | No unused code                      | `npm run lint`          |
+| Prettier formatted                  | `npm run format:check`  |
+
+**IMPORTANT:** After creating or modifying files, always run `npx prettier --write .` before `npm run ci`.
+
+---
+
+## New Service Checklist
+
+When creating a new service (e.g., splitting an existing service):
+
+1. **Create files** - Copy structure from existing service
+2. **Run Prettier** - `npx prettier --write .` (BEFORE running CI)
+3. **Update Terraform** - Add to `locals.services`, create module, update IAM, add outputs
+4. **Update api-docs-hub** - Add OpenAPI URL env var to config.ts
+5. **Update detect-affected.mjs** - Add service to `SERVICE_DEPS`
+6. **Update documentation** - README.md, api-contracts.md, setup guides
+7. **Run CI** - `npm run ci`
+8. **Validate Terraform** - `terraform fmt -check -recursive && terraform validate`
 
 ---
 

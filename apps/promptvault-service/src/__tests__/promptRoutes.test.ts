@@ -6,7 +6,26 @@
  * - GET /v1/tools/notion/promptvault/prompts/:promptId
  * - PATCH /v1/tools/notion/promptvault/prompts/:promptId
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import {
+  describe,
+  it,
+  expect,
+  setupTestContext,
+  createToken,
+  type TestContext,
+} from './testUtils.js';
+
+/**
+ * Helper to set up a Notion connection directly through the repository.
+ * This replaces the need to call /v1/integrations/notion/connect which was moved to notion-service.
+ */
+async function setupConnection(
+  ctx: TestContext,
+  userId: string,
+  pageId = 'vault-page-id'
+): Promise<void> {
+  await ctx.connectionRepository.saveConnection(userId, pageId, 'secret-token');
+}
 
 describe('Prompt Routes', () => {
   const ctx = setupTestContext();
@@ -33,16 +52,8 @@ describe('Prompt Routes', () => {
     it('returns page preview when connected', async () => {
       const token = await createToken({ sub: 'user-preview' });
 
-      // First connect
-      await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'vault-page-id',
-        },
-      });
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-preview');
 
       // Then get main page
       const response = await ctx.app.inject({
@@ -91,16 +102,8 @@ describe('Prompt Routes', () => {
     it('returns empty list when connected but no prompts exist', async () => {
       const token = await createToken({ sub: 'user-empty-list' });
 
-      // Connect first
-      await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-empty-list', 'page-id');
 
       const response = await ctx.app.inject({
         method: 'GET',
@@ -144,16 +147,8 @@ describe('Prompt Routes', () => {
     it('creates prompt successfully', async () => {
       const token = await createToken({ sub: 'user-create-prompt-success' });
 
-      // Connect first
-      await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-create-prompt-success', 'page-id');
 
       const response = await ctx.app.inject({
         method: 'POST',
@@ -265,16 +260,8 @@ describe('Prompt Routes', () => {
     it('returns NOT_FOUND for non-existent prompt', async () => {
       const token = await createToken({ sub: 'user-get-nonexistent' });
 
-      // Connect first
-      await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-get-nonexistent', 'page-id');
 
       const response = await ctx.app.inject({
         method: 'GET',
@@ -336,16 +323,8 @@ describe('Prompt Routes', () => {
     it('returns NOT_FOUND for non-existent prompt', async () => {
       const token = await createToken({ sub: 'user-update-nonexistent' });
 
-      // Connect first
-      await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/integrations/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-token',
-          promptVaultPageId: 'page-id',
-        },
-      });
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-update-nonexistent', 'page-id');
 
       const response = await ctx.app.inject({
         method: 'PATCH',

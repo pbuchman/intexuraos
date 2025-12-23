@@ -180,6 +180,7 @@ firestore_database = "(default)"
 service_accounts = {
   auth_service = "praxos-auth-svc-dev@praxos-dev-yourname.iam.gserviceaccount.com"
   promptvault_service = "praxos-pv-svc-dev@praxos-dev-yourname.iam.gserviceaccount.com"
+  notion_service = "praxos-notion-svc-dev@praxos-dev-yourname.iam.gserviceaccount.com"
 }
 ```
 
@@ -201,6 +202,11 @@ docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/praxos-dev/auth-service:lates
 docker build --platform linux/amd64 -f apps/promptvault-service/Dockerfile \
   -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/praxos-dev/promptvault-service:latest .
 docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/praxos-dev/promptvault-service:latest
+
+# Build and push notion-service
+docker build --platform linux/amd64 -f apps/notion-service/Dockerfile \
+  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/praxos-dev/notion-service:latest .
+docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/praxos-dev/notion-service:latest
 
 # Build and push whatsapp-service
 docker build --platform linux/amd64 -f apps/whatsapp-service/Dockerfile \

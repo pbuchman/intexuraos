@@ -46,6 +46,16 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
+  'notion-service': [
+    'apps/notion-service/',
+    'packages/common/',
+    'packages/domain/',
+    'packages/infra/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
   'whatsapp-service': [
     'apps/whatsapp-service/',
     'packages/common/',

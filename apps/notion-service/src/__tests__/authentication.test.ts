@@ -9,7 +9,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is missing', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
     });
 
     expect(response.statusCode).toBe(401);
@@ -24,7 +24,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is invalid format', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
       headers: {
         authorization: 'InvalidFormat',
       },
@@ -42,7 +42,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED for invalid JWT', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
       headers: {
         authorization: 'Bearer invalid-jwt-token',
       },
@@ -62,7 +62,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -83,7 +83,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -99,24 +99,23 @@ describe('Authentication', () => {
     expect(body.error.message).toContain('sub');
   });
 
-  it('accepts valid JWT and returns 503 MISCONFIGURED when not connected', async () => {
+  it('accepts valid JWT and extracts userId from sub', async () => {
     const token = await createToken({ sub: 'auth0|user-abc123' });
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/v1/integrations/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },
     });
 
-    // Without Notion connection, prompts endpoint returns 503 MISCONFIGURED
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as {
       success: boolean;
-      error: { code: string };
+      data: { configured: boolean };
     };
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe('MISCONFIGURED');
+    expect(body.success).toBe(true);
+    expect(body.data.configured).toBe(false);
   });
 });

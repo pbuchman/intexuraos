@@ -36,7 +36,7 @@ Operations should be safe to retry. Running the same action twice with the same 
 ┌─────────────────────────────────────────────────────────┐
 │                  PraxOS (Execution)                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │ auth-service│  │notion-gpt   │  │ future services │  │
+│  │ auth-service│  │notion-svc   │  │promptvault-svc  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────┘  │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │                 Domain Layer                        ││

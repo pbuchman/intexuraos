@@ -9,7 +9,7 @@ import type { NotionLogger } from '@praxos/infra-notion';
 import { v1Routes } from './v1/routes.js';
 import { getServices } from './services.js';
 
-const SERVICE_NAME = 'promptvault-service';
+const SERVICE_NAME = 'notion-service';
 const SERVICE_VERSION = '0.0.1';
 
 type HealthStatus = 'ok' | 'degraded' | 'down';
@@ -118,21 +118,19 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
-      // The Cloud Run service name change requires a manual redeployment.
-      url: 'https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app',
-      description: 'Cloud (Development) - Legacy URL',
+      url: 'https://praxos-notion-service-ooafxzbaua-lm.a.run.app',
+      description: 'Cloud (Development)',
     },
-    { url: 'http://localhost:8081', description: 'Local' },
+    { url: 'http://localhost:8082', description: 'Local' },
   ];
 
   return {
     openapi: {
       openapi: '3.1.1',
       info: {
-        title: 'PromptVaultService',
+        title: 'NotionService',
         description:
-          'PraxOS PromptVault Service - CRUD operations for PromptVault prompts backed by Notion',
+          'PraxOS Notion Service - Notion integration management (connect/disconnect/status) and webhooks',
         version: SERVICE_VERSION,
       },
       servers,
@@ -197,107 +195,53 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               endpointCalled: { type: 'string' },
             },
           },
-          MainPageResponse: {
+          ConnectRequest: {
             type: 'object',
+            required: ['notionToken', 'promptVaultPageId'],
             properties: {
-              page: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  title: { type: 'string' },
-                  url: { type: 'string' },
-                },
-              },
-              preview: {
-                type: 'object',
-                properties: {
-                  blocks: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        type: { type: 'string' },
-                        content: { type: 'string' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          // Prompt API schemas
-          Prompt: {
-            type: 'object',
-            required: ['id', 'title', 'prompt'],
-            properties: {
-              id: { type: 'string', description: 'Unique prompt identifier' },
-              title: { type: 'string', description: 'Prompt title' },
-              prompt: { type: 'string', description: 'Prompt content' },
-              createdAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Creation timestamp (ISO 8601)',
-              },
-              updatedAt: {
-                type: 'string',
-                format: 'date-time',
-                description: 'Last update timestamp (ISO 8601)',
-              },
-            },
-          },
-          CreatePromptRequest: {
-            type: 'object',
-            required: ['title', 'prompt'],
-            additionalProperties: false,
-            properties: {
-              title: {
+              notionToken: {
                 type: 'string',
                 minLength: 1,
-                maxLength: 200,
-                description: 'Prompt title (max 200 characters)',
+                description: 'Notion integration token (never returned in responses)',
               },
-              prompt: {
+              promptVaultPageId: {
                 type: 'string',
                 minLength: 1,
-                maxLength: 100000,
-                description: 'Prompt content (max 100,000 characters)',
+                description: 'Notion page ID for the Prompt Vault',
               },
             },
           },
-          UpdatePromptRequest: {
+          ConnectResponse: {
             type: 'object',
-            additionalProperties: false,
-            description: 'At least one of title or prompt must be provided',
             properties: {
-              title: {
-                type: 'string',
-                minLength: 1,
-                maxLength: 200,
-                description: 'New prompt title (max 200 characters)',
-              },
-              prompt: {
-                type: 'string',
-                minLength: 1,
-                maxLength: 100000,
-                description: 'New prompt content (max 100,000 characters)',
-              },
+              connected: { type: 'boolean' },
+              promptVaultPageId: { type: 'string' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
             },
           },
-          PromptResponse: {
+          StatusResponse: {
             type: 'object',
-            required: ['prompt'],
             properties: {
-              prompt: { $ref: '#/components/schemas/Prompt' },
+              configured: { type: 'boolean' },
+              connected: { type: 'boolean' },
+              promptVaultPageId: { type: 'string', nullable: true },
+              createdAt: { type: 'string', format: 'date-time', nullable: true },
+              updatedAt: { type: 'string', format: 'date-time', nullable: true },
             },
           },
-          PromptsListResponse: {
+          DisconnectResponse: {
             type: 'object',
-            required: ['prompts'],
             properties: {
-              prompts: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/Prompt' },
-              },
+              connected: { type: 'boolean' },
+              promptVaultPageId: { type: 'string' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          WebhookResponse: {
+            type: 'object',
+            properties: {
+              received: { type: 'boolean' },
             },
           },
           HealthResponse: {
@@ -328,7 +272,8 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       },
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },
-        { name: 'tools', description: 'GPT Action tools for prompt CRUD' },
+        { name: 'integrations', description: 'Notion integration management' },
+        { name: 'webhooks', description: 'Webhook receivers' },
       ],
     },
   };
@@ -448,110 +393,63 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   app.addSchema({
-    $id: 'MainPageResponse',
+    $id: 'ConnectRequest',
     type: 'object',
+    required: ['notionToken', 'promptVaultPageId'],
     properties: {
-      page: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          url: { type: 'string' },
-        },
-      },
-      preview: {
-        type: 'object',
-        properties: {
-          blocks: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                type: { type: 'string' },
-                content: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  // Prompt API schemas
-  app.addSchema({
-    $id: 'Prompt',
-    type: 'object',
-    required: ['id', 'title', 'prompt'],
-    properties: {
-      id: { type: 'string', description: 'Unique prompt identifier' },
-      title: { type: 'string', description: 'Prompt title' },
-      prompt: { type: 'string', description: 'Prompt content' },
-      url: { type: 'string', format: 'uri', description: 'URL to view the prompt in Notion' },
-      createdAt: { type: 'string', format: 'date-time', description: 'Creation timestamp' },
-      updatedAt: { type: 'string', format: 'date-time', description: 'Last update timestamp' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'CreatePromptRequest',
-    type: 'object',
-    required: ['title', 'prompt'],
-    additionalProperties: false,
-    properties: {
-      title: {
+      notionToken: {
         type: 'string',
         minLength: 1,
-        maxLength: 200,
-        description: 'Prompt title (max 200 characters)',
+        description: 'Notion integration token (never returned in responses)',
       },
-      prompt: {
+      promptVaultPageId: {
         type: 'string',
         minLength: 1,
-        maxLength: 100000,
-        description: 'Prompt content (max 100,000 characters)',
+        description: 'Notion page ID for the Prompt Vault',
       },
     },
   });
 
   app.addSchema({
-    $id: 'UpdatePromptRequest',
+    $id: 'ConnectResponse',
     type: 'object',
-    additionalProperties: false,
-    description: 'At least one of title or prompt must be provided',
     properties: {
-      title: {
-        type: 'string',
-        minLength: 1,
-        maxLength: 200,
-        description: 'New prompt title (max 200 characters)',
-      },
-      prompt: {
-        type: 'string',
-        minLength: 1,
-        maxLength: 100000,
-        description: 'New prompt content (max 100,000 characters)',
-      },
+      connected: { type: 'boolean' },
+      promptVaultPageId: { type: 'string' },
+      pageTitle: { type: 'string', description: 'Title of the validated Notion page' },
+      pageUrl: { type: 'string', description: 'URL of the validated Notion page' },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
     },
   });
 
   app.addSchema({
-    $id: 'PromptResponse',
+    $id: 'StatusResponse',
     type: 'object',
-    required: ['prompt'],
     properties: {
-      prompt: { $ref: 'Prompt#' },
+      configured: { type: 'boolean' },
+      connected: { type: 'boolean' },
+      promptVaultPageId: { type: 'string', nullable: true },
+      createdAt: { type: 'string', format: 'date-time', nullable: true },
+      updatedAt: { type: 'string', format: 'date-time', nullable: true },
     },
   });
 
   app.addSchema({
-    $id: 'PromptsListResponse',
+    $id: 'DisconnectResponse',
     type: 'object',
-    required: ['prompts'],
     properties: {
-      prompts: {
-        type: 'array',
-        items: { $ref: 'Prompt#' },
-      },
+      connected: { type: 'boolean' },
+      promptVaultPageId: { type: 'string' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'WebhookResponse',
+    type: 'object',
+    properties: {
+      received: { type: 'boolean' },
     },
   });
 

@@ -4,9 +4,11 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { promptRoutes } from './promptRoutes.js';
+import { integrationRoutes } from './integrationRoutes.js';
+import { webhookRoutes } from './webhookRoutes.js';
 
 export const v1Routes: FastifyPluginCallback = (fastify, _opts, done) => {
-  fastify.register(promptRoutes);
+  fastify.register(integrationRoutes);
+  fastify.register(webhookRoutes);
   done();
 };

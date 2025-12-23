@@ -15,6 +15,13 @@ resource "google_service_account" "promptvault_service" {
   description  = "Service account for promptvault-service Cloud Run deployment"
 }
 
+# Service account for notion-service
+resource "google_service_account" "notion_service" {
+  account_id   = "praxos-notion-svc-${var.environment}"
+  display_name = "PraxOS Notion Service (${var.environment})"
+  description  = "Service account for notion-service Cloud Run deployment"
+}
+
 # Service account for whatsapp-service
 resource "google_service_account" "whatsapp_service" {
   account_id   = "praxos-whatsapp-svc-${var.environment}"
@@ -47,6 +54,15 @@ resource "google_secret_manager_secret_iam_member" "promptvault_service_secrets"
   member    = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
+# Notion service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "notion_service_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.notion_service.email}"
+}
+
 # WhatsApp service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
   for_each = var.secret_ids
@@ -61,6 +77,13 @@ resource "google_project_iam_member" "promptvault_service_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.promptvault_service.email}"
+}
+
+# Notion service: Firestore access
+resource "google_project_iam_member" "notion_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.notion_service.email}"
 }
 
 # WhatsApp service: Firestore access
@@ -88,6 +111,13 @@ resource "google_project_iam_member" "promptvault_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.promptvault_service.email}"
+}
+
+# Notion service: Cloud Logging
+resource "google_project_iam_member" "notion_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.notion_service.email}"
 }
 
 # WhatsApp service: Cloud Logging

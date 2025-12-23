@@ -16,7 +16,7 @@ interface OpenApiSpec {
   };
 }
 
-describe('promptvault-service OpenAPI contract', () => {
+describe('notion-service OpenAPI contract', () => {
   let app: FastifyInstance;
   let openapiSpec: OpenApiSpec;
 
@@ -66,11 +66,10 @@ describe('promptvault-service OpenAPI contract', () => {
     expect(servers).toBeDefined();
     expect(servers?.length).toBe(2);
 
-    // Legacy URL is kept until service is redeployed with new name
-    expect(servers?.[0]?.url).toBe('https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app');
-    expect(servers?.[0]?.description).toBe('Cloud (Development) - Legacy URL');
+    expect(servers?.[0]?.url).toBe('https://praxos-notion-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('http://localhost:8081');
+    expect(servers?.[1]?.url).toBe('http://localhost:8082');
     expect(servers?.[1]?.description).toBe('Local');
   });
 
@@ -99,25 +98,20 @@ describe('promptvault-service OpenAPI contract', () => {
   it('has required endpoints documented', () => {
     const paths = openapiSpec.paths;
 
-    // Prompt CRUD endpoints
-    expect(paths?.['/v1/tools/notion/promptvault/main-page']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/prompts']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/prompts/{promptId}']).toBeDefined();
+    expect(paths?.['/v1/integrations/notion/connect']).toBeDefined();
+    expect(paths?.['/v1/integrations/notion/status']).toBeDefined();
+    expect(paths?.['/v1/integrations/notion/disconnect']).toBeDefined();
+    expect(paths?.['/v1/webhooks/notion']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
-
-    // Integration and webhook endpoints moved to notion-service
-    expect(paths?.['/v1/integrations/notion/connect']).toBeUndefined();
-    expect(paths?.['/v1/integrations/notion/status']).toBeUndefined();
-    expect(paths?.['/v1/integrations/notion/disconnect']).toBeUndefined();
-    expect(paths?.['/v1/webhooks/notion']).toBeUndefined();
   });
 
   it('protected endpoints require bearerAuth security', () => {
     const paths = openapiSpec.paths;
 
     const protectedEndpoints = [
-      '/v1/tools/notion/promptvault/main-page',
-      '/v1/tools/notion/promptvault/prompts',
+      '/v1/integrations/notion/connect',
+      '/v1/integrations/notion/status',
+      '/v1/integrations/notion/disconnect',
     ];
 
     for (const endpoint of protectedEndpoints) {
@@ -125,7 +119,7 @@ describe('promptvault-service OpenAPI contract', () => {
       expect(methods).toBeDefined();
       if (methods === undefined) continue;
       for (const [method, operation] of Object.entries(methods)) {
-        if (method !== 'get' && method !== 'post') continue;
+        if (method !== 'get' && method !== 'post' && method !== 'delete') continue;
         expect(
           operation.security,
           `${method.toUpperCase()} ${endpoint} should have security`

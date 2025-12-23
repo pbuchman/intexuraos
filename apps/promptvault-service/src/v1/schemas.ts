@@ -1,16 +1,6 @@
 import { z } from 'zod';
 
 /**
- * POST /v1/integrations/notion/connect
- */
-export const connectRequestSchema = z.object({
-  notionToken: z.string().min(1, 'notionToken is required'),
-  promptVaultPageId: z.string().min(1, 'promptVaultPageId is required'),
-});
-
-export type ConnectRequest = z.infer<typeof connectRequestSchema>;
-
-/**
  * POST /v1/tools/notion/promptvault/prompts
  *
  * Schema constraints:
@@ -56,7 +46,3 @@ export const updatePromptRequestSchema = z
   });
 
 export type UpdatePromptRequest = z.infer<typeof updatePromptRequestSchema>;
-
-export const webhookRequestSchema = z.record(z.unknown());
-
-export type WebhookRequest = z.infer<typeof webhookRequestSchema>;
