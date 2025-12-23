@@ -14,17 +14,17 @@ This directory contains LLM-executable issue prompts for raising test coverage f
 
 Based on coverage analysis from December 2025:
 
-| File/Area                    | Current | Target | Gap    | Status      |
-| ---------------------------- | ------- | ------ | ------ | ----------- |
-| tokenRoutes.ts               | 53.9%   | 90%+   | 36.1%  | Pending     |
-| processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%   | Improved ✓  |
-| UpdatePromptUseCase.ts       | 52.72%  | 85%+   | 32.3%  | Pending     |
-| GetPromptUseCase.ts          | 63.63%  | 85%+   | 21.4%  | Pending     |
-| whatsapp mappingRoutes.ts    | 76.89%  | 90%+   | 13.1%  | Pending     |
-| whatsapp webhookRoutes.ts    | 72.37%  | 90%+   | 17.6%  | Pending     |
-| notion-service shared.ts     | 20%     | 85%+   | 65%    | Pending     |
-| auth-service shared.ts       | 75%     | 90%+   | 15%    | Pending     |
-| auth-service deviceRoutes.ts | 81.67%  | 90%+   | 8.3%   | Pending     |
+| File/Area                    | Current | Target | Gap   | Status     |
+| ---------------------------- | ------- | ------ | ----- | ---------- |
+| tokenRoutes.ts               | 53.9%   | 90%+   | 36.1% | Pending    |
+| processWhatsAppWebhook.ts    | 79.55%  | 85%+   | 5.5%  | Improved ✓ |
+| UpdatePromptUseCase.ts       | 52.72%  | 85%+   | 32.3% | Pending    |
+| GetPromptUseCase.ts          | 63.63%  | 85%+   | 21.4% | Pending    |
+| whatsapp mappingRoutes.ts    | 76.89%  | 90%+   | 13.1% | Pending    |
+| whatsapp webhookRoutes.ts    | 72.37%  | 90%+   | 17.6% | Pending    |
+| notion-service shared.ts     | 20%     | 85%+   | 65%   | Pending    |
+| auth-service shared.ts       | 75%     | 90%+   | 15%   | Pending    |
+| auth-service deviceRoutes.ts | 81.67%  | 90%+   | 8.3%  | Pending    |
 
 ## Completed Issues
 
