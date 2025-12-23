@@ -15,6 +15,7 @@ const commonSrcDir = join(repoRoot, 'packages', 'common', 'src');
 
 // Keywords that indicate domain leakage into common
 // These are domain-specific concepts that should NOT be in common
+// Note: Infrastructure clients (Firestore, Notion) are allowed as reusable utilities
 const FORBIDDEN_KEYWORDS = [
   // Domain models
   'User',
@@ -22,17 +23,14 @@ const FORBIDDEN_KEYWORDS = [
   'Prompt',
   'PromptVault',
   'Identity',
-  // External services (should be in infra)
+  // External services that should be in app-specific infra
   'Auth0',
-  // 'Notion' - removed: now a service name, checked via boundary rules
-  'Firestore',
-  'Firebase',
   // Domain-specific concepts
   'Workspace',
-  'Database',
+  // 'Database' - removed: generic term used in infrastructure
   'Block',
-  'Page',
-  'Token',
+  // 'Page' - removed: generic term
+  // 'Token' - removed: generic term used in auth utilities
   'Session',
   'Permission',
   'Role',

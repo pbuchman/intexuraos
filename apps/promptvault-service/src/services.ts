@@ -102,8 +102,20 @@ function createConnectionRepository(): ConnectionRepository {
 
 function createNotionApiAdapter(): NotionApiAdapter {
   return {
-    validateToken: async (token) => await validateNotionToken(token, notionLogger),
-    getPageWithPreview: async (token, pageId) => {
+    validateToken: async (token): Promise<Result<boolean, NotionError>> =>
+      await validateNotionToken(token, notionLogger),
+    getPageWithPreview: async (
+      token,
+      pageId
+    ): Promise<
+      Result<
+        {
+          page: { id: string; title: string; url: string };
+          blocks: { type: string; content: string }[];
+        },
+        NotionError
+      >
+    > => {
       const result = await getPageWithPreview(token, pageId, notionLogger);
       if (!result.ok) return result;
       const { id, title, url, blocks } = result.value;
@@ -114,11 +126,13 @@ function createNotionApiAdapter(): NotionApiAdapter {
 
 function createPromptRepository(): PromptRepository {
   return {
-    createPrompt: async (userId, input) =>
+    createPrompt: async (userId, input): Promise<Result<Prompt, PromptVaultError>> =>
       await createPromptFn(userId, input.title, input.content, notionLogger),
-    listPrompts: async (userId) => await listPromptsFn(userId, notionLogger),
-    getPrompt: async (userId, promptId) => await getPromptFn(userId, promptId, notionLogger),
-    updatePrompt: async (userId, promptId, input) =>
+    listPrompts: async (userId): Promise<Result<Prompt[], PromptVaultError>> =>
+      await listPromptsFn(userId, notionLogger),
+    getPrompt: async (userId, promptId): Promise<Result<Prompt, PromptVaultError>> =>
+      await getPromptFn(userId, promptId, notionLogger),
+    updatePrompt: async (userId, promptId, input): Promise<Result<Prompt, PromptVaultError>> =>
       await updatePromptFn(userId, promptId, input, notionLogger),
   };
 }

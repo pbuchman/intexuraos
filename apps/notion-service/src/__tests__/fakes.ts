@@ -70,7 +70,7 @@ export class FakeNotionConnectionRepository {
 
   getToken(userId: string): Promise<Result<string | null, NotionError>> {
     const conn = this.connections.get(userId);
-    if (conn === undefined || conn.connected !== true) return Promise.resolve(ok(null));
+    if (conn?.connected !== true) return Promise.resolve(ok(null));
     return Promise.resolve(ok(conn.token));
   }
 
@@ -157,4 +157,3 @@ export class MockNotionApiAdapter {
     this.invalidTokens.clear();
   }
 }
-

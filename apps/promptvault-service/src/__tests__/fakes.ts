@@ -31,7 +31,7 @@ export class FakeNotionConnectionRepository {
     }
   >();
 
-  async saveConnection(
+  saveConnection(
     userId: string,
     promptVaultPageId: string,
     notionToken: string
@@ -45,49 +45,55 @@ export class FakeNotionConnectionRepository {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
-    return ok({
-      promptVaultPageId,
-      connected: true,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
+    return Promise.resolve(
+      ok({
+        promptVaultPageId,
+        connected: true,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    );
   }
 
-  async getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>> {
+  getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>> {
     const conn = this.connections.get(userId);
-    if (!conn) return ok(null);
-    return ok({
-      promptVaultPageId: conn.promptVaultPageId,
-      connected: conn.connected,
-      createdAt: conn.createdAt,
-      updatedAt: conn.updatedAt,
-    });
+    if (conn === undefined) return Promise.resolve(ok(null));
+    return Promise.resolve(
+      ok({
+        promptVaultPageId: conn.promptVaultPageId,
+        connected: conn.connected,
+        createdAt: conn.createdAt,
+        updatedAt: conn.updatedAt,
+      })
+    );
   }
 
-  async getToken(userId: string): Promise<Result<string | null, NotionError>> {
+  getToken(userId: string): Promise<Result<string | null, NotionError>> {
     const conn = this.connections.get(userId);
-    if (!conn?.connected) return ok(null);
-    return ok(conn.token);
+    if (conn?.connected !== true) return Promise.resolve(ok(null));
+    return Promise.resolve(ok(conn.token));
   }
 
-  async isConnected(userId: string): Promise<Result<boolean, NotionError>> {
+  isConnected(userId: string): Promise<Result<boolean, NotionError>> {
     const conn = this.connections.get(userId);
-    return ok(conn?.connected ?? false);
+    return Promise.resolve(ok(conn?.connected === true));
   }
 
-  async disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+  disconnectConnection(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
     const conn = this.connections.get(userId);
-    if (!conn) {
-      return err({ code: 'NOT_FOUND', message: 'Not found' });
+    if (conn === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Not found' }));
     }
     conn.connected = false;
     conn.updatedAt = new Date().toISOString();
-    return ok({
-      promptVaultPageId: conn.promptVaultPageId,
-      connected: false,
-      createdAt: conn.createdAt,
-      updatedAt: conn.updatedAt,
-    });
+    return Promise.resolve(
+      ok({
+        promptVaultPageId: conn.promptVaultPageId,
+        connected: false,
+        createdAt: conn.createdAt,
+        updatedAt: conn.updatedAt,
+      })
+    );
   }
 
   // Test helpers
@@ -114,11 +120,11 @@ export class MockNotionApiAdapter {
   private pages = new Map<string, { title: string; content: string; url: string }>();
   private childPages = new Map<string, string[]>();
 
-  async validateToken(_token: string): Promise<Result<boolean, NotionError>> {
-    return ok(true);
+  validateToken(_token: string): Promise<Result<boolean, NotionError>> {
+    return Promise.resolve(ok(true));
   }
 
-  async getPageWithPreview(
+  getPageWithPreview(
     _token: string,
     pageId: string
   ): Promise<
@@ -131,23 +137,25 @@ export class MockNotionApiAdapter {
     >
   > {
     const page = this.pages.get(pageId);
-    if (!page) {
-      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    if (page === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
     }
-    return ok({
-      page: { id: pageId, title: page.title, url: page.url },
-      blocks: [{ type: 'paragraph', content: page.content }],
-    });
+    return Promise.resolve(
+      ok({
+        page: { id: pageId, title: page.title, url: page.url },
+        blocks: [{ type: 'paragraph', content: page.content }],
+      })
+    );
   }
 
-  async createPromptVaultNote(params: {
+  createPromptVaultNote(params: {
     token: string;
     parentPageId: string;
     title: string;
     prompt: string;
     userId: string;
   }): Promise<Result<{ id: string; url: string; title: string }, NotionError>> {
-    const id = `page-${Date.now()}`;
+    const id = `page-${String(Date.now())}`;
     this.pages.set(id, {
       title: params.title,
       content: params.prompt,
@@ -156,10 +164,10 @@ export class MockNotionApiAdapter {
     const children = this.childPages.get(params.parentPageId) ?? [];
     children.push(id);
     this.childPages.set(params.parentPageId, children);
-    return ok({ id, url: `https://notion.so/${id}`, title: params.title });
+    return Promise.resolve(ok({ id, url: `https://notion.so/${id}`, title: params.title }));
   }
 
-  async listChildPages(
+  listChildPages(
     _token: string,
     parentPageId: string
   ): Promise<Result<{ id: string; title: string; url: string }[], NotionError>> {
@@ -167,13 +175,13 @@ export class MockNotionApiAdapter {
     const pages = children
       .map((id) => {
         const page = this.pages.get(id);
-        return page ? { id, title: page.title, url: page.url } : null;
+        return page !== undefined ? { id, title: page.title, url: page.url } : null;
       })
       .filter((p): p is { id: string; title: string; url: string } => p !== null);
-    return ok(pages);
+    return Promise.resolve(ok(pages));
   }
 
-  async getPromptPage(
+  getPromptPage(
     _token: string,
     pageId: string
   ): Promise<
@@ -188,16 +196,18 @@ export class MockNotionApiAdapter {
     >
   > {
     const page = this.pages.get(pageId);
-    if (!page) {
-      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    if (page === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
     }
-    return ok({
-      page: { id: pageId, title: page.title, url: page.url },
-      promptContent: page.content,
-    });
+    return Promise.resolve(
+      ok({
+        page: { id: pageId, title: page.title, url: page.url },
+        promptContent: page.content,
+      })
+    );
   }
 
-  async updatePromptPage(
+  updatePromptPage(
     _token: string,
     pageId: string,
     update: { title?: string; promptContent?: string }
@@ -212,15 +222,17 @@ export class MockNotionApiAdapter {
     >
   > {
     const page = this.pages.get(pageId);
-    if (!page) {
-      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    if (page === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
     }
     if (update.title !== undefined) page.title = update.title;
     if (update.promptContent !== undefined) page.content = update.promptContent;
-    return ok({
-      page: { id: pageId, title: page.title, url: page.url },
-      promptContent: page.content,
-    });
+    return Promise.resolve(
+      ok({
+        page: { id: pageId, title: page.title, url: page.url },
+        promptContent: page.content,
+      })
+    );
   }
 
   // Test helpers
@@ -240,6 +252,27 @@ export class MockNotionApiAdapter {
   }
 }
 
+interface PromptResult {
+  id: string;
+  title: string;
+  content: string;
+  url?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface PromptListItem {
+  id: string;
+  title: string;
+  content: string;
+  url?: string;
+}
+
+interface PromptError {
+  code: string;
+  message: string;
+}
+
 /**
  * Factory to create a fake prompt repository for testing.
  */
@@ -250,49 +283,20 @@ export function createFakePromptRepository(
   createPrompt: (
     userId: string,
     input: { title: string; content: string }
-  ) => Promise<
-    Result<
-      {
-        id: string;
-        title: string;
-        content: string;
-        url?: string;
-        createdAt?: string;
-        updatedAt?: string;
-      },
-      { code: string; message: string }
-    >
-  >;
-  listPrompts: (
-    userId: string
-  ) => Promise<
-    Result<
-      { id: string; title: string; content: string; url?: string }[],
-      { code: string; message: string }
-    >
-  >;
-  getPrompt: (
-    userId: string,
-    promptId: string
-  ) => Promise<
-    Result<
-      { id: string; title: string; content: string; url?: string },
-      { code: string; message: string }
-    >
-  >;
+  ) => Promise<Result<PromptResult, PromptError>>;
+  listPrompts: (userId: string) => Promise<Result<PromptListItem[], PromptError>>;
+  getPrompt: (userId: string, promptId: string) => Promise<Result<PromptListItem, PromptError>>;
   updatePrompt: (
     userId: string,
     promptId: string,
     input: { title?: string; content?: string }
-  ) => Promise<
-    Result<
-      { id: string; title: string; content: string; url?: string },
-      { code: string; message: string }
-    >
-  >;
+  ) => Promise<Result<PromptListItem, PromptError>>;
 } {
   return {
-    async createPrompt(userId, input) {
+    createPrompt: async (
+      userId: string,
+      input: { title: string; content: string }
+    ): Promise<Result<PromptResult, PromptError>> => {
       const connectedResult = await connectionRepo.isConnected(userId);
       if (!connectedResult.ok || !connectedResult.value) {
         return err({ code: 'NOT_CONNECTED', message: 'Not connected' });
@@ -323,7 +327,7 @@ export function createFakePromptRepository(
         updatedAt: now,
       });
     },
-    async listPrompts(userId) {
+    listPrompts: async (userId: string): Promise<Result<PromptListItem[], PromptError>> => {
       const connectedResult = await connectionRepo.isConnected(userId);
       if (!connectedResult.ok || !connectedResult.value) {
         return err({ code: 'NOT_CONNECTED', message: 'Not connected' });
@@ -343,7 +347,7 @@ export function createFakePromptRepository(
       if (!listResult.ok)
         return err({ code: 'DOWNSTREAM_ERROR', message: listResult.error.message });
 
-      const prompts = [];
+      const prompts: PromptListItem[] = [];
       for (const page of listResult.value) {
         const pageResult = await notionApi.getPromptPage(tokenResult.value, page.id);
         if (pageResult.ok) {
@@ -357,7 +361,10 @@ export function createFakePromptRepository(
       }
       return ok(prompts);
     },
-    async getPrompt(userId, promptId) {
+    getPrompt: async (
+      userId: string,
+      promptId: string
+    ): Promise<Result<PromptListItem, PromptError>> => {
       const tokenResult = await connectionRepo.getToken(userId);
       if (!tokenResult.ok || tokenResult.value === null) {
         return err({ code: 'NOT_CONNECTED', message: 'No token' });
@@ -375,7 +382,11 @@ export function createFakePromptRepository(
         url: result.value.page.url,
       });
     },
-    async updatePrompt(userId, promptId, input) {
+    updatePrompt: async (
+      userId: string,
+      promptId: string,
+      input: { title?: string; content?: string }
+    ): Promise<Result<PromptListItem, PromptError>> => {
       const tokenResult = await connectionRepo.getToken(userId);
       if (!tokenResult.ok || tokenResult.value === null) {
         return err({ code: 'NOT_CONNECTED', message: 'No token' });

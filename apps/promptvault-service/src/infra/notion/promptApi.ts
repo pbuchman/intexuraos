@@ -291,8 +291,8 @@ async function getPromptById(
       title,
       content,
       url,
-      ...(createdAt && { createdAt }),
-      ...(updatedAt && { updatedAt }),
+      ...(createdAt !== undefined && createdAt !== '' ? { createdAt } : {}),
+      ...(updatedAt !== undefined && updatedAt !== '' ? { updatedAt } : {}),
     });
   } catch (error) {
     return err(mapError(mapNotionError(error)));
@@ -343,7 +343,7 @@ export async function updatePrompt(
       // Update or delete existing blocks
       for (let i = 0; i < codeBlockIds.length; i++) {
         const blockId = codeBlockIds[i];
-        if (!blockId) continue;
+        if (blockId === undefined) continue;
 
         if (i >= newChunks.length) {
           await client.blocks.delete({ block_id: blockId });
@@ -377,7 +377,7 @@ export async function updatePrompt(
     }
 
     // Return updated prompt
-    return getPromptById(token, promptId, logger);
+    return await getPromptById(token, promptId, logger);
   } catch (error) {
     return err(mapError(mapNotionError(error)));
   }

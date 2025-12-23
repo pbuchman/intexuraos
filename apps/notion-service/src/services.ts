@@ -84,7 +84,10 @@ function createNotionApiAdapter(): NotionApiAdapter {
       pageId
     ): Promise<
       Result<
-        { page: { id: string; title: string; url: string }; blocks: { type: string; content: string }[] },
+        {
+          page: { id: string; title: string; url: string };
+          blocks: { type: string; content: string }[];
+        },
         NotionError
       >
     > => {

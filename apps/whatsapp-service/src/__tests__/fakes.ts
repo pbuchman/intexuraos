@@ -147,4 +147,3 @@ export class FakeNotionConnectionRepository {
     this.connections.clear();
   }
 }
-
