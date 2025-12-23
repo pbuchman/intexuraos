@@ -1,8 +1,10 @@
 /**
  * Tests for shared utilities
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadAuth0Config } from '../routes/v1/shared.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ZodError, z } from 'zod';
+import { loadAuth0Config, handleValidationError } from '../routes/v1/shared.js';
+import type { FastifyReply } from 'fastify';
 describe('shared utilities', () => {
   let savedDomain: string | undefined;
   let savedClientId: string | undefined;
@@ -65,6 +67,81 @@ describe('shared utilities', () => {
       expect(config?.audience).toBe('test-audience');
       expect(config?.jwksUrl).toBe('https://test.auth0.com/.well-known/jwks.json');
       expect(config?.issuer).toBe('https://test.auth0.com/');
+    });
+  });
+  describe('handleValidationError', () => {
+    it('converts Zod error to API error response', () => {
+      const schema = z.object({
+        userId: z.string().min(1),
+        email: z.string().email(),
+      });
+      const result = schema.safeParse({ userId: '', email: 'invalid-email' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const mockReply = {
+          fail: vi.fn().mockReturnThis(),
+        } as unknown as FastifyReply;
+        handleValidationError(result.error, mockReply);
+        expect(mockReply.fail).toHaveBeenCalledWith(
+          'INVALID_REQUEST',
+          'Validation failed',
+          undefined,
+          expect.objectContaining({
+            errors: expect.arrayContaining([
+              expect.objectContaining({ path: 'userId' }),
+              expect.objectContaining({ path: 'email' }),
+            ]),
+          })
+        );
+      }
+    });
+    it('handles single validation error', () => {
+      const schema = z.object({
+        name: z.string().min(3),
+      });
+      const result = schema.safeParse({ name: 'ab' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const mockReply = {
+          fail: vi.fn().mockReturnThis(),
+        } as unknown as FastifyReply;
+        handleValidationError(result.error, mockReply);
+        expect(mockReply.fail).toHaveBeenCalledWith(
+          'INVALID_REQUEST',
+          'Validation failed',
+          undefined,
+          expect.objectContaining({
+            errors: expect.arrayContaining([
+              expect.objectContaining({ path: 'name', message: expect.any(String) }),
+            ]),
+          })
+        );
+      }
+    });
+    it('handles nested path in validation error', () => {
+      const schema = z.object({
+        user: z.object({
+          profile: z.object({
+            age: z.number().min(0),
+          }),
+        }),
+      });
+      const result = schema.safeParse({ user: { profile: { age: -1 } } });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const mockReply = {
+          fail: vi.fn().mockReturnThis(),
+        } as unknown as FastifyReply;
+        handleValidationError(result.error, mockReply);
+        expect(mockReply.fail).toHaveBeenCalledWith(
+          'INVALID_REQUEST',
+          'Validation failed',
+          undefined,
+          expect.objectContaining({
+            errors: expect.arrayContaining([expect.objectContaining({ path: 'user.profile.age' })]),
+          })
+        );
+      }
     });
   });
 });
