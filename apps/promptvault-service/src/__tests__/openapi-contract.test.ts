@@ -67,7 +67,9 @@ describe('promptvault-service OpenAPI contract', () => {
     expect(servers?.length).toBe(2);
 
     // Legacy URL is kept until service is redeployed with new name
-    expect(servers?.[0]?.url).toBe('https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.url).toBe(
+      'https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app'
+    );
     expect(servers?.[0]?.description).toBe('Cloud (Development) - Legacy URL');
 
     expect(servers?.[1]?.url).toBe('http://localhost:8081');

@@ -284,8 +284,8 @@ See [Notion Inbox Schema](docs/notion-inbox.md) for Notion property mappings.
 
 Secrets stored in **GCP Secret Manager** with `INTEXURAOS_*` prefix:
 
-| Secret                        | Purpose                          |
-| ----------------------------- | -------------------------------- |
+| Secret                            | Purpose                          |
+| --------------------------------- | -------------------------------- |
 | `INTEXURAOS_AUTH0_DOMAIN`         | Auth0 tenant domain              |
 | `INTEXURAOS_AUTH0_CLIENT_ID`      | Native app client ID             |
 | `INTEXURAOS_AUTH_JWKS_URL`        | JWKS endpoint for JWT validation |

@@ -102,16 +102,16 @@ packages/
 
 ### Domain Logic Ownership
 
-| Domain                  | Owner App           | Current Package              | Target Location                                    |
-| ----------------------- | ------------------- | ---------------------------- | -------------------------------------------------- |
+| Domain                  | Owner App           | Current Package                  | Target Location                                    |
+| ----------------------- | ------------------- | -------------------------------- | -------------------------------------------------- |
 | Identity (auth, tokens) | auth-service        | `@intexuraos/domain-identity`    | `apps/auth-service/src/domain/identity/`           |
 | Inbox (WhatsApp, notes) | whatsapp-service    | `@intexuraos/domain-inbox`       | `apps/whatsapp-service/src/domain/inbox/`          |
 | PromptVault (prompts)   | promptvault-service | `@intexuraos/domain-promptvault` | `apps/promptvault-service/src/domain/promptvault/` |
 
 ### Infra Adapter Ownership
 
-| Adapter                        | Owner               | Current Package           | Target Location                                 |
-| ------------------------------ | ------------------- | ------------------------- | ----------------------------------------------- |
+| Adapter                        | Owner               | Current Package               | Target Location                                 |
+| ------------------------------ | ------------------- | ----------------------------- | ----------------------------------------------- |
 | Auth0Client                    | auth-service        | `@intexuraos/infra-auth0`     | `apps/auth-service/src/infra/auth0/`            |
 | FirestoreAuthTokenRepository   | auth-service        | `@intexuraos/infra-firestore` | `apps/auth-service/src/infra/firestore/`        |
 | NotionPromptRepository         | promptvault-service | `@intexuraos/infra-notion`    | `apps/promptvault-service/src/infra/notion/`    |
@@ -133,14 +133,14 @@ packages/
 
 ### After Migration
 
-| Service             | Depends On                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| auth-service        | `@intexuraos/common`, `@intexuraos/infra-firestore` (client only)                              |
+| Service             | Depends On                                                                                         |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| auth-service        | `@intexuraos/common`, `@intexuraos/infra-firestore` (client only)                                  |
 | promptvault-service | `@intexuraos/common`, `@intexuraos/infra-firestore` (client), `@intexuraos/infra-notion` (adapter) |
 | notion-service      | `@intexuraos/common`, `@intexuraos/infra-firestore` (client), `@intexuraos/infra-notion` (adapter) |
-| whatsapp-service    | `@intexuraos/common`, `@intexuraos/infra-firestore` (client)                                   |
-| api-docs-hub        | `@intexuraos/common`                                                                       |
-| web                 | (frontend, no backend packages)                                                        |
+| whatsapp-service    | `@intexuraos/common`, `@intexuraos/infra-firestore` (client)                                       |
+| api-docs-hub        | `@intexuraos/common`                                                                               |
+| web                 | (frontend, no backend packages)                                                                    |
 
 ---
 

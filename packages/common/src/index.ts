@@ -2,7 +2,12 @@
 export { type Result, ok, err, isOk, isErr } from './result.js';
 
 // HTTP utilities
-export { type ErrorCode, ERROR_HTTP_STATUS, IntexuraOSError, getErrorMessage } from './http/errors.js';
+export {
+  type ErrorCode,
+  ERROR_HTTP_STATUS,
+  IntexuraOSError,
+  getErrorMessage,
+} from './http/errors.js';
 
 export {
   type Diagnostics,

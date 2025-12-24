@@ -4,8 +4,8 @@ This document describes the Cloud Run service configuration and operations.
 
 ## Services Overview
 
-| Service             | Cloud Run Name               | Port | Health Endpoint |
-| ------------------- | ---------------------------- | ---- | --------------- |
+| Service             | Cloud Run Name                   | Port | Health Endpoint |
+| ------------------- | -------------------------------- | ---- | --------------- |
 | Auth Service        | `intexuraos-auth-service`        | 8080 | `/health`       |
 | PromptVault Service | `intexuraos-promptvault-service` | 8080 | `/health`       |
 | Notion Service      | `intexuraos-notion-service`      | 8080 | `/health`       |
@@ -26,8 +26,8 @@ All services are configured with:
 
 Services receive secrets from Secret Manager:
 
-| Environment Variable | Secret Name            |
-| -------------------- | ---------------------- |
+| Environment Variable | Secret Name                |
+| -------------------- | -------------------------- |
 | `AUTH_JWKS_URL`      | `INTEXURAOS_AUTH_JWKS_URL` |
 | `AUTH_ISSUER`        | `INTEXURAOS_AUTH_ISSUER`   |
 | `AUTH_AUDIENCE`      | `INTEXURAOS_AUTH_AUDIENCE` |
