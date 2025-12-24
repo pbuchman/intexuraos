@@ -161,6 +161,30 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         const rawBody =
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
 
+        // Log incoming request (mask signature for safety)
+        try {
+          const headersObj = { ...(request.headers as Record<string, unknown>) };
+          if (typeof headersObj[SIGNATURE_HEADER] === 'string') {
+            const sig = headersObj[SIGNATURE_HEADER];
+            // Keep start and end visible, mask middle
+            const visible = 8;
+            if (sig.length > visible * 2) {
+              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, visible)}...${sig.substring(
+                sig.length - visible
+              )}`;
+            } else {
+              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, Math.min(4, sig.length))}...`;
+            }
+          }
+          request.log.info(
+            { event: 'incoming_whatsapp_webhook', headers: headersObj, rawBody },
+            'Received WhatsApp webhook POST'
+          );
+        } catch (logErr) {
+          // Best-effort logging - should not interrupt processing
+          request.log.debug({ error: logErr }, 'Failed to log incoming webhook');
+        }
+
         // Validate signature
         const signatureValid = validateWebhookSignature(rawBody, signature, config.appSecret);
 
