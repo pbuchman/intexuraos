@@ -1,7 +1,7 @@
 /**
  * Use case for creating a new prompt in the PromptVault.
  */
-import { err, type Result } from '@praxos/common';
+import { err, type Result } from '@intexuraos/common';
 import type { Prompt, PromptVaultError } from '../models/index.js';
 import { createPromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';

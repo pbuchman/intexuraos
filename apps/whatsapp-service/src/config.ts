@@ -13,19 +13,19 @@ const configSchema = z.object({
    * Webhook verification token.
    * Used to verify webhook registration with Meta.
    */
-  verifyToken: z.string().min(1, 'PRAXOS_WHATSAPP_VERIFY_TOKEN is required'),
+  verifyToken: z.string().min(1, 'INTEXURAOS_WHATSAPP_VERIFY_TOKEN is required'),
 
   /**
    * App secret for webhook signature validation.
    * Used to compute HMAC-SHA256 signatures.
    */
-  appSecret: z.string().min(1, 'PRAXOS_WHATSAPP_APP_SECRET is required'),
+  appSecret: z.string().min(1, 'INTEXURAOS_WHATSAPP_APP_SECRET is required'),
 
   /**
    * WhatsApp access token for sending messages via Graph API.
    * Used to authenticate API requests to send messages.
    */
-  accessToken: z.string().min(1, 'PRAXOS_WHATSAPP_ACCESS_TOKEN is required'),
+  accessToken: z.string().min(1, 'INTEXURAOS_WHATSAPP_ACCESS_TOKEN is required'),
 
   /**
    * Allowed WhatsApp Business phone number IDs.
@@ -33,7 +33,7 @@ const configSchema = z.object({
    */
   allowedPhoneNumberIds: z
     .string()
-    .min(1, 'PRAXOS_WHATSAPP_PHONE_NUMBER_ID is required')
+    .min(1, 'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID is required')
     .transform((val) => val.split(',').map((id) => id.trim())),
 
   /**
@@ -55,10 +55,10 @@ export type Config = z.infer<typeof configSchema>;
  */
 export function loadConfig(): Config {
   return configSchema.parse({
-    verifyToken: process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'],
-    appSecret: process.env['PRAXOS_WHATSAPP_APP_SECRET'],
-    accessToken: process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'],
-    allowedPhoneNumberIds: process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'],
+    verifyToken: process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'],
+    appSecret: process.env['INTEXURAOS_WHATSAPP_APP_SECRET'],
+    accessToken: process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'],
+    allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -70,10 +70,10 @@ export function loadConfig(): Config {
  */
 export function validateConfigEnv(): string[] {
   const required = [
-    'PRAXOS_WHATSAPP_VERIFY_TOKEN',
-    'PRAXOS_WHATSAPP_APP_SECRET',
-    'PRAXOS_WHATSAPP_ACCESS_TOKEN',
-    'PRAXOS_WHATSAPP_PHONE_NUMBER_ID',
+    'INTEXURAOS_WHATSAPP_VERIFY_TOKEN',
+    'INTEXURAOS_WHATSAPP_APP_SECRET',
+    'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
+    'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

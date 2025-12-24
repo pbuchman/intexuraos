@@ -1,4 +1,4 @@
-# WhatsApp → PraxOS Inbox Implementation Gaps
+# WhatsApp → IntexuraOS Inbox Implementation Gaps
 
 ## Prerequisites (Must be completed first)
 
@@ -79,7 +79,7 @@
 - Create `WhatsAppMessenger` port in domain
 - Implement adapter using WhatsApp Business Cloud API
 - Method: `sendTextMessage(to: string, message: string): Promise<Result<void, Error>>`
-- Use secrets: `PRAXOS_WHATSAPP_ACCESS_TOKEN`, `PRAXOS_WHATSAPP_PHONE_NUMBER_ID`
+- Use secrets: `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`, `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`
 - Tests required: API call structure with mocked HTTP client
 
 ---
@@ -106,11 +106,11 @@
 
 - Location: `apps/whatsapp-service/src/config/`
 - Environment variables:
-  - `PRAXOS_WHATSAPP_SERVED_PHONE_NUMBERS` (comma-separated list)
-  - `PRAXOS_WHATSAPP_ACCESS_TOKEN`
-  - `PRAXOS_WHATSAPP_PHONE_NUMBER_ID`
-  - `PRAXOS_WHATSAPP_VERIFY_TOKEN`
-  - `PRAXOS_WHATSAPP_APP_SECRET`
+  - `INTEXURAOS_WHATSAPP_SERVED_PHONE_NUMBERS` (comma-separated list)
+  - `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`
+  - `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`
+  - `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`
+  - `INTEXURAOS_WHATSAPP_APP_SECRET`
 - Validate at startup
 - Tests required: Config validation, missing env handling
 
@@ -122,7 +122,7 @@
 
 - Location: `apps/whatsapp-service/src/routes/webhooks/`
 - Endpoint: `GET /webhooks/whatsapp`
-- Verify `hub.verify_token` matches `PRAXOS_WHATSAPP_VERIFY_TOKEN`
+- Verify `hub.verify_token` matches `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`
 - Return `hub.challenge` on success, 403 on failure
 - Tests required: Verification flow
 
@@ -130,7 +130,7 @@
 
 - Location: `apps/whatsapp-service/src/routes/webhooks/`
 - Endpoint: `POST /webhooks/whatsapp`
-- Validate webhook signature using `PRAXOS_WHATSAPP_APP_SECRET`
+- Validate webhook signature using `INTEXURAOS_WHATSAPP_APP_SECRET`
 - Parse and validate payload
 - Call `ProcessWhatsAppWebhook` use case
 - Return appropriate HTTP status per spec (200 or 400)
@@ -166,9 +166,9 @@
 
 - Location: `packages/domain/whatsapp/` or config
 - Messages for:
-  - Success: "Your note has been saved to PraxOS."
+  - Success: "Your note has been saved to IntexuraOS."
   - Unsupported message type: "Only text messages are supported at this time."
-  - User unmapped: "This phone number is not connected to a PraxOS account."
+  - User unmapped: "This phone number is not connected to a IntexuraOS account."
   - Processing failed: "Failed to save your note. Please try again later."
 - Tests required: Template rendering
 
@@ -188,11 +188,11 @@
 
 - Location: `terraform/`
 - Secrets per `docs/setup/07-whatsapp-business-cloud-api.md`:
-  - `PRAXOS_WHATSAPP_VERIFY_TOKEN`
-  - `PRAXOS_WHATSAPP_ACCESS_TOKEN`
-  - `PRAXOS_WHATSAPP_PHONE_NUMBER_ID`
-  - `PRAXOS_WHATSAPP_WABA_ID`
-  - `PRAXOS_WHATSAPP_APP_SECRET`
+  - `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`
+  - `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`
+  - `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID`
+  - `INTEXURAOS_WHATSAPP_WABA_ID`
+  - `INTEXURAOS_WHATSAPP_APP_SECRET`
 - Tests required: N/A (infrastructure)
 
 ---

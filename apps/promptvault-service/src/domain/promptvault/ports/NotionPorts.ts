@@ -3,7 +3,7 @@
  * These interfaces define what the domain needs from infrastructure
  * without depending on any external SDKs.
  */
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 
 /**
  * Notion connection configuration for a user.

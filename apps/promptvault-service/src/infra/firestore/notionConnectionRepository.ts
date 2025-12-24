@@ -1,7 +1,7 @@
 /**
  * Firestore repository for Notion connection config.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 
 export interface NotionConnectionPublic {
   promptVaultPageId: string;

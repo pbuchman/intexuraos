@@ -2,7 +2,7 @@
 
 ## Overview
 
-PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets including branding materials, logos, illustrations, and documentation visuals.
+IntexuraOS uses a public Google Cloud Storage (GCS) bucket to serve static assets including branding materials, logos, illustrations, and documentation visuals.
 
 ## Architecture
 
@@ -14,8 +14,8 @@ PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets in
 ### Infrastructure Components
 
 1. **GCS Bucket** (`terraform/modules/static-assets`)
-   - Bucket name: `praxos-static-assets-{environment}`
-   - Region: Same as other PraxOS resources
+   - Bucket name: `intexuraos-static-assets-{environment}`
+   - Region: Same as other IntexuraOS resources
    - Public read access (anonymous)
    - Uniform bucket-level access enabled
    - CORS enabled for cross-origin requests
@@ -37,13 +37,13 @@ PraxOS uses a public Google Cloud Storage (GCS) bucket to serve static assets in
 Static assets are accessible via:
 
 ```
-https://storage.googleapis.com/praxos-static-assets-{environment}/{path}
+https://storage.googleapis.com/intexuraos-static-assets-{environment}/{path}
 ```
 
 Example:
 
 ```
-https://storage.googleapis.com/praxos-static-assets-dev/branding/exports/primary/logo-primary-light.png
+https://storage.googleapis.com/intexuraos-static-assets-dev/branding/exports/primary/logo-primary-light.png
 ```
 
 ### Terraform Outputs
@@ -52,8 +52,8 @@ After deploying the infrastructure:
 
 ```bash
 cd terraform/environments/dev
-terraform output static_assets_bucket_name    # praxos-static-assets-dev
-terraform output static_assets_public_url     # https://storage.googleapis.com/praxos-static-assets-dev
+terraform output static_assets_bucket_name    # intexuraos-static-assets-dev
+terraform output static_assets_public_url     # https://storage.googleapis.com/intexuraos-static-assets-dev
 ```
 
 ## Deployment
@@ -84,7 +84,7 @@ If you need to manually sync assets:
 ```bash
 # Set variables
 ENVIRONMENT=dev
-BUCKET_NAME=praxos-static-assets-$ENVIRONMENT
+BUCKET_NAME=intexuraos-static-assets-$ENVIRONMENT
 
 # Sync all assets
 gsutil -m rsync -r -d docs/assets/ gs://$BUCKET_NAME/
@@ -118,7 +118,7 @@ gsutil ls -r gs://$BUCKET_NAME/
 
 4. Access via public URL:
    ```
-   https://storage.googleapis.com/praxos-static-assets-dev/{your-path}
+   https://storage.googleapis.com/intexuraos-static-assets-dev/{your-path}
    ```
 
 ### Removing Assets
@@ -137,7 +137,7 @@ gsutil ls -r gs://$BUCKET_NAME/
 
 ```bash
 # Check bucket exists and is public
-curl -I https://storage.googleapis.com/praxos-static-assets-dev/branding/exports/primary/logo-primary-light.png
+curl -I https://storage.googleapis.com/intexuraos-static-assets-dev/branding/exports/primary/logo-primary-light.png
 
 # Should return 200 OK without authentication
 ```
@@ -146,10 +146,10 @@ curl -I https://storage.googleapis.com/praxos-static-assets-dev/branding/exports
 
 ```bash
 # Using gsutil (requires auth)
-gsutil ls -r gs://praxos-static-assets-dev/
+gsutil ls -r gs://intexuraos-static-assets-dev/
 
 # Public API (no auth)
-curl https://storage.googleapis.com/storage/v1/b/praxos-static-assets-dev/o
+curl https://storage.googleapis.com/storage/v1/b/intexuraos-static-assets-dev/o
 ```
 
 ## Security Considerations
@@ -183,13 +183,13 @@ curl https://storage.googleapis.com/storage/v1/b/praxos-static-assets-dev/o
 ### 404 Errors
 
 1. Verify file exists in repository under `docs/assets/**`
-2. Check file was synced: `gsutil ls gs://praxos-static-assets-dev/your-path`
+2. Check file was synced: `gsutil ls gs://intexuraos-static-assets-dev/your-path`
 3. Verify bucket name in URL matches environment
 4. Check path is correct (case-sensitive)
 
 ### Permission Errors
 
-1. Verify bucket IAM: `gsutil iam get gs://praxos-static-assets-dev`
+1. Verify bucket IAM: `gsutil iam get gs://intexuraos-static-assets-dev`
 2. Check `allUsers` has `roles/storage.objectViewer`
 3. Verify public access prevention is set to `inherited`
 4. Check uniform bucket-level access is enabled

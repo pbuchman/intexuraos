@@ -5,7 +5,7 @@ output "connection_name" {
 
 output "repository_id" {
   description = "Cloud Build repository ID"
-  value       = google_cloudbuildv2_repository.praxos.id
+  value       = google_cloudbuildv2_repository.intexuraos.id
 }
 
 output "webhook_trigger_id" {

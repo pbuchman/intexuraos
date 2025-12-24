@@ -11,7 +11,7 @@
 - Coverage target: 90% (currently temporarily lowered to 65%)
 - Test runner: Vitest with v8 coverage provider
 - Architecture: Apps with colocated domain/infra, packages/common as shared utilities
-- Import rules: apps import only from @praxos/common, no cross-app imports
+- Import rules: apps import only from @intexuraos/common, no cross-app imports
 - Mock external systems only (Auth0, Firestore, Notion)
 - Run `npm run ci` to verify all checks pass
 

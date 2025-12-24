@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@praxos/common';
+import { requireAuth } from '@intexuraos/common';
 import {
   createPrompt,
   listPrompts,

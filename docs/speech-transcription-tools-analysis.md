@@ -1,4 +1,4 @@
-# Speech Transcription Tools Analysis for PraxOS
+# Speech Transcription Tools Analysis for IntexuraOS
 
 **Analysis Date:** December 23, 2025  
 **Context:** Transcription of voice messages containing loose thoughts, notes, to-do lists, and short commands.  
@@ -207,7 +207,7 @@
 ❌ **Soniox** - Despite highest accuracy, poor customization support
 
 - Mainly context/instructions, not dedicated custom vocabulary
-- Major weakness for PraxOS use case
+- Major weakness for IntexuraOS use case
 
 ### 5.2 Model Fine-tuning
 
@@ -227,7 +227,7 @@
 - ✅ **Free tier**: 480 minutes/mo for testing
 - ✅ **Batch + Real-time**: Full functionality
 
-**For PraxOS:**
+**For IntexuraOS:**
 
 - Ideal for specialized vocabulary (names, technical terms)
 - Phonetic support crucial for Polish proper nouns
@@ -249,7 +249,7 @@
 - ✅ **Easy integration**: Simple, well-documented
 - ✅ **Batch processing**: Excellent for batch transcription
 
-**For PraxOS:**
+**For IntexuraOS:**
 
 - Best price/performance compromise if custom vocabulary not needed
 - Sufficient for most cases
@@ -270,7 +270,7 @@
 - ✅ **Good features**: Diarization, timestamps, PII redaction
 - ✅ **Decent WER**: ~12% for Polish
 
-**For PraxOS:**
+**For IntexuraOS:**
 
 - Good if real-time needed in future
 - Keyword Boost works well for proper nouns
@@ -292,7 +292,7 @@
 
 1. **Best fit for requirements:**
    - ✅ Batch transcription - main use case
-   - ✅ Custom vocabulary with phonetic support - key for PraxOS
+   - ✅ Custom vocabulary with phonetic support - key for IntexuraOS
    - ✅ Excellent accuracy for Polish (5% WER)
    - ✅ Informal language - enhanced model excellent
 
@@ -324,7 +324,7 @@ interface CustomWord {
 }
 
 const customVocabulary: CustomWord[] = [
-  { content: 'PraxOS', sounds_like: ['praksos', 'praxis'] },
+  { content: 'IntexuraOS', sounds_like: ['praksos', 'praxis'] },
   { content: 'Notion', sounds_like: ['noshun'] },
   // ... more terms
 ];
@@ -370,7 +370,7 @@ Switch to **Deepgram** if:
 
 - ⚠️ **Poor custom vocabulary support** - main reason for rejection
 - Despite highest accuracy (5-7% WER), lacks key functionality
-- For PraxOS case custom vocabulary > pure WER
+- For IntexuraOS case custom vocabulary > pure WER
 
 **When to consider:**
 
@@ -504,5 +504,5 @@ Switch to **Deepgram** if:
 
 **End of document**  
 **Date:** December 23, 2025  
-**Author:** GitHub Copilot for PraxOS  
+**Author:** GitHub Copilot for IntexuraOS  
 **Version:** 2.0 (complete rebuild with full comparison)

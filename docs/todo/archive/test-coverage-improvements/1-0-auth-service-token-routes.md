@@ -20,7 +20,7 @@ Before starting this issue, ensure these are complete:
 
 - Coverage target: 90%
 - Test runner: Vitest with v8 coverage provider
-- Apps import only from `@praxos/common`
+- Apps import only from `@intexuraos/common`
 - Mock external systems only (Auth0, Firestore)
 - Colocated infra in `src/infra/**`
 - Routes in `src/routes/v1/**`

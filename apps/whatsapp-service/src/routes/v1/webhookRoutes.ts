@@ -13,7 +13,7 @@ import type { Config } from '../../config.js';
 import { ProcessWhatsAppWebhookUseCase } from '../../domain/inbox/index.js';
 import { createInboxNote } from '../../infra/notion/index.js';
 import type { InboxNote, InboxNotesRepository, InboxError } from '../../domain/inbox/index.js';
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
 import {
   handleValidationError,

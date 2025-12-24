@@ -3,7 +3,7 @@
  * Implemented by infra layer (Firestore).
  */
 
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import type { AuthTokens, AuthTokensPublic } from '../models/AuthToken.js';
 import type { AuthError } from '../models/AuthError.js';
 

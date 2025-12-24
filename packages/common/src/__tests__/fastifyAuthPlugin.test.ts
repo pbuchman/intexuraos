@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
-import { praxosFastifyPlugin } from '../http/fastifyPlugin.js';
+import { intexuraFastifyPlugin } from '../http/fastifyPlugin.js';
 import { fastifyAuthPlugin, requireAuth, clearJwksCache } from '../index.js';
 
 describe('fastifyAuthPlugin', () => {
@@ -73,7 +73,7 @@ describe('fastifyAuthPlugin', () => {
   describe('when auth is not configured (missing env vars)', () => {
     it('returns 503 MISCONFIGURED when AUTH_JWKS_URL is missing', async () => {
       const app = Fastify({ logger: false });
-      await app.register(praxosFastifyPlugin);
+      await app.register(intexuraFastifyPlugin);
       await app.register(fastifyAuthPlugin);
 
       app.get('/protected', async (request, reply) => {
@@ -107,7 +107,7 @@ describe('fastifyAuthPlugin', () => {
       // AUTH_ISSUER and AUTH_AUDIENCE are missing
 
       const app = Fastify({ logger: false });
-      await app.register(praxosFastifyPlugin);
+      await app.register(intexuraFastifyPlugin);
       await app.register(fastifyAuthPlugin);
 
       app.get('/protected', async (request, reply) => {
@@ -146,7 +146,7 @@ describe('fastifyAuthPlugin', () => {
       process.env['AUTH_AUDIENCE'] = audience;
 
       app = Fastify({ logger: false });
-      await app.register(praxosFastifyPlugin);
+      await app.register(intexuraFastifyPlugin);
       await app.register(fastifyAuthPlugin);
 
       app.get('/protected', async (request, reply) => {

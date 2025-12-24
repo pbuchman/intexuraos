@@ -4,7 +4,7 @@
  */
 
 import * as jose from 'jose';
-import { PraxOSError } from '../http/errors.js';
+import { IntexuraOSError } from '../http/errors.js';
 
 /**
  * JWT configuration for validation.
@@ -51,11 +51,11 @@ export function clearJwksCache(): void {
  * @param token - The JWT token string (without Bearer prefix)
  * @param config - JWT validation configuration
  * @returns Verified JWT with sub claim and all claims
- * @throws PraxOSError with UNAUTHORIZED code on failure
+ * @throws IntexuraOSError with UNAUTHORIZED code on failure
  */
 export async function verifyJwt(token: string, config: JwtConfig): Promise<VerifiedJwt> {
   if (token === '') {
-    throw new PraxOSError('UNAUTHORIZED', 'Token is empty');
+    throw new IntexuraOSError('UNAUTHORIZED', 'Token is empty');
   }
 
   const jwks = getJwksClient(config.jwksUrl);
@@ -69,28 +69,28 @@ export async function verifyJwt(token: string, config: JwtConfig): Promise<Verif
     payload = result.payload;
   } catch (error) {
     if (error instanceof jose.errors.JWTExpired) {
-      throw new PraxOSError('UNAUTHORIZED', 'Token has expired');
+      throw new IntexuraOSError('UNAUTHORIZED', 'Token has expired');
     }
 
     if (error instanceof jose.errors.JWTClaimValidationFailed) {
-      throw new PraxOSError('UNAUTHORIZED', `Token validation failed: ${error.message}`);
+      throw new IntexuraOSError('UNAUTHORIZED', `Token validation failed: ${error.message}`);
     }
 
     if (error instanceof jose.errors.JWSSignatureVerificationFailed) {
-      throw new PraxOSError('UNAUTHORIZED', 'Invalid token signature');
+      throw new IntexuraOSError('UNAUTHORIZED', 'Invalid token signature');
     }
 
     if (error instanceof jose.errors.JOSEError) {
-      throw new PraxOSError('UNAUTHORIZED', `Token error: ${error.message}`);
+      throw new IntexuraOSError('UNAUTHORIZED', `Token error: ${error.message}`);
     }
 
-    throw new PraxOSError('UNAUTHORIZED', 'Token verification failed');
+    throw new IntexuraOSError('UNAUTHORIZED', 'Token verification failed');
   }
 
   // Validate sub claim after try-catch to avoid throw-inside-catch anti-pattern
   const sub = payload.sub;
   if (sub === undefined || sub === '') {
-    throw new PraxOSError('UNAUTHORIZED', 'Token missing sub claim');
+    throw new IntexuraOSError('UNAUTHORIZED', 'Token missing sub claim');
   }
 
   // Extract all claims as a plain object

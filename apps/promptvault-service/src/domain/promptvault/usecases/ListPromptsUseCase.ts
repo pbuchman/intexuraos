@@ -1,7 +1,7 @@
 /**
  * Use case for listing all prompts in the PromptVault.
  */
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import type { Prompt, PromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';
 

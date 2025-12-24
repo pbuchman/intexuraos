@@ -2,7 +2,7 @@
  * Class-based adapters wrapping the function-based repositories.
  * Provides compatibility with existing domain use cases.
  */
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,

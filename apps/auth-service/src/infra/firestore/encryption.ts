@@ -14,7 +14,7 @@ const IV_LENGTH = 16; // 128 bits
  * Falls back to a deterministic key for local dev (NOT SECURE).
  */
 function getEncryptionKey(): Buffer {
-  const keyEnv = process.env['PRAXOS_TOKEN_ENCRYPTION_KEY'];
+  const keyEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
 
   if (keyEnv !== undefined && keyEnv !== '') {
     // Key should be base64-encoded 32-byte key
@@ -27,7 +27,7 @@ function getEncryptionKey(): Buffer {
   // Development fallback: deterministic key (NOT SECURE FOR PRODUCTION)
   // This allows local dev without setting up encryption keys
   const devKey = Buffer.alloc(KEY_LENGTH);
-  devKey.write('praxos-dev-key-not-for-production');
+  devKey.write('intexuraos-dev-key-not-for-production');
   return devKey;
 }
 
@@ -84,7 +84,7 @@ export function decryptToken(encryptedData: string): string {
 
 /**
  * Generate a new encryption key.
- * Returns base64-encoded 32-byte key suitable for PRAXOS_TOKEN_ENCRYPTION_KEY.
+ * Returns base64-encoded 32-byte key suitable for INTEXURAOS_TOKEN_ENCRYPTION_KEY.
  */
 export function generateEncryptionKey(): string {
   return randomBytes(KEY_LENGTH).toString('base64');

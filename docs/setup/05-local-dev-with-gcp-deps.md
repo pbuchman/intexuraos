@@ -1,6 +1,6 @@
 # 05 - Local Development with GCP Dependencies
 
-This document describes how to run PraxOS services locally while using GCP Firestore and Secret Manager.
+This document describes how to run IntexuraOS services locally while using GCP Firestore and Secret Manager.
 
 ## Overview
 
@@ -70,7 +70,7 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 # Option A: Direct values (faster, no GCP calls)
 AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
 AUTH_ISSUER=https://your-tenant.auth0.com/
-AUTH_AUDIENCE=urn:praxos:api
+AUTH_AUDIENCE=urn:intexuraos:api
 
 # Option B: Use Secret Manager (comment out Option A)
 # AUTH_USE_SECRET_MANAGER=true
@@ -148,7 +148,7 @@ npm run dev
 ## Project Structure for Local Development
 
 ```
-praxos/
+intexuraos/
 ├── .env.local          # Local environment (gitignored)
 ├── docker/
 │   └── docker-compose.yaml

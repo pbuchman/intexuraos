@@ -1,4 +1,4 @@
-# PraxOS Auth Service Dockerfile
+# IntexuraOS Auth Service Dockerfile
 # Multi-stage build for minimal production image.
 
 # Stage 1: Build
@@ -20,8 +20,8 @@ COPY packages/common/ ./packages/common/
 COPY apps/auth-service/ ./apps/auth-service/
 
 # Build
-RUN npm run build --workspace=@praxos/common
-RUN npm run build --workspace=@praxos/auth-service
+RUN npm run build --workspace=@intexuraos/common
+RUN npm run build --workspace=@intexuraos/auth-service
 
 # Stage 2: Production
 FROM node:22-alpine AS production
@@ -35,8 +35,8 @@ COPY packages/common/package*.json ./packages/common/
 
 # Install production dependencies
 RUN npm ci --omit=dev \
-    --workspace=@praxos/common \
-    --workspace=@praxos/auth-service
+    --workspace=@intexuraos/common \
+    --workspace=@intexuraos/auth-service
 
 # Copy built files
 COPY --from=builder /app/packages/common/dist ./packages/common/dist

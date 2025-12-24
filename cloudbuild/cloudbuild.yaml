@@ -1,4 +1,4 @@
-# PraxOS Cloud Build Configuration
+# IntexuraOS Cloud Build Configuration
 # Builds and deploys affected services on push to development branch.
 # CI checks (lint, typecheck, test) run in GitHub Actions before this.
 #
@@ -289,7 +289,7 @@ steps:
       - |
         if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "Building web app..."
-          npm run --workspace=@praxos/web build
+          npm run --workspace=@intexuraos/web build
           echo "Web app build complete."
         else
           echo "web not affected, skipping build."

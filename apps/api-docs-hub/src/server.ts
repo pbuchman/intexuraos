@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { praxosFastifyPlugin } from '@praxos/common';
+import { intexuraFastifyPlugin } from '@intexuraos/common';
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
@@ -50,7 +50,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       info: {
         title: SERVICE_NAME,
         description:
-          'PraxOS API Documentation Hub - Aggregated OpenAPI documentation for all PraxOS services',
+          'IntexuraOS API Documentation Hub - Aggregated OpenAPI documentation for all IntexuraOS services',
         version: SERVICE_VERSION,
       },
       components: {},
@@ -62,7 +62,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 export async function buildServer(config: Config): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
-  await app.register(praxosFastifyPlugin);
+  await app.register(intexuraFastifyPlugin);
 
   await app.register(fastifySwagger, buildOpenApiOptions());
 

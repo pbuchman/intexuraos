@@ -9,7 +9,7 @@ SERVICE="web"
 
 require_env_vars ENVIRONMENT
 
-BUCKET="praxos-web-${ENVIRONMENT}"
+BUCKET="intexuraos-web-${ENVIRONMENT}"
 
 log "Deploying ${SERVICE} assets"
 log "  Bucket: ${BUCKET}"

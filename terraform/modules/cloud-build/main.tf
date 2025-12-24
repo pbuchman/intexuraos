@@ -30,7 +30,7 @@ resource "google_cloudbuildv2_connection" "github" {
 }
 
 # Link the repository to the connection
-resource "google_cloudbuildv2_repository" "praxos" {
+resource "google_cloudbuildv2_repository" "intexuraos" {
   project           = var.project_id
   location          = var.region
   name              = var.github_repo
@@ -43,16 +43,16 @@ resource "google_cloudbuildv2_repository" "praxos" {
 # -----------------------------------------------------------------------------
 
 resource "google_service_account" "cloud_build" {
-  account_id   = "praxos-cloudbuild-${var.environment}"
-  display_name = "PraxOS Cloud Build Service Account (${var.environment})"
-  description  = "Service account for Cloud Build to deploy PraxOS services"
+  account_id   = "intexuraos-cloudbuild-${var.environment}"
+  display_name = "IntexuraOS Cloud Build Service Account (${var.environment})"
+  description  = "Service account for Cloud Build to deploy IntexuraOS services"
 }
 
 # Cloud Build needs to push to Artifact Registry
 resource "google_artifact_registry_repository_iam_member" "cloud_build_writer" {
   project    = var.project_id
   location   = var.region
-  repository = "praxos-${var.environment}"
+  repository = "intexuraos-${var.environment}"
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.cloud_build.email}"
 }
@@ -96,12 +96,12 @@ resource "google_storage_bucket_iam_member" "cloud_build_web_storage_admin" {
 # -----------------------------------------------------------------------------
 
 resource "google_cloudbuild_trigger" "webhook_dev" {
-  name        = "praxos-${var.environment}-webhook"
+  name        = "intexuraos-${var.environment}-webhook"
   description = "Webhook-triggered build for ${var.github_branch} branch"
   location    = var.region
 
   repository_event_config {
-    repository = google_cloudbuildv2_repository.praxos.id
+    repository = google_cloudbuildv2_repository.intexuraos.id
 
     push {
       branch = "^${var.github_branch}$"
@@ -127,13 +127,13 @@ resource "google_cloudbuild_trigger" "webhook_dev" {
 # -----------------------------------------------------------------------------
 
 resource "google_cloudbuild_trigger" "manual_main" {
-  name        = "praxos-${var.environment}-manual"
+  name        = "intexuraos-${var.environment}-manual"
   description = "Manual trigger - force deploys all services from ${var.github_branch}"
   location    = var.region
 
   # Use source_to_build for manual triggers (no automatic event)
   source_to_build {
-    repository = google_cloudbuildv2_repository.praxos.id
+    repository = google_cloudbuildv2_repository.intexuraos.id
     ref        = "refs/heads/${var.github_branch}"
     repo_type  = "GITHUB"
   }

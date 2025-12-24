@@ -10,7 +10,7 @@ import {
   mapNotionError,
   type NotionLogger,
   type NotionError,
-} from '@praxos/common';
+} from '@intexuraos/common';
 
 /**
  * Validate a Notion token.

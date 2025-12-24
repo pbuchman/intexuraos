@@ -7,7 +7,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@praxos/common';
+import { requireAuth } from '@intexuraos/common';
 import { connectRequestSchema } from './schemas.js';
 import { getServices } from '../../services.js';
 import { handleValidationError } from './shared.js';

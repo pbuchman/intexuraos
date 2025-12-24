@@ -1,5 +1,5 @@
 {
-  "name": "@praxos/api-docs-hub",
+  "name": "@intexuraos/api-docs-hub",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
     "dev": "node --watch dist/index.js"
   },
   "dependencies": {
-    "@praxos/common": "*",
+    "@intexuraos/common": "*",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",
     "fastify": "^5.1.0"

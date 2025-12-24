@@ -7,8 +7,8 @@
  * Coverage note: Some methods may show low coverage until all Tier 1 test issues
  * are completed (see docs/todo/1-3-promptvault-usecases.md).
  */
-import type { Result } from '@praxos/common';
-import { ok, err } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common';
 
 export interface NotionConnectionPublic {
   promptVaultPageId: string;

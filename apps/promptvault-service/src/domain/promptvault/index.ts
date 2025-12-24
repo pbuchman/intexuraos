@@ -1,5 +1,5 @@
 /**
- * @praxos/promptvault-service domain layer
+ * @intexuraos/promptvault-service domain layer
  *
  * Prompt vault domain - prompt template management and versioning.
  *

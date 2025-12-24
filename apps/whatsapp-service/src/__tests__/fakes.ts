@@ -7,8 +7,8 @@
  * Coverage note: Some methods may show low coverage until all Tier 1 test issues
  * are completed (see docs/todo/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
  */
-import type { Result } from '@praxos/common';
-import { ok, err } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,

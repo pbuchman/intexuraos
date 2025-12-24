@@ -40,7 +40,7 @@ Only `packages/common` exists. Domain and infra logic is colocated in apps (`app
 
 ## Package Naming
 
-- `@praxos/common` — the only shared package
+- `@intexuraos/common` — the only shared package
 
 ---
 

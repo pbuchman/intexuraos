@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to PraxOS will be documented in this file.
+All notable changes to IntexuraOS will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -14,13 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **promptvault-service**: Prompt template management with Notion integration
 - **whatsapp-service**: WhatsApp Business Cloud API webhook receiver
 - **api-docs-hub**: Unified Swagger UI aggregating all service OpenAPI specs
-- **@praxos/common**: Result types, HTTP utilities, JWT validation
-- **@praxos/domain-identity**: User identity models and ports
-- **@praxos/domain-promptvault**: Prompt template domain logic
-- **@praxos/domain-inbox**: Inbox note and action models
-- **@praxos/infra-auth0**: Auth0 SDK adapter
-- **@praxos/infra-notion**: Notion API adapter
-- **@praxos/infra-firestore**: Firestore adapter with emulator support
+- **@intexuraos/common**: Result types, HTTP utilities, JWT validation
+- **@intexuraos/domain-identity**: User identity models and ports
+- **@intexuraos/domain-promptvault**: Prompt template domain logic
+- **@intexuraos/domain-inbox**: Inbox note and action models
+- **@intexuraos/infra-auth0**: Auth0 SDK adapter
+- **@intexuraos/infra-notion**: Notion API adapter
+- **@intexuraos/infra-firestore**: Firestore adapter with emulator support
 - Terraform modules for GCP infrastructure (Cloud Run, Firestore, Secret Manager, IAM)
 - Cloud Build CI/CD pipeline with affected-service detection
 - Comprehensive setup guides for GCP, Auth0, and WhatsApp integration

@@ -1,6 +1,6 @@
 # 01 - GCP Project Setup
 
-This document describes how to create and configure a GCP project for PraxOS development.
+This document describes how to create and configure a GCP project for IntexuraOS development.
 
 ## Prerequisites
 
@@ -13,10 +13,10 @@ This document describes how to create and configure a GCP project for PraxOS dev
 
 ```bash
 # Set your project ID (must be globally unique)
-export PROJECT_ID="praxos-dev-$(whoami | tr '.' '-')"
+export PROJECT_ID="intexuraos-dev-$(whoami | tr '.' '-')"
 
 # Create the project
-gcloud projects create $PROJECT_ID --name="PraxOS Dev"
+gcloud projects create $PROJECT_ID --name="IntexuraOS Dev"
 
 # Set as active project
 gcloud config set project $PROJECT_ID
@@ -31,7 +31,7 @@ gcloud billing projects link $PROJECT_ID --billing-account=$BILLING_ACCOUNT
 
 1. Go to [GCP Console](https://console.cloud.google.com/)
 2. Click project dropdown → "New Project"
-3. Enter project name: `PraxOS Dev`
+3. Enter project name: `IntexuraOS Dev`
 4. Note the generated Project ID
 5. Link billing in "Billing" section
 

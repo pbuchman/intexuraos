@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { praxosFastifyPlugin } from '../http/fastifyPlugin.js';
+import { intexuraFastifyPlugin } from '../http/fastifyPlugin.js';
 
-describe('praxosFastifyPlugin', () => {
+describe('intexuraFastifyPlugin', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = Fastify({ logger: false });
-    await app.register(praxosFastifyPlugin);
+    await app.register(intexuraFastifyPlugin);
 
     // Add test routes
     app.get('/test-ok', async (_req, reply) => {

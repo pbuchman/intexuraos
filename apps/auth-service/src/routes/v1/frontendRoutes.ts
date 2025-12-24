@@ -7,7 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@praxos/common';
+import { requireAuth } from '@intexuraos/common';
 import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import { loadAuth0Config } from './shared.js';
 

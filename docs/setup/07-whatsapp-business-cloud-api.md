@@ -1,6 +1,6 @@
 # WhatsApp Business Cloud API Setup
 
-This guide covers setting up the WhatsApp Business Cloud API for PraxOS integration.
+This guide covers setting up the WhatsApp Business Cloud API for IntexuraOS integration.
 
 > **Target date**: 2025-12-18. Steps reflect the expected Meta UI as of this date; if the UI differs, follow the closest matching screens and consult [official Meta documentation](https://developers.facebook.com/docs/whatsapp/cloud-api).
 
@@ -23,7 +23,7 @@ This guide covers setting up the WhatsApp Business Cloud API for PraxOS integrat
 3. Select use case: **Other**
 4. Select app type: **Business**
 5. Enter app details:
-   - **App name**: `PraxOS WhatsApp` (or your preferred name)
+   - **App name**: `IntexuraOS WhatsApp` (or your preferred name)
    - **App contact email**: Your email
    - **Business Account**: Select existing or create new
 6. Click **Create App**
@@ -104,7 +104,7 @@ For production, create a System User with a permanent token:
 1. Go to [Business Settings](https://business.facebook.com/settings/)
 2. Navigate to **Users** → **System users**
 3. Click **Add** to create a new system user:
-   - Name: `praxos-whatsapp-bot`
+   - Name: `intexuraos-whatsapp-bot`
    - Role: **Admin** (required for messaging)
 4. Click **Add Assets**:
    - Select **Apps** → your WhatsApp app
@@ -133,7 +133,7 @@ Webhooks allow your service to receive incoming messages and status updates.
 
 ### Callback URL Concept
 
-You need a publicly accessible HTTPS endpoint that Meta will call. This will be implemented in a future PraxOS service. For now, document your planned URL:
+You need a publicly accessible HTTPS endpoint that Meta will call. This will be implemented in a future IntexuraOS service. For now, document your planned URL:
 
 ```
 https://your-service.run.app/webhooks/whatsapp
@@ -145,7 +145,7 @@ https://your-service.run.app/webhooks/whatsapp
 2. Under **Webhook**, click **Edit**
 3. Configure:
    - **Callback URL**: Your service endpoint (must be HTTPS)
-   - **Verify token**: A secret string you create (e.g., `praxos_whatsapp_verify_abc123`)
+   - **Verify token**: A secret string you create (e.g., `intexuraos_whatsapp_verify_abc123`)
 4. Click **Verify and save**
 
 ### Webhook Verification Flow
@@ -238,7 +238,7 @@ curl -X POST "https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages" \
     "messaging_product": "whatsapp",
     "to": "'"${RECIPIENT_PHONE}"'",
     "type": "text",
-    "text": { "body": "Hello from PraxOS!" }
+    "text": { "body": "Hello from IntexuraOS!" }
   }'
 ```
 
@@ -390,8 +390,8 @@ curl -X POST "https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages" \
 
 ```bash
 # WhatsApp Business Cloud API - Required for whatsapp-service
-PRAXOS_WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
-PRAXOS_WHATSAPP_APP_SECRET=your-app-secret
+INTEXURAOS_WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
+INTEXURAOS_WHATSAPP_APP_SECRET=your-app-secret
 
 # Optional: for sending messages (not used by webhook service)
 WHATSAPP_ACCESS_TOKEN=your-access-token
@@ -403,13 +403,13 @@ WHATSAPP_WABA_ID=1234567890123456
 
 | Secret Name                       | Env Var                           | Purpose                      |
 | --------------------------------- | --------------------------------- | ---------------------------- |
-| `PRAXOS_WHATSAPP_VERIFY_TOKEN`    | `PRAXOS_WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
-| `PRAXOS_WHATSAPP_APP_SECRET`      | `PRAXOS_WHATSAPP_APP_SECRET`      | Webhook signature validation |
-| `PRAXOS_WHATSAPP_ACCESS_TOKEN`    | `PRAXOS_WHATSAPP_ACCESS_TOKEN`    | API authentication           |
-| `PRAXOS_WHATSAPP_PHONE_NUMBER_ID` | `PRAXOS_WHATSAPP_PHONE_NUMBER_ID` | Identify sender              |
-| `PRAXOS_WHATSAPP_WABA_ID`         | `PRAXOS_WHATSAPP_WABA_ID`         | Business account ID          |
+| `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
+| `INTEXURAOS_WHATSAPP_APP_SECRET`      | `INTEXURAOS_WHATSAPP_APP_SECRET`      | Webhook signature validation |
+| `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | API authentication           |
+| `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID` | `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID` | Identify sender              |
+| `INTEXURAOS_WHATSAPP_WABA_ID`         | `INTEXURAOS_WHATSAPP_WABA_ID`         | Business account ID          |
 
-## PraxOS WhatsApp Service
+## IntexuraOS WhatsApp Service
 
 The `whatsapp-service` app provides webhook endpoints for receiving WhatsApp events.
 
@@ -431,7 +431,7 @@ GET /webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challe
 
 The service:
 
-1. Validates `hub.verify_token` matches `PRAXOS_WHATSAPP_VERIFY_TOKEN`
+1. Validates `hub.verify_token` matches `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`
 2. Returns `hub.challenge` as plain text on success
 3. Returns 403 if token doesn't match
 
@@ -447,7 +447,7 @@ Content-Type: application/json
 
 The service:
 
-1. Validates `X-Hub-Signature-256` using `PRAXOS_WHATSAPP_APP_SECRET`
+1. Validates `X-Hub-Signature-256` using `INTEXURAOS_WHATSAPP_APP_SECRET`
 2. Returns 401 if signature header is missing
 3. Returns 403 if signature is invalid
 4. Persists valid events to Firestore (`whatsapp_webhook_events` collection)
@@ -460,8 +460,8 @@ The service:
 npm install
 
 # Set required environment variables
-export PRAXOS_WHATSAPP_VERIFY_TOKEN="your-verify-token"
-export PRAXOS_WHATSAPP_APP_SECRET="your-app-secret"
+export INTEXURAOS_WHATSAPP_VERIFY_TOKEN="your-verify-token"
+export INTEXURAOS_WHATSAPP_APP_SECRET="your-app-secret"
 
 # Build and run
 npm run build
@@ -477,8 +477,8 @@ docker build -f apps/whatsapp-service/Dockerfile -t whatsapp-service .
 
 # Run
 docker run -p 8080:8080 \
-  -e PRAXOS_WHATSAPP_VERIFY_TOKEN="your-verify-token" \
-  -e PRAXOS_WHATSAPP_APP_SECRET="your-app-secret" \
+  -e INTEXURAOS_WHATSAPP_VERIFY_TOKEN="your-verify-token" \
+  -e INTEXURAOS_WHATSAPP_APP_SECRET="your-app-secret" \
   whatsapp-service
 ```
 

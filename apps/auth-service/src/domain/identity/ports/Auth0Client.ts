@@ -3,7 +3,7 @@
  * Implemented by infra layer.
  */
 
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import type { RefreshResult } from '../models/AuthToken.js';
 import type { AuthError } from '../models/AuthError.js';
 

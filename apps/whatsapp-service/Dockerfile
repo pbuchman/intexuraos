@@ -1,4 +1,4 @@
-# PraxOS WhatsApp Service Dockerfile
+# IntexuraOS WhatsApp Service Dockerfile
 # Multi-stage build for minimal production image.
 
 # Stage 1: Build
@@ -20,7 +20,7 @@ COPY packages/common/ ./packages/common/
 COPY apps/whatsapp-service/ ./apps/whatsapp-service/
 
 # Build
-RUN npm run build --workspace=@praxos/common
+RUN npm run build --workspace=@intexuraos/common
 RUN npm run build --workspace=apps/whatsapp-service
 
 # Stage 2: Production
@@ -35,7 +35,7 @@ COPY packages/common/package*.json ./packages/common/
 
 # Install production dependencies
 RUN npm ci --omit=dev \
-    --workspace=@praxos/common \
+    --workspace=@intexuraos/common \
     --workspace=apps/whatsapp-service
 
 # Copy built files

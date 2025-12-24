@@ -1,7 +1,7 @@
-Create a professional, minimalist logo for a system called "PraxOS".
+Create a professional, minimalist logo for a system called "IntexuraOS".
 
 System meaning:
-PraxOS is an execution and automation system operating on top of structured human decisions.
+IntexuraOS is an execution and automation system operating on top of structured human decisions.
 It represents determinism, orchestration, and controlled execution.
 This is infrastructure-level software, not a consumer application.
 
@@ -16,7 +16,7 @@ Composition:
 
 - Square canvas.
 - Dense, compact, vertically centered composition.
-- Symbol above or tightly integrated with the logotype "PraxOS".
+- Symbol above or tightly integrated with the logotype "IntexuraOS".
 - Strong alignment and mechanical precision.
 
 Symbol direction:

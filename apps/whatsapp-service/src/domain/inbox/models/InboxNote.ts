@@ -2,7 +2,7 @@
  * Domain models for Inbox.
  * Pure domain entities with no external dependencies.
  */
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 
 /**
  * Source of the inbox note.
@@ -46,7 +46,7 @@ export type InboxProcessor = 'MasterNotesAssistant' | 'None' | 'Manual';
 /**
  * Topics for multi-select categorization.
  */
-export type InboxTopic = 'AI' | 'Work' | 'Health' | 'Fishing' | 'PraxOS' | 'Home' | 'Family';
+export type InboxTopic = 'AI' | 'Work' | 'Health' | 'Fishing' | 'IntexuraOS' | 'Home' | 'Family';
 
 /**
  * Core inbox note entity.

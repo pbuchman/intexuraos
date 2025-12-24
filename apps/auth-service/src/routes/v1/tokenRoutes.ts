@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr } from '@praxos/common';
+import { isErr } from '@intexuraos/common';
 import type { AuthTokens } from '../../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config, handleValidationError } from './shared.js';

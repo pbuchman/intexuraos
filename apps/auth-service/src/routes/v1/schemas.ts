@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Request device authorization code from Auth0.
  */
 export const deviceStartRequestSchema = z.object({
-  audience: z.string().url().optional().default('urn:praxos:api'),
+  audience: z.string().url().optional().default('urn:intexuraos:api'),
   scope: z.string().optional().default('openid profile email offline_access'),
 });
 

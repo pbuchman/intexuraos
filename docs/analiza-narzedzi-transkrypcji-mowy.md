@@ -1,4 +1,4 @@
-# Analiza Narzędzi Transkrypcji Mowy dla PraxOS
+# Analiza Narzędzi Transkrypcji Mowy dla IntexuraOS
 
 **Data analizy:** 23 grudnia 2025  
 **Kontekst:** Transkrypcja wiadomości głosowych zawierających luźne myśli, notatki, listy zadań i krótkie polecenia.  
@@ -207,7 +207,7 @@
 ❌ **Soniox** - Mimo najwyższej dokładności, słabe wsparcie kastomizacji
 
 - Głównie kontekst/instrukcje, nie dedykowane custom vocabulary
-- Dla przypadku użycia PraxOS to duża wada
+- Dla przypadku użycia IntexuraOS to duża wada
 
 ### 5.2 Fine-tuning Modeli
 
@@ -227,7 +227,7 @@
 - ✅ **Darmowy tier**: 480 minut/mies. do testów
 - ✅ **Batch + Real-time**: Pełna funkcjonalność
 
-**Dla PraxOS:**
+**Dla IntexuraOS:**
 
 - Idealny dla specjalistycznego słownictwa (nazwy, terminy techniczne)
 - Phonetic support kluczowy dla polskich nazw własnych
@@ -249,7 +249,7 @@
 - ✅ **Łatwość integracji**: Prosta, dobrze udokumentowana
 - ✅ **Batch processing**: Doskonały dla wsadowej transkrypcji
 
-**Dla PraxOS:**
+**Dla IntexuraOS:**
 
 - Najlepszy kompromis cena/jakość jeśli nie potrzeba custom vocabulary
 - Wystarczający dla większości przypadków
@@ -270,7 +270,7 @@
 - ✅ **Dobre funkcje**: Diarization, timestamps, PII redaction
 - ✅ **Przyzwoity WER**: ~12% dla polskiego
 
-**Dla PraxOS:**
+**Dla IntexuraOS:**
 
 - Dobry jeśli potrzeba real-time w przyszłości
 - Keyword Boost działa dobrze dla nazw własnych
@@ -292,7 +292,7 @@
 
 1. **Najlepsze dopasowanie do wymagań:**
    - ✅ Batch transcription - główny przypadek użycia
-   - ✅ Custom vocabulary z phonetic support - kluczowe dla PraxOS
+   - ✅ Custom vocabulary z phonetic support - kluczowe dla IntexuraOS
    - ✅ Doskonała dokładność dla polskiego (5% WER)
    - ✅ Nieformalny język - enhanced model doskonały
 
@@ -324,7 +324,7 @@ interface CustomWord {
 }
 
 const customVocabulary: CustomWord[] = [
-  { content: 'PraxOS', sounds_like: ['praksos', 'praxis'] },
+  { content: 'IntexuraOS', sounds_like: ['praksos', 'praxis'] },
   { content: 'Notion', sounds_like: ['noszyn'] },
   // ... więcej terminów
 ];
@@ -370,7 +370,7 @@ Przejść na **Deepgram** jeśli:
 
 - ⚠️ **Słabe wsparcie custom vocabulary** - główny powód odrzucenia
 - Mimo najwyższej dokładności (5-7% WER), brak kluczowej funkcjonalności
-- Dla przypadku PraxOS custom vocabulary > czysty WER
+- Dla przypadku IntexuraOS custom vocabulary > czysty WER
 
 **Kiedy rozważyć:**
 
@@ -504,5 +504,5 @@ Przejść na **Deepgram** jeśli:
 
 **Koniec dokumentu**  
 **Data:** 23 grudnia 2025  
-**Autor:** GitHub Copilot dla PraxOS  
+**Autor:** GitHub Copilot dla IntexuraOS  
 **Wersja:** 2.0 (pełna przebudowa z kompletnym zestawieniem)

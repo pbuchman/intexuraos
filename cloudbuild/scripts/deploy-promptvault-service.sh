@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 SERVICE="promptvault-service"
-CLOUD_RUN_SERVICE="praxos-promptvault-service"
+CLOUD_RUN_SERVICE="intexuraos-promptvault-service"
 
 require_env_vars REGION ARTIFACT_REGISTRY_URL COMMIT_SHA
 

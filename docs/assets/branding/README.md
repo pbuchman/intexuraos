@@ -1,6 +1,6 @@
-# PraxOS Branding Contract
+# IntexuraOS Branding Contract
 
-PraxOS has a single official branding direction (version 3: tight system framing).
+IntexuraOS has a single official branding direction (version 3: tight system framing).
 
 ## Rules
 

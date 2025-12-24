@@ -77,32 +77,32 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@praxos/*/src/*', '@praxos/*/src/**'],
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
               message:
                 'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
             },
             {
-              group: ['@praxos/auth-service', '@praxos/auth-service/**'],
+              group: ['@intexuraos/auth-service', '@intexuraos/auth-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@praxos/promptvault-service', '@praxos/promptvault-service/**'],
+              group: ['@intexuraos/promptvault-service', '@intexuraos/promptvault-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@praxos/notion-service', '@praxos/notion-service/**'],
+              group: ['@intexuraos/notion-service', '@intexuraos/notion-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@praxos/whatsapp-service', '@praxos/whatsapp-service/**'],
+              group: ['@intexuraos/whatsapp-service', '@intexuraos/whatsapp-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@praxos/api-docs-hub', '@praxos/api-docs-hub/**'],
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
-              group: ['@praxos/web', '@praxos/web/**'],
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],

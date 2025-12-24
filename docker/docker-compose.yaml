@@ -1,4 +1,4 @@
-# PraxOS Local Development Environment
+# IntexuraOS Local Development Environment
 # Usage: docker compose -f docker/docker-compose.yaml up --build
 
 services:
