@@ -390,7 +390,7 @@ This provides a stable identifier across sessions.
 | --------------- | ----------------------------- | ----------------------------------------------------- |
 | `AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                      |
+| `AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                  |
 
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
@@ -401,10 +401,10 @@ The auth-service provides Device Authorization Flow helpers for CLI/device authe
 
 ### Configuration
 
-| Variable          | Description              | Example                   |
-| ----------------- | ------------------------ | ------------------------- |
+| Variable          | Description              | Example                       |
+| ----------------- | ------------------------ | ----------------------------- |
 | `AUTH0_DOMAIN`    | Auth0 tenant domain      | `intexuraos-dev.eu.auth0.com` |
-| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`               |
+| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`                   |
 | `AUTH_AUDIENCE`   | API identifier (default) | `urn:intexuraos:api`          |
 
 If any required variable is missing, endpoints return `503 MISCONFIGURED`.

@@ -152,15 +152,15 @@ This application enables OAuth for ChatGPT custom GPTs.
 
 In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
 
-| Field                     | Value                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------- |
-| **Authentication Type**   | `OAuth`                                                                       |
-| **Client ID**             | From Auth0 → Your App → Settings → Client ID                                  |
-| **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                              |
+| Field                     | Value                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| **Authentication Type**   | `OAuth`                                                                           |
+| **Client ID**             | From Auth0 → Your App → Settings → Client ID                                      |
+| **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                                  |
 | **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
 | **Token URL**             | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/token`     |
-| **Scope**                 | `openid profile email offline_access`                                         |
-| **Token Exchange Method** | `Default (POST request)`                                                      |
+| **Scope**                 | `openid profile email offline_access`                                             |
+| **Token Exchange Method** | `Default (POST request)`                                                          |
 
 > **Important**: Both Authorization URL and Token URL must be on the same root domain as your API.
 > The auth-service `/authorize` endpoint redirects to Auth0 to satisfy ChatGPT's domain requirement.
@@ -212,7 +212,7 @@ From your tenant domain, derive:
 | `AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
 | `AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
 | `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_AUDIENCE` | `urn:intexuraos:api` (from API Identifier)                   |
+| `AUTH_AUDIENCE` | `urn:intexuraos:api` (from API Identifier)               |
 
 ## 6. Generate Encryption Key for Refresh Tokens
 
@@ -595,19 +595,19 @@ export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 
 ### auth-service
 
-| Variable                      | Description                               | Example                                                 |
-| ----------------------------- | ----------------------------------------- | ------------------------------------------------------- |
-| `AUTH0_DOMAIN`                | Auth0 tenant domain                       | `intexuraos-dev.eu.auth0.com`                               |
-| `AUTH0_CLIENT_ID`             | Native app client ID                      | `abc123...`                                             |
-| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:intexuraos:api`                                        |
-| `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification  | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`                 | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                     |
+| Variable                          | Description                               | Example                                                     |
+| --------------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `AUTH0_DOMAIN`                    | Auth0 tenant domain                       | `intexuraos-dev.eu.auth0.com`                               |
+| `AUTH0_CLIENT_ID`                 | Native app client ID                      | `abc123...`                                                 |
+| `AUTH_AUDIENCE`                   | API identifier (default for device flow)  | `urn:intexuraos:api`                                        |
+| `AUTH_JWKS_URL`                   | JWKS endpoint URL for token verification  | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `AUTH_ISSUER`                     | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                         |
 
 ### promptvault-service (and other protected services)
 
-| Variable        | Description       | Example                                                 |
-| --------------- | ----------------- | ------------------------------------------------------- |
+| Variable        | Description       | Example                                                     |
+| --------------- | ----------------- | ----------------------------------------------------------- |
 | `AUTH_JWKS_URL` | JWKS endpoint URL | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Token issuer      | `https://intexuraos-dev.eu.auth0.com/`                      |
 | `AUTH_AUDIENCE` | Expected audience | `urn:intexuraos:api`                                        |

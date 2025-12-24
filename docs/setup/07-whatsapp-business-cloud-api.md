@@ -401,8 +401,8 @@ WHATSAPP_WABA_ID=1234567890123456
 
 ### Production (Secret Manager via Terraform)
 
-| Secret Name                       | Env Var                           | Purpose                      |
-| --------------------------------- | --------------------------------- | ---------------------------- |
+| Secret Name                           | Env Var                               | Purpose                      |
+| ------------------------------------- | ------------------------------------- | ---------------------------- |
 | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
 | `INTEXURAOS_WHATSAPP_APP_SECRET`      | `INTEXURAOS_WHATSAPP_APP_SECRET`      | Webhook signature validation |
 | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | API authentication           |

@@ -197,16 +197,16 @@
 
 ### Domain Packages — All Colocate
 
-| Package                      | Owner App           | Multi-service?                  | Action                          |
-| ---------------------------- | ------------------- | ------------------------------- | ------------------------------- |
+| Package                          | Owner App           | Multi-service?                  | Action                          |
+| -------------------------------- | ------------------- | ------------------------------- | ------------------------------- |
 | `@intexuraos/domain-identity`    | auth-service        | No                              | Colocate                        |
 | `@intexuraos/domain-inbox`       | whatsapp-service    | No                              | Colocate                        |
 | `@intexuraos/domain-promptvault` | promptvault-service | Yes (notion-service uses types) | Colocate + extract shared types |
 
 ### Infra Packages — Mixed
 
-| Package                   | Shared Part           | Colocate Part              |
-| ------------------------- | --------------------- | -------------------------- |
+| Package                       | Shared Part           | Colocate Part              |
+| ----------------------------- | --------------------- | -------------------------- |
 | `@intexuraos/infra-auth0`     | None                  | All → auth-service         |
 | `@intexuraos/infra-firestore` | `getFirestore` client | Repositories → owning apps |
 | `@intexuraos/infra-notion`    | `NotionApiAdapter`    | Repositories → owning apps |

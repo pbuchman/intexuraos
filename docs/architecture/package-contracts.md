@@ -130,9 +130,9 @@ infra/
 
 ## Import Rules
 
-| From                    | Can Import                        |
-| ----------------------- | --------------------------------- |
-| `packages/common`       | nothing                           |
+| From                    | Can Import                            |
+| ----------------------- | ------------------------------------- |
+| `packages/common`       | nothing                               |
 | `apps/<app>/src/domain` | `@intexuraos/common`                  |
 | `apps/<app>/src/infra`  | `@intexuraos/common`, same-app domain |
 | `apps/<app>/src/v1`     | `@intexuraos/common`, same-app all    |
@@ -145,13 +145,13 @@ infra/
 
 ## Naming Conventions
 
-| Type           | Pattern                  | Example                  |
-| -------------- | ------------------------ | ------------------------ |
-| Shared package | `@intexuraos/common`         | `@intexuraos/common`         |
-| App            | `@intexuraos/<name>-service` | `@intexuraos/auth-service`   |
-| Repository     | `*Repository.ts`         | `authTokenRepository.ts` |
-| Use case       | `*UseCase.ts`            | `createPromptUseCase.ts` |
-| API adapter    | `*Api.ts`                | `promptApi.ts`           |
+| Type           | Pattern                      | Example                    |
+| -------------- | ---------------------------- | -------------------------- |
+| Shared package | `@intexuraos/common`         | `@intexuraos/common`       |
+| App            | `@intexuraos/<name>-service` | `@intexuraos/auth-service` |
+| Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |
+| Use case       | `*UseCase.ts`                | `createPromptUseCase.ts`   |
+| API adapter    | `*Api.ts`                    | `promptApi.ts`             |
 
 ## Verification
 
