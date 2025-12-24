@@ -280,8 +280,9 @@ steps:
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== web pipeline =====
+  # Step 1: Fetch secrets and write to .env file
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'build-web'
+    id: 'fetch-web-secrets'
     waitFor: ['npm-ci', 'detect-affected']
     entrypoint: 'bash'
     args:
@@ -289,13 +290,29 @@ steps:
       - |
         if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "Fetching secrets for web build..."
-          export INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
-          export INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
-          export INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-          export INTEXURAOS_AUTH_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_SERVICE_URL)
-          export INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
-          export INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
-          export INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
+          cat > /workspace/apps/web/.env << EOF
+        INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
+        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
+        INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
+        INTEXURAOS_AUTH_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_SERVICE_URL)
+        INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
+        INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
+        INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
+        EOF
+          echo "Secrets written to /workspace/apps/web/.env"
+        else
+          echo "web not affected, skipping secret fetch."
+        fi
+
+  # Step 2: Build web app with Node (reads .env file via Vite)
+  - name: 'node:22-slim'
+    id: 'build-web'
+    waitFor: ['fetch-web-secrets']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "Building web app..."
           npm run --workspace=@intexuraos/web build
           echo "Web app build complete."
