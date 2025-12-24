@@ -11,7 +11,7 @@
 - Coverage target: Currently 80/72/65/80, goal is 90/85/85/90
 - Test runner: Vitest with v8 coverage provider
 - Architecture: Apps in `apps/*`, shared utilities in `packages/common`
-- Import rules: apps can only import from `@praxos/common`
+- Import rules: apps can only import from `@intexuraos/common`
 - Colocated infra (`src/infra/**`) tested via integration tests through routes
 - Run `npm run ci` to verify all checks pass
 

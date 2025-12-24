@@ -5,7 +5,7 @@ benchmark: https://github.com/pbuchman/motorscope/blob/main/README.md
 STARTING POINTS:
 
 - Use the existing `README.md` and `docs/` directory for source content.
-- Reference the Swagger UI for API definitions: https://praxos-api-docs-hub-ooafxzbaua-lm.a.run.app/docs
+- Reference the Swagger UI for API definitions: https://intexuraos-api-docs-hub-ooafxzbaua-lm.a.run.app/docs
 
 README STRUCTURE — must include, in this order:
 

@@ -1,7 +1,7 @@
 /**
  * Use case for updating an existing prompt.
  */
-import { err, type Result } from '@praxos/common';
+import { err, type Result } from '@intexuraos/common';
 import type { Prompt, PromptId, PromptVaultError } from '../models/index.js';
 import { createPromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';

@@ -2,7 +2,7 @@
  * Use case for processing WhatsApp webhooks and creating inbox notes.
  * Implements the core business logic for phase 1 ingestion flow.
  */
-import { ok, err, type Result } from '@praxos/common';
+import { ok, err, type Result } from '@intexuraos/common';
 import type {
   InboxNote,
   InboxError,

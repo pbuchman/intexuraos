@@ -5,11 +5,11 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
 import {
-  praxosFastifyPlugin,
+  intexuraFastifyPlugin,
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
-} from '@praxos/common';
+} from '@intexuraos/common';
 import { v1AuthRoutes } from './routes/v1/routes.js';
 
 const SERVICE_NAME = 'auth-service';
@@ -40,7 +40,7 @@ function checkSecrets(): HealthCheck {
     'AUTH_JWKS_URL',
     'AUTH_ISSUER',
     'AUTH_AUDIENCE',
-    'PRAXOS_TOKEN_ENCRYPTION_KEY',
+    'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
   ];
   const missing = required.filter((k) => process.env[k] === undefined || process.env[k] === '');
 
@@ -101,7 +101,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      url: 'https://praxos-auth-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8080', description: 'Local' },
@@ -112,7 +112,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description: 'PraxOS Authentication Service - Device Authorization Flow helpers',
+        description: 'IntexuraOS Authentication Service - Device Authorization Flow helpers',
         version: SERVICE_VERSION,
       },
       servers,
@@ -214,10 +214,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Support application/x-www-form-urlencoded (OAuth2 standard)
   await app.register(fastifyFormbody);
 
-  await app.register(praxosFastifyPlugin);
+  await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  // Ensure Fastify validation errors are returned in PraxOS envelope
+  // Ensure Fastify validation errors are returned in IntexuraOS envelope
   app.setErrorHandler(async (error, request, reply) => {
     if (
       typeof error === 'object' &&

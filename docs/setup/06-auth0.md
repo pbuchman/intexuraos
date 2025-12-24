@@ -1,6 +1,6 @@
 # Auth0 Setup Guide (Updated 2025-12-22)
 
-This guide covers setting up Auth0 for PraxOS authentication:
+This guide covers setting up Auth0 for IntexuraOS authentication:
 
 1. **ChatGPT Actions OAuth** — Authorization Code flow for ChatGPT custom GPTs (primary)
 2. **Device Authorization Flow** — For testing with Swagger UI and CLI tools
@@ -33,7 +33,7 @@ Uses OAuth2 Device Authorization Flow for:
 
 1. Go to [Auth0 Dashboard](https://manage.auth0.com/)
 2. Click **Create Tenant**
-3. Choose a tenant name (e.g., `praxos-dev`)
+3. Choose a tenant name (e.g., `intexuraos-dev`)
 4. Select region closest to your deployment (e.g., `EU` for Europe)
 5. Note your tenant domain: `your-tenant.eu.auth0.com`
 
@@ -44,8 +44,8 @@ The API defines the audience identifier used for token validation.
 1. Go to **Applications** → **APIs**
 2. Click **Create API**
 3. Configure:
-   - **Name**: `PraxOS API`
-   - **Identifier**: `urn:praxos:api` (this is your `AUTH_AUDIENCE`)
+   - **Name**: `IntexuraOS API`
+   - **Identifier**: `urn:intexuraos:api` (this is your `AUTH_AUDIENCE`)
    - **Signing Algorithm**: `RS256`
 4. Click **Create**
 
@@ -69,7 +69,7 @@ This application is for **testing APIs via Swagger UI** and CLI tools using Devi
 1. Go to **Applications** → **Applications**
 2. Click **Create Application**
 3. Configure:
-   - **Name**: `PraxOS CLI / Swagger UI`
+   - **Name**: `IntexuraOS CLI / Swagger UI`
    - **Type**: `Native`
 4. Click **Create**
 
@@ -113,7 +113,7 @@ There is no separate tenant-level setting required. If you enabled "Device Code"
 
 To verify:
 
-1. Go to **Applications** → **Applications** → **PraxOS CLI / Swagger UI**
+1. Go to **Applications** → **Applications** → **IntexuraOS CLI / Swagger UI**
 2. Go to **Settings** → **Advanced Settings** → **Grant Types**
 3. Confirm **Device Code** is checked
 
@@ -157,8 +157,8 @@ In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
 | **Authentication Type**   | `OAuth`                                                                       |
 | **Client ID**             | From Auth0 → Your App → Settings → Client ID                                  |
 | **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                              |
-| **Authorization URL**     | `https://praxos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
-| **Token URL**             | `https://praxos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/token`     |
+| **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
+| **Token URL**             | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/token`     |
 | **Scope**                 | `openid profile email offline_access`                                         |
 | **Token Exchange Method** | `Default (POST request)`                                                      |
 
@@ -212,7 +212,7 @@ From your tenant domain, derive:
 | `AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
 | `AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
 | `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_AUDIENCE` | `urn:praxos:api` (from API Identifier)                   |
+| `AUTH_AUDIENCE` | `urn:intexuraos:api` (from API Identifier)                   |
 
 ## 6. Generate Encryption Key for Refresh Tokens
 
@@ -235,7 +235,7 @@ Save this key securely - you'll need it for Secret Manager.
 
 Terraform creates the secrets; you populate them with actual values using `gcloud secrets versions add`.
 
-> **Important**: Secrets are created by Terraform with names prefixed `PRAXOS_*`.
+> **Important**: Secrets are created by Terraform with names prefixed `INTEXURAOS_*`.
 > Use `versions add`, not `create`. The secrets already exist.
 
 ```bash
@@ -245,41 +245,41 @@ export PROJECT_ID=your-gcp-project-id
 # Set your Auth0 configuration values
 export AUTH0_DOMAIN="your-tenant.eu.auth0.com"
 export AUTH0_CLIENT_ID="your-native-app-client-id"
-export AUTH0_AUDIENCE="urn:praxos:api"
+export AUTH0_AUDIENCE="urn:intexuraos:api"
 export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
 
 # Populate secret versions (Terraform created the secrets, we add values)
 
 # Auth0 domain (tenant) - required for auth-service DAF endpoints
 echo -n "${AUTH0_DOMAIN}" | \
-  gcloud secrets versions add PRAXOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
 
 # Auth0 client ID (from Native app) - required for auth-service DAF endpoints
 echo -n "${AUTH0_CLIENT_ID}" | \
-  gcloud secrets versions add PRAXOS_AUTH0_CLIENT_ID --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=- --project=$PROJECT_ID
 
 # Auth JWKS URL - required for JWT verification
 echo -n "https://${AUTH0_DOMAIN}/.well-known/jwks.json" | \
-  gcloud secrets versions add PRAXOS_AUTH_JWKS_URL --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH_JWKS_URL --data-file=- --project=$PROJECT_ID
 
 # Auth issuer - required for JWT verification
 echo -n "https://${AUTH0_DOMAIN}/" | \
-  gcloud secrets versions add PRAXOS_AUTH_ISSUER --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH_ISSUER --data-file=- --project=$PROJECT_ID
 
 # Auth audience - required for JWT verification
 echo -n "${AUTH0_AUDIENCE}" | \
-  gcloud secrets versions add PRAXOS_AUTH_AUDIENCE --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH_AUDIENCE --data-file=- --project=$PROJECT_ID
 
 # Token encryption key - required for encrypting refresh tokens
 echo -n "${TOKEN_ENCRYPTION_KEY}" | \
-  gcloud secrets versions add PRAXOS_TOKEN_ENCRYPTION_KEY --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_TOKEN_ENCRYPTION_KEY --data-file=- --project=$PROJECT_ID
 ```
 
 To update an existing secret value:
 
 ```bash
 echo -n "new-value" | \
-  gcloud secrets versions add PRAXOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
+  gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
 ```
 
 ## 8. Authentication Flow (with Refresh Tokens)
@@ -291,7 +291,7 @@ echo -n "new-value" | \
 curl -X POST http://localhost:3000/v1/auth/device/start \
   -H "Content-Type: application/json" \
   -d '{
-    "audience": "urn:praxos:api",
+    "audience": "urn:intexuraos:api",
     "scope": "openid profile email offline_access"
   }'
 ```
@@ -566,8 +566,8 @@ export AUTH0_DOMAIN=your-tenant.eu.auth0.com
 export AUTH0_CLIENT_ID=your-client-id
 export AUTH_JWKS_URL=https://your-tenant.eu.auth0.com/.well-known/jwks.json
 export AUTH_ISSUER=https://your-tenant.eu.auth0.com/
-export AUTH_AUDIENCE=urn:praxos:api
-export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
+export AUTH_AUDIENCE=urn:intexuraos:api
+export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 ```
 
 ### Device Code Expired
@@ -597,20 +597,20 @@ export PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 
 | Variable                      | Description                               | Example                                                 |
 | ----------------------------- | ----------------------------------------- | ------------------------------------------------------- |
-| `AUTH0_DOMAIN`                | Auth0 tenant domain                       | `praxos-dev.eu.auth0.com`                               |
+| `AUTH0_DOMAIN`                | Auth0 tenant domain                       | `intexuraos-dev.eu.auth0.com`                               |
 | `AUTH0_CLIENT_ID`             | Native app client ID                      | `abc123...`                                             |
-| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:praxos:api`                                        |
-| `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification  | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`                 | Token issuer for verification             | `https://praxos-dev.eu.auth0.com/`                      |
-| `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                     |
+| `AUTH_AUDIENCE`               | API identifier (default for device flow)  | `urn:intexuraos:api`                                        |
+| `AUTH_JWKS_URL`               | JWKS endpoint URL for token verification  | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `AUTH_ISSUER`                 | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                     |
 
 ### promptvault-service (and other protected services)
 
 | Variable        | Description       | Example                                                 |
 | --------------- | ----------------- | ------------------------------------------------------- |
-| `AUTH_JWKS_URL` | JWKS endpoint URL | `https://praxos-dev.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`   | Token issuer      | `https://praxos-dev.eu.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected audience | `urn:praxos:api`                                        |
+| `AUTH_JWKS_URL` | JWKS endpoint URL | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `AUTH_ISSUER`   | Token issuer      | `https://intexuraos-dev.eu.auth0.com/`                      |
+| `AUTH_AUDIENCE` | Expected audience | `urn:intexuraos:api`                                        |
 
 ## 13. Troubleshooting Checklist
 

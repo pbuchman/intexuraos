@@ -1,4 +1,4 @@
-# PraxOS API Docs Hub Dockerfile
+# IntexuraOS API Docs Hub Dockerfile
 # Multi-stage build for minimal production image.
 
 # Stage 1: Build
@@ -20,8 +20,8 @@ COPY packages/common/ ./packages/common/
 COPY apps/api-docs-hub/ ./apps/api-docs-hub/
 
 # Build all packages in dependency order
-RUN npm run build --workspace=@praxos/common
-RUN npm run build --workspace=@praxos/api-docs-hub
+RUN npm run build --workspace=@intexuraos/common
+RUN npm run build --workspace=@intexuraos/api-docs-hub
 
 # Stage 2: Production
 FROM node:22-alpine AS production
@@ -34,7 +34,7 @@ COPY apps/api-docs-hub/package*.json ./apps/api-docs-hub/
 COPY packages/common/package*.json ./packages/common/
 
 # Install production dependencies only
-RUN npm ci --omit=dev --workspace=@praxos/common --workspace=apps/api-docs-hub
+RUN npm ci --omit=dev --workspace=@intexuraos/common --workspace=apps/api-docs-hub
 
 # Copy built files
 COPY --from=builder /app/packages/common/dist ./packages/common/dist

@@ -1,29 +1,24 @@
 <p align="center">
-  <img src="docs/assets/branding/exports/primary/logo-primary-light.png" alt="PraxOS Logo" width="280">
+  <img src="docs/assets/branding/exports/primary/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
 </p>
 
-<h1 align="center">PraxOS</h1>
+Derived from the Latin _intexere_ (to weave together) and _textura_ (structure), **IntexuraOS** is the integration fabric that interlaces external signals into your central model of truth.
+**Notion models the world. IntexuraOS executes.**
 
-<p align="center">
-  <strong>Notion models the world. PraxOS executes.</strong>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Node.js-22+-5FA04E?logo=node.js&logoColor=white" alt="Node.js 22+">
-  <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.7">
-  <img src="https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white" alt="Fastify">
-  <img src="https://img.shields.io/badge/Google%20Cloud-Run-4285F4?logo=googlecloud&logoColor=white" alt="Cloud Run">
-  <img src="https://img.shields.io/badge/Firestore-Native-FFCA28?logo=firebase&logoColor=black" alt="Firestore">
-  <img src="https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform&logoColor=white" alt="Terraform">
-  <img src="https://img.shields.io/badge/Auth0-OAuth2-EB5424?logo=auth0&logoColor=white" alt="Auth0">
-  <img src="https://img.shields.io/badge/Coverage-89%25+-brightgreen" alt="Coverage 89%+">
-</p>
+![Node.js 22+](https://img.shields.io/badge/Node.js-22+-5FA04E?logo=node.js&logoColor=white)
+![TypeScript 5.7](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white)
+![Cloud Run](https://img.shields.io/badge/Google%20Cloud-Run-4285F4?logo=googlecloud&logoColor=white)
+![Firestore](https://img.shields.io/badge/Firestore-Native-FFCA28?logo=firebase&logoColor=black)
+![Terraform](https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform&logoColor=white)
+![Auth0](https://img.shields.io/badge/Auth0-OAuth2-EB5424?logo=auth0&logoColor=white)
+![Coverage 89%+](https://img.shields.io/badge/Coverage-90%25+-brightgreen)
 
 ---
 
 ## Overview
 
-PraxOS is the execution layer for a personal operating system where **Notion serves as the single source of truth** for goals, projects, actions, and context. It bridges structured planning in Notion with automated execution via LLM-powered agents and integrations.
+IntexuraOS is the execution layer for a personal operating system where **Notion serves as the single source of truth** for goals, projects, actions, and context. It bridges structured planning in Notion with automated execution via LLM-powered agents and integrations.
 
 **Key use cases:**
 
@@ -56,7 +51,7 @@ PraxOS is the execution layer for a personal operating system where **Notion ser
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      PraxOS (Execution Layer)                   │
+│                      IntexuraOS (Execution Layer)                   │
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                       Apps Layer                          │   │
@@ -69,7 +64,7 @@ PraxOS is the execution layer for a personal operating system where **Notion ser
 │                             │                                    │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                      Common Layer                           ││
-│  │         @praxos/common (Result types, HTTP utils)           ││
+│  │         @intexuraos/common (Result types, HTTP utils)           ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -87,9 +82,9 @@ Each app owns its domain logic and infrastructure adapters:
 
 **Import rules** (enforced by `npm run verify:boundaries`):
 
-- Apps import only from `@praxos/common`
+- Apps import only from `@intexuraos/common`
 - Apps cannot import from other apps
-- `@praxos/common` imports nothing (leaf package)
+- `@intexuraos/common` imports nothing (leaf package)
 
 For detailed contracts, see [Package Contracts](docs/architecture/package-contracts.md).
 
@@ -97,14 +92,14 @@ For detailed contracts, see [Package Contracts](docs/architecture/package-contra
 
 ## Authentication Flow
 
-PraxOS supports two OAuth2 flows:
+IntexuraOS supports two OAuth2 flows:
 
 ### 1. ChatGPT Actions (Production)
 
 Authorization Code flow for custom GPTs:
 
 1. User activates GPT action → ChatGPT redirects to `/v1/auth/oauth/authorize`
-2. PraxOS redirects to Auth0 Universal Login
+2. IntexuraOS redirects to Auth0 Universal Login
 3. User authenticates → Auth0 returns authorization code
 4. ChatGPT exchanges code for tokens via `/v1/auth/oauth/token`
 5. Access token included in all subsequent API calls
@@ -143,7 +138,7 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 
 ## API Overview
 
-📖 **[Live API Documentation](https://praxos-api-docs-hub-ooafxzbaua-lm.a.run.app/docs)** — Unified Swagger UI
+📖 **[Live API Documentation](https://intexuraos-api-docs-hub-ooafxzbaua-lm.a.run.app/docs)** — Unified Swagger UI
 
 ### Services
 
@@ -157,7 +152,7 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 
 - **Authentication:** Bearer JWT in `Authorization` header
 - **JWKS validation:** Tokens verified against Auth0 JWKS endpoint
-- **Audience:** `urn:praxos:api`
+- **Audience:** `urn:intexuraos:api`
 - **Request tracing:** `X-Request-Id` header propagated across services
 
 ### Pagination
@@ -287,17 +282,17 @@ See [Notion Inbox Schema](docs/notion-inbox.md) for Notion property mappings.
 
 ### Secrets Management
 
-Secrets stored in **GCP Secret Manager** with `PRAXOS_*` prefix:
+Secrets stored in **GCP Secret Manager** with `INTEXURAOS_*` prefix:
 
 | Secret                        | Purpose                          |
 | ----------------------------- | -------------------------------- |
-| `PRAXOS_AUTH0_DOMAIN`         | Auth0 tenant domain              |
-| `PRAXOS_AUTH0_CLIENT_ID`      | Native app client ID             |
-| `PRAXOS_AUTH_JWKS_URL`        | JWKS endpoint for JWT validation |
-| `PRAXOS_AUTH_ISSUER`          | Expected JWT issuer              |
-| `PRAXOS_AUTH_AUDIENCE`        | Expected JWT audience            |
-| `PRAXOS_TOKEN_ENCRYPTION_KEY` | AES-256 key for refresh tokens   |
-| `PRAXOS_WHATSAPP_*`           | WhatsApp API credentials         |
+| `INTEXURAOS_AUTH0_DOMAIN`         | Auth0 tenant domain              |
+| `INTEXURAOS_AUTH0_CLIENT_ID`      | Native app client ID             |
+| `INTEXURAOS_AUTH_JWKS_URL`        | JWKS endpoint for JWT validation |
+| `INTEXURAOS_AUTH_ISSUER`          | Expected JWT issuer              |
+| `INTEXURAOS_AUTH_AUDIENCE`        | Expected JWT audience            |
+| `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 key for refresh tokens   |
+| `INTEXURAOS_WHATSAPP_*`           | WhatsApp API credentials         |
 
 ### Vulnerability Reports
 
@@ -319,8 +314,8 @@ Report security issues to the repository owner. Do not open public issues for se
 
 ```bash
 # Clone and install
-git clone https://github.com/your-org/praxos.git
-cd praxos
+git clone https://github.com/your-org/intexuraos.git
+cd intexuraos
 npm install
 
 # Start Firestore emulator
@@ -344,10 +339,10 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 # Auth (direct values for local dev)
 AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
 AUTH_ISSUER=https://your-tenant.auth0.com/
-AUTH_AUDIENCE=urn:praxos:api
+AUTH_AUDIENCE=urn:intexuraos:api
 AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_CLIENT_ID=your-client-id
-PRAXOS_TOKEN_ENCRYPTION_KEY=your-base64-32-byte-key
+INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-32-byte-key
 
 # Logging
 LOG_LEVEL=debug

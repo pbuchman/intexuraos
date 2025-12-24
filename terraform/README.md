@@ -1,6 +1,6 @@
-# PraxOS Terraform Infrastructure
+# IntexuraOS Terraform Infrastructure
 
-Terraform configuration for PraxOS GCP infrastructure.
+Terraform configuration for IntexuraOS GCP infrastructure.
 
 ## Structure
 

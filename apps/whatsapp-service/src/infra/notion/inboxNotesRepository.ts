@@ -8,7 +8,7 @@ import {
   createNotionClient,
   mapNotionError,
   type NotionError,
-} from '@praxos/common';
+} from '@intexuraos/common';
 import type { InboxNote } from '../../domain/inbox/index.js';
 
 /**

@@ -23,7 +23,7 @@ declare module 'fastify' {
   }
 }
 
-const praxosPlugin: FastifyPluginCallback = (
+const intexuraPlugin: FastifyPluginCallback = (
   fastify: FastifyInstance,
   _opts: Record<string, unknown>,
   done: (err?: Error) => void
@@ -89,7 +89,7 @@ const praxosPlugin: FastifyPluginCallback = (
   done();
 };
 
-export const praxosFastifyPlugin = fp(praxosPlugin, {
-  name: 'praxos-plugin',
+export const intexuraFastifyPlugin = fp(intexuraPlugin, {
+  name: 'intexura-plugin',
   fastify: '5.x',
 });

@@ -1,6 +1,6 @@
 /**
  * Creates a Result type for explicit error handling.
- * PraxOS follows "no dummy success" principle - failures must be explicit.
+ * IntexuraOS follows "no dummy success" principle - failures must be explicit.
  */
 export type Result<T, E = Error> =
   | { readonly ok: true; readonly value: T }

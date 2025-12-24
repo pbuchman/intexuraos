@@ -217,13 +217,13 @@ Note: Authentication state is managed by ChatGPT OAuth, not tracked in model sta
 # API ENDPOINTS REFERENCE
 
 ## Auth Service
-Base: `https://praxos-auth-service-ooafxzbaua-lm.a.run.app`
+Base: `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app`
 - OAuth authorization and token exchange handled by ChatGPT Actions
 - `GET /v1/auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
 - `POST /v1/auth/oauth/token` — Token exchange (used by ChatGPT)
 
 ## PromptVault Service
-Base: `https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app`
+Base: `https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app`
 - `GET /v1/integrations/notion/status` — Check Notion connection
 - `POST /v1/tools/notion/promptvault/prompts` — Save prompt to Notion
 

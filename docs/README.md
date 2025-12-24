@@ -1,10 +1,10 @@
-# PraxOS Documentation
+# IntexuraOS Documentation
 
 ## Philosophy
 
-**Notion models the world. PraxOS executes.**
+**Notion models the world. IntexuraOS executes.**
 
-PraxOS is the execution layer for a personal operating system where Notion serves as the single source of truth for goals, projects, actions, and context. PraxOS bridges the gap between structured planning in Notion and automated execution via LLM-powered agents.
+IntexuraOS is the execution layer for a personal operating system where Notion serves as the single source of truth for goals, projects, actions, and context. IntexuraOS bridges the gap between structured planning in Notion and automated execution via LLM-powered agents.
 
 ## Core Principles
 
@@ -34,7 +34,7 @@ Operations should be safe to retry. Running the same action twice with the same 
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  PraxOS (Execution)                     │
+│                  IntexuraOS (Execution)                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
 │  │ auth-service│  │notion-svc   │  │promptvault-svc  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────┘  │
@@ -59,7 +59,7 @@ For branding guidelines and assets, see [Branding](./assets/branding/README.md).
 
 ## Setup Guides
 
-Step-by-step guides for setting up PraxOS infrastructure:
+Step-by-step guides for setting up IntexuraOS infrastructure:
 
 1. [GCP Project Setup](./setup/01-gcp-project.md) - Create and configure GCP project
 2. [Terraform Bootstrap](./setup/02-terraform-bootstrap.md) - Initialize infrastructure

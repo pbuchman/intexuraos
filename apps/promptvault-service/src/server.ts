@@ -4,12 +4,12 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import {
-  praxosFastifyPlugin,
+  intexuraFastifyPlugin,
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
   type NotionLogger,
-} from '@praxos/common';
+} from '@intexuraos/common';
 import { v1Routes } from './routes/v1/routes.js';
 import { getServices } from './services.js';
 
@@ -124,7 +124,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
     {
       // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
       // The Cloud Run service name change requires a manual redeployment.
-      url: 'https://praxos-promptvault-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development) - Legacy URL',
     },
     { url: 'http://localhost:8081', description: 'Local' },
@@ -136,7 +136,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       info: {
         title: 'PromptVaultService',
         description:
-          'PraxOS PromptVault Service - CRUD operations for PromptVault prompts backed by Notion',
+          'IntexuraOS PromptVault Service - CRUD operations for PromptVault prompts backed by Notion',
         version: SERVICE_VERSION,
       },
       servers,
@@ -370,10 +370,10 @@ export async function buildServer(): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
-  await app.register(praxosFastifyPlugin);
+  await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  // Ensure Fastify validation errors are returned in PraxOS envelope
+  // Ensure Fastify validation errors are returned in IntexuraOS envelope
   app.setErrorHandler(async (error, request, reply) => {
     if (
       typeof error === 'object' &&

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ok, fail } from '../http/response.js';
 import { getRequestId, REQUEST_ID_HEADER } from '../http/requestId.js';
-import { PraxOSError, ERROR_HTTP_STATUS, getErrorMessage } from '../http/errors.js';
+import { IntexuraOSError, ERROR_HTTP_STATUS, getErrorMessage } from '../http/errors.js';
 
 describe('HTTP Response', () => {
   describe('ok()', () => {
@@ -113,9 +113,9 @@ describe('Request ID', () => {
   });
 });
 
-describe('PraxOSError', () => {
+describe('IntexuraOSError', () => {
   it('creates error with code and message', () => {
-    const error = new PraxOSError('NOT_FOUND', 'Resource not found');
+    const error = new IntexuraOSError('NOT_FOUND', 'Resource not found');
 
     expect(error.code).toBe('NOT_FOUND');
     expect(error.message).toBe('Resource not found');
@@ -124,7 +124,7 @@ describe('PraxOSError', () => {
   });
 
   it('creates error with details', () => {
-    const error = new PraxOSError('INVALID_REQUEST', 'Bad input', {
+    const error = new IntexuraOSError('INVALID_REQUEST', 'Bad input', {
       field: 'id',
     });
 
@@ -151,8 +151,8 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(error)).toBe('Something went wrong');
   });
 
-  it('extracts message from PraxOSError instance', () => {
-    const error = new PraxOSError('NOT_FOUND', 'Resource not found');
+  it('extracts message from IntexuraOSError instance', () => {
+    const error = new IntexuraOSError('NOT_FOUND', 'Resource not found');
     expect(getErrorMessage(error)).toBe('Resource not found');
   });
 

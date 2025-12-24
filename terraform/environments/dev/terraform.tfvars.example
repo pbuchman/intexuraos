@@ -1,4 +1,4 @@
-# PraxOS Dev Environment Terraform Variables
+# IntexuraOS Dev Environment Terraform Variables
 # Copy this file to terraform.tfvars and fill in your values.
 # DO NOT commit terraform.tfvars to version control.
 
@@ -15,7 +15,7 @@ environment = "dev"
 github_owner = "your-github-username"
 
 # GitHub repository name
-github_repo = "praxos"
+github_repo = "intexuraos"
 
 # GitHub branch to trigger builds
 github_branch = "development"

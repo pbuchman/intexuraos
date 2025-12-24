@@ -7,7 +7,7 @@ import * as jose from 'jose';
 import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { clearJwksCache } from '@praxos/common';
+import { clearJwksCache } from '@intexuraos/common';
 import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,
@@ -183,10 +183,10 @@ export function setupTestContext(): TestContext {
 
     clearJwksCache();
     process.env['VITEST'] = 'true';
-    process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
-    process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
-    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
-    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
+    process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
+    process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
+    process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
 
     context.app = await buildServer(testConfig);
   });
@@ -195,10 +195,10 @@ export function setupTestContext(): TestContext {
     await context.app.close();
     resetServices();
     delete process.env['VITEST'];
-    delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
-    delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
-    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
-    delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
+    delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
+    delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
   });
 
   return context;

@@ -4,11 +4,11 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import {
-  praxosFastifyPlugin,
+  intexuraFastifyPlugin,
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
-} from '@praxos/common';
+} from '@intexuraos/common';
 import { createV1Routes } from './routes/v1/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
 
@@ -93,7 +93,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      url: 'https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://intexuraos-whatsapp-service-ooafxzbaua-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8082', description: 'Local' },
@@ -104,7 +104,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description: 'PraxOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
+        description: 'IntexuraOS WhatsApp Service - WhatsApp Business Cloud API webhook handler',
         version: SERVICE_VERSION,
       },
       servers,
@@ -173,7 +173,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     }
   });
 
-  await app.register(praxosFastifyPlugin);
+  await app.register(intexuraFastifyPlugin);
 
   // Register shared schemas for $ref usage in routes
   app.addSchema({

@@ -2,7 +2,7 @@
 # Creates a public Google Cloud Storage bucket for static assets (branding, logos, docs visuals).
 
 resource "google_storage_bucket" "static_assets" {
-  name     = "praxos-static-assets-${var.environment}"
+  name     = "intexuraos-static-assets-${var.environment}"
   location = var.region
   project  = var.project_id
 

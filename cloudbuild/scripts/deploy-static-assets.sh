@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib.sh"
 
 require_env_vars ENVIRONMENT
 
-BUCKET="praxos-static-assets-${ENVIRONMENT}"
+BUCKET="intexuraos-static-assets-${ENVIRONMENT}"
 
 log "Syncing static assets"
 log "  Bucket: ${BUCKET}"

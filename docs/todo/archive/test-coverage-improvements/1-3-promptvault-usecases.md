@@ -149,5 +149,5 @@ npm run ci
 
 If tests fail due to Result type handling:
 
-1. Review Result/err/ok patterns in @praxos/common
+1. Review Result/err/ok patterns in @intexuraos/common
 2. Use isErr/isOk helpers for assertions

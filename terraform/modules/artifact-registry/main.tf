@@ -1,10 +1,10 @@
 # Artifact Registry Module
 # Creates a Docker repository for Cloud Run service images.
 
-resource "google_artifact_registry_repository" "praxos" {
+resource "google_artifact_registry_repository" "intexuraos" {
   location      = var.region
-  repository_id = "praxos-${var.environment}"
-  description   = "Docker repository for PraxOS ${var.environment} services"
+  repository_id = "intexuraos-${var.environment}"
+  description   = "Docker repository for IntexuraOS ${var.environment} services"
   format        = "DOCKER"
   labels        = var.labels
 

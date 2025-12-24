@@ -1,5 +1,5 @@
 /**
- * Error codes for PraxOS API responses.
+ * Error codes for IntexuraOS API responses.
  * These codes are stable and must not change meaning.
  */
 export type ErrorCode =
@@ -27,16 +27,16 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
 };
 
 /**
- * Base error class for PraxOS services.
+ * Base error class for IntexuraOS services.
  */
-export class PraxOSError extends Error {
+export class IntexuraOSError extends Error {
   readonly code: ErrorCode;
   readonly httpStatus: number;
   readonly details?: unknown;
 
   constructor(code: ErrorCode, message: string, details?: unknown) {
     super(message);
-    this.name = 'PraxOSError';
+    this.name = 'IntexuraOSError';
     this.code = code;
     this.httpStatus = ERROR_HTTP_STATUS[code];
     this.details = details;

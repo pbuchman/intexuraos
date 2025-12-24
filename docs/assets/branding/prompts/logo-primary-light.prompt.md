@@ -1,4 +1,4 @@
-Create a light-theme variant of the official PraxOS logo.
+Create a light-theme variant of the official IntexuraOS logo.
 
 Rules:
 
@@ -13,4 +13,4 @@ Color palette (light):
 - Accent color: same cyan or teal as the dark version.
 
 Deliver:
-A light-theme variant fully consistent with the official PraxOS logo.
+A light-theme variant fully consistent with the official IntexuraOS logo.
