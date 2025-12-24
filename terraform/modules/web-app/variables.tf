@@ -16,7 +16,7 @@ variable "environment" {
 variable "bucket_name" {
   description = "Base name for the storage bucket"
   type        = string
-  default     = "praxos-web"
+  default     = "intexuraos-web"
 }
 
 variable "labels" {

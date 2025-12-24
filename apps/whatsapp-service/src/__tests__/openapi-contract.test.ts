@@ -34,10 +34,10 @@ describe('whatsapp-service OpenAPI contract', () => {
 
   beforeAll(async () => {
     // Set required env vars
-    process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
-    process.env['PRAXOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
-    process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
-    process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
+    process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
+    process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
+    process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
     process.env['VITEST'] = 'true';
 
     app = await buildServer(testConfig);
@@ -50,10 +50,10 @@ describe('whatsapp-service OpenAPI contract', () => {
 
   afterAll(async () => {
     await app.close();
-    delete process.env['PRAXOS_WHATSAPP_VERIFY_TOKEN'];
-    delete process.env['PRAXOS_WHATSAPP_APP_SECRET'];
-    delete process.env['PRAXOS_WHATSAPP_ACCESS_TOKEN'];
-    delete process.env['PRAXOS_WHATSAPP_PHONE_NUMBER_ID'];
+    delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
+    delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     delete process.env['VITEST'];
   });
 
@@ -80,7 +80,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(servers).toBeDefined();
     expect(servers?.length).toBe(2);
 
-    expect(servers?.[0]?.url).toBe('https://praxos-whatsapp-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.url).toBe('https://intexuraos-whatsapp-service-ooafxzbaua-lm.a.run.app');
     expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
     expect(servers?.[1]?.url).toBe('http://localhost:8082');

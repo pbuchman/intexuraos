@@ -2,7 +2,7 @@
  * Firestore repository for Notion connection config.
  * Used to get user's Notion token for creating inbox notes.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import type { InboxError } from './webhookEventRepository.js';
 
 export interface NotionConnectionPublic {

@@ -1,6 +1,6 @@
 # API Contracts
 
-This document defines the API-level contracts for all PraxOS services.
+This document defines the API-level contracts for all IntexuraOS services.
 
 ## Response Envelopes
 
@@ -189,7 +189,7 @@ Each service exposes OpenAPI documentation.
 
 ### Runtime OpenAPI Aggregation
 
-PraxOS provides a central API documentation hub (`api-docs-hub`) that aggregates OpenAPI specs from all services.
+IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggregates OpenAPI specs from all services.
 
 #### Architecture
 
@@ -390,7 +390,7 @@ This provides a stable identifier across sessions.
 | --------------- | ----------------------------- | ----------------------------------------------------- |
 | `AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
 | `AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected token audience       | `urn:praxos:api`                                      |
+| `AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                  |
 
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
@@ -401,11 +401,11 @@ The auth-service provides Device Authorization Flow helpers for CLI/device authe
 
 ### Configuration
 
-| Variable          | Description              | Example                   |
-| ----------------- | ------------------------ | ------------------------- |
-| `AUTH0_DOMAIN`    | Auth0 tenant domain      | `praxos-dev.eu.auth0.com` |
-| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`               |
-| `AUTH_AUDIENCE`   | API identifier (default) | `urn:praxos:api`          |
+| Variable          | Description              | Example                       |
+| ----------------- | ------------------------ | ----------------------------- |
+| `AUTH0_DOMAIN`    | Auth0 tenant domain      | `intexuraos-dev.eu.auth0.com` |
+| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`                   |
+| `AUTH_AUDIENCE`   | API identifier (default) | `urn:intexuraos:api`          |
 
 If any required variable is missing, endpoints return `503 MISCONFIGURED`.
 
@@ -417,7 +417,7 @@ Start Device Authorization Flow. Returns device code and user code.
 
 ```json
 {
-  "audience": "urn:praxos:api",
+  "audience": "urn:intexuraos:api",
   "scope": "openid profile email"
 }
 ```
@@ -496,10 +496,10 @@ Get non-secret auth configuration for troubleshooting.
 {
   "success": true,
   "data": {
-    "domain": "praxos-dev.eu.auth0.com",
-    "issuer": "https://praxos-dev.eu.auth0.com/",
-    "audience": "urn:praxos:api",
-    "jwksUrl": "https://praxos-dev.eu.auth0.com/.well-known/jwks.json"
+    "domain": "intexuraos-dev.eu.auth0.com",
+    "issuer": "https://intexuraos-dev.eu.auth0.com/",
+    "audience": "urn:intexuraos:api",
+    "jwksUrl": "https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json"
   }
 }
 ```

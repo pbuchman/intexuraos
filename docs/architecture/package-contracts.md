@@ -1,11 +1,11 @@
 # Package Contracts
 
-This document defines the architectural contracts for PraxOS.
+This document defines the architectural contracts for IntexuraOS.
 These rules are enforced by ESLint boundaries, CI scripts, and code review.
 
 ## Architecture Overview
 
-PraxOS uses **app-first colocation**: each app owns its domain logic and infrastructure adapters.
+IntexuraOS uses **app-first colocation**: each app owns its domain logic and infrastructure adapters.
 
 ```
 apps/
@@ -74,7 +74,7 @@ domain/
 
 **Dependencies:**
 
-- `@praxos/common` ✓
+- `@intexuraos/common` ✓
 - Same-app `src/infra/` via ports only ✗ (domain should not import infra directly)
 
 ### apps/\*/src/infra/
@@ -108,7 +108,7 @@ infra/
 
 **Dependencies:**
 
-- `@praxos/common` ✓
+- `@intexuraos/common` ✓
 - Same-app `src/domain/` ✓
 
 ### apps/\*/src/routes/v1/
@@ -126,16 +126,16 @@ infra/
 
 - Same-app `src/domain/` ✓
 - Same-app `src/infra/` ✓ (via services.ts)
-- `@praxos/common` ✓
+- `@intexuraos/common` ✓
 
 ## Import Rules
 
-| From                    | Can Import                        |
-| ----------------------- | --------------------------------- |
-| `packages/common`       | nothing                           |
-| `apps/<app>/src/domain` | `@praxos/common`                  |
-| `apps/<app>/src/infra`  | `@praxos/common`, same-app domain |
-| `apps/<app>/src/v1`     | `@praxos/common`, same-app all    |
+| From                    | Can Import                            |
+| ----------------------- | ------------------------------------- |
+| `packages/common`       | nothing                               |
+| `apps/<app>/src/domain` | `@intexuraos/common`                  |
+| `apps/<app>/src/infra`  | `@intexuraos/common`, same-app domain |
+| `apps/<app>/src/v1`     | `@intexuraos/common`, same-app all    |
 
 **Forbidden:**
 
@@ -145,13 +145,13 @@ infra/
 
 ## Naming Conventions
 
-| Type           | Pattern                  | Example                  |
-| -------------- | ------------------------ | ------------------------ |
-| Shared package | `@praxos/common`         | `@praxos/common`         |
-| App            | `@praxos/<name>-service` | `@praxos/auth-service`   |
-| Repository     | `*Repository.ts`         | `authTokenRepository.ts` |
-| Use case       | `*UseCase.ts`            | `createPromptUseCase.ts` |
-| API adapter    | `*Api.ts`                | `promptApi.ts`           |
+| Type           | Pattern                      | Example                    |
+| -------------- | ---------------------------- | -------------------------- |
+| Shared package | `@intexuraos/common`         | `@intexuraos/common`       |
+| App            | `@intexuraos/<name>-service` | `@intexuraos/auth-service` |
+| Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |
+| Use case       | `*UseCase.ts`                | `createPromptUseCase.ts`   |
+| API adapter    | `*Api.ts`                    | `promptApi.ts`             |
 
 ## Verification
 

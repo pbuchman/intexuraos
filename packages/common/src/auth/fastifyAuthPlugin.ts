@@ -125,7 +125,7 @@ const authPlugin: FastifyPluginCallback = (
 };
 
 export const fastifyAuthPlugin = fp(authPlugin, {
-  name: 'praxos-auth-plugin',
+  name: 'intexura-auth-plugin',
   fastify: '5.x',
-  dependencies: ['praxos-plugin'],
+  dependencies: ['intexura-plugin'],
 });

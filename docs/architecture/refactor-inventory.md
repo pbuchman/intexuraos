@@ -13,7 +13,7 @@
 
 ## Domain Package Inventory (HISTORICAL)
 
-### `@praxos/domain-identity`
+### `@intexuraos/domain-identity`
 
 **Location:** `packages/domain/identity/`
 
@@ -34,7 +34,7 @@
 
 ---
 
-### `@praxos/domain-inbox`
+### `@intexuraos/domain-inbox`
 
 **Location:** `packages/domain/inbox/`
 
@@ -56,7 +56,7 @@
 
 ---
 
-### `@praxos/domain-promptvault`
+### `@intexuraos/domain-promptvault`
 
 **Location:** `packages/domain/promptvault/`
 
@@ -80,7 +80,7 @@
 **Analysis:** Both services share Notion connection types. Two migration strategies:
 
 1. **PREFERRED:** Move to `promptvault-service` and have `notion-service` depend on it (services coupling)
-2. **ALTERNATIVE:** Extract shared Notion types to a thin `@praxos/common-notion` types package
+2. **ALTERNATIVE:** Extract shared Notion types to a thin `@intexuraos/common-notion` types package
 
 **Proposed Owner:** `promptvault-service` (primary), with `notion-service` importing from it OR shared types extracted.
 
@@ -88,7 +88,7 @@
 
 ## Infra Package Inventory
 
-### `@praxos/infra-auth0`
+### `@intexuraos/infra-auth0`
 
 **Location:** `packages/infra/auth0/`
 
@@ -99,7 +99,7 @@
 |-----|--------|------|
 | auth-service | `Auth0ClientImpl`, `loadAuth0Config` | `v1/routes/tokenRoutes.ts` |
 
-**Dependencies:** `@praxos/common`, `@praxos/domain-identity`
+**Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`
 
 **Multi-service:** NO (auth-service only)
 
@@ -107,7 +107,7 @@
 
 ---
 
-### `@praxos/infra-firestore`
+### `@intexuraos/infra-firestore`
 
 **Location:** `packages/infra/firestore/`
 
@@ -134,7 +134,7 @@
 | whatsapp-service | Fakes | `__tests__/testUtils.ts` |
 | notion-service | `FirestoreNotionConnectionRepository` | `services.ts` |
 
-**Dependencies:** `@praxos/common`, `@praxos/domain-identity`, `@praxos/domain-promptvault`, `@praxos/domain-inbox`
+**Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`, `@intexuraos/domain-promptvault`, `@intexuraos/domain-inbox`
 
 **Multi-service:** YES (4 services)
 
@@ -154,7 +154,7 @@
 
 ---
 
-### `@praxos/infra-notion`
+### `@intexuraos/infra-notion`
 
 **Location:** `packages/infra/notion/`
 
@@ -175,7 +175,7 @@
 | notion-service | `MockNotionApiAdapter` | `__tests__/testUtils.ts` |
 | whatsapp-service | `NotionInboxNotesRepository` | `v1/routes/webhookRoutes.ts` |
 
-**Dependencies:** `@praxos/common`, `@praxos/domain-promptvault`, `@praxos/domain-inbox`, `@notionhq/client`
+**Dependencies:** `@intexuraos/common`, `@intexuraos/domain-promptvault`, `@intexuraos/domain-inbox`, `@notionhq/client`
 
 **Multi-service:** YES (3 services)
 
@@ -197,19 +197,19 @@
 
 ### Domain Packages — All Colocate
 
-| Package                      | Owner App           | Multi-service?                  | Action                          |
-| ---------------------------- | ------------------- | ------------------------------- | ------------------------------- |
-| `@praxos/domain-identity`    | auth-service        | No                              | Colocate                        |
-| `@praxos/domain-inbox`       | whatsapp-service    | No                              | Colocate                        |
-| `@praxos/domain-promptvault` | promptvault-service | Yes (notion-service uses types) | Colocate + extract shared types |
+| Package                          | Owner App           | Multi-service?                  | Action                          |
+| -------------------------------- | ------------------- | ------------------------------- | ------------------------------- |
+| `@intexuraos/domain-identity`    | auth-service        | No                              | Colocate                        |
+| `@intexuraos/domain-inbox`       | whatsapp-service    | No                              | Colocate                        |
+| `@intexuraos/domain-promptvault` | promptvault-service | Yes (notion-service uses types) | Colocate + extract shared types |
 
 ### Infra Packages — Mixed
 
-| Package                   | Shared Part           | Colocate Part              |
-| ------------------------- | --------------------- | -------------------------- |
-| `@praxos/infra-auth0`     | None                  | All → auth-service         |
-| `@praxos/infra-firestore` | `getFirestore` client | Repositories → owning apps |
-| `@praxos/infra-notion`    | `NotionApiAdapter`    | Repositories → owning apps |
+| Package                       | Shared Part           | Colocate Part              |
+| ----------------------------- | --------------------- | -------------------------- |
+| `@intexuraos/infra-auth0`     | None                  | All → auth-service         |
+| `@intexuraos/infra-firestore` | `getFirestore` client | Repositories → owning apps |
+| `@intexuraos/infra-notion`    | `NotionApiAdapter`    | Repositories → owning apps |
 
 ---
 

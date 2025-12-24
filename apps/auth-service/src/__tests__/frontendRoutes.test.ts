@@ -5,12 +5,12 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
-import { clearJwksCache } from '@praxos/common';
+import { clearJwksCache } from '@intexuraos/common';
 import { buildServer } from '../server.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:praxos:api';
+const AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('Frontend Auth Routes', () => {
   let app: FastifyInstance;

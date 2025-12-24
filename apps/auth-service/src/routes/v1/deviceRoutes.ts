@@ -6,7 +6,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr } from '@praxos/common';
+import { isErr } from '@intexuraos/common';
 import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import type { AuthTokens } from '../../domain/identity/index.js';
 import {

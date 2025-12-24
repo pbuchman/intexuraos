@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { ok, err } from '@praxos/common';
+import { ok, err } from '@intexuraos/common';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeAuth0Client } from './fakes.js';
@@ -22,7 +22,7 @@ describe('Token Refresh Routes', () => {
     delete process.env['AUTH0_DOMAIN'];
     delete process.env['AUTH0_CLIENT_ID'];
     delete process.env['AUTH_AUDIENCE'];
-    delete process.env['PRAXOS_TOKEN_ENCRYPTION_KEY'];
+    delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
 
     // Reset services before each test
     resetServices();

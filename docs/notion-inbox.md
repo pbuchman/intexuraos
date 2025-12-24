@@ -2,7 +2,7 @@
 
 ## 1. Located Databases
 
-- Parent page: [PraxOS – Notes & Actions Hub](https://www.notion.so/PraxOS-Notes-Actions-Hub-0b80a2d5448c4d2e8998c3ae265cfb12?pvs=21) ("PraxOS – Notes & Actions Hub")
+- Parent page: [IntexuraOS – Notes & Actions Hub](https://www.notion.so/IntexuraOS-Notes-Actions-Hub-0b80a2d5448c4d2e8998c3ae265cfb12?pvs=21) ("IntexuraOS – Notes & Actions Hub")
 - Inbox Notes (name + database ID): "View of Inbox" — [](https://www.notion.so/63256a187ac44648aa05e10efedcc7e8?pvs=21)
   - Data source (schema ID): [Inbox](https://www.notion.so/33132459790b81389db0000392254de6/ds/fd13e74a1128495fae248a70acf30f62?db=08a02c6880344364ae86e63688660fbd&pvs=21) ("📥 Inbox")
 - Inbox Actions (name + database ID): "View of Actions" — [](https://www.notion.so/1c220ddedf7a466994395d9290525a53?pvs=21)
@@ -32,7 +32,7 @@
 | Source                | Select        | unknown   | WhatsApp, Manual, WebClipper, Email, API, Automation                                                                                                                                   | WhatsApp                                   |
 | Message type          | Select        | unknown   | Text, Image, Video, Audio, Document, Mixed                                                                                                                                             | Audio                                      |
 | Type                  | Select        | unknown   | Web, Prompt, Meeting, Idea, Task, Log, Quote, Research, Other                                                                                                                          | Idea                                       |
-| Topic                 | Multi-select  | unknown   | AI, Work, Health, Fishing, PraxOS, Home, Family                                                                                                                                        | ["PraxOS","AI"]                            |
+| Topic                 | Multi-select  | unknown   | AI, Work, Health, Fishing, IntexuraOS, Home, Family                                                                                                                                    | ["IntexuraOS","AI"]                        |
 | Original text         | Rich text     | unknown   | Free text.                                                                                                                                                                             | "Raw WhatsApp message…"                    |
 | Clean text            | Rich text     | unknown   | Free text.                                                                                                                                                                             | "Normalized message…"                      |
 | Transcript            | Rich text     | unknown   | Free text.                                                                                                                                                                             | "Transcription…"                           |
@@ -122,7 +122,7 @@ Content-Type: application/json
     "Source": { "select": { "name": "WhatsApp" } },
     "Message type": { "select": { "name": "Text" } },
     "Type": { "select": { "name": "Other" } },
-    "Topic": { "multi_select": [{ "name": "PraxOS" }] },
+    "Topic": { "multi_select": [{ "name": "IntexuraOS" }] },
     "Original text": { "rich_text": [{ "text": { "content": "<RAW_MESSAGE_TEXT>" } }] },
     "Clean text": { "rich_text": [{ "text": { "content": "<CLEAN_TEXT>" } }] },
     "Transcript": { "rich_text": [{ "text": { "content": "<TRANSCRIPT>" } }] },
@@ -397,9 +397,9 @@ These IDs are valid ONLY for this specific workspace and will NOT work in other 
 
 ### Parent Page
 
-- **Page name**: PraxOS – Notes & Actions Hub
+- **Page name**: IntexuraOS – Notes & Actions Hub
 - **Page ID** (for API operations): `146e0b1ad6cb80238e95e51b2e43ec21`
-- **Page URL**: [PraxOS – Notes & Actions Hub](https://www.notion.so/PraxOS-Notes-Actions-Hub-0b80a2d5448c4d2e8998c3ae265cfb12?pvs=21)
+- **Page URL**: [IntexuraOS – Notes & Actions Hub](https://www.notion.so/IntexuraOS-Notes-Actions-Hub-0b80a2d5448c4d2e8998c3ae265cfb12?pvs=21)
 
 ### Inbox Notes Database
 

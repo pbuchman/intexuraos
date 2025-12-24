@@ -3,7 +3,7 @@
  * Stores per-user Auth0 tokens with encrypted refresh tokens.
  */
 
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import type {
   AuthTokenRepository,
   AuthTokens,

@@ -1,4 +1,4 @@
-# PraxOS Dev Environment
+# IntexuraOS Dev Environment
 # This is the main entry point for the dev environment.
 
 # Include root-level configurations
@@ -53,7 +53,7 @@ variable "github_owner" {
 variable "github_repo" {
   description = "GitHub repository name"
   type        = string
-  default     = "praxos"
+  default     = "intexuraos"
 }
 
 variable "github_branch" {
@@ -70,35 +70,35 @@ variable "github_connection_name" {
 locals {
   services = {
     auth_service = {
-      name      = "praxos-auth-service"
+      name      = "intexuraos-auth-service"
       app_path  = "apps/auth-service"
       port      = 8080
       min_scale = 0
       max_scale = 2
     }
     promptvault_service = {
-      name      = "praxos-promptvault-service"
+      name      = "intexuraos-promptvault-service"
       app_path  = "apps/promptvault-service"
       port      = 8080
       min_scale = 0
       max_scale = 2
     }
     notion_service = {
-      name      = "praxos-notion-service"
+      name      = "intexuraos-notion-service"
       app_path  = "apps/notion-service"
       port      = 8080
       min_scale = 0
       max_scale = 2
     }
     whatsapp_service = {
-      name      = "praxos-whatsapp-service"
+      name      = "intexuraos-whatsapp-service"
       app_path  = "apps/whatsapp-service"
       port      = 8080
       min_scale = 0
       max_scale = 2
     }
     api_docs_hub = {
-      name      = "praxos-api-docs-hub"
+      name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
       port      = 8080
       min_scale = 0
@@ -109,7 +109,7 @@ locals {
   common_labels = {
     environment = var.environment
     managed_by  = "terraform"
-    project     = "praxos"
+    project     = "intexuraos"
   }
 }
 
@@ -190,20 +190,20 @@ module "secret_manager" {
 
   secrets = {
     # Auth0 secrets
-    "PRAXOS_AUTH0_DOMAIN"        = "Auth0 tenant domain for Device Authorization Flow"
-    "PRAXOS_AUTH0_CLIENT_ID"     = "Auth0 Native app client ID for Device Authorization Flow"
-    "PRAXOS_AUTH0_SPA_CLIENT_ID" = "Auth0 SPA app client ID for web application"
-    "PRAXOS_AUTH_JWKS_URL"       = "Auth0 JWKS URL for JWT verification"
-    "PRAXOS_AUTH_ISSUER"         = "Auth0 issuer URL"
-    "PRAXOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
+    "INTEXURAOS_AUTH0_DOMAIN"        = "Auth0 tenant domain for Device Authorization Flow"
+    "INTEXURAOS_AUTH0_CLIENT_ID"     = "Auth0 Native app client ID for Device Authorization Flow"
+    "INTEXURAOS_AUTH0_SPA_CLIENT_ID" = "Auth0 SPA app client ID for web application"
+    "INTEXURAOS_AUTH_JWKS_URL"       = "Auth0 JWKS URL for JWT verification"
+    "INTEXURAOS_AUTH_ISSUER"         = "Auth0 issuer URL"
+    "INTEXURAOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
     # Token encryption key
-    "PRAXOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
+    "INTEXURAOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
-    "PRAXOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
-    "PRAXOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
-    "PRAXOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
-    "PRAXOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
-    "PRAXOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
+    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
+    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
+    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
+    "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
+    "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
   }
 
   depends_on = [google_project_service.apis]
@@ -242,12 +242,12 @@ module "auth_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/auth-service:latest"
 
   secrets = {
-    AUTH0_DOMAIN                = module.secret_manager.secret_ids["PRAXOS_AUTH0_DOMAIN"]
-    AUTH0_CLIENT_ID             = module.secret_manager.secret_ids["PRAXOS_AUTH0_CLIENT_ID"]
-    AUTH_JWKS_URL               = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                 = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE               = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
-    PRAXOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["PRAXOS_TOKEN_ENCRYPTION_KEY"]
+    AUTH0_DOMAIN                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
+    AUTH0_CLIENT_ID                 = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
+    AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
   }
 
   depends_on = [
@@ -273,9 +273,9 @@ module "promptvault_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
   }
 
   depends_on = [
@@ -302,9 +302,9 @@ module "notion_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["PRAXOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["PRAXOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["PRAXOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
   }
 
   depends_on = [
@@ -331,10 +331,10 @@ module "whatsapp_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
 
   secrets = {
-    PRAXOS_WHATSAPP_VERIFY_TOKEN    = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_VERIFY_TOKEN"]
-    PRAXOS_WHATSAPP_APP_SECRET      = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_APP_SECRET"]
-    PRAXOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_ACCESS_TOKEN"]
-    PRAXOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["PRAXOS_WHATSAPP_PHONE_NUMBER_ID"]
+    INTEXURAOS_WHATSAPP_VERIFY_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_VERIFY_TOKEN"]
+    INTEXURAOS_WHATSAPP_APP_SECRET      = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_APP_SECRET"]
+    INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
+    INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
   }
 
   depends_on = [

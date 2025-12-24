@@ -1,7 +1,7 @@
 /**
  * Firestore repository for WhatsApp webhook events.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@praxos/common';
+import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import { randomUUID } from 'node:crypto';
 
 export type WebhookProcessingStatus =

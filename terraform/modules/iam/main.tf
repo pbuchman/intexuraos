@@ -1,38 +1,38 @@
 # IAM Module
-# Creates service accounts and IAM bindings for PraxOS services.
+# Creates service accounts and IAM bindings for IntexuraOS services.
 
 # Service account for auth-service
 resource "google_service_account" "auth_service" {
-  account_id   = "praxos-auth-svc-${var.environment}"
-  display_name = "PraxOS Auth Service (${var.environment})"
+  account_id   = "intexuraos-auth-svc-${var.environment}"
+  display_name = "IntexuraOS Auth Service (${var.environment})"
   description  = "Service account for auth-service Cloud Run deployment"
 }
 
 # Service account for promptvault-service
 resource "google_service_account" "promptvault_service" {
-  account_id   = "praxos-pv-svc-${var.environment}"
-  display_name = "PraxOS PromptVault Service (${var.environment})"
+  account_id   = "intexuraos-pv-svc-${var.environment}"
+  display_name = "IntexuraOS PromptVault Service (${var.environment})"
   description  = "Service account for promptvault-service Cloud Run deployment"
 }
 
 # Service account for notion-service
 resource "google_service_account" "notion_service" {
-  account_id   = "praxos-notion-svc-${var.environment}"
-  display_name = "PraxOS Notion Service (${var.environment})"
+  account_id   = "intexuraos-notion-svc-${var.environment}"
+  display_name = "IntexuraOS Notion Service (${var.environment})"
   description  = "Service account for notion-service Cloud Run deployment"
 }
 
 # Service account for whatsapp-service
 resource "google_service_account" "whatsapp_service" {
-  account_id   = "praxos-whatsapp-svc-${var.environment}"
-  display_name = "PraxOS WhatsApp Service (${var.environment})"
+  account_id   = "intexuraos-whatsapp-svc-${var.environment}"
+  display_name = "IntexuraOS WhatsApp Service (${var.environment})"
   description  = "Service account for whatsapp-service Cloud Run deployment"
 }
 
 # Service account for api-docs-hub
 resource "google_service_account" "api_docs_hub" {
-  account_id   = "praxos-docs-hub-${var.environment}"
-  display_name = "PraxOS API Docs Hub (${var.environment})"
+  account_id   = "intexuraos-docs-hub-${var.environment}"
+  display_name = "IntexuraOS API Docs Hub (${var.environment})"
   description  = "Service account for api-docs-hub Cloud Run deployment"
 }
 

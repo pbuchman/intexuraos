@@ -5,21 +5,21 @@
  * POST /v1/webhooks/whatsapp - Webhook event receiver
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { webhookVerifyQuerySchema, type WebhookPayload } from './schemas.js';
-import { validateWebhookSignature, SIGNATURE_HEADER } from '../../signature.js';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
+import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
 import type { Config } from '../../config.js';
+import type { InboxError, InboxNote, InboxNotesRepository } from '../../domain/inbox/index.js';
 import { ProcessWhatsAppWebhookUseCase } from '../../domain/inbox/index.js';
 import { createInboxNote } from '../../infra/notion/index.js';
-import type { InboxNote, InboxNotesRepository, InboxError } from '../../domain/inbox/index.js';
-import type { Result } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
 import {
-  handleValidationError,
+  extractMessageId,
   extractPhoneNumberId,
   extractSenderPhoneNumber,
-  extractMessageId,
+  handleValidationError,
 } from './shared.js';
 
 /**
@@ -150,16 +150,40 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         },
       },
       async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) => {
-        // Get signature from header
-        const signature = request.headers[SIGNATURE_HEADER];
-
-        if (typeof signature !== 'string' || signature === '') {
-          return await reply.fail('UNAUTHORIZED', 'Missing X-Hub-Signature-256 header');
-        }
-
         // Get raw body for signature validation
         const rawBody =
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
+
+        try {
+          const headersObj = { ...(request.headers as Record<string, unknown>) };
+          if (typeof headersObj[SIGNATURE_HEADER] === 'string') {
+            const sig = headersObj[SIGNATURE_HEADER];
+            // Keep start and end visible, mask middle
+            const visible = 8;
+            if (sig.length > visible * 2) {
+              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, visible)}...${sig.substring(
+                sig.length - visible
+              )}`;
+            } else {
+              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, Math.min(4, sig.length))}...`;
+            }
+          }
+
+          request.log.info(
+            { event: 'incoming_whatsapp_webhook', headers: headersObj, rawBody },
+            'Received WhatsApp webhook POST'
+          );
+        } catch (logErr) {
+          // Best-effort logging - should not interrupt processing
+          request.log.debug({ error: logErr }, 'Failed to log incoming webhook');
+        }
+
+        // Get signature from header
+        const signature = request.headers[SIGNATURE_HEADER];
+        if (typeof signature !== 'string' || signature === '') {
+          return await reply.fail('UNAUTHORIZED', 'Missing X-Hub-Signature-256 header');
+        }
+        // Log incoming request (mask signature for safety)
 
         // Validate signature
         const signatureValid = validateWebhookSignature(rawBody, signature, config.appSecret);

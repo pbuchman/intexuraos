@@ -2,7 +2,7 @@
  * Unit tests for promptvault use cases.
  */
 import { describe, it, expect } from 'vitest';
-import { ok, err, isErr, type Result } from '@praxos/common';
+import { ok, err, isErr, type Result } from '@intexuraos/common';
 import {
   createPrompt,
   createCreatePromptUseCase,

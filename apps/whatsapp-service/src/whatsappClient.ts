@@ -3,7 +3,7 @@
  * Implements the WhatsApp Business Cloud API for outbound messaging.
  */
 
-import { getErrorMessage } from '@praxos/common';
+import { getErrorMessage } from '@intexuraos/common';
 
 /**
  * Send a text message via WhatsApp Graph API.

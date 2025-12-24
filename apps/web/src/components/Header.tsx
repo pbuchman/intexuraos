@@ -28,7 +28,7 @@ export function Header(): React.JSX.Element {
       <div className="flex items-center gap-3">
         <img
           src="/logo.png"
-          alt="PraxOS Logo"
+          alt="IntexuraOS Logo"
           className="h-8 w-8"
           onError={(e) => {
             e.currentTarget.style.display = 'none';

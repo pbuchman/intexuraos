@@ -4,11 +4,11 @@ This document describes the Cloud Run service configuration and operations.
 
 ## Services Overview
 
-| Service             | Cloud Run Name               | Port | Health Endpoint |
-| ------------------- | ---------------------------- | ---- | --------------- |
-| Auth Service        | `praxos-auth-service`        | 8080 | `/health`       |
-| PromptVault Service | `praxos-promptvault-service` | 8080 | `/health`       |
-| Notion Service      | `praxos-notion-service`      | 8080 | `/health`       |
+| Service             | Cloud Run Name                   | Port | Health Endpoint |
+| ------------------- | -------------------------------- | ---- | --------------- |
+| Auth Service        | `intexuraos-auth-service`        | 8080 | `/health`       |
+| PromptVault Service | `intexuraos-promptvault-service` | 8080 | `/health`       |
+| Notion Service      | `intexuraos-notion-service`      | 8080 | `/health`       |
 
 ## Service Configuration
 
@@ -26,11 +26,11 @@ All services are configured with:
 
 Services receive secrets from Secret Manager:
 
-| Environment Variable | Secret Name            |
-| -------------------- | ---------------------- |
-| `AUTH_JWKS_URL`      | `PRAXOS_AUTH_JWKS_URL` |
-| `AUTH_ISSUER`        | `PRAXOS_AUTH_ISSUER`   |
-| `AUTH_AUDIENCE`      | `PRAXOS_AUTH_AUDIENCE` |
+| Environment Variable | Secret Name                |
+| -------------------- | -------------------------- |
+| `AUTH_JWKS_URL`      | `INTEXURAOS_AUTH_JWKS_URL` |
+| `AUTH_ISSUER`        | `INTEXURAOS_AUTH_ISSUER`   |
+| `AUTH_AUDIENCE`      | `INTEXURAOS_AUTH_AUDIENCE` |
 
 ## View Service Status
 
@@ -39,11 +39,11 @@ Services receive secrets from Secret Manager:
 gcloud run services list
 
 # Get specific service details
-gcloud run services describe praxos-auth-service --region=europe-central2
-gcloud run services describe praxos-promptvault-service --region=europe-central2
+gcloud run services describe intexuraos-auth-service --region=europe-central2
+gcloud run services describe intexuraos-promptvault-service --region=europe-central2
 
 # Get service URL
-gcloud run services describe praxos-auth-service \
+gcloud run services describe intexuraos-auth-service \
   --region=europe-central2 \
   --format="value(status.url)"
 ```
@@ -52,16 +52,16 @@ gcloud run services describe praxos-auth-service \
 
 ```bash
 # Stream logs for auth-service
-gcloud run services logs read praxos-auth-service \
+gcloud run services logs read intexuraos-auth-service \
   --region=europe-central2 \
   --tail=50
 
 # Stream logs (follow mode)
-gcloud run services logs tail praxos-auth-service \
+gcloud run services logs tail intexuraos-auth-service \
   --region=europe-central2
 
 # Filter by severity
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=praxos-auth-service AND severity>=ERROR" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=intexuraos-auth-service AND severity>=ERROR" \
   --limit=20
 ```
 
@@ -73,11 +73,11 @@ Verify services are healthy:
 
 ```bash
 # Get service URLs
-AUTH_URL=$(gcloud run services describe praxos-auth-service \
+AUTH_URL=$(gcloud run services describe intexuraos-auth-service \
   --region=europe-central2 --format="value(status.url)")
-PROMPTVAULT_URL=$(gcloud run services describe praxos-promptvault-service \
+PROMPTVAULT_URL=$(gcloud run services describe intexuraos-promptvault-service \
   --region=europe-central2 --format="value(status.url)")
-NOTION_URL=$(gcloud run services describe praxos-notion-service \
+NOTION_URL=$(gcloud run services describe intexuraos-notion-service \
   --region=europe-central2 --format="value(status.url)")
 
 # Check health endpoints
@@ -121,20 +121,20 @@ Deploy a specific image manually:
 
 ```bash
 # Deploy auth-service
-gcloud run deploy praxos-auth-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/praxos-dev/auth-service:latest \
+gcloud run deploy intexuraos-auth-service \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/auth-service:latest \
   --region=europe-central2 \
   --platform=managed
 
 # Deploy promptvault-service
-gcloud run deploy praxos-promptvault-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/praxos-dev/promptvault-service:latest \
+gcloud run deploy intexuraos-promptvault-service \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/promptvault-service:latest \
   --region=europe-central2 \
   --platform=managed
 
 # Deploy notion-service
-gcloud run deploy praxos-notion-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/praxos-dev/notion-service:latest \
+gcloud run deploy intexuraos-notion-service \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/notion-service:latest \
   --region=europe-central2 \
   --platform=managed
 ```
@@ -145,12 +145,12 @@ Rollback to a previous revision:
 
 ```bash
 # List revisions
-gcloud run revisions list --service=praxos-auth-service --region=europe-central2
+gcloud run revisions list --service=intexuraos-auth-service --region=europe-central2
 
 # Route traffic to specific revision
-gcloud run services update-traffic praxos-auth-service \
+gcloud run services update-traffic intexuraos-auth-service \
   --region=europe-central2 \
-  --to-revisions=praxos-auth-service-00001-abc=100
+  --to-revisions=intexuraos-auth-service-00001-abc=100
 ```
 
 ## Troubleshooting
@@ -161,7 +161,7 @@ Check startup probe configuration and health endpoint.
 
 ```bash
 # View recent logs
-gcloud run services logs read praxos-auth-service \
+gcloud run services logs read intexuraos-auth-service \
   --region=europe-central2 \
   --limit=100
 ```
@@ -172,7 +172,7 @@ Ensure service account has `roles/secretmanager.secretAccessor` on all secrets.
 
 ```bash
 # Check IAM bindings
-gcloud secrets get-iam-policy PRAXOS_AUTH_JWKS_URL
+gcloud secrets get-iam-policy INTEXURAOS_AUTH_JWKS_URL
 ```
 
 ### Cold start issues
@@ -182,7 +182,7 @@ Services scale to zero. First request after idle period takes longer.
 To keep warm (not recommended for dev):
 
 ```bash
-gcloud run services update praxos-auth-service \
+gcloud run services update intexuraos-auth-service \
   --min-instances=1 \
   --region=europe-central2
 ```

@@ -66,7 +66,7 @@ describe('notion-service OpenAPI contract', () => {
     expect(servers).toBeDefined();
     expect(servers?.length).toBe(2);
 
-    expect(servers?.[0]?.url).toBe('https://praxos-notion-service-ooafxzbaua-lm.a.run.app');
+    expect(servers?.[0]?.url).toBe('https://intexuraos-notion-service-ooafxzbaua-lm.a.run.app');
     expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
     expect(servers?.[1]?.url).toBe('http://localhost:8082');

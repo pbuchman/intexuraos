@@ -10,8 +10,8 @@ import { ProcessWhatsAppWebhookUseCase } from '../domain/inbox/usecases/processW
 import type { WhatsAppWebhookPayload } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
 import { FakeWhatsAppWebhookEventRepository, FakeWhatsAppUserMappingRepository } from './fakes.js';
 import type { InboxNotesRepository, InboxNote, InboxError } from '../domain/inbox/index.js';
-import type { Result } from '@praxos/common';
-import { ok, err } from '@praxos/common';
+import type { Result } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common';
 
 /**
  * Fake inbox notes repository for testing.

@@ -4,7 +4,7 @@ This document describes the Cloud Build CI/CD pipeline and trigger configuration
 
 ## Overview
 
-PraxOS uses Cloud Build (2nd gen) to:
+IntexuraOS uses Cloud Build (2nd gen) to:
 
 1. Detect which services are affected by changes
 2. Build Docker images for affected services
@@ -31,10 +31,10 @@ Before running Terraform, you must create the GitHub connection manually.
 2. Select your project and region (`europe-central2`)
 3. Click **Create host connection**
 4. Select **GitHub** as the provider
-5. Enter connection name: `praxos-github-dev`
+5. Enter connection name: `intexuraos-github-dev`
 6. Click **Connect**
 7. Complete the GitHub OAuth authorization flow
-8. Grant access to your `praxos` repository
+8. Grant access to your `intexuraos` repository
 
 ### Step 2: Verify Connection
 
@@ -48,7 +48,7 @@ You should see:
 
 ```
 NAME                INSTALLATION_STATE
-praxos-github-dev   COMPLETE
+intexuraos-github-dev   COMPLETE
 ```
 
 ### Step 3: Add Connection Name to Terraform Variables
@@ -56,13 +56,13 @@ praxos-github-dev   COMPLETE
 Add to your `terraform.tfvars`:
 
 ```hcl
-github_connection_name = "praxos-github-dev"
+github_connection_name = "github-pbuchman"
 ```
 
 Or set via environment variable:
 
 ```bash
-export TF_VAR_github_connection_name="praxos-github-dev"
+export TF_VAR_github_connection_name="github-pbuchman"
 ```
 
 ### Step 4: Import Connection into Terraform State
@@ -78,7 +78,7 @@ terraform init
 # Import the connection (adjust PROJECT_ID to your project)
 terraform import \
   module.cloud_build.google_cloudbuildv2_connection.github \
-  projects/praxos-dev-pbuchman/locations/europe-central2/connections/praxos-github-dev
+  projects/intexuraos-dev-pbuchman/locations/europe-central2/connections/github-pbuchman
 ```
 
 ### Step 5: Run Terraform
@@ -89,7 +89,7 @@ terraform apply
 
 Terraform will:
 
-1. Link the `praxos` repository to the existing connection
+1. Link the `intexuraos` repository to the existing connection
 2. Create the webhook trigger for `development` branch
 3. Create the manual trigger for `main` branch
 
@@ -97,14 +97,14 @@ Terraform will:
 
 ### Webhook Trigger (Development)
 
-- **Name**: `praxos-dev-webhook`
+- **Name**: `intexuraos-dev-webhook`
 - **Branch**: `development` (regex: `^development$`)
 - **Event**: Push (automatic via Cloud Build GitHub App)
 - **Config**: `cloudbuild/cloudbuild.yaml`
 
 ### Manual Trigger (Main)
 
-- **Name**: `praxos-dev-manual`
+- **Name**: `intexuraos-dev-manual`
 - **Branch**: `main` (regex: `^main$`)
 - **State**: Disabled (run manually)
 - **Config**: `cloudbuild/cloudbuild.yaml`
@@ -162,12 +162,12 @@ Or use the [Cloud Build Console](https://console.cloud.google.com/cloud-build/bu
 
 ```bash
 # Trigger the manual (main) build
-gcloud builds triggers run praxos-dev-manual \
+gcloud builds triggers run intexuraos-dev-manual \
   --region=europe-central2 \
   --branch=main
 
 # Trigger the webhook (development) build manually
-gcloud builds triggers run praxos-dev-webhook \
+gcloud builds triggers run intexuraos-dev-webhook \
   --region=europe-central2 \
   --branch=development
 ```

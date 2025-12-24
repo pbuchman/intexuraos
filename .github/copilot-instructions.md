@@ -1,4 +1,4 @@
-# PraxOS — Copilot Instructions
+# IntexuraOS — Copilot Instructions
 
 **All rules below are verified by `npm run ci`. If CI passes, rules are satisfied.**
 
@@ -33,7 +33,7 @@ docs/           → All documentation
 **Import rules** (enforced by `npm run verify:boundaries`):
 
 - `packages/common` → imports nothing (leaf package)
-- `apps/*` → imports only from `@praxos/common`
+- `apps/*` → imports only from `@intexuraos/common`
 - apps cannot import from other apps
 
 **App structure pattern:**
@@ -317,8 +317,8 @@ export { routes } from './routes/index.js';
   return err({ code: 'INTERNAL_ERROR', message });
 }
 
-// ✅ Use getErrorMessage() from @praxos/common
-import { getErrorMessage } from '@praxos/common';
+// ✅ Use getErrorMessage() from @intexuraos/common
+import { getErrorMessage } from '@intexuraos/common';
 
 } catch (error) {
   return err({

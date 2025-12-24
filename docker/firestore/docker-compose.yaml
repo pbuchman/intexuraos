@@ -11,7 +11,7 @@
 services:
   firestore-emulator:
     image: google/cloud-sdk:emulators
-    container_name: praxos-firestore-emulator
+    container_name: intexuraos-firestore-emulator
     command:
       - gcloud
       - emulators

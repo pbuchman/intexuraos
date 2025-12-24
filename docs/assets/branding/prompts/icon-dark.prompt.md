@@ -1,4 +1,4 @@
-Create a square application icon for a system called "PraxOS".
+Create a square application icon for a system called "IntexuraOS".
 
 Important:
 
@@ -9,7 +9,7 @@ Important:
 - Must remain readable at 32x32 and 64x64 sizes.
 
 System meaning:
-PraxOS represents deterministic execution, orchestration, and system control.
+IntexuraOS represents deterministic execution, orchestration, and system control.
 This is infrastructure software, not a consumer application.
 
 Icon concept:
