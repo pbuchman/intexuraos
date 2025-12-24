@@ -25,10 +25,22 @@ import { randomUUID } from 'node:crypto';
  */
 export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventRepository {
   private events = new Map<string, WhatsAppWebhookEvent>();
+  private shouldFailSave = false;
+
+  /**
+   * Configure the fake to fail the next saveEvent call.
+   */
+  setFailNextSave(fail: boolean): void {
+    this.shouldFailSave = fail;
+  }
 
   saveEvent(
     event: Omit<WhatsAppWebhookEvent, 'id'>
   ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+    if (this.shouldFailSave) {
+      this.shouldFailSave = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
+    }
     const id = randomUUID();
     const fullEvent: WhatsAppWebhookEvent = { id, ...event };
     this.events.set(id, fullEvent);

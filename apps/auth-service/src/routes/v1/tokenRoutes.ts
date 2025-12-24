@@ -6,14 +6,10 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr } from '@praxos/common';
-import {
-  Auth0ClientImpl,
-  loadAuth0Config as loadAuth0ConfigFromInfra,
-} from '../../infra/auth0/index.js';
-import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import type { AuthTokens } from '../../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config, handleValidationError } from './shared.js';
+import { getServices } from '../../services.js';
 
 export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /v1/auth/refresh
@@ -90,18 +86,17 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { userId } = parseResult.data;
 
       try {
-        const tokenRepo = new FirestoreAuthTokenRepository();
-        const auth0ClientConfig = loadAuth0ConfigFromInfra();
-        if (auth0ClientConfig === null) {
+        const { authTokenRepository, auth0Client } = getServices();
+
+        if (auth0Client === null) {
           return await reply.fail(
             'MISCONFIGURED',
             'Auth0 is not configured for refresh operations.'
           );
         }
-        const auth0Client = new Auth0ClientImpl(auth0ClientConfig);
 
         // Get stored refresh token
-        const refreshTokenResult = await tokenRepo.getRefreshToken(userId);
+        const refreshTokenResult = await authTokenRepository.getRefreshToken(userId);
         if (isErr(refreshTokenResult)) {
           return await reply.fail(
             'INTERNAL_ERROR',
@@ -125,7 +120,7 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
           // If invalid_grant, delete stored token and require reauth
           if (error.code === 'INVALID_GRANT') {
-            await tokenRepo.deleteTokens(userId);
+            await authTokenRepository.deleteTokens(userId);
             return await reply.fail(
               'UNAUTHORIZED',
               'Refresh token is invalid or expired. User must re-authenticate.'
@@ -151,7 +146,7 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           idToken: newTokens.idToken,
         };
 
-        const saveResult = await tokenRepo.saveTokens(userId, tokensToStore);
+        const saveResult = await authTokenRepository.saveTokens(userId, tokensToStore);
         if (isErr(saveResult)) {
           fastify.log.warn(
             { userId, errorMessage: saveResult.error.message },
