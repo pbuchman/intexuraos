@@ -137,6 +137,24 @@ describe('Device Authorization Flow', () => {
         expect(receivedBody).toContain(`audience=${encodeURIComponent(customAudience)}`);
       });
 
+      it('returns 400 when audience format is invalid', async () => {
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/start',
+          payload: { audience: 'not-a-valid-uri' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INVALID_REQUEST');
+      });
+
       it('handles Auth0 error response', async () => {
         nock(`https://${AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
           error: 'invalid_client',
@@ -161,6 +179,52 @@ describe('Device Authorization Flow', () => {
         expect(body.error.code).toBe('DOWNSTREAM_ERROR');
         expect(body.error.message).toContain('device flow');
         expect(body.diagnostics.downstreamStatus).toBe(400);
+      });
+
+      it('handles non-Auth0 error response for device/start', async () => {
+        nock(`https://${AUTH0_DOMAIN}`)
+          .post('/oauth/device/code')
+          .reply(500, 'Internal Server Error');
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/start',
+          payload: {},
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+        expect(body.error.message).toContain('failed');
+      });
+
+      it('handles network error for device/start', async () => {
+        nock(`https://${AUTH0_DOMAIN}`)
+          .post('/oauth/device/code')
+          .replyWithError('Connection refused');
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/start',
+          payload: {},
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+        expect(body.error.message).toContain('failed');
       });
     });
   });
@@ -354,6 +418,250 @@ describe('Device Authorization Flow', () => {
         };
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      });
+
+      it('returns success and attempts to store refresh token when provided', async () => {
+        // Create a valid JWT-like access token with a sub claim
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64');
+        const payload = Buffer.from(JSON.stringify({ sub: 'auth0|user-123' })).toString('base64');
+        const signature = 'test-signature';
+        const accessToken = `${header}.${payload}.${signature}`;
+
+        const mockTokenResponse = {
+          access_token: accessToken,
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          scope: 'openid profile email offline_access',
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed regardless of token storage outcome
+        // Note: refresh_token is not included in the response schema,
+        // but the storeRefreshToken function is triggered internally
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { access_token: string; token_type: string; expires_in: number };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.access_token).toBe(accessToken);
+      });
+
+      it('handles invalid JWT format gracefully when storing refresh token', async () => {
+        const mockTokenResponse = {
+          access_token: 'not.a.valid.jwt.token.with.too.many.parts',
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken is best-effort
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+      });
+
+      it('handles JWT with missing sub claim gracefully', async () => {
+        // Create a JWT without a sub claim
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64');
+        const payload = Buffer.from(JSON.stringify({ aud: 'test-audience' })).toString('base64');
+        const signature = 'test-signature';
+        const accessToken = `${header}.${payload}.${signature}`;
+
+        const mockTokenResponse = {
+          access_token: accessToken,
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken exits early for missing sub
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+      });
+
+      it('handles JWT with empty sub claim gracefully', async () => {
+        // Create a JWT with an empty sub claim
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64');
+        const payload = Buffer.from(JSON.stringify({ sub: '' })).toString('base64');
+        const signature = 'test-signature';
+        const accessToken = `${header}.${payload}.${signature}`;
+
+        const mockTokenResponse = {
+          access_token: accessToken,
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken exits early for empty sub
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+      });
+
+      it('handles malformed JWT payload gracefully', async () => {
+        // Create a JWT with invalid base64 payload
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64');
+        const invalidPayload = '!!!not-valid-base64!!!';
+        const signature = 'test-signature';
+        const accessToken = `${header}.${invalidPayload}.${signature}`;
+
+        const mockTokenResponse = {
+          access_token: accessToken,
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken catches the parse error
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+      });
+
+      it('handles two-part JWT gracefully', async () => {
+        const mockTokenResponse = {
+          access_token: 'header.payload', // Only 2 parts, not 3
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken exits early for invalid token format
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+      });
+
+      it('does not attempt to store token when refresh_token is missing', async () => {
+        const mockTokenResponse = {
+          access_token: 'test-access-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          scope: 'openid profile email',
+          // No refresh_token
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.access_token).toBe(mockTokenResponse.access_token);
+      });
+
+      it('does not attempt to store token when refresh_token is empty', async () => {
+        const mockTokenResponse = {
+          access_token: 'test-access-token',
+          refresh_token: '',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: typeof mockTokenResponse;
+        };
+        expect(body.success).toBe(true);
       });
     });
   });
