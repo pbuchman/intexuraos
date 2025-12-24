@@ -15,7 +15,12 @@ import { ProcessWhatsAppWebhookUseCase } from '../../domain/inbox/index.js';
 import { createInboxNote } from '../../infra/notion/index.js';
 import type { Result } from '@intexuraos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
-import { extractMessageId, extractPhoneNumberId, extractSenderPhoneNumber, handleValidationError, } from './shared.js';
+import {
+  extractMessageId,
+  extractPhoneNumberId,
+  extractSenderPhoneNumber,
+  handleValidationError,
+} from './shared.js';
 
 /**
  * Creates webhook routes plugin with config.
