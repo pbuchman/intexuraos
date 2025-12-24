@@ -93,9 +93,32 @@ This will take several minutes. The longest steps are usually:
 
 ## 5. Populate Secrets
 
-Terraform creates empty secrets. You must populate them with actual values:
+Terraform creates empty secrets. You must populate them with actual values.
 
-### Auth0 Secrets
+### Option A: Interactive Script (Recommended)
+
+Use the interactive script to populate all secrets:
+
+```bash
+# From repository root
+./scripts/populate-secrets.sh
+
+# Or specify environment
+./scripts/populate-secrets.sh dev
+```
+
+The script will:
+
+1. Extract all secret names from Terraform configuration
+2. Prompt for each secret value (sensitive values are hidden)
+3. Skip secrets that already have values (with option to overwrite)
+4. Output a complete list of populated secrets at the end
+
+> **Important**: Save the final output - secret values won't be shown again!
+
+### Option B: Manual Population
+
+#### Auth0 Secrets
 
 ```bash
 # Set your Auth0 configuration

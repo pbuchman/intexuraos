@@ -56,13 +56,13 @@ intexuraos-github-dev   COMPLETE
 Add to your `terraform.tfvars`:
 
 ```hcl
-github_connection_name = "intexuraos-github-dev"
+github_connection_name = "github-pbuchman"
 ```
 
 Or set via environment variable:
 
 ```bash
-export TF_VAR_github_connection_name="intexuraos-github-dev"
+export TF_VAR_github_connection_name="github-pbuchman"
 ```
 
 ### Step 4: Import Connection into Terraform State
@@ -78,7 +78,7 @@ terraform init
 # Import the connection (adjust PROJECT_ID to your project)
 terraform import \
   module.cloud_build.google_cloudbuildv2_connection.github \
-  projects/intexuraos-dev-pbuchman/locations/europe-central2/connections/intexuraos-github-dev
+  projects/intexuraos-dev-pbuchman/locations/europe-central2/connections/github-pbuchman
 ```
 
 ### Step 5: Run Terraform

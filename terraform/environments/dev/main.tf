@@ -242,11 +242,11 @@ module "auth_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/auth-service:latest"
 
   secrets = {
-    AUTH0_DOMAIN                = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
-    AUTH0_CLIENT_ID             = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
-    AUTH_JWKS_URL               = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                 = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE               = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    AUTH0_DOMAIN                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
+    AUTH0_CLIENT_ID                 = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
+    AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
   }
 
