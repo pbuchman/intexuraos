@@ -71,7 +71,14 @@ variable "env_vars" {
 }
 
 variable "allow_unauthenticated" {
-  description = "Allow unauthenticated access to the service"
+  description = <<-EOT
+    Allow unauthenticated access (public) to the service.
+
+    Default: true - External callers (e.g., Meta webhooks) don't send IAM auth headers.
+    Services implement their own auth (JWT, webhook signatures).
+
+    Set to false only for internal-only services that require IAM authentication.
+  EOT
   type        = bool
   default     = true
 }

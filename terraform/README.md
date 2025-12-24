@@ -48,6 +48,34 @@ terraform apply
 | `iam`               | Service accounts with least-privilege IAM         |
 | `secret-manager`    | Application secrets storage                       |
 
+## Cloud Run Public Access
+
+All Cloud Run services are **public by default** (`allow_unauthenticated = true`).
+
+### Why public access is required
+
+External callers like Meta webhooks (WhatsApp Business API) do not send Google IAM authentication headers.
+Services must accept unauthenticated HTTP requests to receive these webhooks.
+
+Each service implements its own authentication:
+- **Webhook endpoints**: Validate signatures (e.g., `x-hub-signature-256` for WhatsApp)
+- **API endpoints**: Require JWT tokens validated via Auth0 JWKS
+
+### How to opt out per service
+
+To make a specific service private (require IAM authentication):
+
+```hcl
+module "my_private_service" {
+  source = "../../modules/cloud-run-service"
+  # ...other config...
+  
+  allow_unauthenticated = false  # Requires IAM authentication
+}
+```
+
+**Note**: Private services will reject requests without valid Google IAM credentials.
+
 ## Environments
 
 Currently only `dev` environment is configured. Production will follow the same pattern.
