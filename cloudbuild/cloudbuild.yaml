@@ -280,7 +280,7 @@ steps:
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== web pipeline =====
-  - name: 'node:22-slim'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'build-web'
     waitFor: ['npm-ci', 'detect-affected']
     entrypoint: 'bash'
@@ -288,6 +288,14 @@ steps:
       - '-c'
       - |
         if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+          echo "Fetching secrets for web build..."
+          export INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
+          export INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
+          export INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
+          export INTEXURAOS_AUTH_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_SERVICE_URL)
+          export INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
+          export INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
+          export INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
           echo "Building web app..."
           npm run --workspace=@intexuraos/web build
           echo "Web app build complete."

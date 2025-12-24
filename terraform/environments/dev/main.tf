@@ -204,6 +204,11 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
+    # Web frontend service URLs (public, non-sensitive)
+    "INTEXURAOS_AUTH_SERVICE_URL"       = "Auth service Cloud Run URL for web frontend"
+    "INTEXURAOS_PROMPTVAULT_SERVICE_URL" = "PromptVault service Cloud Run URL for web frontend"
+    "INTEXURAOS_WHATSAPP_SERVICE_URL"   = "WhatsApp service Cloud Run URL for web frontend"
+    "INTEXURAOS_NOTION_SERVICE_URL"     = "Notion service Cloud Run URL for web frontend"
   }
 
   depends_on = [google_project_service.apis]

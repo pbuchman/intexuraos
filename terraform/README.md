@@ -58,6 +58,7 @@ External callers like Meta webhooks (WhatsApp Business API) do not send Google I
 Services must accept unauthenticated HTTP requests to receive these webhooks.
 
 Each service implements its own authentication:
+
 - **Webhook endpoints**: Validate signatures (e.g., `x-hub-signature-256` for WhatsApp)
 - **API endpoints**: Require JWT tokens validated via Auth0 JWKS
 
@@ -69,7 +70,7 @@ To make a specific service private (require IAM authentication):
 module "my_private_service" {
   source = "../../modules/cloud-run-service"
   # ...other config...
-  
+
   allow_unauthenticated = false  # Requires IAM authentication
 }
 ```

@@ -92,4 +92,5 @@ export interface AppConfig {
   authServiceUrl: string;
   promptVaultServiceUrl: string;
   whatsappServiceUrl: string;
+  notionServiceUrl: string;
 }
