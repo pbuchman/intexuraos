@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/branding/exports/primary/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
+  <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
 </p>
 
 Derived from the Latin _intexere_ (to weave together) and _textura_ (structure), **IntexuraOS** is the integration fabric that interlaces external signals into your central model of truth.
