@@ -21,4 +21,4 @@ github_repo = "intexuraos"
 github_branch = "development"
 
 # Cloud Build GitHub connection name
-github_connection_name = "github-connection"
+github_connection_name = "github-pbuchman"

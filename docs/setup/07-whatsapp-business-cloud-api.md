@@ -23,7 +23,7 @@ This guide covers setting up the WhatsApp Business Cloud API for IntexuraOS inte
 3. Select use case: **Other**
 4. Select app type: **Business**
 5. Enter app details:
-   - **App name**: `IntexuraOS WhatsApp` (or your preferred name)
+   - **App name**: `Intexura`
    - **App contact email**: Your email
    - **Business Account**: Select existing or create new
 6. Click **Create App**
