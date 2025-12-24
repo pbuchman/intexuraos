@@ -406,7 +406,7 @@ npm run test
 
 | Environment | Branch        | URL Pattern                 |
 | ----------- | ------------- | --------------------------- |
-| dev         | `development` | `*-ooafxzbaua-lm.a.run.app` |
+| dev         | `development` | `*-cj44trunra-lm.a.run.app` |
 | staging     | `staging`     | (planned)                   |
 | prod        | `main`        | (planned)                   |
 

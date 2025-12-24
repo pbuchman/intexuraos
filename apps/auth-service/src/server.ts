@@ -101,7 +101,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      url: 'https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://intexuraos-auth-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8080', description: 'Local' },
