@@ -223,7 +223,7 @@ Base: `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app`
 - `POST /v1/auth/oauth/token` — Token exchange (used by ChatGPT)
 
 ## PromptVault Service
-Base: `https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app`
+Base: `https://intexuraos-promptvault-service-cj44trunra-lm.a.run.app`
 - `GET /v1/integrations/notion/status` — Check Notion connection
 - `POST /v1/tools/notion/promptvault/prompts` — Save prompt to Notion
 

@@ -158,7 +158,7 @@ In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
 | **Client ID**             | From Auth0 → Your App → Settings → Client ID                                      |
 | **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                                  |
 | **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
-| **Token URL**             | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/token`     |
+| **Token URL**             | `https://intexuraos-auth-service-cj44trunra-lm.a.run.app/v1/auth/oauth/token`     |
 | **Scope**                 | `openid profile email offline_access`                                             |
 | **Token Exchange Method** | `Default (POST request)`                                                          |
 
