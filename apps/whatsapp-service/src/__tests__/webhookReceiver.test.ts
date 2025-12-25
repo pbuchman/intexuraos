@@ -176,6 +176,63 @@ describe('POST /v1/webhooks/whatsapp (webhook event receiver)', () => {
     expect(events.length).toBe(0);
   });
 
+  it('returns 403 when phone_number_id is not in allowed list', async () => {
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: 'WABA_ID',
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: '+1234567890',
+                  phone_number_id: 'unknown-phone-id-not-allowed',
+                },
+                messages: [
+                  {
+                    from: '15551234567',
+                    id: 'wamid.XXXXX',
+                    timestamp: '1234567890',
+                    type: 'text',
+                    text: { body: 'Test' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const payloadString = JSON.stringify(payload);
+    const signature = createSignature(payloadString, testConfig.appSecret);
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signature,
+      },
+      payload: payloadString,
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('not allowed');
+
+    // Should not persist event when phone_number_id doesn't match
+    const events = ctx.webhookEventRepository.getAll();
+    expect(events.length).toBe(0);
+  });
+
   it('handles status updates correctly', async () => {
     const statusPayload = {
       object: 'whatsapp_business_account',
