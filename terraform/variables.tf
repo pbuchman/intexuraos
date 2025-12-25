@@ -32,3 +32,19 @@ variable "github_branch" {
   default     = "development"
 }
 
+variable "github_connection_name" {
+  description = "Name of the Cloud Build GitHub connection (created manually via GCP Console)"
+  type        = string
+}
+
+variable "enable_load_balancer" {
+  description = "Enable Cloud Load Balancer with CDN for web app SPA hosting"
+  type        = bool
+  default     = false
+}
+
+variable "web_app_domain" {
+  description = "Domain name for the web app (e.g., intexuraos.pbuchman.com)"
+  type        = string
+  default     = ""
+}
