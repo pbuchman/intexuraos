@@ -23,3 +23,13 @@ output "website_url" {
   value       = var.enable_load_balancer && var.domain != "" ? "https://${var.domain}" : "https://storage.googleapis.com/${google_storage_bucket.web_app.name}/index.html"
 }
 
+output "web_app_dns_a_record_hint" {
+  description = "DNS A record to create in Route53 or your DNS provider"
+  value       = var.enable_load_balancer && var.domain != "" ? "${var.domain} A ${google_compute_global_address.web_app[0].address}" : null
+}
+
+output "web_app_cert_name" {
+  description = "Managed SSL certificate resource name (check status: gcloud compute ssl-certificates describe <name>)"
+  value       = var.enable_load_balancer && var.domain != "" ? google_compute_managed_ssl_certificate.web_app[0].name : null
+}
+
