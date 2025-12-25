@@ -60,6 +60,9 @@ resource "google_compute_global_address" "web_app" {
 }
 
 # Backend bucket pointing to the GCS bucket
+# NOTE: Cache policy relies on origin headers. Upload strategy:
+#   - index.html: Cache-Control: no-cache, max-age=0, must-revalidate
+#   - assets/*:   Cache-Control: public, max-age=31536000, immutable
 resource "google_compute_backend_bucket" "web_app" {
   count       = var.enable_load_balancer ? 1 : 0
   name        = "intexuraos-web-${var.environment}-backend"
@@ -68,11 +71,8 @@ resource "google_compute_backend_bucket" "web_app" {
   enable_cdn  = true
 
   cdn_policy {
-    cache_mode        = "CACHE_ALL_STATIC"
-    default_ttl       = 3600
-    max_ttl           = 86400
-    negative_caching  = true
-    serve_while_stale = 86400
+    cache_mode       = "USE_ORIGIN_HEADERS"
+    negative_caching = true
   }
 
   # Custom response headers
@@ -92,8 +92,8 @@ resource "google_compute_url_map" "web_app" {
   # SPA fallback: return index.html for 404 errors (deep links)
   default_custom_error_response_policy {
     error_response_rule {
-      match_response_codes = ["404"]
-      path                 = "/index.html"
+      match_response_codes   = ["404"]
+      path                   = "/index.html"
       override_response_code = 200
     }
   }
@@ -111,15 +111,30 @@ resource "google_compute_url_map" "web_app" {
     # SPA fallback for this path matcher
     custom_error_response_policy {
       error_response_rule {
-        match_response_codes = ["404"]
-        path                 = "/index.html"
+        match_response_codes   = ["404"]
+        path                   = "/index.html"
         override_response_code = 200
       }
     }
 
-    # Static assets served directly (no rewrite)
+    # Static assets served directly (no rewrite, no SPA fallback)
+    # Covers: Vite/React assets, fonts, icons, manifests, robots
     path_rule {
-      paths   = ["/assets/*", "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg"]
+      paths = [
+        "/assets/*",
+        "/static/*",
+        "/fonts/*",
+        "/*.js",
+        "/*.css",
+        "/*.ico",
+        "/*.png",
+        "/*.svg",
+        "/*.woff",
+        "/*.woff2",
+        "/favicon.ico",
+        "/robots.txt",
+        "/manifest.webmanifest",
+      ]
       service = google_compute_backend_bucket.web_app[0].id
     }
   }
