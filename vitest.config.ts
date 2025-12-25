@@ -5,14 +5,14 @@ export default defineConfig({
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    // Run tests sequentially to avoid emulator race conditions
+    // Run tests sequentially to avoid race conditions in shared state
     pool: 'forks',
     poolOptions: {
       forks: {
         singleFork: true,
       },
     },
-    // Longer timeout for emulator operations
+    // Standard timeout for async operations
     testTimeout: 10000,
     hookTimeout: 30000,
     coverage: {

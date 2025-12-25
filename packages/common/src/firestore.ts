@@ -26,7 +26,7 @@ export function resetFirestore(): void {
 }
 
 /**
- * Set a custom Firestore instance (for testing with emulator).
+ * Set a custom Firestore instance (for testing).
  */
 export function setFirestore(instance: Firestore): void {
   firestoreInstance = instance;

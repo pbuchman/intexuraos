@@ -91,8 +91,7 @@ export interface TestContext {
  * Setup test environment with mock services.
  * Returns context that must be used in tests.
  *
- * Note: With colocated infra, service injection isn't supported.
- * Tests need to use the Firestore emulator or mock at the HTTP level.
+ * Note: Tests use fake repositories (in-memory) via dependency injection.
  */
 export function setupTestContext(): TestContext {
   const context: TestContext = {

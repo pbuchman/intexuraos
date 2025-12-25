@@ -305,7 +305,6 @@ Report security issues to the repository owner. Do not open public issues for se
 ### Prerequisites
 
 - Node.js 22+
-- Docker (for Firestore emulator)
 - GCP project with billing enabled
 - Auth0 account (free tier works)
 - Terraform 1.5+
@@ -318,10 +317,7 @@ git clone https://github.com/your-org/intexuraos.git
 cd intexuraos
 npm install
 
-# Start Firestore emulator
-npm run emulator:start
-
-# Run tests
+# Run tests (uses in-memory fakes, no external deps)
 npm run ci
 
 # Start services locally
@@ -388,14 +384,14 @@ npm run test:coverage     # With coverage report
 - **Notion:** Fake adapter in `apps/*/src/__tests__/fakes.ts`
 - **External HTTP:** No real calls in unit tests
 
-### Test Data
+### Testing
+
+Tests use **in-memory fake repositories** via dependency injection. No external services required:
 
 ```bash
-# Start emulator with seed data
-npm run emulator:start
-
-# Run tests against emulator
-npm run test
+npm run test          # Run all tests
+npm run test:coverage # Run with coverage report
+npm run ci            # Full CI pipeline (lint, typecheck, test, build)
 ```
 
 ---
