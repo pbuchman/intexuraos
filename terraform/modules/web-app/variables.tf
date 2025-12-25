@@ -25,3 +25,15 @@ variable "labels" {
   default     = {}
 }
 
+variable "enable_load_balancer" {
+  description = "Enable Cloud Load Balancer with CDN for SPA hosting"
+  type        = bool
+  default     = false
+}
+
+variable "domain" {
+  description = "Domain name for the web app (e.g., app.intexuraos.com)"
+  type        = string
+  default     = ""
+}
+

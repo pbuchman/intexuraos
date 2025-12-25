@@ -124,6 +124,7 @@ resource "google_project_service" "apis" {
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "storage.googleapis.com",
+    "compute.googleapis.com",
   ])
 
   project            = var.project_id
@@ -155,14 +156,16 @@ module "static_assets" {
   depends_on = [google_project_service.apis]
 }
 
-# Web App Bucket (SPA hosting)
+# Web App Bucket (SPA hosting with Load Balancer)
 module "web_app" {
   source = "../../modules/web-app"
 
-  project_id  = var.project_id
-  region      = var.region
-  environment = var.environment
-  labels      = local.common_labels
+  project_id           = var.project_id
+  region               = var.region
+  environment          = var.environment
+  labels               = local.common_labels
+  enable_load_balancer = true
+  domain               = "intexuraos.pbuchman.com"
 
   depends_on = [google_project_service.apis]
 }
@@ -470,3 +473,9 @@ output "web_app_url" {
   description = "Web app public URL"
   value       = module.web_app.website_url
 }
+
+output "web_app_load_balancer_ip" {
+  description = "Web app load balancer IP (configure DNS A record to point to this)"
+  value       = module.web_app.load_balancer_ip
+}
+
