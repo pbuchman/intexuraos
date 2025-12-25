@@ -1,7 +1,6 @@
 # IntexuraOS Dev Environment
 # This is the main entry point for the dev environment.
 
-# Include root-level configurations
 terraform {
   required_version = ">= 1.5.0"
 
@@ -13,6 +12,10 @@ terraform {
     google-beta = {
       source  = "hashicorp/google-beta"
       version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0"
     }
   }
 }
@@ -27,7 +30,10 @@ provider "google-beta" {
   region  = var.region
 }
 
+# -----------------------------------------------------------------------------
 # Variables
+# -----------------------------------------------------------------------------
+
 variable "project_id" {
   description = "GCP project ID"
   type        = string
@@ -66,6 +72,22 @@ variable "github_connection_name" {
   description = "Name of the Cloud Build GitHub connection (created manually via GCP Console)"
   type        = string
 }
+
+variable "enable_load_balancer" {
+  description = "Enable Cloud Load Balancer with CDN for web app SPA hosting"
+  type        = bool
+  default     = true
+}
+
+variable "web_app_domain" {
+  description = "Domain name for the web app"
+  type        = string
+  default     = "intexuraos.pbuchman.com"
+}
+
+# -----------------------------------------------------------------------------
+# Locals
+# -----------------------------------------------------------------------------
 
 locals {
   services = {
@@ -113,7 +135,10 @@ locals {
   }
 }
 
+# -----------------------------------------------------------------------------
 # Enable required APIs
+# -----------------------------------------------------------------------------
+
 resource "google_project_service" "apis" {
   for_each = toset([
     "run.googleapis.com",
@@ -132,7 +157,10 @@ resource "google_project_service" "apis" {
   disable_on_destroy = false
 }
 
+# -----------------------------------------------------------------------------
 # Artifact Registry
+# -----------------------------------------------------------------------------
+
 module "artifact_registry" {
   source = "../../modules/artifact-registry"
 
@@ -144,7 +172,10 @@ module "artifact_registry" {
   depends_on = [google_project_service.apis]
 }
 
+# -----------------------------------------------------------------------------
 # Static Assets Bucket
+# -----------------------------------------------------------------------------
+
 module "static_assets" {
   source = "../../modules/static-assets"
 
@@ -156,7 +187,10 @@ module "static_assets" {
   depends_on = [google_project_service.apis]
 }
 
+# -----------------------------------------------------------------------------
 # Web App Bucket (SPA hosting with Load Balancer)
+# -----------------------------------------------------------------------------
+
 module "web_app" {
   source = "../../modules/web-app"
 
@@ -164,13 +198,16 @@ module "web_app" {
   region               = var.region
   environment          = var.environment
   labels               = local.common_labels
-  enable_load_balancer = true
-  domain               = "intexuraos.pbuchman.com"
+  enable_load_balancer = var.enable_load_balancer
+  domain               = var.web_app_domain
 
   depends_on = [google_project_service.apis]
 }
 
+# -----------------------------------------------------------------------------
 # Firestore
+# -----------------------------------------------------------------------------
+
 module "firestore" {
   source = "../../modules/firestore"
 
@@ -181,7 +218,10 @@ module "firestore" {
   depends_on = [google_project_service.apis]
 }
 
+# -----------------------------------------------------------------------------
 # Secret Manager
+# -----------------------------------------------------------------------------
+
 # NOTE: Only app-level secrets are stored here.
 # Per-user Notion integration tokens are stored in Firestore, not Secret Manager.
 module "secret_manager" {
@@ -217,7 +257,10 @@ module "secret_manager" {
   depends_on = [google_project_service.apis]
 }
 
+# -----------------------------------------------------------------------------
 # IAM - Service Accounts
+# -----------------------------------------------------------------------------
+
 module "iam" {
   source = "../../modules/iam"
 
@@ -233,7 +276,10 @@ module "iam" {
   ]
 }
 
+# -----------------------------------------------------------------------------
 # Cloud Run Services
+# -----------------------------------------------------------------------------
+
 module "auth_service" {
   source = "../../modules/cloud-run-service"
 
@@ -389,7 +435,10 @@ module "api_docs_hub" {
   ]
 }
 
+# -----------------------------------------------------------------------------
 # Cloud Build Trigger
+# -----------------------------------------------------------------------------
+
 module "cloud_build" {
   source = "../../modules/cloud-build"
 
@@ -413,7 +462,10 @@ module "cloud_build" {
   ]
 }
 
+# -----------------------------------------------------------------------------
 # Outputs
+# -----------------------------------------------------------------------------
+
 output "artifact_registry_url" {
   description = "Artifact Registry URL"
   value       = module.artifact_registry.repository_url
@@ -477,5 +529,15 @@ output "web_app_url" {
 output "web_app_load_balancer_ip" {
   description = "Web app load balancer IP (configure DNS A record to point to this)"
   value       = module.web_app.load_balancer_ip
+}
+
+output "web_app_dns_a_record_hint" {
+  description = "DNS A record hint for web app"
+  value       = module.web_app.web_app_dns_a_record_hint
+}
+
+output "web_app_cert_name" {
+  description = "Managed SSL certificate name for web app"
+  value       = module.web_app.web_app_cert_name
 }
 

@@ -1,5 +1,10 @@
 # Web App Module
 # Creates a public Google Cloud Storage bucket for SPA hosting with Load Balancer.
+#
+# IMPORTANT: SPA deep-link fallback (404 -> index.html) is handled by the URL map
+# via default_route_action.url_rewrite, NOT by the bucket's website config.
+# The bucket's website block only works for direct GCS static website access
+# (storage.googleapis.com), which is NOT used when traffic goes through LB.
 
 resource "google_storage_bucket" "web_app" {
   name     = "${var.bucket_name}-${var.environment}"
@@ -9,11 +14,9 @@ resource "google_storage_bucket" "web_app" {
   # Uniform bucket-level access (required for public access)
   uniform_bucket_level_access = true
 
-  # SPA routing: serve index.html for all paths
-  website {
-    main_page_suffix = "index.html"
-    not_found_page   = "index.html"
-  }
+  # NOTE: website block is intentionally omitted.
+  # When using Load Balancer, the bucket's website config has no effect.
+  # SPA routing is handled by google_compute_url_map.web_app using url_rewrite.
 
   # CORS configuration for API calls
   cors {

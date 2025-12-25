@@ -22,3 +22,10 @@ github_branch = "development"
 
 # Cloud Build GitHub connection name
 github_connection_name = "github-pbuchman"
+
+# Enable Load Balancer for web app SPA hosting
+enable_load_balancer = true
+
+# Domain name for the web app (requires DNS A record pointing to LB IP)
+web_app_domain = "intexuraos.pbuchman.com"
+
