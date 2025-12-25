@@ -82,21 +82,15 @@ resource "google_compute_backend_bucket" "web_app" {
   ]
 }
 
-# URL map with SPA routing (404 fallback to index.html)
+# URL map for SPA hosting
+# NOTE: For SPA deep link support, the bucket has not_found_page = "index.html".
+# Through LB, 404s from missing paths will return the bucket's 404 response.
+# Client-side routing handles the rest.
 resource "google_compute_url_map" "web_app" {
   count           = var.enable_load_balancer ? 1 : 0
   name            = "intexuraos-web-${var.environment}-url-map"
   project         = var.project_id
   default_service = google_compute_backend_bucket.web_app[0].id
-
-  # SPA fallback: return index.html for 404 errors (deep links)
-  default_custom_error_response_policy {
-    error_response_rule {
-      match_response_codes   = ["404"]
-      path                   = "/index.html"
-      override_response_code = 200
-    }
-  }
 
   # Host rule for the domain
   host_rule {
@@ -108,14 +102,6 @@ resource "google_compute_url_map" "web_app" {
     name            = "web-paths"
     default_service = google_compute_backend_bucket.web_app[0].id
 
-    # SPA fallback for this path matcher
-    custom_error_response_policy {
-      error_response_rule {
-        match_response_codes   = ["404"]
-        path                   = "/index.html"
-        override_response_code = 200
-      }
-    }
 
     # Static assets served directly (no rewrite, no SPA fallback)
     # Covers: Vite/React assets, fonts, icons, manifests, robots
