@@ -92,14 +92,12 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
 
   saveMapping(
     userId: string,
-    phoneNumbers: string[],
-    inboxNotesDbId: string
+    phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
     const now = new Date().toISOString();
     const mapping = {
       userId,
       phoneNumbers,
-      inboxNotesDbId,
       connected: true,
       createdAt: now,
       updatedAt: now,
@@ -145,23 +143,3 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 }
 
-/**
- * Fake Notion connection repository for testing.
- */
-export class FakeNotionConnectionRepository {
-  private connections = new Map<string, { token: string; connected: boolean }>();
-
-  getToken(userId: string): Promise<Result<string | null, InboxError>> {
-    const conn = this.connections.get(userId);
-    if (conn?.connected !== true) return Promise.resolve(ok(null));
-    return Promise.resolve(ok(conn.token));
-  }
-
-  setConnection(userId: string, token: string, connected = true): void {
-    this.connections.set(userId, { token, connected });
-  }
-
-  clear(): void {
-    this.connections.clear();
-  }
-}

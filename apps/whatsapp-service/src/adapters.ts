@@ -21,7 +21,6 @@ import {
   findUserByPhoneNumber,
   disconnectUserMapping,
   isUserConnected,
-  getNotionToken,
 } from './infra/firestore/index.js';
 
 /**
@@ -57,10 +56,9 @@ export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventReposi
 export class UserMappingRepositoryAdapter implements WhatsAppUserMappingRepository {
   async saveMapping(
     userId: string,
-    phoneNumbers: string[],
-    inboxNotesDbId: string
+    phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
-    return await saveUserMapping(userId, phoneNumbers, inboxNotesDbId);
+    return await saveUserMapping(userId, phoneNumbers);
   }
 
   async getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
@@ -80,11 +78,3 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
   }
 }
 
-/**
- * Notion connection repository adapter for getting tokens.
- */
-export class NotionConnectionRepositoryAdapter {
-  async getToken(userId: string): Promise<Result<string | null, InboxError>> {
-    return await getNotionToken(userId);
-  }
-}

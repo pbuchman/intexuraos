@@ -11,7 +11,6 @@ import { clearJwksCache } from '@intexuraos/common';
 import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,
-  FakeNotionConnectionRepository,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -150,7 +149,6 @@ export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;
   userMappingRepository: FakeWhatsAppUserMappingRepository;
-  notionConnectionRepository: FakeNotionConnectionRepository;
 }
 
 /**
@@ -161,7 +159,6 @@ export function setupTestContext(): TestContext {
     app: null as unknown as FastifyInstance,
     webhookEventRepository: null as unknown as FakeWhatsAppWebhookEventRepository,
     userMappingRepository: null as unknown as FakeWhatsAppUserMappingRepository,
-    notionConnectionRepository: null as unknown as FakeNotionConnectionRepository,
   };
 
   beforeAll(async () => {
@@ -175,12 +172,10 @@ export function setupTestContext(): TestContext {
   beforeEach(async () => {
     context.webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
     context.userMappingRepository = new FakeWhatsAppUserMappingRepository();
-    context.notionConnectionRepository = new FakeNotionConnectionRepository();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
       userMappingRepository: context.userMappingRepository,
-      notionConnectionRepository: context.notionConnectionRepository,
     });
 
     clearJwksCache();

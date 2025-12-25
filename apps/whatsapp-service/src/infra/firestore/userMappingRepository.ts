@@ -6,7 +6,6 @@ import type { InboxError } from './webhookEventRepository.js';
 
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -20,8 +19,7 @@ const COLLECTION_NAME = 'whatsapp_user_mappings';
 
 export async function saveUserMapping(
   userId: string,
-  phoneNumbers: string[],
-  inboxNotesDbId: string
+  phoneNumbers: string[]
 ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
   try {
     const db = getFirestore();
@@ -54,7 +52,6 @@ export async function saveUserMapping(
     const doc: WhatsAppUserMappingDoc = {
       userId,
       phoneNumbers,
-      inboxNotesDbId,
       connected: true,
       createdAt: existingData?.createdAt ?? now,
       updatedAt: now,
@@ -64,7 +61,6 @@ export async function saveUserMapping(
 
     return ok({
       phoneNumbers: doc.phoneNumbers,
-      inboxNotesDbId: doc.inboxNotesDbId,
       connected: doc.connected,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
@@ -88,7 +84,6 @@ export async function getUserMapping(
     const data = doc.data() as WhatsAppUserMappingDoc;
     return ok({
       phoneNumbers: data.phoneNumbers,
-      inboxNotesDbId: data.inboxNotesDbId,
       connected: data.connected,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -144,7 +139,6 @@ export async function disconnectUserMapping(
 
     return ok({
       phoneNumbers: existingData.phoneNumbers,
-      inboxNotesDbId: existingData.inboxNotesDbId,
       connected: false,
       createdAt: existingData.createdAt,
       updatedAt: now,

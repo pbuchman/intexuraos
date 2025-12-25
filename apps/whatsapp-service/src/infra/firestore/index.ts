@@ -20,8 +20,3 @@ export {
   isUserConnected,
 } from './userMappingRepository.js';
 
-export {
-  type NotionConnectionPublic,
-  getNotionToken,
-  isNotionConnected,
-} from './notionConnectionRepository.js';

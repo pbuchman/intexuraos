@@ -12,7 +12,6 @@ export async function getWhatsAppStatus(accessToken: string): Promise<WhatsAppSt
 
 export interface WhatsAppConnectRequest {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
 }
 
 export async function connectWhatsApp(

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, type FormEvent } from 'react';
-import { Layout, Button, Input, Card } from '@/components';
+import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
 import { getWhatsAppStatus, connectWhatsApp, disconnectWhatsApp, ApiError } from '@/services';
 import type { WhatsAppStatus } from '@/types';
@@ -7,7 +7,6 @@ import { Plus, X } from 'lucide-react';
 
 interface FormState {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
 }
 
 export function WhatsAppConnectionPage(): React.JSX.Element {
@@ -21,7 +20,6 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
 
   const [form, setForm] = useState<FormState>({
     phoneNumbers: [''],
-    inboxNotesDbId: '',
   });
 
   const fetchStatus = useCallback(async (): Promise<void> => {
@@ -33,7 +31,6 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       if (whatsappStatus) {
         setForm({
           phoneNumbers: whatsappStatus.phoneNumbers.length > 0 ? whatsappStatus.phoneNumbers : [''],
-          inboxNotesDbId: whatsappStatus.inboxNotesDbId,
         });
       }
     } catch (e) {
@@ -80,17 +77,11 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       return;
     }
 
-    if (!form.inboxNotesDbId.trim()) {
-      setError('Inbox Notes Database ID is required');
-      return;
-    }
-
     try {
       setIsSaving(true);
       const token = await getAccessToken();
       await connectWhatsApp(token, {
         phoneNumbers: validPhoneNumbers,
-        inboxNotesDbId: form.inboxNotesDbId.trim(),
       });
       setSuccessMessage('WhatsApp connection saved successfully');
       await fetchStatus();
@@ -110,7 +101,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await disconnectWhatsApp(token);
       setSuccessMessage('WhatsApp disconnected successfully');
-      setForm({ phoneNumbers: [''], inboxNotesDbId: '' });
+      setForm({ phoneNumbers: [''] });
       setStatus(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to disconnect WhatsApp');
@@ -134,7 +125,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900">WhatsApp Connection</h2>
         <p className="text-slate-600">
-          Connect your WhatsApp phone numbers to forward messages to Notion
+          Connect your WhatsApp phone numbers to save messages as notes
         </p>
       </div>
 
@@ -188,15 +179,6 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
               </button>
             </div>
 
-            <Input
-              label="Inbox Notes Database ID"
-              placeholder="Enter your Notion database ID"
-              value={form.inboxNotesDbId}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, inboxNotesDbId: e.target.value }));
-              }}
-            />
-
             <div className="flex gap-3 pt-2">
               <Button type="submit" isLoading={isSaving}>
                 {status?.connected === true ? 'Update Connection' : 'Connect WhatsApp'}
@@ -236,11 +218,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                   ))}
                 </dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-600">Inbox Database ID</dt>
-                <dd className="font-mono text-slate-900">{status.inboxNotesDbId}</dd>
-              </div>
-              {status.updatedAt ? (
+              {status.updatedAt !== undefined && status.updatedAt !== '' ? (
                 <div className="flex justify-between">
                   <dt className="text-slate-600">Last Updated</dt>
                   <dd className="text-slate-900">{new Date(status.updatedAt).toLocaleString()}</dd>

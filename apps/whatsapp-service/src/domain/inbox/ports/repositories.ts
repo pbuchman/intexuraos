@@ -45,7 +45,6 @@ export interface WhatsAppWebhookEvent {
  */
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -86,8 +85,7 @@ export interface WhatsAppUserMapping {
 export interface WhatsAppUserMappingRepository {
   saveMapping(
     userId: string,
-    phoneNumbers: string[],
-    inboxNotesDbId: string
+    phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>>;
   getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>>;
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>>;

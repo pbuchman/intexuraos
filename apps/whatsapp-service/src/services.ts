@@ -2,11 +2,7 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
-import {
-  WebhookEventRepositoryAdapter,
-  UserMappingRepositoryAdapter,
-  NotionConnectionRepositoryAdapter,
-} from './adapters.js';
+import { WebhookEventRepositoryAdapter, UserMappingRepositoryAdapter } from './adapters.js';
 
 /**
  * Service container holding all adapter instances.
@@ -14,7 +10,6 @@ import {
 export interface ServiceContainer {
   webhookEventRepository: WebhookEventRepositoryAdapter;
   userMappingRepository: UserMappingRepositoryAdapter;
-  notionConnectionRepository: NotionConnectionRepositoryAdapter;
 }
 
 let container: ServiceContainer | null = null;
@@ -26,7 +21,6 @@ export function getServices(): ServiceContainer {
   container ??= {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
-    notionConnectionRepository: new NotionConnectionRepositoryAdapter(),
   };
   return container;
 }
@@ -47,4 +41,3 @@ export function resetServices(): void {
 
 // Re-export infra functions for direct use
 export * from './infra/firestore/index.js';
-export { createInboxNote } from './infra/notion/index.js';
