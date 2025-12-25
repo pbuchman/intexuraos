@@ -57,6 +57,12 @@ add_secret_value() {
     echo -n "$value" | gcloud secrets versions add "$secret_name" --data-file=-
 }
 
+# Get latest secret value (may fail due to permissions; caller decides how to handle)
+get_latest_secret_value() {
+    local secret_name="$1"
+    gcloud secrets versions access latest --secret "$secret_name" 2>/dev/null
+}
+
 echo "============================================"
 echo "IntexuraOS Secret Manager Population Script"
 echo "============================================"
@@ -108,6 +114,14 @@ for SECRET_NAME in $SECRETS; do
     # Check if already has a value
     if secret_has_version "$SECRET_NAME"; then
         echo "Status: Already has a value"
+
+        CURRENT_VALUE=$(get_latest_secret_value "$SECRET_NAME" || true)
+        if [[ -z "$CURRENT_VALUE" ]]; then
+            echo "Current value: <unable to read (no access or empty)>"
+        else
+            echo "Current value: ${CURRENT_VALUE}"
+        fi
+
         read -rp "Overwrite? [y/N]: " OVERWRITE
         if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
             echo "Skipping..."
