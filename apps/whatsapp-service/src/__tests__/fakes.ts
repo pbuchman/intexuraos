@@ -9,6 +9,7 @@
  */
 import type { Result } from '@intexuraos/common';
 import { ok, err } from '@intexuraos/common';
+import { normalizePhoneNumber } from '../routes/v1/shared.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -97,15 +98,17 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
     const now = new Date().toISOString();
+    // Normalize phone numbers (remove leading "+") to match real implementation
+    const normalizedPhoneNumbers = phoneNumbers.map(normalizePhoneNumber);
     const mapping = {
       userId,
-      phoneNumbers,
+      phoneNumbers: normalizedPhoneNumbers,
       connected: true,
       createdAt: now,
       updatedAt: now,
     };
     this.mappings.set(userId, mapping);
-    for (const phone of phoneNumbers) {
+    for (const phone of normalizedPhoneNumbers) {
       this.phoneIndex.set(phone, userId);
     }
     const { userId: _, ...publicMapping } = mapping;
@@ -120,7 +123,9 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
-    return Promise.resolve(ok(this.phoneIndex.get(phoneNumber) ?? null));
+    // Normalize phone number to match stored format (without "+")
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
   }
 
   disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {

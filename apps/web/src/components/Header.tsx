@@ -34,8 +34,9 @@ export function Header(): React.JSX.Element {
             e.currentTarget.style.display = 'none';
           }}
         />
-        <h1 className="text-xl font-bold text-slate-900">
-          Prax<span className="text-amber-500">OS</span>
+        <h1 className="text-xl font-bold">
+          <span className="text-cyan-500">Intexura</span>
+          <span className="text-slate-900">OS</span>
         </h1>
       </div>
 

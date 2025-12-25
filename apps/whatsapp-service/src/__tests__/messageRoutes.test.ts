@@ -83,7 +83,8 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.messages.length).toBe(1);
       expect(body.data.messages[0]?.text).toBe('Test message content');
       expect(body.data.messages[0]?.fromNumber).toBe('+15551234567');
-      expect(body.data.fromNumber).toBe('+15551234567');
+      // fromNumber from mapping is normalized (without +)
+      expect(body.data.fromNumber).toBe('15551234567');
     });
 
     it('returns messages sorted by newest first', async () => {

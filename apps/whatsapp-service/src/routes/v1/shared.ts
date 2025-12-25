@@ -2,6 +2,18 @@ import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 
 /**
+ * Normalize phone number by removing leading "+" if present.
+ * WhatsApp webhook payloads typically send numbers WITHOUT the "+",
+ * so we normalize all stored numbers to match.
+ *
+ * @example normalizePhoneNumber("+15551234567") => "15551234567"
+ * @example normalizePhoneNumber("15551234567") => "15551234567"
+ */
+export function normalizePhoneNumber(phoneNumber: string): string {
+  return phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
+}
+
+/**
  * Handle Zod validation errors.
  * Converts Zod errors to standard API error response.
  */

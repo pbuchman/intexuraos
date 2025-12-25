@@ -49,7 +49,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['+15551234567']);
+      expect(body.data.phoneNumbers).toEqual(['15551234567']);
       expect(body.data.connected).toBe(true);
     });
 
@@ -105,7 +105,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['+15552222222']);
+      expect(body.data.phoneNumbers).toEqual(['15552222222']);
     });
   });
 
@@ -172,7 +172,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['+15553333333']);
+      expect(body.data.phoneNumbers).toEqual(['15553333333']);
       expect(body.data.connected).toBe(true);
     });
   });

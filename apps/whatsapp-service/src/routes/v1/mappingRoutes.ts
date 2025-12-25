@@ -10,6 +10,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { z } from 'zod';
 import { requireAuth } from '@intexuraos/common';
 import { getServices } from '../../services.js';
+import { normalizePhoneNumber } from './shared.js';
 
 /**
  * Request body schema for connecting WhatsApp mapping.
@@ -114,9 +115,12 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { phoneNumbers } = parseResult.data;
 
+      // Normalize phone numbers (remove leading "+")
+      const normalizedPhoneNumbers = phoneNumbers.map(normalizePhoneNumber);
+
       // Save mapping
       const { userMappingRepository } = getServices();
-      const result = await userMappingRepository.saveMapping(user.userId, phoneNumbers);
+      const result = await userMappingRepository.saveMapping(user.userId, normalizedPhoneNumbers);
 
       if (!result.ok) {
         // Phone conflict returns VALIDATION_ERROR with details

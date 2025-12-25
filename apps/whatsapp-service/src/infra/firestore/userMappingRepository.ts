@@ -3,6 +3,7 @@
  */
 import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import type { InboxError } from './webhookEventRepository.js';
+import { normalizePhoneNumber } from '../../routes/v1/shared.js';
 
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];
@@ -101,9 +102,11 @@ export async function findUserByPhoneNumber(
 ): Promise<Result<string | null, InboxError>> {
   try {
     const db = getFirestore();
+    // Normalize phone number to match stored format (without "+")
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
     const snapshot = await db
       .collection(COLLECTION_NAME)
-      .where('phoneNumbers', 'array-contains', phoneNumber)
+      .where('phoneNumbers', 'array-contains', normalizedPhone)
       .where('connected', '==', true)
       .limit(1)
       .get();

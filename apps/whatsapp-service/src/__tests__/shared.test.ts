@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { FastifyReply } from 'fastify';
 import {
   handleValidationError,
+  normalizePhoneNumber,
   extractWabaId,
   extractPhoneNumberId,
   extractDisplayPhoneNumber,
@@ -18,6 +19,24 @@ import {
 } from '../routes/v1/shared.js';
 
 describe('shared utilities', () => {
+  describe('normalizePhoneNumber', () => {
+    it('removes leading + from phone number', () => {
+      expect(normalizePhoneNumber('+15551234567')).toBe('15551234567');
+    });
+
+    it('returns unchanged if no leading +', () => {
+      expect(normalizePhoneNumber('15551234567')).toBe('15551234567');
+    });
+
+    it('handles empty string', () => {
+      expect(normalizePhoneNumber('')).toBe('');
+    });
+
+    it('only removes leading +', () => {
+      expect(normalizePhoneNumber('+1+2+3')).toBe('1+2+3');
+    });
+  });
+
   describe('handleValidationError', () => {
     it('converts Zod error to API error response', () => {
       const schema = z.object({
