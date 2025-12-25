@@ -4,6 +4,7 @@
  */
 import type { Result } from '@intexuraos/common';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
+import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 
 /**
  * Processing status for webhook events.
@@ -73,7 +74,6 @@ export interface InboxActionsRepository {
 export interface WhatsAppUserMapping {
   userId: string;
   phoneNumbers: string[];
-  inboxNotesDbId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -110,4 +110,34 @@ export interface WhatsAppWebhookEventRepository {
     }
   ): Promise<Result<WhatsAppWebhookEvent, InboxError>>;
   getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>>;
+}
+
+/**
+ * Repository for WhatsApp messages.
+ */
+export interface WhatsAppMessageRepository {
+  /**
+   * Save a new message.
+   */
+  saveMessage(
+    message: Omit<WhatsAppMessage, 'id'>
+  ): Promise<Result<WhatsAppMessage, InboxError>>;
+
+  /**
+   * Get messages for a user, ordered by receivedAt descending.
+   */
+  getMessagesByUser(
+    userId: string,
+    limit?: number
+  ): Promise<Result<WhatsAppMessage[], InboxError>>;
+
+  /**
+   * Get a single message by ID.
+   */
+  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+
+  /**
+   * Delete a message.
+   */
+  deleteMessage(messageId: string): Promise<Result<void, InboxError>>;
 }

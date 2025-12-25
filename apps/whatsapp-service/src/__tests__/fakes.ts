@@ -12,10 +12,12 @@ import { ok, err } from '@intexuraos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
+  WhatsAppMessageRepository,
   WhatsAppWebhookEvent,
   WebhookProcessingStatus,
   IgnoredReason,
   WhatsAppUserMappingPublic,
+  WhatsAppMessage,
   InboxError,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
@@ -143,3 +145,44 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 }
 
+/**
+ * Fake WhatsApp message repository for testing.
+ */
+export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository {
+  private messages = new Map<string, WhatsAppMessage>();
+
+  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
+    const id = randomUUID();
+    const fullMessage: WhatsAppMessage = { id, ...message };
+    this.messages.set(id, fullMessage);
+    return Promise.resolve(ok(fullMessage));
+  }
+
+  getMessagesByUser(
+    userId: string,
+    limit = 100
+  ): Promise<Result<WhatsAppMessage[], InboxError>> {
+    const userMessages = Array.from(this.messages.values())
+      .filter((m) => m.userId === userId)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, limit);
+    return Promise.resolve(ok(userMessages));
+  }
+
+  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    return Promise.resolve(ok(this.messages.get(messageId) ?? null));
+  }
+
+  deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    this.messages.delete(messageId);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getAll(): WhatsAppMessage[] {
+    return Array.from(this.messages.values());
+  }
+
+  clear(): void {
+    this.messages.clear();
+  }
+}

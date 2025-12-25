@@ -6,10 +6,12 @@ import type { Result } from '@intexuraos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
+  WhatsAppMessageRepository,
   WhatsAppWebhookEvent,
   WebhookProcessingStatus,
   IgnoredReason,
   WhatsAppUserMappingPublic,
+  WhatsAppMessage,
   InboxError,
 } from './domain/inbox/index.js';
 import {
@@ -21,6 +23,10 @@ import {
   findUserByPhoneNumber,
   disconnectUserMapping,
   isUserConnected,
+  saveMessage,
+  getMessagesByUser,
+  getMessage,
+  deleteMessage,
 } from './infra/firestore/index.js';
 
 /**
@@ -78,3 +84,28 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
   }
 }
 
+/**
+ * Class adapter for WhatsAppMessageRepository.
+ */
+export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
+  async saveMessage(
+    message: Omit<WhatsAppMessage, 'id'>
+  ): Promise<Result<WhatsAppMessage, InboxError>> {
+    return await saveMessage(message);
+  }
+
+  async getMessagesByUser(
+    userId: string,
+    limit?: number
+  ): Promise<Result<WhatsAppMessage[], InboxError>> {
+    return await getMessagesByUser(userId, limit);
+  }
+
+  async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    return await getMessage(messageId);
+  }
+
+  async deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    return await deleteMessage(messageId);
+  }
+}

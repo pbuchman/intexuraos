@@ -22,6 +22,11 @@ export type {
   InboxResult,
 } from './models/InboxNote.js';
 
+export type {
+  WhatsAppMessage,
+  WhatsAppMessageMetadata,
+} from './models/WhatsAppMessage.js';
+
 // Ports
 export type {
   InboxNotesRepository,
@@ -33,6 +38,7 @@ export type {
   IgnoredReason,
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
+  WhatsAppMessageRepository,
 } from './ports/repositories.js';
 
 // Use cases

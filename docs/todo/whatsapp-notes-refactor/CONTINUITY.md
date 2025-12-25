@@ -28,11 +28,23 @@ Refactor WhatsApp integration to:
 - OTP verification is research-only (no implementation this iteration)
 - Text-only message support (no media)
 - No pagination for message list (MVP)
+- Removed Notion infra folder, notionConnectionRepository, inboxNotesDbId from entire flow
 
 ## State
-- Done: Planning complete (8 issue files created)
-- Now: 0-0-remove-notion-connection.md
-- Next: 0-1-otp-verification-research.md
+- Done: 
+  - 0-0-remove-notion-connection.md (Notion infra removed, tests updated)
+  - 0-1-otp-verification-research.md (docs/whatsapp-otp.md created)
+  - 1-0-firestore-message-storage.md (WhatsAppMessage model, repository, adapter)
+  - 1-1-webhook-text-only.md (webhook now rejects non-text with IGNORED status)
+  - 1-2-async-reply-with-reference.md (already implemented, uses contextMessageId)
+- Now: 2-0-whatsapp-notes-api.md (in progress - routes created, type verification pending)
+- Next: 2-1-whatsapp-notes-web-view.md
+
+## Working set
+- apps/whatsapp-service/src/routes/v1/messageRoutes.ts (new API routes)
+- apps/whatsapp-service/src/services.ts (updated to use interface types)
+- apps/whatsapp-service/src/infra/firestore/messageRepository.ts
+- apps/whatsapp-service/src/domain/inbox/models/WhatsAppMessage.ts
 
 ## Open questions
 - (none)
