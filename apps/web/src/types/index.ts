@@ -38,7 +38,7 @@ export interface UserInfo {
 }
 
 /**
- * Notion connection status from promptvault-service
+ * Notion connection status from notion-service
  */
 export interface NotionStatus {
   configured: boolean;
@@ -92,4 +92,5 @@ export interface AppConfig {
   authServiceUrl: string;
   promptVaultServiceUrl: string;
   whatsappServiceUrl: string;
+  notionServiceUrl: string;
 }

@@ -15,6 +15,12 @@ log "Deploying ${SERVICE} assets"
 log "  Bucket: ${BUCKET}"
 log "  Source: apps/web/dist/"
 
+# Sync all files with automatic content-type detection
 gsutil -m rsync -r -d apps/web/dist/ "gs://${BUCKET}/"
 
-log "Deployment complete for ${SERVICE}" 
+# Set correct content-type for common web assets
+gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/*.png" 2>/dev/null || true
+gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/favicon.png" 2>/dev/null || true
+gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/logo.png" 2>/dev/null || true
+
+log "Deployment complete for ${SERVICE}"

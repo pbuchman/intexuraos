@@ -10,6 +10,47 @@ This guide covers setting up the WhatsApp Business Cloud API for IntexuraOS inte
 - Business verification (required for production; test mode works without)
 - Phone number for WhatsApp (can use Meta's test number initially)
 
+## WhatsApp ID Types Reference
+
+WhatsApp Cloud API uses two primary identifiers. Understanding the difference is critical for webhook validation.
+
+| ID Type                                    | Represents                                                 | Primary Use                                                     | Example           |
+| ------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------- | ----------------- |
+| **WhatsApp Business Account ID (WABA ID)** | The business entity as a whole                             | Webhook subscriptions, business settings, phone number listings | `102290129340398` |
+| **Phone Number ID**                        | A specific WhatsApp phone number registered under the WABA | Sending/receiving messages via API, message routing             | `106540352242922` |
+
+**Where they appear in webhook payloads:**
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398", // ← WABA ID
+      "changes": [
+        {
+          "value": {
+            "metadata": {
+              "phone_number_id": "106540352242922", // ← Phone Number ID
+              "display_phone_number": "15550783881"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**IntexuraOS validates both IDs** on incoming webhooks:
+
+- `INTEXURAOS_WHATSAPP_WABA_ID` — must match `entry[].id`
+- `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID` — must match `metadata.phone_number_id`
+
+This ensures webhooks are only accepted from your configured business account and phone number.
+
+> **Reference**: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+
 ## 1. Create/Access Meta Developer Account
 
 1. Go to [Meta for Developers](https://developers.facebook.com/)
@@ -172,6 +213,70 @@ After verification, subscribe to message events:
    - `message_status` - Delivery/read receipts (optional but recommended)
 
 > **Note**: Other fields like `message_template_status_update` are useful for template management.
+
+### REQUIRED: Subscribe the app to your WABA (missing step)
+
+Even when the webhook URL is verified and fields are selected, **message webhooks may not fire** until the WhatsApp app is explicitly subscribed to the WhatsApp Business Account (WABA).
+
+This subscription is **not always done automatically** by the Meta UI.
+
+#### Option A (recommended): Meta Graph API Explorer
+
+1. Open Graph API Explorer:
+   - https://developers.facebook.com/tools/explorer/
+2. Select:
+   - **Meta App**: your WhatsApp app
+   - **User token**: a token that has access to the Business/WABA
+3. Add required permissions (at minimum):
+   - `whatsapp_business_management`
+   - `whatsapp_business_messaging`
+4. Run (replace `${WABA_ID}`):
+
+**Check current subscriptions**
+
+```
+GET /v24.0/${WABA_ID}/subscribed_apps
+```
+
+**Subscribe your app**
+
+```
+POST /v24.0/${WABA_ID}/subscribed_apps
+```
+
+If successful, re-run the GET and confirm your `app_id` appears.
+
+#### Option B: curl (same Graph API calls)
+
+```bash
+export META_ACCESS_TOKEN="..."  # token with required permissions
+export WABA_ID="1234567890123456"
+
+# Check subscriptions
+curl -s "https://graph.facebook.com/v24.0/${WABA_ID}/subscribed_apps" \
+  -H "Authorization: Bearer ${META_ACCESS_TOKEN}" \
+  | jq .
+
+# Subscribe app
+curl -s -X POST "https://graph.facebook.com/v24.0/${WABA_ID}/subscribed_apps" \
+  -H "Authorization: Bearer ${META_ACCESS_TOKEN}" \
+  | jq .
+```
+
+#### When to do this
+
+Do this
+
+- after creating/connecting the WABA and adding the WhatsApp product to the app
+- after configuring the webhook callback + selecting webhook fields
+- whenever you rotate the app/WABA relationship, or migrate between test/prod WABAs
+
+#### Symptom this fixes
+
+- Webhook verification works (GET challenge succeeds)
+- “Test webhook” in dashboard may work
+- Sending/receiving real messages works
+- **But incoming `messages` webhooks never arrive**
 
 ## 7. Required Permissions/Scopes
 

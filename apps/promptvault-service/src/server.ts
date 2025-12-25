@@ -122,10 +122,8 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      // LEGACY URL: This URL will be updated when the service is redeployed with the new name.
-      // The Cloud Run service name change requires a manual redeployment.
-      url: 'https://intexuraos-promptvault-service-ooafxzbaua-lm.a.run.app',
-      description: 'Cloud (Development) - Legacy URL',
+      url: 'https://intexuraos-promptvault-service-cj44trunra-lm.a.run.app',
+      description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8081', description: 'Local' },
   ];

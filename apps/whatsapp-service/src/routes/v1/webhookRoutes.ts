@@ -16,9 +16,11 @@ import { createInboxNote } from '../../infra/notion/index.js';
 import type { Result } from '@intexuraos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
 import {
+  extractDisplayPhoneNumber,
   extractMessageId,
   extractPhoneNumberId,
   extractSenderPhoneNumber,
+  extractWabaId,
   handleValidationError,
 } from './shared.js';
 
@@ -156,19 +158,6 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         try {
           const headersObj = { ...(request.headers as Record<string, unknown>) };
-          if (typeof headersObj[SIGNATURE_HEADER] === 'string') {
-            const sig = headersObj[SIGNATURE_HEADER];
-            // Keep start and end visible, mask middle
-            const visible = 8;
-            if (sig.length > visible * 2) {
-              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, visible)}...${sig.substring(
-                sig.length - visible
-              )}`;
-            } else {
-              headersObj[SIGNATURE_HEADER] = `${sig.substring(0, Math.min(4, sig.length))}...`;
-            }
-          }
-
           request.log.info(
             { event: 'incoming_whatsapp_webhook', headers: headersObj, rawBody },
             'Received WhatsApp webhook POST'
@@ -181,19 +170,65 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         // Get signature from header
         const signature = request.headers[SIGNATURE_HEADER];
         if (typeof signature !== 'string' || signature === '') {
+          request.log.warn(
+            { reason: 'missing_signature' },
+            'Webhook rejected: missing X-Hub-Signature-256 header'
+          );
           return await reply.fail('UNAUTHORIZED', 'Missing X-Hub-Signature-256 header');
         }
-        // Log incoming request (mask signature for safety)
 
         // Validate signature
         const signatureValid = validateWebhookSignature(rawBody, signature, config.appSecret);
 
         if (!signatureValid) {
+          request.log.warn(
+            { reason: 'invalid_signature', signatureReceived: signature },
+            'Webhook rejected: invalid signature'
+          );
           return await reply.fail('FORBIDDEN', 'Invalid webhook signature');
         }
 
-        // Extract phone number ID from payload
+        // Extract identifiers from payload
+        // See: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+        const wabaId = extractWabaId(request.body);
         const phoneNumberId = extractPhoneNumberId(request.body);
+        const displayPhoneNumber = extractDisplayPhoneNumber(request.body);
+
+        // Validate WABA ID (entry[].id) matches configured allowed IDs
+        if (wabaId === null || !config.allowedWabaIds.includes(wabaId)) {
+          request.log.warn(
+            {
+              reason: 'waba_id_mismatch',
+              receivedWabaId: wabaId,
+              receivedPhoneNumberId: phoneNumberId,
+              receivedDisplayPhoneNumber: displayPhoneNumber,
+              allowedWabaIds: config.allowedWabaIds,
+            },
+            'Webhook rejected: waba_id not in allowed list'
+          );
+          return await reply.fail(
+            'FORBIDDEN',
+            `Webhook rejected: waba_id "${wabaId ?? 'null'}" not allowed`
+          );
+        }
+
+        // Validate phone number ID (metadata.phone_number_id) matches configured allowed IDs
+        if (phoneNumberId === null || !config.allowedPhoneNumberIds.includes(phoneNumberId)) {
+          request.log.warn(
+            {
+              reason: 'phone_number_id_mismatch',
+              receivedWabaId: wabaId,
+              receivedPhoneNumberId: phoneNumberId,
+              receivedDisplayPhoneNumber: displayPhoneNumber,
+              allowedPhoneNumberIds: config.allowedPhoneNumberIds,
+            },
+            'Webhook rejected: phone_number_id not in allowed list'
+          );
+          return await reply.fail(
+            'FORBIDDEN',
+            `Webhook rejected: phone_number_id "${phoneNumberId ?? 'null'}" not allowed`
+          );
+        }
 
         // Persist webhook event with initial PENDING status
         const { webhookEventRepository } = getServices();

@@ -7,8 +7,8 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr } from '@intexuraos/common';
-import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
-import type { AuthTokens } from '../../domain/identity/index.js';
+import type { AuthTokens, AuthTokenRepository } from '../../domain/identity/index.js';
+import { getServices } from '../../services.js';
 import {
   deviceStartRequestSchema,
   devicePollRequestSchema,
@@ -255,9 +255,10 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         const data = responseBody as TokenResponse;
 
-        // Store refresh token if received
+        // Store refresh token if received (uses injected repository for testability)
         if (data.refresh_token !== undefined && data.refresh_token !== '') {
-          await storeRefreshToken(fastify, data);
+          const { authTokenRepository } = getServices();
+          await storeRefreshToken(fastify, data, authTokenRepository);
         }
 
         return await reply.ok(data);
@@ -276,10 +277,15 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 /**
  * Extract userId from access token and store refresh token.
  * Best-effort: logs warnings but doesn't fail the request.
+ *
+ * @param fastify - Fastify instance for logging
+ * @param data - Token response from Auth0
+ * @param tokenRepo - Repository for storing tokens (injected for testability)
  */
 async function storeRefreshToken(
   fastify: { log: { warn: (obj: object, msg: string) => void } },
-  data: TokenResponse
+  data: TokenResponse,
+  tokenRepo: AuthTokenRepository
 ): Promise<void> {
   try {
     // Extract userId from access token JWT (without verification, just for storage key)
@@ -297,7 +303,6 @@ async function storeRefreshToken(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (userId === '' || userId === null || userId === undefined) return;
 
-    const tokenRepo = new FirestoreAuthTokenRepository();
     const authTokens: AuthTokens = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token as string,

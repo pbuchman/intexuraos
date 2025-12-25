@@ -1,8 +1,22 @@
 /**
  * Webhook signature validation for WhatsApp Business Cloud API.
  *
- * Meta signs webhook payloads using HMAC-SHA256 with the app secret.
+ * Meta signs webhook payloads using HMAC-SHA256 with the App Secret.
  * The signature is sent in the X-Hub-Signature-256 header.
+ *
+ * From official docs (https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/create-endpoint):
+ *
+ * > Request syntax:
+ * > POST <CALLBACK_URL>
+ * > X-Hub-Signature-256: sha256=<SHA256_PAYLOAD_HASH>
+ * >
+ * > <SHA256_PAYLOAD_HASH>: HMAC-SHA256 hash, calculated using the post body payload
+ * > and your app secret as the secret key.
+ *
+ * Validation steps:
+ * 1. Generate HMAC-SHA256 hash using JSON payload as message and App Secret as key
+ * 2. Compare generated hash to hash in X-Hub-Signature-256 header (after "sha256=")
+ * 3. Use timing-safe comparison to prevent timing attacks
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 

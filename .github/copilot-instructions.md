@@ -47,16 +47,16 @@ docs/           → All documentation
 
 ## Code Rules
 
-| Rule                                | Verification            |
-| ----------------------------------- | ----------------------- |
-| Zero `tsc` errors                   | `npm run typecheck`     |
-| Zero ESLint warnings                | `npm run lint`          |
-| 65%+ test coverage                  | `npm run test:coverage` |
-| ESM only (`import`/`export`)        | `npm run lint`          |
-| Explicit return types on exports    | `npm run lint`          |
-| No `@ts-ignore`, `@ts-expect-error` | `npm run lint`          |
-| No unused code                      | `npm run lint`          |
-| Prettier formatted                  | `npm run format:check`  |
+| Rule                                 | Verification            |
+| ------------------------------------ | ----------------------- |
+| Zero `tsc` errors                    | `npm run typecheck`     |
+| Zero ESLint warnings                 | `npm run lint`          |
+| Test coverage (see vitest.config.ts) | `npm run test:coverage` |
+| ESM only (`import`/`export`)         | `npm run lint`          |
+| Explicit return types on exports     | `npm run lint`          |
+| No `@ts-ignore`, `@ts-expect-error`  | `npm run lint`          |
+| No unused code                       | `npm run lint`          |
+| Prettier formatted                   | `npm run format:check`  |
 
 **IMPORTANT:** After creating or modifying files, always run `npx prettier --write .` before `npm run ci`.
 
@@ -332,11 +332,70 @@ import { getErrorMessage } from '@intexuraos/common';
 
 ## Testing
 
-- Coverage: 65% lines, 70% branches, 45% functions, 65% statements (temporarily lowered)
-- TODO: Restore to 89/85/90/89 after adding tests for colocated infra modules
-- Mock external systems only (Auth0, Firestore, Notion)
-- Assert observable behavior, not implementation
-- Colocated infra (`src/infra/**`) is tested via integration tests through routes
+**No external dependencies required.** Tests use in-memory fake repositories via dependency injection.
+
+### Architecture
+
+| Component                | Test Strategy                                               |
+| ------------------------ | ----------------------------------------------------------- |
+| Routes (`src/routes/**`) | Integration tests via `app.inject()` with fake repositories |
+| Domain (`src/domain/**`) | Unit tests with fake ports                                  |
+| Infra (`src/infra/**`)   | Tested indirectly through route integration tests           |
+
+### Dependency Injection Pattern
+
+Routes must obtain dependencies via `getServices()`, not direct instantiation:
+
+```ts-example
+// ❌ Direct instantiation — blocks tests, requires real Firestore
+const tokenRepo = new FirestoreAuthTokenRepository();
+await tokenRepo.saveTokens(userId, tokens);
+
+// ✅ Dependency injection — allows fake injection in tests
+const tokenRepo = getServices().authTokenRepository;
+await tokenRepo.saveTokens(userId, tokens);
+```
+
+### Test Setup Pattern
+
+```ts-example
+// In test file
+import { setServices, resetServices } from '../services.js';
+import { FakeAuthTokenRepository } from './fakes.js';
+
+describe('MyRoute', () => {
+  let fakeTokenRepo: FakeAuthTokenRepository;
+
+  beforeEach(() => {
+    fakeTokenRepo = new FakeAuthTokenRepository();
+    setServices({ authTokenRepository: fakeTokenRepo });
+  });
+
+  afterEach(() => {
+    resetServices();
+  });
+
+  it('stores token', async () => {
+    // ... test code ...
+    // Verify via fake:
+    const stored = fakeTokenRepo.getStoredTokens('user-123');
+    expect(stored?.refreshToken).toBe('expected-token');
+  });
+});
+```
+
+### Coverage Thresholds
+
+See `vitest.config.ts` for current values (lines: 90%, branches: 82%, functions: 75%, statements: 90%).
+
+Coverage exclusions are documented with `// JUSTIFIED:` comments in `vitest.config.ts`.
+
+### Key Rules
+
+- **No emulator, no Docker** — tests run with `npm run test` only
+- **Mock external HTTP** — use `nock` for Auth0, Notion API calls
+- **Fake repositories** — use in-memory fakes for Firestore adapters
+- **Assert behavior** — test observable outcomes, not implementation details
 
 **Verification:** `npm run test:coverage`
 

@@ -7,6 +7,9 @@ import { z } from 'zod';
 /**
  * Schema for WhatsApp service configuration.
  * All values are sourced from environment variables.
+ *
+ * Webhook validation requires both WABA ID and Phone Number ID to match.
+ * This ensures webhooks are only accepted from the configured business account.
  */
 const configSchema = z.object({
   /**
@@ -28,8 +31,19 @@ const configSchema = z.object({
   accessToken: z.string().min(1, 'INTEXURAOS_WHATSAPP_ACCESS_TOKEN is required'),
 
   /**
+   * Allowed WhatsApp Business Account IDs (WABA IDs).
+   * Comma-separated list. Webhooks are rejected if entry[].id doesn't match.
+   * Find at: Business Settings → WhatsApp Business Accounts → Account ID
+   */
+  allowedWabaIds: z
+    .string()
+    .min(1, 'INTEXURAOS_WHATSAPP_WABA_ID is required')
+    .transform((val) => val.split(',').map((id) => id.trim())),
+
+  /**
    * Allowed WhatsApp Business phone number IDs.
-   * Comma-separated list of phone number IDs that this service will process.
+   * Comma-separated list. Webhooks are rejected if metadata.phone_number_id doesn't match.
+   * Find at: WhatsApp → API Setup → Phone Number ID
    */
   allowedPhoneNumberIds: z
     .string()
@@ -58,6 +72,7 @@ export function loadConfig(): Config {
     verifyToken: process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'],
     appSecret: process.env['INTEXURAOS_WHATSAPP_APP_SECRET'],
     accessToken: process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'],
+    allowedWabaIds: process.env['INTEXURAOS_WHATSAPP_WABA_ID'],
     allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -73,6 +88,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_VERIFY_TOKEN',
     'INTEXURAOS_WHATSAPP_APP_SECRET',
     'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
+    'INTEXURAOS_WHATSAPP_WABA_ID',
     'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
