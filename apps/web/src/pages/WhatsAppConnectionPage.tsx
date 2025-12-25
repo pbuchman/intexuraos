@@ -218,7 +218,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                   ))}
                 </dd>
               </div>
-              {status.updatedAt !== undefined && status.updatedAt !== '' ? (
+              {status.updatedAt !== '' ? (
                 <div className="flex justify-between">
                   <dt className="text-slate-600">Last Updated</dt>
                   <dd className="text-slate-900">{new Date(status.updatedAt).toLocaleString()}</dd>

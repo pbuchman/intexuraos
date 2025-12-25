@@ -20,3 +20,11 @@ export {
   isUserConnected,
 } from './userMappingRepository.js';
 
+export {
+  type WhatsAppMessage,
+  type WhatsAppMessageMetadata,
+  saveMessage,
+  getMessagesByUser,
+  getMessage,
+  deleteMessage,
+} from './messageRepository.js';

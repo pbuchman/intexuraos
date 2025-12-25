@@ -2,14 +2,25 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
-import { WebhookEventRepositoryAdapter, UserMappingRepositoryAdapter } from './adapters.js';
+import {
+  WebhookEventRepositoryAdapter,
+  UserMappingRepositoryAdapter,
+  MessageRepositoryAdapter,
+} from './adapters.js';
+import type {
+  WhatsAppWebhookEventRepository,
+  WhatsAppUserMappingRepository,
+  WhatsAppMessageRepository,
+} from './domain/inbox/index.js';
 
 /**
  * Service container holding all adapter instances.
+ * Uses domain interface types for proper type inference.
  */
 export interface ServiceContainer {
-  webhookEventRepository: WebhookEventRepositoryAdapter;
-  userMappingRepository: UserMappingRepositoryAdapter;
+  webhookEventRepository: WhatsAppWebhookEventRepository;
+  userMappingRepository: WhatsAppUserMappingRepository;
+  messageRepository: WhatsAppMessageRepository;
 }
 
 let container: ServiceContainer | null = null;
@@ -21,6 +32,7 @@ export function getServices(): ServiceContainer {
   container ??= {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
+    messageRepository: new MessageRepositoryAdapter(),
   };
   return container;
 }

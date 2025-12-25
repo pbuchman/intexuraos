@@ -17,6 +17,10 @@ import {
   extractPhoneNumberId,
   extractSenderPhoneNumber,
   extractWabaId,
+  extractMessageText,
+  extractMessageTimestamp,
+  extractSenderName,
+  extractMessageType,
   handleValidationError,
 } from './shared.js';
 
@@ -256,8 +260,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
 /**
  * Process webhook asynchronously after returning 200 to Meta.
- * For now, just validates the user mapping and sends confirmation.
- * Message storage will be added in a subsequent task.
+ * Validates user mapping and saves message to Firestore.
  */
 async function processWebhookAsync(
   request: FastifyRequest<{ Body: WebhookPayload }>,
@@ -265,7 +268,7 @@ async function processWebhookAsync(
   config: Config
 ): Promise<void> {
   try {
-    const { webhookEventRepository, userMappingRepository } = getServices();
+    const { webhookEventRepository, userMappingRepository, messageRepository } = getServices();
 
     // Find user by phone number
     const fromNumber = extractSenderPhoneNumber(request.body);
@@ -275,6 +278,25 @@ async function processWebhookAsync(
         ignoredReason: {
           code: 'NO_SENDER',
           message: 'No sender phone number in webhook payload',
+        },
+      });
+      return;
+    }
+
+    // Extract message text (only support text messages)
+    const messageText = extractMessageText(request.body);
+    const messageType = extractMessageType(request.body);
+
+    if (messageType !== 'text' || messageText === null) {
+      request.log.info(
+        { eventId: savedEvent.id, messageType },
+        'Ignoring non-text message'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'UNSUPPORTED_MESSAGE_TYPE',
+          message: `Only text messages are supported. Received: ${messageType ?? 'unknown'}`,
+          details: { messageType },
         },
       });
       return;
@@ -312,7 +334,7 @@ async function processWebhookAsync(
 
     // Check if user mapping is connected
     const mappingResult = await userMappingRepository.getMapping(userId);
-    if (!mappingResult.ok || !mappingResult.value?.connected) {
+    if (!mappingResult.ok || mappingResult.value?.connected !== true) {
       request.log.info(
         { eventId: savedEvent.id, userId },
         'User mapping exists but is disconnected'
@@ -327,14 +349,47 @@ async function processWebhookAsync(
       return;
     }
 
-    // TODO: Store message in Firestore (task 1-0)
-    // For now, just mark as processed since user is valid
+    // Extract message details
+    const waMessageId = extractMessageId(request.body) ?? `unknown-${savedEvent.id}`;
+    const toNumber = extractDisplayPhoneNumber(request.body) ?? '';
+    const timestamp = extractMessageTimestamp(request.body) ?? '';
+    const senderName = extractSenderName(request.body);
+    const phoneNumberId = extractPhoneNumberId(request.body);
+
+    // Save message to Firestore
+    const saveResult = await messageRepository.saveMessage({
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      text: messageText,
+      timestamp,
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+      metadata: {
+        senderName: senderName ?? undefined,
+        phoneNumberId: phoneNumberId ?? undefined,
+      },
+    });
+
+    if (!saveResult.ok) {
+      request.log.error(
+        { error: saveResult.error, eventId: savedEvent.id },
+        'Failed to save message'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to save message: ${saveResult.error.message}`,
+      });
+      return;
+    }
+
+    const savedMessage = saveResult.value;
 
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
 
     request.log.info(
-      { eventId: savedEvent.id, userId },
-      'Webhook processed successfully'
+      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+      'Message saved successfully'
     );
 
     // Send confirmation message

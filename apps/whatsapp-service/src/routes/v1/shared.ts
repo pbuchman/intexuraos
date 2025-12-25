@@ -52,6 +52,16 @@ interface WebhookValue {
   messages?: {
     from?: string;
     id?: string;
+    timestamp?: string;
+    type?: string;
+    text?: {
+      body?: string;
+    };
+  }[];
+  contacts?: {
+    profile?: {
+      name?: string;
+    };
   }[];
 }
 
@@ -163,4 +173,60 @@ export function extractMessageId(payload: unknown): string | null {
   const message = value?.messages?.[0];
   if (message === undefined) return null;
   return typeof message.id === 'string' ? message.id : null;
+}
+
+/**
+ * Extract message text content from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].text.body
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageText(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.text?.body === 'string' ? message.text.body : null;
+}
+
+/**
+ * Extract message timestamp from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].timestamp
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageTimestamp(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.timestamp === 'string' ? message.timestamp : null;
+}
+
+/**
+ * Extract sender profile name from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.contacts[0].profile.name
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#contacts-object
+ */
+export function extractSenderName(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const contact = value?.contacts?.[0];
+  if (contact === undefined) return null;
+  return typeof contact.profile?.name === 'string' ? contact.profile.name : null;
+}
+
+/**
+ * Extract message type from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].type
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageType(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.type === 'string' ? message.type : null;
 }
