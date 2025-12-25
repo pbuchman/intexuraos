@@ -47,16 +47,16 @@ docs/           → All documentation
 
 ## Code Rules
 
-| Rule                                | Verification            |
-| ----------------------------------- | ----------------------- |
-| Zero `tsc` errors                   | `npm run typecheck`     |
-| Zero ESLint warnings                | `npm run lint`          |
-| Test coverage (see vitest.config.ts)| `npm run test:coverage` |
-| ESM only (`import`/`export`)        | `npm run lint`          |
-| Explicit return types on exports    | `npm run lint`          |
-| No `@ts-ignore`, `@ts-expect-error` | `npm run lint`          |
-| No unused code                      | `npm run lint`          |
-| Prettier formatted                  | `npm run format:check`  |
+| Rule                                 | Verification            |
+| ------------------------------------ | ----------------------- |
+| Zero `tsc` errors                    | `npm run typecheck`     |
+| Zero ESLint warnings                 | `npm run lint`          |
+| Test coverage (see vitest.config.ts) | `npm run test:coverage` |
+| ESM only (`import`/`export`)         | `npm run lint`          |
+| Explicit return types on exports     | `npm run lint`          |
+| No `@ts-ignore`, `@ts-expect-error`  | `npm run lint`          |
+| No unused code                       | `npm run lint`          |
+| Prettier formatted                   | `npm run format:check`  |
 
 **IMPORTANT:** After creating or modifying files, always run `npx prettier --write .` before `npm run ci`.
 
