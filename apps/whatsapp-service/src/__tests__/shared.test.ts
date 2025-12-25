@@ -7,6 +7,7 @@ import type { FastifyReply } from 'fastify';
 import {
   handleValidationError,
   extractPhoneNumberId,
+  extractDisplayPhoneNumber,
   extractSenderPhoneNumber,
   extractMessageId,
 } from '../routes/v1/shared.js';
@@ -95,6 +96,43 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { metadata: {} } }] }],
       };
       expect(extractPhoneNumberId(payload)).toBeNull();
+    });
+  });
+
+  describe('extractDisplayPhoneNumber', () => {
+    it('extracts display phone number from valid webhook payload', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  metadata: {
+                    display_phone_number: '15551381846',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(extractDisplayPhoneNumber(payload)).toBe('15551381846');
+    });
+
+    it('returns null for null payload', () => {
+      expect(extractDisplayPhoneNumber(null)).toBeNull();
+    });
+
+    it('returns null for payload without entry', () => {
+      expect(extractDisplayPhoneNumber({})).toBeNull();
+    });
+
+    it('returns null when metadata has no display_phone_number', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { metadata: { phone_number_id: '123' } } }] }],
+      };
+      expect(extractDisplayPhoneNumber(payload)).toBeNull();
     });
   });
 

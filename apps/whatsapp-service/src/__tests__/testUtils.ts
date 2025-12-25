@@ -86,7 +86,7 @@ export const testConfig: Config = {
   verifyToken: 'test-verify-token-12345',
   appSecret: 'test-app-secret-67890',
   accessToken: 'test-access-token',
-  allowedPhoneNumberIds: ['test-phone-id'],
+  allowedPhoneNumberIds: ['123456789012345', '987654321098765'],
   port: 8080,
   host: '0.0.0.0',
 };

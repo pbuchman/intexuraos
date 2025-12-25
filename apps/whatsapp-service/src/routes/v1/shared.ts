@@ -16,121 +16,94 @@ export function handleValidationError(error: ZodError, reply: FastifyReply): Fas
 }
 
 /**
- * Extract phone number ID from webhook payload if available.
+ * WhatsApp webhook payload structure (partial, for extraction).
+ * Based on actual Meta webhook format.
+ */
+interface WebhookValue {
+  metadata?: {
+    phone_number_id?: string;
+    display_phone_number?: string;
+  };
+  messages?: {
+    from?: string;
+    id?: string;
+  }[];
+}
+
+interface WebhookChange {
+  value?: WebhookValue;
+}
+
+interface WebhookEntry {
+  changes?: WebhookChange[];
+}
+
+interface WebhookPayloadShape {
+  entry?: WebhookEntry[];
+}
+
+/**
+ * Safely extract the first webhook value from payload.
+ */
+function extractFirstValue(payload: unknown): WebhookValue | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const p = payload as WebhookPayloadShape;
+  const entry = p.entry?.[0];
+  if (entry === undefined) return null;
+
+  const change = entry.changes?.[0];
+  if (change === undefined) return null;
+
+  return change.value ?? null;
+}
+
+/**
+ * Extract phone number ID from webhook payload.
+ * This is the Meta-assigned ID for the WhatsApp Business phone number receiving the message.
+ *
+ * Path: entry[0].changes[0].value.metadata.phone_number_id
  */
 export function extractPhoneNumberId(payload: unknown): string | null {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'entry' in payload &&
-    Array.isArray((payload as { entry: unknown }).entry)
-  ) {
-    const entry = (payload as { entry: unknown[] }).entry[0];
-    if (
-      typeof entry === 'object' &&
-      entry !== null &&
-      'changes' in entry &&
-      Array.isArray((entry as { changes: unknown }).changes)
-    ) {
-      const change = (entry as { changes: unknown[] }).changes[0];
-      if (
-        typeof change === 'object' &&
-        change !== null &&
-        'value' in change &&
-        typeof (change as { value: unknown }).value === 'object' &&
-        (change as { value: unknown }).value !== null
-      ) {
-        const value = (change as { value: { metadata?: { phone_number_id?: string } } }).value;
-        if (value.metadata?.phone_number_id !== undefined) {
-          return value.metadata.phone_number_id;
-        }
-      }
-    }
-  }
-  return null;
+  const value = extractFirstValue(payload);
+  return value?.metadata?.phone_number_id ?? null;
 }
 
 /**
- * Extract sender phone number from webhook payload if available.
+ * Extract display phone number from webhook payload.
+ * This is the actual phone number in international format WITHOUT leading "+".
+ * Example: "15551381846" (not "+15551381846")
+ *
+ * Path: entry[0].changes[0].value.metadata.display_phone_number
+ */
+export function extractDisplayPhoneNumber(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  return value?.metadata?.display_phone_number ?? null;
+}
+
+/**
+ * Extract sender phone number from webhook payload.
+ * This is the WhatsApp user who sent the message, in international format WITHOUT leading "+".
+ * Example: "48534042325" (not "+48534042325")
+ *
+ * Path: entry[0].changes[0].value.messages[0].from
  */
 export function extractSenderPhoneNumber(payload: unknown): string | null {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'entry' in payload &&
-    Array.isArray((payload as { entry: unknown }).entry)
-  ) {
-    const entry = (payload as { entry: unknown[] }).entry[0];
-    if (
-      typeof entry === 'object' &&
-      entry !== null &&
-      'changes' in entry &&
-      Array.isArray((entry as { changes: unknown }).changes)
-    ) {
-      const change = (entry as { changes: unknown[] }).changes[0];
-      if (
-        typeof change === 'object' &&
-        change !== null &&
-        'value' in change &&
-        typeof (change as { value: unknown }).value === 'object' &&
-        (change as { value: unknown }).value !== null
-      ) {
-        const value = (change as { value: { messages?: { from?: string }[] } }).value;
-        if (
-          value.messages !== undefined &&
-          Array.isArray(value.messages) &&
-          value.messages.length > 0
-        ) {
-          const message = value.messages[0];
-          if (message !== undefined && typeof message.from === 'string') {
-            return message.from;
-          }
-        }
-      }
-    }
-  }
-  return null;
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.from === 'string' ? message.from : null;
 }
 
 /**
- * Extract message ID from webhook payload if available.
+ * Extract message ID from webhook payload.
  * Used for creating message replies (context).
+ *
+ * Path: entry[0].changes[0].value.messages[0].id
  */
 export function extractMessageId(payload: unknown): string | null {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'entry' in payload &&
-    Array.isArray((payload as { entry: unknown }).entry)
-  ) {
-    const entry = (payload as { entry: unknown[] }).entry[0];
-    if (
-      typeof entry === 'object' &&
-      entry !== null &&
-      'changes' in entry &&
-      Array.isArray((entry as { changes: unknown }).changes)
-    ) {
-      const change = (entry as { changes: unknown[] }).changes[0];
-      if (
-        typeof change === 'object' &&
-        change !== null &&
-        'value' in change &&
-        typeof (change as { value: unknown }).value === 'object' &&
-        (change as { value: unknown }).value !== null
-      ) {
-        const value = (change as { value: { messages?: { id?: string }[] } }).value;
-        if (
-          value.messages !== undefined &&
-          Array.isArray(value.messages) &&
-          value.messages.length > 0
-        ) {
-          const message = value.messages[0];
-          if (message !== undefined && typeof message.id === 'string') {
-            return message.id;
-          }
-        }
-      }
-    }
-  }
-  return null;
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.id === 'string' ? message.id : null;
 }
