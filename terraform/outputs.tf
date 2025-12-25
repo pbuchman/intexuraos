@@ -10,6 +10,6 @@ output "region" {
 
 output "artifact_registry_url" {
   description = "Artifact Registry URL for Docker images"
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/praxos"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/intexuraos"
 }
 
