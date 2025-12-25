@@ -42,6 +42,18 @@ IntexuraOS is the execution layer for a personal operating system where **Notion
 
 ---
 
+## ChatGPT Custom Model
+
+The project includes a ChatGPT custom model (GPT) for prompt review and management:
+
+📂 **[chatgpt-prompts-model/](chatgpt-prompts-model/)** — Notion Prompt Vault
+
+- Review prompts using 10-dimension weighted scoring
+- Iterative improvement loop until score ≥ 8.0
+- Direct save to Notion via OAuth-authenticated API
+
+---
+
 ## Architecture
 
 ```
