@@ -4,7 +4,7 @@ import type { NotionStatus, NotionConnectResponse } from '@/types';
 
 export async function getNotionStatus(accessToken: string): Promise<NotionStatus> {
   return await apiRequest<NotionStatus>(
-    config.promptVaultServiceUrl,
+    config.notionServiceUrl,
     '/v1/integrations/notion/status',
     accessToken
   );
@@ -20,7 +20,7 @@ export async function connectNotion(
   request: NotionConnectRequest
 ): Promise<NotionConnectResponse> {
   return await apiRequest<NotionConnectResponse>(
-    config.promptVaultServiceUrl,
+    config.notionServiceUrl,
     '/v1/integrations/notion/connect',
     accessToken,
     {
@@ -32,7 +32,7 @@ export async function connectNotion(
 
 export async function disconnectNotion(accessToken: string): Promise<void> {
   await apiRequest<{ disconnected: boolean }>(
-    config.promptVaultServiceUrl,
+    config.notionServiceUrl,
     '/v1/integrations/notion/disconnect',
     accessToken,
     { method: 'DELETE' }

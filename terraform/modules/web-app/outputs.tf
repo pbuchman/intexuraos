@@ -9,12 +9,27 @@ output "bucket_url" {
 }
 
 output "public_url" {
-  description = "Public URL for the web app"
-  value       = "https://storage.googleapis.com/${google_storage_bucket.web_app.name}"
+  description = "Public URL for the web app (direct GCS access)"
+  value       = "https://storage.googleapis.com/${google_storage_bucket.web_app.name}/index.html"
+}
+
+output "load_balancer_ip" {
+  description = "Load balancer IP address (configure DNS to point to this)"
+  value       = var.enable_load_balancer ? google_compute_global_address.web_app[0].address : null
 }
 
 output "website_url" {
-  description = "Website URL (custom domain format)"
-  value       = "https://${google_storage_bucket.web_app.name}.storage.googleapis.com"
+  description = "Website URL (via load balancer if enabled, otherwise direct GCS)"
+  value       = var.enable_load_balancer && var.domain != "" ? "https://${var.domain}" : "https://storage.googleapis.com/${google_storage_bucket.web_app.name}/index.html"
+}
+
+output "web_app_dns_a_record_hint" {
+  description = "DNS A record to create in Route53 or your DNS provider"
+  value       = var.enable_load_balancer && var.domain != "" ? "${var.domain} A ${google_compute_global_address.web_app[0].address}" : null
+}
+
+output "web_app_cert_name" {
+  description = "Managed SSL certificate resource name (check status: gcloud compute ssl-certificates describe <name>)"
+  value       = var.enable_load_balancer && var.domain != "" ? google_compute_managed_ssl_certificate.web_app[0].name : null
 }
 

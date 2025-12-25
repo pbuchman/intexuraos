@@ -13,6 +13,19 @@ terraform validate                # From /terraform or environment dir
 
 ---
 
+## Repo-specific gotchas
+
+### Web hosting (GCS backend bucket)
+
+When changing `terraform/modules/web-app`:
+
+- Remember that backend buckets **do not** honor GCS `website.main_page_suffix`.
+- `GET /` will 404 unless the URL map rewrites `/` → `/index.html`.
+
+Reference: `docs/architecture/web-app-hosting.md`
+
+---
+
 ## Rules
 
 | Rule                              | Verification                      |

@@ -10,12 +10,13 @@ function getEnvVar(key: string): string {
 
 export function getConfig(): AppConfig {
   return {
-    auth0Domain: getEnvVar('VITE_AUTH0_DOMAIN'),
-    auth0ClientId: getEnvVar('VITE_AUTH0_CLIENT_ID'),
-    authAudience: getEnvVar('VITE_AUTH_AUDIENCE'),
-    authServiceUrl: getEnvVar('VITE_AUTH_SERVICE_URL'),
-    promptVaultServiceUrl: getEnvVar('VITE_PROMPTVAULT_SERVICE_URL'),
-    whatsappServiceUrl: getEnvVar('VITE_WHATSAPP_SERVICE_URL'),
+    auth0Domain: getEnvVar('INTEXURAOS_AUTH0_DOMAIN'),
+    auth0ClientId: getEnvVar('INTEXURAOS_AUTH0_SPA_CLIENT_ID'),
+    authAudience: getEnvVar('INTEXURAOS_AUTH_AUDIENCE'),
+    authServiceUrl: getEnvVar('INTEXURAOS_AUTH_SERVICE_URL'),
+    promptVaultServiceUrl: getEnvVar('INTEXURAOS_PROMPTVAULT_SERVICE_URL'),
+    whatsappServiceUrl: getEnvVar('INTEXURAOS_WHATSAPP_SERVICE_URL'),
+    notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
   };
 }
 

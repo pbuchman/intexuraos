@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **@intexuraos/domain-inbox**: Inbox note and action models
 - **@intexuraos/infra-auth0**: Auth0 SDK adapter
 - **@intexuraos/infra-notion**: Notion API adapter
-- **@intexuraos/infra-firestore**: Firestore adapter with emulator support
+- **@intexuraos/infra-firestore**: Firestore adapter
 - Terraform modules for GCP infrastructure (Cloud Run, Firestore, Secret Manager, IAM)
 - Cloud Build CI/CD pipeline with affected-service detection
 - Comprehensive setup guides for GCP, Auth0, and WhatsApp integration
@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Token redaction in all log output
 - JWKS-based JWT validation
 
-## [0.0.1] - 2024-12-22
+## [0.0.1] - 2025-12-22
 
 ### Added
 

@@ -122,7 +122,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      url: 'https://intexuraos-notion-service-ooafxzbaua-lm.a.run.app',
+      url: 'https://intexuraos-notion-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8082', description: 'Local' },

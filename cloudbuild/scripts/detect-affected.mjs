@@ -20,10 +20,14 @@ const WORKSPACE = process.env.WORKSPACE || '/workspace';
 const OUTPUT_FILE = join(WORKSPACE, 'affected.json');
 
 // Service dependencies - each app owns its domain and infra
+// terraform/ changes affect all services (infrastructure changes require redeploy)
+// cloudbuild/ changes affect all services (build/deploy logic changes require redeploy)
 const SERVICE_DEPS = {
   'auth-service': [
     'apps/auth-service/',
     'packages/common/',
+    'terraform/',
+    'cloudbuild/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -32,6 +36,8 @@ const SERVICE_DEPS = {
   'promptvault-service': [
     'apps/promptvault-service/',
     'packages/common/',
+    'terraform/',
+    'cloudbuild/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -40,6 +46,8 @@ const SERVICE_DEPS = {
   'notion-service': [
     'apps/notion-service/',
     'packages/common/',
+    'terraform/',
+    'cloudbuild/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -48,6 +56,8 @@ const SERVICE_DEPS = {
   'whatsapp-service': [
     'apps/whatsapp-service/',
     'packages/common/',
+    'terraform/',
+    'cloudbuild/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
@@ -56,12 +66,22 @@ const SERVICE_DEPS = {
   'api-docs-hub': [
     'apps/api-docs-hub/',
     'packages/common/',
+    'terraform/',
+    'cloudbuild/',
     'package.json',
     'package-lock.json',
     'tsconfig.json',
     'tsconfig.base.json',
   ],
-  web: ['apps/web/', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.base.json'],
+  web: [
+    'apps/web/',
+    'terraform/',
+    'cloudbuild/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
 };
 
 /**

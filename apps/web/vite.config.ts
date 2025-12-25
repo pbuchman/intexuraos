@@ -5,6 +5,8 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Expose INTEXURAOS_ prefixed env vars to the client
+  envPrefix: 'INTEXURAOS_',
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

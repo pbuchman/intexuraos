@@ -8,6 +8,25 @@ applyTo: 'apps/web/**'
 
 ---
 
+## Hosting & Routing (IMPORTANT)
+
+The web app is deployed as static assets to GCS (`gs://intexuraos-web-${ENVIRONMENT}`) and served via an external HTTP(S) Load Balancer using a backend bucket.
+
+### Link format requirement
+
+Backend buckets do **not** support a general "SPA fallback" rewrite (e.g. `/notion` → `/index.html`).
+
+To ensure links work in development and production under this hosting model:
+
+- Use **hash routing** URLs (e.g. `/#/notion`, not `/notion`).
+- Do not introduce new routes that assume server-side rewrites.
+
+**Implementation:** `apps/web/src/App.tsx` uses `HashRouter`.
+
+Reference: `docs/architecture/web-app-hosting.md`
+
+---
+
 ## Architecture
 
 ### Single Responsibility Principle (SRP)
@@ -74,7 +93,8 @@ applyTo: 'apps/web/**'
 ### No Magic Strings
 
 - Extract constants or use configuration.
-- Environment variables via `import.meta.env.VITE_*`.
+- Environment variables are exposed to the client via `envPrefix: 'INTEXURAOS_'` in Vite.
+  - Prefer `import.meta.env.INTEXURAOS_*`.
 
 ---
 
@@ -129,5 +149,6 @@ npm run ci            # Full CI check
 - [ ] No new ESLint or TS warnings
 - [ ] Components are minimal and focused (SRP)
 - [ ] Files follow single responsibility principle
+- [ ] Any new links/routes use hash routing (`/#/...`) so they work under static hosting
 
 **Verification is not optional.**

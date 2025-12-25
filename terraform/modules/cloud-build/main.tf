@@ -91,6 +91,13 @@ resource "google_storage_bucket_iam_member" "cloud_build_web_storage_admin" {
   member = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs to access secrets for web build (INTEXURAOS_* env vars)
+resource "google_project_iam_member" "cloud_build_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Webhook Trigger for Development Branch
 # -----------------------------------------------------------------------------

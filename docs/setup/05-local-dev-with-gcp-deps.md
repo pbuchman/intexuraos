@@ -127,22 +127,14 @@ open http://localhost:8080/docs
 open http://localhost:8081/docs
 ```
 
-## 6. Using Local Firestore Emulator (Optional)
+## 6. Testing
 
-For fully offline development, use the Firestore emulator:
+Tests use **in-memory fake repositories** via dependency injection—no external services required:
 
 ```bash
-# Install emulator
-gcloud components install cloud-firestore-emulator
-
-# Start emulator
-gcloud emulators firestore start --host-port=localhost:8085
-
-# In another terminal, set environment
-export FIRESTORE_EMULATOR_HOST=localhost:8085
-
-# Run services (they'll connect to emulator)
-npm run dev
+npm run test          # Run all tests
+npm run test:coverage # Run with coverage report
+npm run ci            # Full CI pipeline
 ```
 
 ## Project Structure for Local Development

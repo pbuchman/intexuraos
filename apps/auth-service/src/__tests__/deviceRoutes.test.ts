@@ -5,6 +5,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
+import { setServices, resetServices } from '../services.js';
+import { FakeAuthTokenRepository } from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
@@ -12,6 +14,7 @@ const AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('Device Authorization Flow', () => {
   let app: FastifyInstance;
+  let fakeTokenRepo: FakeAuthTokenRepository;
 
   beforeAll(() => {
     nock.disableNetConnect();
@@ -27,10 +30,15 @@ describe('Device Authorization Flow', () => {
     delete process.env['AUTH0_CLIENT_ID'];
     delete process.env['AUTH_AUDIENCE'];
     nock.cleanAll();
+    resetServices();
+
+    // Create fake repository for token storage tests
+    fakeTokenRepo = new FakeAuthTokenRepository();
   });
 
   afterEach(async () => {
     await app.close();
+    resetServices();
   });
 
   describe('POST /v1/auth/device/start', () => {
@@ -255,6 +263,12 @@ describe('Device Authorization Flow', () => {
         process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+
+        // Inject fake repository to avoid Firestore connection during token storage
+        setServices({
+          authTokenRepository: fakeTokenRepo,
+          auth0Client: null, // Not used in device flow (uses direct HTTP calls)
+        });
       });
 
       it('returns 400 when device_code is missing', async () => {
@@ -445,9 +459,6 @@ describe('Device Authorization Flow', () => {
           payload: { device_code: 'test-device-code' },
         });
 
-        // Request should succeed regardless of token storage outcome
-        // Note: refresh_token is not included in the response schema,
-        // but the storeRefreshToken function is triggered internally
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body) as {
           success: boolean;
@@ -455,6 +466,12 @@ describe('Device Authorization Flow', () => {
         };
         expect(body.success).toBe(true);
         expect(body.data.access_token).toBe(accessToken);
+
+        // Verify token was stored in the fake repository
+        const storedTokens = fakeTokenRepo.getStoredTokens('auth0|user-123');
+        expect(storedTokens).toBeDefined();
+        expect(storedTokens?.refreshToken).toBe('test-refresh-token');
+        expect(storedTokens?.accessToken).toBe(accessToken);
       });
 
       it('handles invalid JWT format gracefully when storing refresh token', async () => {
