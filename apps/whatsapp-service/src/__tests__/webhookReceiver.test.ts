@@ -176,19 +176,77 @@ describe('POST /v1/webhooks/whatsapp (webhook event receiver)', () => {
     expect(events.length).toBe(0);
   });
 
-  it('returns 403 when phone_number_id is not in allowed list', async () => {
+  it('returns 403 when waba_id is not in allowed list', async () => {
     const payload = {
       object: 'whatsapp_business_account',
       entry: [
         {
-          id: 'WABA_ID',
+          id: 'unknown-waba-id-not-allowed',
           changes: [
             {
               field: 'messages',
               value: {
                 messaging_product: 'whatsapp',
                 metadata: {
-                  display_phone_number: '+1234567890',
+                  display_phone_number: '15551234567',
+                  phone_number_id: '123456789012345', // Valid phone number ID
+                },
+                messages: [
+                  {
+                    from: '15551234567',
+                    id: 'wamid.XXXXX',
+                    timestamp: '1234567890',
+                    type: 'text',
+                    text: { body: 'Test' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const payloadString = JSON.stringify(payload);
+    const signature = createSignature(payloadString, testConfig.appSecret);
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signature,
+      },
+      payload: payloadString,
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('waba_id');
+    expect(body.error.message).toContain('not allowed');
+
+    // Should not persist event when waba_id doesn't match
+    const events = ctx.webhookEventRepository.getAll();
+    expect(events.length).toBe(0);
+  });
+
+  it('returns 403 when phone_number_id is not in allowed list', async () => {
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: '102290129340398', // Valid WABA ID
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: '15551234567',
                   phone_number_id: 'unknown-phone-id-not-allowed',
                 },
                 messages: [
@@ -226,6 +284,7 @@ describe('POST /v1/webhooks/whatsapp (webhook event receiver)', () => {
     };
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.message).toContain('phone_number_id');
     expect(body.error.message).toContain('not allowed');
 
     // Should not persist event when phone_number_id doesn't match
@@ -238,15 +297,15 @@ describe('POST /v1/webhooks/whatsapp (webhook event receiver)', () => {
       object: 'whatsapp_business_account',
       entry: [
         {
-          id: 'WABA_ID',
+          id: '102290129340398', // Valid WABA ID
           changes: [
             {
               field: 'messages',
               value: {
                 messaging_product: 'whatsapp',
                 metadata: {
-                  display_phone_number: '+1234567890',
-                  phone_number_id: '987654321098765',
+                  display_phone_number: '15559876543',
+                  phone_number_id: '987654321098765', // Valid phone number ID
                 },
                 statuses: [
                   {

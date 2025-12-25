@@ -20,6 +20,7 @@ import {
   extractMessageId,
   extractPhoneNumberId,
   extractSenderPhoneNumber,
+  extractWabaId,
   handleValidationError,
 } from './shared.js';
 
@@ -187,15 +188,36 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           return await reply.fail('FORBIDDEN', 'Invalid webhook signature');
         }
 
-        // Extract phone number ID from payload
+        // Extract identifiers from payload
+        // See: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+        const wabaId = extractWabaId(request.body);
         const phoneNumberId = extractPhoneNumberId(request.body);
         const displayPhoneNumber = extractDisplayPhoneNumber(request.body);
 
-        // Reject if phone number ID doesn't match configured allowed IDs
+        // Validate WABA ID (entry[].id) matches configured allowed IDs
+        if (wabaId === null || !config.allowedWabaIds.includes(wabaId)) {
+          request.log.warn(
+            {
+              reason: 'waba_id_mismatch',
+              receivedWabaId: wabaId,
+              receivedPhoneNumberId: phoneNumberId,
+              receivedDisplayPhoneNumber: displayPhoneNumber,
+              allowedWabaIds: config.allowedWabaIds,
+            },
+            'Webhook rejected: waba_id not in allowed list'
+          );
+          return await reply.fail(
+            'FORBIDDEN',
+            `Webhook rejected: waba_id "${wabaId ?? 'null'}" not allowed`
+          );
+        }
+
+        // Validate phone number ID (metadata.phone_number_id) matches configured allowed IDs
         if (phoneNumberId === null || !config.allowedPhoneNumberIds.includes(phoneNumberId)) {
           request.log.warn(
             {
               reason: 'phone_number_id_mismatch',
+              receivedWabaId: wabaId,
               receivedPhoneNumberId: phoneNumberId,
               receivedDisplayPhoneNumber: displayPhoneNumber,
               allowedPhoneNumberIds: config.allowedPhoneNumberIds,

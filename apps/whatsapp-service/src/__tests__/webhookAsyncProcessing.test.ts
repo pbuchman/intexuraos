@@ -121,14 +121,14 @@ describe('Webhook async processing', () => {
         object: 'whatsapp_business_account',
         entry: [
           {
-            id: 'WABA_ID',
+            id: '102290129340398',
             changes: [
               {
                 field: 'messages',
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: {
-                    display_phone_number: '+1234567890',
+                    display_phone_number: '15551234567',
                     phone_number_id: '123456789012345',
                   },
                   statuses: [
@@ -205,15 +205,15 @@ describe('Webhook async processing', () => {
         object: 'whatsapp_business_account',
         entry: [
           {
-            id: 'WABA_ID',
+            id: '102290129340398',
             changes: [
               {
                 field: 'messages',
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: {
-                    display_phone_number: '+1234567890',
-                    phone_number_id: 'test-phone-id', // This is in testConfig.allowedPhoneNumberIds
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345', // This is in testConfig.allowedPhoneNumberIds
                   },
                   contacts: [
                     {
@@ -256,7 +256,7 @@ describe('Webhook async processing', () => {
 
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.phoneNumberId).toBe('test-phone-id');
+      expect(events[0]?.phoneNumberId).toBe('123456789012345');
     });
   });
 
@@ -276,15 +276,15 @@ describe('Webhook async processing', () => {
         object: 'whatsapp_business_account',
         entry: [
           {
-            id: 'WABA_ID',
+            id: '102290129340398',
             changes: [
               {
                 field: 'messages',
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: {
-                    display_phone_number: '+1234567890',
-                    phone_number_id: 'test-phone-id',
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
                   },
                   contacts: [
                     {
@@ -350,15 +350,15 @@ describe('Webhook async processing', () => {
         object: 'whatsapp_business_account',
         entry: [
           {
-            id: 'WABA_ID',
+            id: '102290129340398',
             changes: [
               {
                 field: 'messages',
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: {
-                    display_phone_number: '+1234567890',
-                    phone_number_id: 'test-phone-id',
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
                   },
                   contacts: [
                     {
@@ -404,67 +404,9 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
     });
 
-    it('does not send confirmation when phoneNumberId is null', async () => {
-      // Clear the mock call count
-      vi.mocked(sendWhatsAppMessage).mockClear();
-
-      // Payload with no phone_number_id
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: 'WABA_ID',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '+1234567890',
-                    // No phone_number_id
-                  },
-                  contacts: [
-                    {
-                      wa_id: '15551234567',
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: '15551234567',
-                      id: 'wamid.test123',
-                      timestamp: '1234567890',
-                      type: 'text',
-                      text: { body: 'Hello' },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/webhooks/whatsapp',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await waitForAsyncProcessing(200);
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-    });
+    // Note: Test for "phoneNumberId is null" has been removed because webhooks without
+    // phone_number_id are now rejected at the validation layer (403).
+    // See webhookReceiver.test.ts: "returns 403 when phone_number_id is not in allowed list"
   });
 
   describe('error handling in processWebhookAsync', () => {
@@ -487,15 +429,15 @@ describe('Webhook async processing', () => {
         object: 'whatsapp_business_account',
         entry: [
           {
-            id: 'WABA_ID',
+            id: '102290129340398',
             changes: [
               {
                 field: 'messages',
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: {
-                    display_phone_number: '+1234567890',
-                    phone_number_id: 'test-phone-id',
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
                   },
                   contacts: [
                     {

@@ -27,7 +27,8 @@ describe('whatsapp-service OpenAPI contract', () => {
     verifyToken: 'test-verify-token-12345',
     appSecret: 'test-app-secret-67890',
     accessToken: 'test-access-token',
-    allowedPhoneNumberIds: ['test-phone-id'],
+    allowedWabaIds: ['102290129340398'],
+    allowedPhoneNumberIds: ['123456789012345'],
     port: 8080,
     host: '0.0.0.0',
   };
@@ -37,6 +38,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
     process.env['VITEST'] = 'true';
 
@@ -53,6 +55,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     delete process.env['VITEST'];
   });
