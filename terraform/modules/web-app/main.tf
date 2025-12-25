@@ -1,10 +1,10 @@
 # Web App Module
 # Creates a public Google Cloud Storage bucket for SPA hosting with Load Balancer.
 #
-# IMPORTANT: SPA deep-link fallback (404 -> index.html) is handled by the URL map
-# via default_route_action.url_rewrite, NOT by the bucket's website config.
-# The bucket's website block only works for direct GCS static website access
-# (storage.googleapis.com), which is NOT used when traffic goes through LB.
+# LIMITATION: GCP backend buckets don't support SPA deep-link fallback (404 -> index.html).
+# The bucket's website.main_page_suffix works for / -> index.html.
+# For deep links (/settings, /dashboard), users must navigate from / first,
+# or use hash-based routing (#/settings).
 
 resource "google_storage_bucket" "web_app" {
   name     = "${var.bucket_name}-${var.environment}"
@@ -14,9 +14,12 @@ resource "google_storage_bucket" "web_app" {
   # Uniform bucket-level access (required for public access)
   uniform_bucket_level_access = true
 
-  # NOTE: website block is intentionally omitted.
-  # When using Load Balancer, the bucket's website config has no effect.
-  # SPA routing is handled by google_compute_url_map.web_app using url_rewrite.
+  # Website configuration
+  # main_page_suffix: serves index.html when accessing /
+  # not_found_page: NOT effective through Load Balancer, only for direct GCS access
+  website {
+    main_page_suffix = "index.html"
+  }
 
   # CORS configuration for API calls
   cors {
@@ -86,59 +89,16 @@ resource "google_compute_backend_bucket" "web_app" {
 }
 
 # URL map for SPA hosting
-# NOTE: SPA deep-link fallback is achieved by rewriting non-asset paths to /index.html.
-# The bucket's website.not_found_page does NOT work through Load Balancer.
-# Assets are matched explicitly and served directly without rewrite.
+# NOTE: This is a simple pass-through URL map. All requests go to the backend bucket.
+# The bucket serves files as-is. For SPA deep links to work:
+#   - Navigate to / first, then use client-side routing
+#   - Or use hash-based routing (#/settings instead of /settings)
+# GCP backend buckets don't support proper SPA fallback (rewrite to index.html).
 resource "google_compute_url_map" "web_app" {
   count           = var.enable_load_balancer ? 1 : 0
   name            = "intexuraos-web-${var.environment}-url-map"
   project         = var.project_id
   default_service = google_compute_backend_bucket.web_app[0].id
-
-  # Host rule for the domain
-  host_rule {
-    hosts        = [var.domain]
-    path_matcher = "web-paths"
-  }
-
-  path_matcher {
-    name            = "web-paths"
-    default_service = google_compute_backend_bucket.web_app[0].id
-
-    # SPA fallback: rewrite unknown paths to /index.html
-    # This catches all deep links like /settings, /dashboard, etc.
-    default_route_action {
-      url_rewrite {
-        path_prefix_rewrite = "/index.html"
-      }
-    }
-
-    # Static assets served directly (no rewrite)
-    # Covers: Vite/React assets, fonts, icons, manifests, robots
-    # These paths are matched BEFORE the default fallback
-    # NOTE: GCP URL maps don't support wildcards like /*.png at root level,
-    # so root-level static files must be listed explicitly
-    # IMPORTANT: route_action with empty url_rewrite ensures files are served
-    # as-is without the default_route_action rewrite to /index.html
-    path_rule {
-      paths = [
-        "/assets/*",
-        "/static/*",
-        "/fonts/*",
-        "/favicon.ico",
-        "/favicon.png",
-        "/logo.png",
-        "/robots.txt",
-        "/manifest.webmanifest",
-      ]
-      service = google_compute_backend_bucket.web_app[0].id
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = ""
-        }
-      }
-    }
-  }
 }
 
 # Random suffix for SSL certificate (regenerates when domain changes)
