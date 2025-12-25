@@ -173,6 +173,70 @@ After verification, subscribe to message events:
 
 > **Note**: Other fields like `message_template_status_update` are useful for template management.
 
+### REQUIRED: Subscribe the app to your WABA (missing step)
+
+Even when the webhook URL is verified and fields are selected, **message webhooks may not fire** until the WhatsApp app is explicitly subscribed to the WhatsApp Business Account (WABA).
+
+This subscription is **not always done automatically** by the Meta UI.
+
+#### Option A (recommended): Meta Graph API Explorer
+
+1. Open Graph API Explorer:
+   - https://developers.facebook.com/tools/explorer/
+2. Select:
+   - **Meta App**: your WhatsApp app
+   - **User token**: a token that has access to the Business/WABA
+3. Add required permissions (at minimum):
+   - `whatsapp_business_management`
+   - `whatsapp_business_messaging`
+4. Run (replace `${WABA_ID}`):
+
+**Check current subscriptions**
+
+```
+GET /v24.0/${WABA_ID}/subscribed_apps
+```
+
+**Subscribe your app**
+
+```
+POST /v24.0/${WABA_ID}/subscribed_apps
+```
+
+If successful, re-run the GET and confirm your `app_id` appears.
+
+#### Option B: curl (same Graph API calls)
+
+```bash
+export META_ACCESS_TOKEN="..."  # token with required permissions
+export WABA_ID="1234567890123456"
+
+# Check subscriptions
+curl -s "https://graph.facebook.com/v24.0/${WABA_ID}/subscribed_apps" \
+  -H "Authorization: Bearer ${META_ACCESS_TOKEN}" \
+  | jq .
+
+# Subscribe app
+curl -s -X POST "https://graph.facebook.com/v24.0/${WABA_ID}/subscribed_apps" \
+  -H "Authorization: Bearer ${META_ACCESS_TOKEN}" \
+  | jq .
+```
+
+#### When to do this
+
+Do this
+
+- after creating/connecting the WABA and adding the WhatsApp product to the app
+- after configuring the webhook callback + selecting webhook fields
+- whenever you rotate the app/WABA relationship, or migrate between test/prod WABAs
+
+#### Symptom this fixes
+
+- Webhook verification works (GET challenge succeeds)
+- “Test webhook” in dashboard may work
+- Sending/receiving real messages works
+- **But incoming `messages` webhooks never arrive**
+
 ## 7. Required Permissions/Scopes
 
 | Permission                     | Purpose                         | Required |
