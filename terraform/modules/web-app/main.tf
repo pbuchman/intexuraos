@@ -82,12 +82,21 @@ resource "google_compute_backend_bucket" "web_app" {
   ]
 }
 
-# URL map with SPA routing (all paths -> index.html)
+# URL map with SPA routing (404 fallback to index.html)
 resource "google_compute_url_map" "web_app" {
   count           = var.enable_load_balancer ? 1 : 0
   name            = "intexuraos-web-${var.environment}-url-map"
   project         = var.project_id
   default_service = google_compute_backend_bucket.web_app[0].id
+
+  # SPA fallback: return index.html for 404 errors (deep links)
+  default_custom_error_response_policy {
+    error_response_rule {
+      match_response_codes = ["404"]
+      path                 = "/index.html"
+      override_response_code = 200
+    }
+  }
 
   # Host rule for the domain
   host_rule {
@@ -99,20 +108,16 @@ resource "google_compute_url_map" "web_app" {
     name            = "web-paths"
     default_service = google_compute_backend_bucket.web_app[0].id
 
-    # Route all paths to the backend (SPA handles client-side routing)
-    path_rule {
-      paths   = ["/*"]
-      service = google_compute_backend_bucket.web_app[0].id
-
-      # Rewrite to index.html for SPA routing
-      route_action {
-        url_rewrite {
-          path_prefix_rewrite = "/index.html"
-        }
+    # SPA fallback for this path matcher
+    custom_error_response_policy {
+      error_response_rule {
+        match_response_codes = ["404"]
+        path                 = "/index.html"
+        override_response_code = 200
       }
     }
 
-    # Static assets should be served directly
+    # Static assets served directly (no rewrite)
     path_rule {
       paths   = ["/assets/*", "/*.js", "/*.css", "/*.ico", "/*.png", "/*.svg"]
       service = google_compute_backend_bucket.web_app[0].id
