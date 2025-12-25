@@ -119,17 +119,12 @@ export interface WhatsAppMessageRepository {
   /**
    * Save a new message.
    */
-  saveMessage(
-    message: Omit<WhatsAppMessage, 'id'>
-  ): Promise<Result<WhatsAppMessage, InboxError>>;
+  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>>;
 
   /**
    * Get messages for a user, ordered by receivedAt descending.
    */
-  getMessagesByUser(
-    userId: string,
-    limit?: number
-  ): Promise<Result<WhatsAppMessage[], InboxError>>;
+  getMessagesByUser(userId: string, limit?: number): Promise<Result<WhatsAppMessage[], InboxError>>;
 
   /**
    * Get a single message by ID.

@@ -11,6 +11,10 @@ import {
   extractDisplayPhoneNumber,
   extractSenderPhoneNumber,
   extractMessageId,
+  extractMessageText,
+  extractMessageTimestamp,
+  extractSenderName,
+  extractMessageType,
 } from '../routes/v1/shared.js';
 
 describe('shared utilities', () => {
@@ -311,6 +315,128 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { messages: [{ id: 12345 }] } }] }],
       };
       expect(extractMessageId(payload)).toBeNull();
+    });
+  });
+
+  describe('extractMessageText', () => {
+    it('extracts text body from valid message', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ text: { body: 'Hello world!' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageText(payload)).toBe('Hello world!');
+    });
+
+    it('returns null for message without text', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'image' }] } }] }],
+      };
+      expect(extractMessageText(payload)).toBeNull();
+    });
+
+    it('returns null for null payload', () => {
+      expect(extractMessageText(null)).toBeNull();
+    });
+  });
+
+  describe('extractMessageTimestamp', () => {
+    it('extracts timestamp from valid message', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ timestamp: '1234567890' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageTimestamp(payload)).toBe('1234567890');
+    });
+
+    it('returns null for message without timestamp', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ id: 'test' }] } }] }],
+      };
+      expect(extractMessageTimestamp(payload)).toBeNull();
+    });
+  });
+
+  describe('extractSenderName', () => {
+    it('extracts sender name from contacts', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  contacts: [{ profile: { name: 'John Doe' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractSenderName(payload)).toBe('John Doe');
+    });
+
+    it('returns null when contacts not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractSenderName(payload)).toBeNull();
+    });
+
+    it('returns null when profile name not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { contacts: [{}] } }] }],
+      };
+      expect(extractSenderName(payload)).toBeNull();
+    });
+  });
+
+  describe('extractMessageType', () => {
+    it('extracts message type', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'text' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageType(payload)).toBe('text');
+    });
+
+    it('returns null for message without type', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ id: 'test' }] } }] }],
+      };
+      expect(extractMessageType(payload)).toBeNull();
+    });
+
+    it('returns null for non-string type', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 123 }] } }] }],
+      };
+      expect(extractMessageType(payload)).toBeNull();
     });
   });
 });

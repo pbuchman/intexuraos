@@ -120,8 +120,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'deleteWhatsAppMessage',
         summary: 'Delete a WhatsApp message',
-        description:
-          'Delete a specific WhatsApp message. User can only delete their own messages.',
+        description: 'Delete a specific WhatsApp message. User can only delete their own messages.',
         tags: ['whatsapp'],
         params: {
           type: 'object',
@@ -179,10 +178,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Params: MessageParams }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -220,4 +216,3 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
-

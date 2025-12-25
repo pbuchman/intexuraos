@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageCircle, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  LayoutDashboard,
+  MessageCircle,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+} from 'lucide-react';
 
 interface NavItem {
   to: string;
@@ -12,6 +19,7 @@ const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/notion', label: 'Notion Connection', icon: FileText },
   { to: '/whatsapp', label: 'WhatsApp Connection', icon: MessageCircle },
+  { to: '/whatsapp-notes', label: 'WhatsApp Notes', icon: MessageSquare },
 ];
 
 export function Sidebar(): React.JSX.Element {

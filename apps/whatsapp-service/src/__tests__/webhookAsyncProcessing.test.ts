@@ -1,7 +1,7 @@
 /**
  * Tests for webhook async processing:
- * - processWebhookAsync (lines 205-298)
- * - sendConfirmationMessage (lines 303-333)
+ * - processWebhookAsync
+ * - sendConfirmationMessage
  *
  * These tests wait for the async processing to complete and verify the state changes.
  */
@@ -21,24 +21,7 @@ vi.mock('../whatsappClient.js', () => ({
   sendWhatsAppMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'mock-message-id' }),
 }));
 
-// Mock the notion infra to simulate createInboxNote
-vi.mock('../infra/notion/index.js', () => ({
-  createInboxNote: vi.fn().mockResolvedValue({
-    ok: true,
-    value: {
-      id: 'mock-note-id',
-      title: 'Test Note',
-      content: 'Test Content',
-      source: 'whatsapp',
-      status: 'inbox',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  }),
-}));
-
 import { sendWhatsAppMessage } from '../whatsappClient.js';
-import { createInboxNote } from '../infra/notion/index.js';
 
 describe('Webhook async processing', () => {
   const ctx = setupTestContext();
@@ -52,7 +35,7 @@ describe('Webhook async processing', () => {
   }
 
   describe('processWebhookAsync', () => {
-    it('processes webhook and updates event status when no user mapping exists', async () => {
+    it('processes webhook and updates event status to USER_UNMAPPED when no user mapping exists', async () => {
       const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -72,24 +55,19 @@ describe('Webhook async processing', () => {
       // Wait for async processing
       await waitForAsyncProcessing();
 
-      // Event should be persisted with updated status
+      // Event should be persisted with USER_UNMAPPED status (no mapping for sender)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      // Status will be IGNORED because phone_number_id is not in allowedPhoneNumberIds
-      const event = events[0];
-      expect(event?.status).toBeDefined();
+      expect(events[0]?.status).toBe('USER_UNMAPPED');
     });
 
-    it('processes webhook when user mapping exists with Notion connection', async () => {
-      // Setup user mapping and Notion connection
+    it('processes webhook and stores message when user mapping exists', async () => {
+      // Setup user mapping
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
-      const inboxNotesDbId = 'test-db-id';
-      const notionToken = 'test-notion-token';
 
       // Create mapping with the sender's phone number
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone], inboxNotesDbId);
-      ctx.notionConnectionRepository.setConnection(userId, notionToken);
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
       const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -110,9 +88,16 @@ describe('Webhook async processing', () => {
       // Wait for async processing
       await waitForAsyncProcessing();
 
-      // Verify event was processed
+      // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('PROCESSED');
+
+      // Message should be stored
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+      expect(messages[0]?.text).toBe('Hello, World!');
+      expect(messages[0]?.userId).toBe(userId);
     });
 
     it('handles webhook with no sender phone number', async () => {
@@ -164,18 +149,19 @@ describe('Webhook async processing', () => {
       // Wait for async processing
       await waitForAsyncProcessing();
 
-      // Event should be persisted
+      // Event should be persisted with IGNORED status (no sender)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
     });
 
-    it('processes webhook when user has mapping but no Notion connection', async () => {
+    it('processes webhook when user mapping is disconnected', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
-      const inboxNotesDbId = 'test-db-id';
 
-      // Create mapping without Notion connection
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone], inboxNotesDbId);
+      // Create mapping and then disconnect it
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      await ctx.userMappingRepository.disconnectMapping(userId);
 
       const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -197,117 +183,20 @@ describe('Webhook async processing', () => {
 
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-    });
-
-    it('processes webhook from allowed phone number ID', async () => {
-      // Create payload with allowed phone number ID
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345', // This is in testConfig.allowedPhoneNumberIds
-                  },
-                  contacts: [
-                    {
-                      wa_id: '15551234567',
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: '15551234567',
-                      id: 'wamid.test123',
-                      timestamp: '1234567890',
-                      type: 'text',
-                      text: { body: 'Hello, World!' },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/webhooks/whatsapp',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await waitForAsyncProcessing();
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
-      expect(events[0]?.phoneNumberId).toBe('123456789012345');
+      // User is found but mapping is disconnected, so USER_UNMAPPED
+      expect(events[0]?.status).toBe('USER_UNMAPPED');
     });
   });
 
   describe('sendConfirmationMessage', () => {
     it('sends confirmation message when webhook is successfully processed', async () => {
-      // Setup user mapping and Notion connection
+      // Setup user mapping
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
-      const inboxNotesDbId = 'test-db-id';
-      const notionToken = 'test-notion-token';
 
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone], inboxNotesDbId);
-      ctx.notionConnectionRepository.setConnection(userId, notionToken);
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
-      // Use allowed phone number ID to ensure processing
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: senderPhone,
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: senderPhone,
-                      id: 'wamid.test-message-id',
-                      timestamp: '1234567890',
-                      type: 'text',
-                      text: { body: 'Test message' },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
+      const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
 
@@ -329,6 +218,10 @@ describe('Webhook async processing', () => {
       // Verify event was processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('PROCESSED');
+
+      // Verify sendWhatsAppMessage was called
+      expect(sendWhatsAppMessage).toHaveBeenCalled();
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
@@ -340,48 +233,10 @@ describe('Webhook async processing', () => {
 
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
-      const inboxNotesDbId = 'test-db-id';
-      const notionToken = 'test-notion-token';
 
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone], inboxNotesDbId);
-      ctx.notionConnectionRepository.setConnection(userId, notionToken);
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: senderPhone,
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: senderPhone,
-                      id: 'wamid.test-message-id',
-                      timestamp: '1234567890',
-                      type: 'text',
-                      text: { body: 'Test message' },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
+      const payload = createWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
 
@@ -400,87 +255,10 @@ describe('Webhook async processing', () => {
 
       await waitForAsyncProcessing(200);
 
+      // Event should still be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-    });
-
-    // Note: Test for "phoneNumberId is null" has been removed because webhooks without
-    // phone_number_id are now rejected at the validation layer (403).
-    // See webhookReceiver.test.ts: "returns 403 when phone_number_id is not in allowed list"
-  });
-
-  describe('error handling in processWebhookAsync', () => {
-    it('handles createInboxNote failure gracefully', async () => {
-      // Mock createInboxNote to fail
-      vi.mocked(createInboxNote).mockResolvedValueOnce({
-        ok: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Failed to create note' },
-      });
-
-      const senderPhone = '15551234567';
-      const userId = 'test-user-id';
-      const inboxNotesDbId = 'test-db-id';
-      const notionToken = 'test-notion-token';
-
-      await ctx.userMappingRepository.saveMapping(userId, [senderPhone], inboxNotesDbId);
-      ctx.notionConnectionRepository.setConnection(userId, notionToken);
-
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: '102290129340398',
-            changes: [
-              {
-                field: 'messages',
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15551234567',
-                    phone_number_id: '123456789012345',
-                  },
-                  contacts: [
-                    {
-                      wa_id: senderPhone,
-                      profile: { name: 'Test User' },
-                    },
-                  ],
-                  messages: [
-                    {
-                      from: senderPhone,
-                      id: 'wamid.test-message-id',
-                      timestamp: '1234567890',
-                      type: 'text',
-                      text: { body: 'Test message' },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      };
-
-      const payloadString = JSON.stringify(payload);
-      const signature = createSignature(payloadString, testConfig.appSecret);
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/v1/webhooks/whatsapp',
-        headers: {
-          'content-type': 'application/json',
-          'x-hub-signature-256': signature,
-        },
-        payload: payloadString,
-      });
-
-      // Response should still be 200 (fire-and-forget)
-      expect(response.statusCode).toBe(200);
-
-      await waitForAsyncProcessing(200);
-
-      const events = ctx.webhookEventRepository.getAll();
-      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('PROCESSED');
     });
   });
 

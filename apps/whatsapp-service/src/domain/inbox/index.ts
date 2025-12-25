@@ -22,10 +22,7 @@ export type {
   InboxResult,
 } from './models/InboxNote.js';
 
-export type {
-  WhatsAppMessage,
-  WhatsAppMessageMetadata,
-} from './models/WhatsAppMessage.js';
+export type { WhatsAppMessage, WhatsAppMessageMetadata } from './models/WhatsAppMessage.js';
 
 // Ports
 export type {

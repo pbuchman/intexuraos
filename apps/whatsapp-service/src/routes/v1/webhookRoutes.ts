@@ -288,10 +288,7 @@ async function processWebhookAsync(
     const messageType = extractMessageType(request.body);
 
     if (messageType !== 'text' || messageText === null) {
-      request.log.info(
-        { eventId: savedEvent.id, messageType },
-        'Ignoring non-text message'
-      );
+      request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring non-text message');
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
@@ -356,8 +353,8 @@ async function processWebhookAsync(
     const senderName = extractSenderName(request.body);
     const phoneNumberId = extractPhoneNumberId(request.body);
 
-    // Save message to Firestore
-    const saveResult = await messageRepository.saveMessage({
+    // Build message object
+    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
       userId,
       waMessageId,
       fromNumber,
@@ -366,11 +363,22 @@ async function processWebhookAsync(
       timestamp,
       receivedAt: new Date().toISOString(),
       webhookEventId: savedEvent.id,
-      metadata: {
-        senderName: senderName ?? undefined,
-        phoneNumberId: phoneNumberId ?? undefined,
-      },
-    });
+    };
+
+    // Add metadata only if we have any values
+    if (senderName !== null || phoneNumberId !== null) {
+      const metadata: { senderName?: string; phoneNumberId?: string } = {};
+      if (senderName !== null) {
+        metadata.senderName = senderName;
+      }
+      if (phoneNumberId !== null) {
+        metadata.phoneNumberId = phoneNumberId;
+      }
+      messageToSave.metadata = metadata;
+    }
+
+    // Save message to Firestore
+    const saveResult = await messageRepository.saveMessage(messageToSave);
 
     if (!saveResult.ok) {
       request.log.error(

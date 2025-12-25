@@ -7,18 +7,21 @@
 ## Context Snapshot
 
 Messages will be stored in Firestore (`whatsapp_messages` collection). Web app needs API endpoints to:
+
 1. List user's messages
 2. Delete a specific message
 
 ## Problem Statement
 
 Create REST API endpoints in whatsapp-service for:
+
 - Fetching user's WhatsApp messages (for display in web app)
 - Deleting a specific message
 
 ## Scope
 
 **In scope:**
+
 - `GET /v1/whatsapp/messages` — list user's messages
 - `DELETE /v1/whatsapp/messages/:messageId` — delete specific message
 - OpenAPI documentation
@@ -26,6 +29,7 @@ Create REST API endpoints in whatsapp-service for:
 - Tests
 
 **Out of scope:**
+
 - Web UI (task 2-1)
 - Pagination (explicit: no paging for now)
 
@@ -35,24 +39,24 @@ Create REST API endpoints in whatsapp-service for:
 
 ===
 Request:
-  Headers: Authorization: Bearer <token>
-  Query params: (none for now, no pagination)
+Headers: Authorization: Bearer <token>
+Query params: (none for now, no pagination)
 
 Response 200:
 {
-  "success": true,
-  "data": {
-    "messages": [
-      {
-        "id": "msg-uuid",
-        "text": "Message content",
-        "fromNumber": "+48123456789",
-        "timestamp": "2025-12-25T10:30:00Z",
-        "receivedAt": "2025-12-25T10:30:01Z"
-      }
-    ],
-    "fromNumber": "+48123456789"  // User's registered number (for header display)
-  }
+"success": true,
+"data": {
+"messages": [
+{
+"id": "msg-uuid",
+"text": "Message content",
+"fromNumber": "+48123456789",
+"timestamp": "2025-12-25T10:30:00Z",
+"receivedAt": "2025-12-25T10:30:01Z"
+}
+],
+"fromNumber": "+48123456789" // User's registered number (for header display)
+}
 }
 
 Response 401: Unauthorized
@@ -63,13 +67,13 @@ Response 502: Downstream error
 
 ===
 Request:
-  Headers: Authorization: Bearer <token>
-  Path params: messageId
+Headers: Authorization: Bearer <token>
+Path params: messageId
 
 Response 200:
 {
-  "success": true,
-  "data": { "deleted": true }
+"success": true,
+"data": { "deleted": true }
 }
 
 Response 401: Unauthorized
@@ -121,4 +125,3 @@ curl -X GET http://localhost:3002/v1/whatsapp/messages -H "Authorization: Bearer
 ## Rollback Plan
 
 Git revert. No database migrations.
-

@@ -11,6 +11,7 @@
 This document outlines the design for verifying phone number ownership when users connect WhatsApp to IntexuraOS. The system will send a one-time password (OTP) via WhatsApp to the phone number being registered, and the user must enter this code in the web app to prove ownership.
 
 **Key Decisions:**
+
 - Use WhatsApp Business Cloud API to send OTP messages
 - 6-digit numeric OTP with 5-minute expiry
 - Maximum 3 attempts before lockout
@@ -21,12 +22,15 @@ This document outlines the design for verifying phone number ownership when user
 ## 2. Problem Statement
 
 ### Current State
+
 Users can register any phone number without verification. This creates security risks:
+
 - Malicious users could claim phone numbers they don't own
 - Messages from victims would be associated with attackers' accounts
 - Privacy breach — attacker sees all messages sent to the claimed number
 
 ### Target State
+
 Phone number ownership must be verified before WhatsApp connection is established. The registered phone number's owner must prove control by receiving and entering an OTP.
 
 ---
@@ -36,12 +40,14 @@ Phone number ownership must be verified before WhatsApp connection is establishe
 ### 3.1 Message Types for OTP
 
 **Option A: Template Messages (Recommended)**
+
 - Pre-approved message templates required
 - Must be approved by Meta before use
 - Supports authentication/OTP category
 - Example template: "Your IntexuraOS verification code is {{1}}. Valid for 5 minutes."
 
 **Option B: Session Messages**
+
 - Only available within 24-hour window after user messages first
 - NOT suitable for initial verification (user hasn't messaged yet)
 
@@ -50,6 +56,7 @@ Phone number ownership must be verified before WhatsApp connection is establishe
 ### 3.2 Template Registration Requirements
 
 Template requirements for authentication:
+
 - Category: `AUTHENTICATION`
 - Content type: OTP
 - Variables: `{{1}}` for the OTP code
@@ -57,6 +64,7 @@ Template requirements for authentication:
 - Must include security disclaimer if required by locale
 
 Example template submission:
+
 ```
 Name: intexuraos_otp_verification
 Category: AUTHENTICATION
@@ -67,6 +75,7 @@ Body: Your IntexuraOS verification code is {{1}}. This code expires in 5 minutes
 ### 3.3 Rate Limits
 
 WhatsApp Cloud API rate limits:
+
 - 80 messages/second for business-initiated messages (template)
 - Per-phone-number rate limits apply to recipients
 - Recommendation: Implement application-level rate limiting stricter than API limits
@@ -284,18 +293,18 @@ Document ID: Auto-generated (verification ID)
 
 ```typescript
 interface WhatsAppVerification {
-  id: string;                    // Document ID / verification ID
-  userId: string;                // User requesting verification
-  phoneNumber: string;           // Phone number being verified (E.164)
-  phoneNumberHash: string;       // SHA256 hash for lookups
-  codeHash: string;              // SHA256 hash of OTP (never store plaintext)
+  id: string; // Document ID / verification ID
+  userId: string; // User requesting verification
+  phoneNumber: string; // Phone number being verified (E.164)
+  phoneNumberHash: string; // SHA256 hash for lookups
+  codeHash: string; // SHA256 hash of OTP (never store plaintext)
   status: 'PENDING' | 'VERIFIED' | 'EXPIRED' | 'LOCKED';
-  attempts: number;              // Failed verification attempts
-  createdAt: string;             // ISO timestamp
-  expiresAt: string;             // ISO timestamp (createdAt + 5 min)
-  lockedUntil?: string;          // ISO timestamp if locked
-  lastAttemptAt?: string;        // ISO timestamp of last attempt
-  messageId?: string;            // WhatsApp message ID for tracking
+  attempts: number; // Failed verification attempts
+  createdAt: string; // ISO timestamp
+  expiresAt: string; // ISO timestamp (createdAt + 5 min)
+  lockedUntil?: string; // ISO timestamp if locked
+  lastAttemptAt?: string; // ISO timestamp of last attempt
+  messageId?: string; // WhatsApp message ID for tracking
 }
 ```
 
@@ -373,12 +382,12 @@ function verifyOTP(providedCode: string, storedHash: string): boolean {
 
 ### 8.1 Limits
 
-| Action | Limit | Window | Scope |
-|--------|-------|--------|-------|
-| Request OTP | 1 | 60 seconds | Per phone number |
-| Request OTP | 5 | 15 minutes | Per user |
-| Verify OTP | 3 | Per verification | Per verification ID |
-| Resend OTP | 3 | 15 minutes | Per phone number |
+| Action      | Limit | Window           | Scope               |
+| ----------- | ----- | ---------------- | ------------------- |
+| Request OTP | 1     | 60 seconds       | Per phone number    |
+| Request OTP | 5     | 15 minutes       | Per user            |
+| Verify OTP  | 3     | Per verification | Per verification ID |
+| Resend OTP  | 3     | 15 minutes       | Per phone number    |
 
 ### 8.2 Storage
 
@@ -386,10 +395,10 @@ Use Firestore or Redis for rate limit counters:
 
 ```typescript
 interface RateLimitEntry {
-  key: string;        // e.g., "otp_request:{phoneHash}" 
+  key: string; // e.g., "otp_request:{phoneHash}"
   count: number;
   windowStart: string; // ISO timestamp
-  expiresAt: string;   // ISO timestamp
+  expiresAt: string; // ISO timestamp
 }
 ```
 
@@ -400,6 +409,7 @@ interface RateLimitEntry {
 ### 9.1 UI Flow
 
 **Step 1: Enter Phone Number**
+
 ```
 ┌────────────────────────────────────────┐
 │ Connect WhatsApp                       │
@@ -414,6 +424,7 @@ interface RateLimitEntry {
 ```
 
 **Step 2: Enter OTP**
+
 ```
 ┌────────────────────────────────────────┐
 │ Enter Verification Code                │
@@ -434,6 +445,7 @@ interface RateLimitEntry {
 ```
 
 **Step 3: Success**
+
 ```
 ┌────────────────────────────────────────┐
 │ ✅ Phone Number Verified               │
@@ -447,14 +459,14 @@ interface RateLimitEntry {
 
 ### 9.2 Error Messages
 
-| Scenario | Message |
-|----------|---------|
-| Invalid code | "Incorrect code. 2 attempts remaining." |
-| Expired code | "Code expired. Please request a new one." |
-| Locked | "Too many attempts. Try again in 15 minutes." |
-| Rate limited | "Please wait 45 seconds before requesting another code." |
-| Already mapped | "This phone number is connected to another account." |
-| Send failure | "Failed to send code. Please try again." |
+| Scenario       | Message                                                  |
+| -------------- | -------------------------------------------------------- |
+| Invalid code   | "Incorrect code. 2 attempts remaining."                  |
+| Expired code   | "Code expired. Please request a new one."                |
+| Locked         | "Too many attempts. Try again in 15 minutes."            |
+| Rate limited   | "Please wait 45 seconds before requesting another code." |
+| Already mapped | "This phone number is connected to another account."     |
+| Send failure   | "Failed to send code. Please try again."                 |
 
 ### 9.3 Accessibility
 
@@ -523,4 +535,3 @@ interface RateLimitEntry {
 - [WhatsApp Message Templates](https://developers.facebook.com/docs/whatsapp/message-templates)
 - [Authentication Templates Guide](https://developers.facebook.com/docs/whatsapp/message-templates/guidelines/authentication-templates)
 - [OWASP OTP Guidelines](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
-

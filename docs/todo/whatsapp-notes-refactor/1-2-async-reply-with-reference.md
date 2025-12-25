@@ -7,6 +7,7 @@
 ## Context Snapshot
 
 Current `whatsappClient.ts` has `sendWhatsAppMessage` function that supports:
+
 - Sending text messages
 - Optional `contextMessageId` parameter for replies
 
@@ -15,6 +16,7 @@ Requirement: When a message is accepted and persisted, reply asynchronously to t
 ## Problem Statement
 
 After webhook persists a message:
+
 1. Send confirmation reply to user
 2. Reply should reference the original message (WhatsApp threading)
 3. Must be async (don't block webhook response)
@@ -22,12 +24,14 @@ After webhook persists a message:
 ## Scope
 
 **In scope:**
+
 - Update async webhook processing to send reply
 - Use `contextMessageId` to create threaded reply
 - Confirmation message text
 - Error handling (don't fail if reply fails)
 
 **Out of scope:**
+
 - Notification for failed saves (just log)
 - Custom message templates
 
@@ -43,23 +47,24 @@ const waMessageId = extractMessageId(request.body);
 const fromNumber = extractSenderPhoneNumber(request.body);
 
 if (waMessageId && fromNumber) {
-  const replyResult = await sendWhatsAppMessage(
-    config.phoneNumberId,
-    fromNumber,
-    '✅ Your note has been saved.',
-    config.accessToken,
-    waMessageId  // This creates a reply to the original message
-  );
-  
-  if (!replyResult.success) {
-    request.log.warn({ error: replyResult.error }, 'Failed to send confirmation reply');
-  }
+const replyResult = await sendWhatsAppMessage(
+config.phoneNumberId,
+fromNumber,
+'✅ Your note has been saved.',
+config.accessToken,
+waMessageId // This creates a reply to the original message
+);
+
+if (!replyResult.success) {
+request.log.warn({ error: replyResult.error }, 'Failed to send confirmation reply');
+}
 }
 ===
 
 ### Message Text
 
 Keep it simple:
+
 - Success: `✅ Your note has been saved.`
 - Could be configurable later, but hardcode for now
 
@@ -99,4 +104,3 @@ npm run test:coverage
 ## Rollback Plan
 
 Git revert. No database changes.
-

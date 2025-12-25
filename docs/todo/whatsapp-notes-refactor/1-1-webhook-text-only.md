@@ -13,6 +13,7 @@ Requirement: webhook should **only** support incoming text messages. Other messa
 ## Problem Statement
 
 Simplify webhook to:
+
 1. Only accept text messages
 2. Return clear response for unsupported types
 3. No exceptions for other message types
@@ -20,12 +21,14 @@ Simplify webhook to:
 ## Scope
 
 **In scope:**
+
 - Update webhook classification logic
 - Update domain InboxNote model (remove non-text message types)
 - Update webhook response for unsupported types
 - Update tests
 
 **Out of scope:**
+
 - Handling media messages (explicitly not supported)
 - Voice transcription (future feature)
 
@@ -34,14 +37,15 @@ Simplify webhook to:
 ### Classification Changes
 
 In `processWhatsAppWebhook.ts`, update `classifyWebhook` to:
+
 - Check message type early
 - Return IGNORED with clear reason for non-text
 - Only proceed for `type === 'text'`
 
 ### Domain Model Updates
 
-Update `InboxMessageType` in domain:
-===
+# Update `InboxMessageType` in domain:
+
 // Before: Text, Image, Video, Audio, Document, Mixed
 // After: Text only (or remove the type entirely since it's always Text)
 ===
@@ -49,6 +53,7 @@ Update `InboxMessageType` in domain:
 ### Response Behavior
 
 When non-text message received:
+
 - Log the rejection
 - Save webhook event with status IGNORED
 - Return 200 OK (Meta requires 200 for all webhooks)
@@ -84,4 +89,3 @@ npm run test:coverage
 ## Rollback Plan
 
 Git revert. No database changes.
-

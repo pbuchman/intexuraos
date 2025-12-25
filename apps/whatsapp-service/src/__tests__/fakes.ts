@@ -158,10 +158,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(fullMessage));
   }
 
-  getMessagesByUser(
-    userId: string,
-    limit = 100
-  ): Promise<Result<WhatsAppMessage[], InboxError>> {
+  getMessagesByUser(userId: string, limit = 100): Promise<Result<WhatsAppMessage[], InboxError>> {
     const userMessages = Array.from(this.messages.values())
       .filter((m) => m.userId === userId)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))

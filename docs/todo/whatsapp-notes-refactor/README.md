@@ -21,28 +21,27 @@ This folder contains the planning and execution artifacts for refactoring the Wh
 
 ## Task List
 
-| File | Tier | Title | Status |
-|------|------|-------|--------|
-| 0-0-remove-notion-connection.md | 0 | Remove Notion Connection | Pending |
-| 0-1-otp-verification-research.md | 0 | OTP Verification Research | Pending |
-| 1-0-firestore-message-storage.md | 1 | Firestore Message Storage | Pending |
-| 1-1-webhook-text-only.md | 1 | Webhook Text-Only Support | Pending |
-| 1-2-async-reply-with-reference.md | 1 | Async Reply with Reference | Pending |
-| 2-0-whatsapp-notes-api.md | 2 | WhatsApp Notes API Endpoints | Pending |
-| 2-1-whatsapp-notes-web-view.md | 2 | WhatsApp Notes Web View | Pending |
-| 2-2-delete-message-feature.md | 2 | Delete Message Feature | Pending |
+| File                              | Tier | Title                        | Status  |
+| --------------------------------- | ---- | ---------------------------- | ------- |
+| 0-0-remove-notion-connection.md   | 0    | Remove Notion Connection     | ✅ Done |
+| 0-1-otp-verification-research.md  | 0    | OTP Verification Research    | ✅ Done |
+| 1-0-firestore-message-storage.md  | 1    | Firestore Message Storage    | ✅ Done |
+| 1-1-webhook-text-only.md          | 1    | Webhook Text-Only Support    | ✅ Done |
+| 1-2-async-reply-with-reference.md | 1    | Async Reply with Reference   | ✅ Done |
+| 2-0-whatsapp-notes-api.md         | 2    | WhatsApp Notes API Endpoints | ✅ Done |
+| 2-1-whatsapp-notes-web-view.md    | 2    | WhatsApp Notes Web View      | ✅ Done |
+| 2-2-delete-message-feature.md     | 2    | Delete Message Feature       | ✅ Done |
 
 ## How to Resume After Interruption
 
 1. Read `CONTINUITY.md` to get current state
-2. Find *Now* item in ledger
+2. Find _Now_ item in ledger
 3. Continue from that task
 4. Update ledger after each completed subtask
 
 ## Verification Commands
 
 ===
-npm run ci                        # Must pass before task completion
-npx prettier --write .            # Run before CI if files were modified
+npm run ci # Must pass before task completion
+npx prettier --write . # Run before CI if files were modified
 ===
-

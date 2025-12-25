@@ -7,6 +7,7 @@
 ## Context Snapshot
 
 Web app currently has:
+
 - Dashboard page
 - Notion connection page
 - WhatsApp connection page
@@ -16,6 +17,7 @@ Need new tab/page: WhatsApp Notes — displays messages sent by user via WhatsAp
 ## Problem Statement
 
 Create a new view in the web app to display user's WhatsApp messages:
+
 - New navigation tab: "WhatsApp Notes"
 - List messages sorted newest first
 - Show: date, text content
@@ -24,6 +26,7 @@ Create a new view in the web app to display user's WhatsApp messages:
 ## Scope
 
 **In scope:**
+
 - New route `/whatsapp-notes`
 - New page component `WhatsAppNotesPage.tsx`
 - Navigation update (new tab)
@@ -34,6 +37,7 @@ Create a new view in the web app to display user's WhatsApp messages:
 - Empty state
 
 **Out of scope:**
+
 - Delete button (task 2-2)
 - Pagination
 - Search/filter
@@ -42,15 +46,15 @@ Create a new view in the web app to display user's WhatsApp messages:
 
 ### Route
 
-Add to `App.tsx`:
-===
+# Add to `App.tsx`:
+
 <Route
-  path="/whatsapp-notes"
-  element={
-    <ProtectedRoute>
-      <WhatsAppNotesPage />
-    </ProtectedRoute>
-  }
+path="/whatsapp-notes"
+element={
+<ProtectedRoute>
+<WhatsAppNotesPage />
+</ProtectedRoute>
+}
 />
 ===
 
@@ -62,41 +66,40 @@ Update `Layout` or `DashboardPage` to include link to WhatsApp Notes.
 
 ===
 ┌─────────────────────────────────────────┐
-│ WhatsApp Notes                          │
-│ From: +48123456789                       │  ← Header with phone number
+│ WhatsApp Notes │
+│ From: +48123456789 │ ← Header with phone number
 ├─────────────────────────────────────────┤
-│ Dec 25, 2025 10:30                      │
-│ Message text content here...            │
+│ Dec 25, 2025 10:30 │
+│ Message text content here... │
 ├─────────────────────────────────────────┤
-│ Dec 24, 2025 15:45                      │
-│ Another message text...                 │
+│ Dec 24, 2025 15:45 │
+│ Another message text... │
 ├─────────────────────────────────────────┤
-│ ...                                     │
+│ ... │
 └─────────────────────────────────────────┘
 ===
 
 ### API Service
 
-Add to `apps/web/src/services/`:
-===
-export async function getWhatsAppMessages(token: string): Promise<WhatsAppMessagesResponse>
-===
+# Add to `apps/web/src/services/`:
+
+# export async function getWhatsAppMessages(token: string): Promise<WhatsAppMessagesResponse>
 
 ### Types
 
-Add to `apps/web/src/types/`:
-===
+# Add to `apps/web/src/types/`:
+
 interface WhatsAppMessage {
-  id: string;
-  text: string;
-  fromNumber: string;
-  timestamp: string;
-  receivedAt: string;
+id: string;
+text: string;
+fromNumber: string;
+timestamp: string;
+receivedAt: string;
 }
 
 interface WhatsAppMessagesResponse {
-  messages: WhatsAppMessage[];
-  fromNumber: string;
+messages: WhatsAppMessage[];
+fromNumber: string;
 }
 ===
 
@@ -131,10 +134,11 @@ interface WhatsAppMessagesResponse {
 
 ===
 npm run ci
+
 # Manual: navigate to /whatsapp-notes in browser
+
 ===
 
 ## Rollback Plan
 
 Git revert. No backend changes.
-

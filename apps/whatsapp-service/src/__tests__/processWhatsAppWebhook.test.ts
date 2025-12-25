@@ -260,7 +260,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
     it('returns USER_UNMAPPED when user mapping is disconnected', async () => {
       const phone = '+1234567890';
       // Create mapping then disconnect
-      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.saveMapping('user-1', [phone]);
       await mappingRepo.disconnectMapping('user-1');
 
       const payload = createValidPayload(phone, 'Hello');
@@ -278,7 +278,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   describe('successful processing', () => {
     it('creates inbox note for valid text message with connected user', async () => {
       const phone = '+1234567890';
-      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.saveMapping('user-1', [phone]);
 
       const payload = createValidPayload(phone, 'This is my inbox note');
 
@@ -295,7 +295,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
 
     it('truncates long message text in title', async () => {
       const phone = '+1234567890';
-      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.saveMapping('user-1', [phone]);
 
       const longText =
         'This is a very long message that should be truncated in the title because it exceeds fifty characters';
@@ -315,7 +315,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
   describe('error handling', () => {
     it('returns FAILED when inbox note creation fails', async () => {
       const phone = '+1234567890';
-      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.saveMapping('user-1', [phone]);
       notesRepo.setFail(true);
 
       const payload = createValidPayload(phone, 'Hello');
@@ -353,7 +353,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
 
     it('updates event status to PROCESSED for successful processing', async () => {
       const phone = '+1234567890';
-      await mappingRepo.saveMapping('user-1', [phone], 'db-id');
+      await mappingRepo.saveMapping('user-1', [phone]);
 
       const payload = createValidPayload(phone, 'Hello');
 

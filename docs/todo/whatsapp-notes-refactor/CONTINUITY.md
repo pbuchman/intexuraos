@@ -1,7 +1,9 @@
 # Continuity Ledger — WhatsApp Notes Refactor
 
 ## Goal (incl. success criteria)
+
 Refactor WhatsApp integration to:
+
 1. Remove all Notion connection dependencies from WhatsApp service
 2. Store messages in Firestore (not Notion) — easily fetchable by user identifier
 3. Add OTP verification flow research document (no implementation)
@@ -10,6 +12,7 @@ Refactor WhatsApp integration to:
 6. Reply to user with message reference after webhook persists message
 
 **Success criteria:**
+
 - `npm run ci` passes
 - No Notion-related code/config in whatsapp-service (except for removed files)
 - Messages stored in Firestore, retrievable by userId
@@ -17,6 +20,7 @@ Refactor WhatsApp integration to:
 - Async reply functionality works with message reference
 
 ## Constraints / Assumptions
+
 - Europe/Warsaw timezone (research date: 25 Dec 2025)
 - Must maintain existing test coverage thresholds (90%+ lines)
 - Follow hexagonal architecture: domain → infra → routes
@@ -24,6 +28,7 @@ Refactor WhatsApp integration to:
 - No cross-app imports; apps depend only on @intexuraos/common
 
 ## Key decisions
+
 - Task decomposition: 8 subtasks across 3 tiers
 - OTP verification is research-only (no implementation this iteration)
 - Text-only message support (no media)
@@ -31,25 +36,31 @@ Refactor WhatsApp integration to:
 - Removed Notion infra folder, notionConnectionRepository, inboxNotesDbId from entire flow
 
 ## State
-- Done: 
+
+- Done:
   - 0-0-remove-notion-connection.md (Notion infra removed, tests updated)
   - 0-1-otp-verification-research.md (docs/whatsapp-otp.md created)
   - 1-0-firestore-message-storage.md (WhatsAppMessage model, repository, adapter)
   - 1-1-webhook-text-only.md (webhook now rejects non-text with IGNORED status)
   - 1-2-async-reply-with-reference.md (already implemented, uses contextMessageId)
-- Now: 2-0-whatsapp-notes-api.md (in progress - routes created, type verification pending)
-- Next: 2-1-whatsapp-notes-web-view.md
+  - 2-0-whatsapp-notes-api.md (GET/DELETE /v1/whatsapp/messages endpoints)
+  - 2-1-whatsapp-notes-web-view.md (WhatsAppNotesPage created with list view)
+  - 2-2-delete-message-feature.md (delete button with fade animation)
+- Now: COMPLETE ✅
+- Next: Archive task folder
+
+## Final Verification
+
+- CI passed: 2025-12-25
+- All 379 tests passing
+- Coverage: 91.24% lines, 82.56% branches (thresholds met)
 
 ## Working set
-- apps/whatsapp-service/src/routes/v1/messageRoutes.ts (new API routes)
-- apps/whatsapp-service/src/services.ts (updated to use interface types)
-- apps/whatsapp-service/src/infra/firestore/messageRepository.ts
-- apps/whatsapp-service/src/domain/inbox/models/WhatsAppMessage.ts
 
-## Open questions
-- (none)
+(completed)
 
 ## Working set (files / ids / commands)
+
 - `apps/whatsapp-service/src/infra/notion/` — to be removed
 - `apps/whatsapp-service/src/infra/firestore/notionConnectionRepository.ts` — to be removed
 - `apps/whatsapp-service/src/domain/inbox/usecases/processWhatsAppWebhook.ts` — to be modified
@@ -58,4 +69,3 @@ Refactor WhatsApp integration to:
 - `apps/web/src/pages/WhatsAppConnectionPage.tsx` — to be modified
 - `docs/whatsapp-todo.md` — to be deprecated/updated
 - `docs/notion-inbox.md` — WhatsApp references to be removed
-

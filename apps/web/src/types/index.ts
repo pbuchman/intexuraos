@@ -81,6 +81,25 @@ export interface WhatsAppConnectResponse {
 }
 
 /**
+ * WhatsApp message from whatsapp-service
+ */
+export interface WhatsAppMessage {
+  id: string;
+  text: string;
+  fromNumber: string;
+  timestamp: string;
+  receivedAt: string;
+}
+
+/**
+ * WhatsApp messages list response
+ */
+export interface WhatsAppMessagesResponse {
+  messages: WhatsAppMessage[];
+  fromNumber: string | null;
+}
+
+/**
  * Application config from environment
  */
 export interface AppConfig {

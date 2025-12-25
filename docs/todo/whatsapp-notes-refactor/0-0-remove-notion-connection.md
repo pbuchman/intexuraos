@@ -6,6 +6,7 @@
 ## Context Snapshot
 
 The whatsapp-service currently:
+
 - Has `src/infra/notion/` folder with `inboxNotesRepository.ts` for writing to Notion
 - Has `src/infra/firestore/notionConnectionRepository.ts` for fetching Notion tokens
 - Uses `NotionConnectionRepositoryAdapter` in services.ts
@@ -21,6 +22,7 @@ Notion connection is being deprecated for WhatsApp. Messages should be stored in
 ## Scope
 
 **In scope:**
+
 - Delete `apps/whatsapp-service/src/infra/notion/` folder
 - Delete `apps/whatsapp-service/src/infra/firestore/notionConnectionRepository.ts`
 - Remove `NotionConnectionRepositoryAdapter` from `services.ts` and `adapters.ts`
@@ -30,6 +32,7 @@ Notion connection is being deprecated for WhatsApp. Messages should be stored in
 - Remove Notion references from `docs/notion-inbox.md` related to WhatsApp
 
 **Out of scope:**
+
 - Implementing new Firestore message storage (separate task)
 - OTP verification (separate task)
 - Web view for messages (separate task)
@@ -86,4 +89,3 @@ npm run ci
 ## Rollback Plan
 
 Git revert to previous commit. No database migrations involved — Firestore documents remain unchanged (we're only removing code that reads/writes them).
-
