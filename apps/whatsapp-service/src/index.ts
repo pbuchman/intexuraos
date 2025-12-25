@@ -1,5 +1,6 @@
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
+import { getErrorMessage } from '@intexuraos/common';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -23,8 +24,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(
-    `Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`
-  );
+  process.stderr.write(`Failed to start server: ${getErrorMessage(error)}\n`);
   process.exit(1);
 });
