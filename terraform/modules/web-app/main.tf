@@ -95,10 +95,37 @@ resource "google_compute_backend_bucket" "web_app" {
 #   - Or use hash-based routing (#/settings instead of /settings)
 # GCP backend buckets don't support proper SPA fallback (rewrite to index.html).
 resource "google_compute_url_map" "web_app" {
-  count           = var.enable_load_balancer ? 1 : 0
-  name            = "intexuraos-web-${var.environment}-url-map"
-  project         = var.project_id
+  count   = var.enable_load_balancer ? 1 : 0
+  name    = "intexuraos-web-${var.environment}-url-map"
+  project = var.project_id
+
   default_service = google_compute_backend_bucket.web_app[0].id
+
+  # IMPORTANT: GCS website properties (main_page_suffix) are NOT applied when using
+  # a backend bucket behind the external HTTP(S) Load Balancer. Without an explicit
+  # rewrite, GET / will try to fetch an empty object name and return 404.
+  host_rule {
+    hosts        = var.domain != "" ? [var.domain] : ["*"]
+    path_matcher = "web-app"
+  }
+
+  path_matcher {
+    name            = "web-app"
+    default_service = google_compute_backend_bucket.web_app[0].id
+
+    # Rewrite root requests to the actual object.
+    path_rule {
+      paths = ["/"]
+
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = "/index.html"
+        }
+      }
+
+      service = google_compute_backend_bucket.web_app[0].id
+    }
+  }
 }
 
 # Random suffix for SSL certificate (regenerates when domain changes)
@@ -179,4 +206,3 @@ resource "google_compute_global_forwarding_rule" "web_app_http" {
   port_range            = "80"
   target                = google_compute_target_http_proxy.web_app[0].id
 }
-
