@@ -83,9 +83,9 @@ resource "google_compute_backend_bucket" "web_app" {
 }
 
 # URL map for SPA hosting
-# NOTE: For SPA deep link support, the bucket has not_found_page = "index.html".
-# Through LB, 404s from missing paths will return the bucket's 404 response.
-# Client-side routing handles the rest.
+# NOTE: SPA deep-link fallback is achieved by rewriting non-asset paths to /index.html.
+# The bucket's website.not_found_page does NOT work through Load Balancer.
+# Assets are matched explicitly and served directly without rewrite.
 resource "google_compute_url_map" "web_app" {
   count           = var.enable_load_balancer ? 1 : 0
   name            = "intexuraos-web-${var.environment}-url-map"
@@ -102,9 +102,17 @@ resource "google_compute_url_map" "web_app" {
     name            = "web-paths"
     default_service = google_compute_backend_bucket.web_app[0].id
 
+    # SPA fallback: rewrite unknown paths to /index.html
+    # This catches all deep links like /settings, /dashboard, etc.
+    default_route_action {
+      url_rewrite {
+        path_prefix_rewrite = "/index.html"
+      }
+    }
 
-    # Static assets served directly (no rewrite, no SPA fallback)
+    # Static assets served directly (no rewrite)
     # Covers: Vite/React assets, fonts, icons, manifests, robots
+    # These paths are matched BEFORE the default fallback
     path_rule {
       paths = [
         "/assets/*",
