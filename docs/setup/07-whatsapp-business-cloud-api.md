@@ -10,6 +10,47 @@ This guide covers setting up the WhatsApp Business Cloud API for IntexuraOS inte
 - Business verification (required for production; test mode works without)
 - Phone number for WhatsApp (can use Meta's test number initially)
 
+## WhatsApp ID Types Reference
+
+WhatsApp Cloud API uses two primary identifiers. Understanding the difference is critical for webhook validation.
+
+| ID Type                                    | Represents                                                 | Primary Use                                                     | Example           |
+| ------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------- | ----------------- |
+| **WhatsApp Business Account ID (WABA ID)** | The business entity as a whole                             | Webhook subscriptions, business settings, phone number listings | `102290129340398` |
+| **Phone Number ID**                        | A specific WhatsApp phone number registered under the WABA | Sending/receiving messages via API, message routing             | `106540352242922` |
+
+**Where they appear in webhook payloads:**
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398", // ← WABA ID
+      "changes": [
+        {
+          "value": {
+            "metadata": {
+              "phone_number_id": "106540352242922", // ← Phone Number ID
+              "display_phone_number": "15550783881"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**IntexuraOS validates both IDs** on incoming webhooks:
+
+- `INTEXURAOS_WHATSAPP_WABA_ID` — must match `entry[].id`
+- `INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID` — must match `metadata.phone_number_id`
+
+This ensures webhooks are only accepted from your configured business account and phone number.
+
+> **Reference**: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+
 ## 1. Create/Access Meta Developer Account
 
 1. Go to [Meta for Developers](https://developers.facebook.com/)

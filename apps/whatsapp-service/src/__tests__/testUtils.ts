@@ -86,6 +86,7 @@ export const testConfig: Config = {
   verifyToken: 'test-verify-token-12345',
   appSecret: 'test-app-secret-67890',
   accessToken: 'test-access-token',
+  allowedWabaIds: ['102290129340398', '419561257915477'],
   allowedPhoneNumberIds: ['123456789012345', '987654321098765'],
   port: 8080,
   host: '0.0.0.0',
@@ -101,21 +102,22 @@ export function createSignature(payload: string, secret: string): string {
 
 /**
  * Create a sample WhatsApp webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
  */
 export function createWebhookPayload(): object {
   return {
     object: 'whatsapp_business_account',
     entry: [
       {
-        id: 'WABA_ID',
+        id: '102290129340398', // Must match testConfig.allowedWabaIds
         changes: [
           {
             field: 'messages',
             value: {
               messaging_product: 'whatsapp',
               metadata: {
-                display_phone_number: '+1234567890',
-                phone_number_id: '123456789012345',
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345', // Must match testConfig.allowedPhoneNumberIds
               },
               contacts: [
                 {
@@ -186,6 +188,7 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
+    process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
 
     context.app = await buildServer(testConfig);
@@ -198,6 +201,7 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
+    delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
   });
 

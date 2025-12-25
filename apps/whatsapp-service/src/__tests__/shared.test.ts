@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { FastifyReply } from 'fastify';
 import {
   handleValidationError,
+  extractWabaId,
   extractPhoneNumberId,
   extractDisplayPhoneNumber,
   extractSenderPhoneNumber,
@@ -35,6 +36,37 @@ describe('shared utilities', () => {
         expect(callArgs[0]).toBe('INVALID_REQUEST');
         expect(callArgs[1]).toBe('Validation failed');
       }
+    });
+  });
+
+  describe('extractWabaId', () => {
+    it('extracts WABA ID from valid webhook payload', () => {
+      const payload = {
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [{ value: {} }],
+          },
+        ],
+      };
+
+      expect(extractWabaId(payload)).toBe('102290129340398');
+    });
+
+    it('returns null for null payload', () => {
+      expect(extractWabaId(null)).toBeNull();
+    });
+
+    it('returns null for payload without entry', () => {
+      expect(extractWabaId({})).toBeNull();
+    });
+
+    it('returns null for payload with empty entry array', () => {
+      expect(extractWabaId({ entry: [] })).toBeNull();
+    });
+
+    it('returns null when entry has no id', () => {
+      expect(extractWabaId({ entry: [{ changes: [] }] })).toBeNull();
     });
   });
 
