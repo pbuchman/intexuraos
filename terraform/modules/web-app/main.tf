@@ -118,6 +118,8 @@ resource "google_compute_url_map" "web_app" {
     # These paths are matched BEFORE the default fallback
     # NOTE: GCP URL maps don't support wildcards like /*.png at root level,
     # so root-level static files must be listed explicitly
+    # IMPORTANT: route_action with empty url_rewrite ensures files are served
+    # as-is without the default_route_action rewrite to /index.html
     path_rule {
       paths = [
         "/assets/*",
@@ -130,6 +132,11 @@ resource "google_compute_url_map" "web_app" {
         "/manifest.webmanifest",
       ]
       service = google_compute_backend_bucket.web_app[0].id
+      route_action {
+        url_rewrite {
+          path_prefix_rewrite = ""
+        }
+      }
     }
   }
 }

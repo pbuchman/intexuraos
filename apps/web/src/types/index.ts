@@ -38,7 +38,7 @@ export interface UserInfo {
 }
 
 /**
- * Notion connection status from promptvault-service
+ * Notion connection status from notion-service
  */
 export interface NotionStatus {
   configured: boolean;
