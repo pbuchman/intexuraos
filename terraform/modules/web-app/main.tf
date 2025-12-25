@@ -116,19 +116,16 @@ resource "google_compute_url_map" "web_app" {
     # Static assets served directly (no rewrite)
     # Covers: Vite/React assets, fonts, icons, manifests, robots
     # These paths are matched BEFORE the default fallback
+    # NOTE: GCP URL maps don't support wildcards like /*.png at root level,
+    # so root-level static files must be listed explicitly
     path_rule {
       paths = [
         "/assets/*",
         "/static/*",
         "/fonts/*",
-        "/*.js",
-        "/*.css",
-        "/*.ico",
-        "/*.png",
-        "/*.svg",
-        "/*.woff",
-        "/*.woff2",
         "/favicon.ico",
+        "/favicon.png",
+        "/logo.png",
         "/robots.txt",
         "/manifest.webmanifest",
       ]
