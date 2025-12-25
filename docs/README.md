@@ -73,6 +73,7 @@ Step-by-step guides for setting up IntexuraOS infrastructure:
 
 - [Terraform Configuration](../terraform/README.md) - Infrastructure as code
 - [Cloud Build Pipeline](../cloudbuild/cloudbuild.yaml) - CI/CD configuration
+- [Web App Hosting (GCS + Load Balancer)](./architecture/web-app-hosting.md) - SPA hosting model and routing constraints
 
 ## Status
 
