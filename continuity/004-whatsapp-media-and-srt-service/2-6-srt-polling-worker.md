@@ -57,22 +57,22 @@ Implement polling worker that:
 
 ## Step Checklist
 
-- [ ] Create `src/workers/pollingWorker.ts`
-- [ ] Implement startPollingWorker()
-- [ ] Add lastPolledAt, pollIntervalMs fields to TranscriptionJob
-- [ ] Query non-final jobs
-- [ ] Calculate if poll is due (current time >= lastPolledAt + pollIntervalMs)
-- [ ] Poll Speechmatics
-- [ ] Update job status (pending → processing → completed/failed)
-- [ ] Store transcript on completion
-- [ ] Update pollIntervalMs with exponential backoff (5s, 10s, 20s... max 1h)
-- [ ] Update lastPolledAt
-- [ ] Sleep between cycles (e.g., 1s)
-- [ ] Start worker in server.ts
-- [ ] Update TranscriptionJob model
-- [ ] Update Firestore adapter
-- [ ] Run npm run typecheck
-- [ ] Run npm run lint
+- [x] Create `src/workers/pollingWorker.ts`
+- [x] Implement startPollingWorker()
+- [x] Add lastPolledAt, pollIntervalMs fields to TranscriptionJob - SKIPPED: using nextPollAt already in model
+- [x] Query non-final jobs
+- [x] Calculate if poll is due (current time >= nextPollAt)
+- [x] Poll Speechmatics
+- [x] Update job status (pending → processing → completed/failed)
+- [x] Store transcript on completion
+- [x] Update pollIntervalMs with exponential backoff (5s, 10s, 20s... max 1h)
+- [x] Update nextPollAt
+- [x] Sleep between cycles (e.g., 1s)
+- [x] Start worker in index.ts
+- [x] Update TranscriptionJob model - Already had required fields
+- [x] Update Firestore adapter - Already had required methods
+- [x] Run npm run typecheck
+- [x] Run npm run lint
 
 ---
 

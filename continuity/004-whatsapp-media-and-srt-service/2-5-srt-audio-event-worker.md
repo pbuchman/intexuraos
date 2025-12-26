@@ -56,21 +56,21 @@ Implement Pub/Sub pull worker that:
 
 ## Step Checklist
 
-- [ ] Create `src/workers/audioEventWorker.ts`
-- [ ] Implement startAudioEventWorker()
-- [ ] Get subscription from config
-- [ ] Pull messages continuously
-- [ ] Parse AudioStoredEvent JSON
-- [ ] Validate required fields
-- [ ] Call CreateTranscriptionJobUseCase
-- [ ] Ack message on success
-- [ ] Ack message on idempotent duplicate (already exists)
-- [ ] Nack on transient Speechmatics error
-- [ ] Ack on permanent error (log and continue)
-- [ ] Start worker in server.ts
-- [ ] Add config for subscription name
-- [ ] Run npm run typecheck
-- [ ] Run npm run lint
+- [x] Create `src/workers/audioEventWorker.ts`
+- [x] Implement startAudioEventWorker()
+- [x] Get subscription from config
+- [x] Pull messages continuously
+- [x] Parse AudioStoredEvent JSON
+- [x] Validate required fields
+- [x] Call CreateTranscriptionJobUseCase (via repository directly)
+- [x] Ack message on success
+- [x] Ack message on idempotent duplicate (already exists)
+- [x] Nack on transient Speechmatics error
+- [x] Ack on permanent error (log and continue)
+- [x] Start worker in index.ts
+- [x] Add config for subscription name
+- [x] Run npm run typecheck
+- [x] Run npm run lint
 
 ---
 

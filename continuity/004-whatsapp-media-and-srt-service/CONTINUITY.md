@@ -94,11 +94,11 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 | ---- | ------------------------------------------------- | ------- | ------------------ |
 | 2-0  | Extend Webhook for Image Messages                 | ✅ DONE | 1-0, 1-1, 1-2, 1-4 |
 | 2-1  | Extend Webhook for Audio Messages + Publish Event | ✅ DONE | 1-0, 1-1, 1-3, 1-4 |
-| 2-2  | Add Message Media Routes (Signed URLs)            | ⬜ TODO | 1-0, 1-1, 2-0, 2-1 |
-| 2-3  | Implement Message Deletion with Async Cleanup     | ⬜ TODO | 1-0, 1-1, 1-3      |
-| 2-4  | Implement srt-service Routes                      | ⬜ TODO | 1-5, 1-6           |
-| 2-5  | Implement srt-service Audio Event Worker          | ⬜ TODO | 1-5, 1-6, 2-4      |
-| 2-6  | Implement srt-service Polling Worker              | ⬜ TODO | 1-5, 1-6           |
+| 2-2  | Add Message Media Routes (Signed URLs)            | ✅ DONE | 1-0, 1-1, 2-0, 2-1 |
+| 2-3  | Implement Message Deletion with Async Cleanup     | ✅ DONE | 1-0, 1-1, 1-3      |
+| 2-4  | Implement srt-service Routes                      | ✅ DONE | 1-5, 1-6           |
+| 2-5  | Implement srt-service Audio Event Worker          | ✅ DONE | 1-5, 1-6, 2-4      |
+| 2-6  | Implement srt-service Polling Worker              | ✅ DONE | 1-5, 1-6           |
 
 ### Tier 3: UI Integration
 
@@ -139,14 +139,20 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 - Tier 1 complete (1-0 through 1-6)
 - Task 2-0: Extend Webhook for Image Messages
 - Task 2-1: Extend Webhook for Audio Messages + Publish Event
+- Task 2-2: Add Message Media Routes (Signed URLs)
+- Task 2-3: Implement Message Deletion with Async Cleanup
+- Task 2-4: Implement srt-service Routes
+- Task 2-5: Implement srt-service Audio Event Worker
+- Task 2-6: Implement srt-service Polling Worker
 
 **Now:**
 
-- Ready for Task 2-2: Add Message Media Routes (Signed URLs)
+- All Tier 2 backend tasks complete
+- Ready for Tier 3: Web UI (deferred)
 
 **Next:**
 
-- Execute remaining Tier 2 tasks (2-2 through 2-6)
+- Documentation update
 
 ---
 

@@ -57,8 +57,8 @@ export function loadConfig(): Config {
 export function validateConfigEnv(): string[] {
   const required = [
     'INTEXURAOS_SPEECHMATICS_API_KEY',
-    'PUBSUB_AUDIO_STORED_SUBSCRIPTION',
-    'GCP_PROJECT_ID',
+    'INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION',
+    'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

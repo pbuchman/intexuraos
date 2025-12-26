@@ -52,20 +52,20 @@ Add routes to messageRoutes.ts for media access:
 
 ## Step Checklist
 
-- [ ] Add GET /v1/whatsapp/messages/:id/media route
-- [ ] Verify auth with requireAuth
-- [ ] Get message from repository
-- [ ] Verify userId matches
-- [ ] Check gcsPath exists
-- [ ] Generate signed URL (15 min TTL)
-- [ ] Return { url, expiresAt }
-- [ ] Add GET /v1/whatsapp/messages/:id/thumbnail route
-- [ ] Same flow but use thumbnailGcsPath
-- [ ] Update OpenAPI schema
-- [ ] Add integration tests
-- [ ] Run npm run typecheck
-- [ ] Run npm run lint
-- [ ] Run npm run test
+- [x] Add GET /v1/whatsapp/messages/:id/media route
+- [x] Verify auth with requireAuth
+- [x] Get message from repository
+- [x] Verify userId matches
+- [x] Check gcsPath exists
+- [x] Generate signed URL (15 min TTL)
+- [x] Return { url, expiresAt }
+- [x] Add GET /v1/whatsapp/messages/:id/thumbnail route
+- [x] Same flow but use thumbnailGcsPath
+- [x] Update OpenAPI schema
+- [x] Add integration tests
+- [x] Run npm run typecheck
+- [x] Run npm run lint
+- [x] Run npm run test
 
 ---
 

@@ -69,9 +69,10 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'test';
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = 'test';
     process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test';
-    process.env['PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
-    process.env['PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
-    process.env['GCP_PROJECT_ID'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -86,9 +87,10 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'test';
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = 'test';
     process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test';
-    process.env['PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
-    process.env['PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
-    process.env['GCP_PROJECT_ID'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -103,9 +105,10 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'];
-    delete process.env['PUBSUB_AUDIO_STORED_TOPIC'];
-    delete process.env['PUBSUB_MEDIA_CLEANUP_TOPIC'];
-    delete process.env['GCP_PROJECT_ID'];
+    delete process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'];
+    delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'];
+    delete process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'];
+    delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
 
     expect(() => loadConfig()).toThrow();
   });
@@ -119,9 +122,10 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'waba1,waba2';
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = '123,456,789';
     process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test-bucket';
-    process.env['PUBSUB_AUDIO_STORED_TOPIC'] = 'test-topic';
-    process.env['PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
-    process.env['GCP_PROJECT_ID'] = 'test-project';
+    process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test-topic';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
+    process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
 
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);

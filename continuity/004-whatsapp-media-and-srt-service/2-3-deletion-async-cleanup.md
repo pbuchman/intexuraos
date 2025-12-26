@@ -53,20 +53,20 @@ Extend DELETE /v1/whatsapp/messages/:id to:
 
 ## Step Checklist
 
-- [ ] Modify DELETE route to extract gcsPath, thumbnailGcsPath before delete
-- [ ] Delete message from Firestore first
-- [ ] Publish MediaCleanupEvent with paths array
-- [ ] Create `src/workers/cleanupWorker.ts`
-- [ ] Implement Pub/Sub pull logic
-- [ ] Delete each GCS path
-- [ ] Ack message on success
-- [ ] Handle not-found as success (idempotent)
-- [ ] Nack on transient errors (retry)
-- [ ] Start worker in server.ts
-- [ ] Add integration tests
-- [ ] Run npm run typecheck
-- [ ] Run npm run lint
-- [ ] Run npm run test
+- [x] Modify DELETE route to extract gcsPath, thumbnailGcsPath before delete
+- [x] Delete message from Firestore first
+- [x] Publish MediaCleanupEvent with paths array
+- [x] Create `src/workers/cleanupWorker.ts`
+- [x] Implement Pub/Sub pull logic
+- [x] Delete each GCS path
+- [x] Ack message on success
+- [x] Handle not-found as success (idempotent)
+- [x] Nack on transient errors (retry)
+- [x] Start worker in server.ts (via index.ts)
+- [x] Add integration tests
+- [x] Run npm run typecheck
+- [x] Run npm run lint
+- [x] Run npm run test
 
 ---
 

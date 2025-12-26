@@ -470,10 +470,11 @@ module "whatsapp_service" {
   }
 
   env_vars = {
-    WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
-    PUBSUB_AUDIO_STORED_TOPIC         = module.pubsub_audio_stored.topic_name
-    PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
-    PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = module.pubsub_audio_stored.topic_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
   }
 
   depends_on = [
@@ -549,8 +550,8 @@ module "srt_service" {
   }
 
   env_vars = {
-    PUBSUB_AUDIO_STORED_SUBSCRIPTION = module.pubsub_audio_stored.subscription_name
-    GCP_PROJECT_ID                   = var.project_id
+    INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION = module.pubsub_audio_stored.subscription_name
+    INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
   }
 
   depends_on = [

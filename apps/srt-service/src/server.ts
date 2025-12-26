@@ -12,6 +12,7 @@ import {
 } from '@intexuraos/common';
 import { validateConfigEnv, type Config } from './config.js';
 import { initServices } from './services.js';
+import { v1Routes } from './routes/v1/index.js';
 
 const SERVICE_NAME = 'srt-service';
 const SERVICE_VERSION = '0.0.1';
@@ -213,8 +214,8 @@ export async function createServer(config: Config): Promise<FastifyInstance> {
     }
   );
 
-  // Register v1 routes (placeholder - to be implemented in later tasks)
-  // await app.register(createV1Routes);
+  // Register v1 routes
+  await app.register(v1Routes);
 
   return await app;
 }

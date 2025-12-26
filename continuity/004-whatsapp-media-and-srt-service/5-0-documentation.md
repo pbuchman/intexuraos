@@ -58,6 +58,9 @@ Update documentation for:
 - [ ] Document new env vars for services
 - [ ] Add architecture diagram for event flow (ASCII or description)
 - [ ] Add CHANGELOG entry for media + srt-service
+- [ ] Verify .env.default files are up to date with all required env vars
+  - [ ] apps/whatsapp-service/.env.default (add PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION)
+  - [ ] apps/srt-service/.env.default (verify all required vars)
 - [ ] Verify docs render correctly
 
 ---

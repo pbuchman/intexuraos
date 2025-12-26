@@ -32,6 +32,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     mediaBucket: 'test-media-bucket',
     audioStoredTopic: 'test-audio-stored',
     mediaCleanupTopic: 'test-media-cleanup',
+    mediaCleanupSubscription: 'test-media-cleanup-sub',
     gcpProjectId: 'test-project',
     port: 8080,
     host: '0.0.0.0',

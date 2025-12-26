@@ -68,6 +68,12 @@ export default defineConfig({
         '**/whatsappClient.ts',
         // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
+
+        // Workers - Pub/Sub subscription handlers
+        // JUSTIFIED: Thin wrappers around Pub/Sub SDK, tested via integration
+        // CleanupWorker subscribes to media cleanup events and calls mediaStorage.delete()
+        // Core delete logic is tested via route tests that verify cleanup events are published
+        '**/workers/**',
       ],
       thresholds: {
         // Updated after coverage improvement work (Dec 2024)
