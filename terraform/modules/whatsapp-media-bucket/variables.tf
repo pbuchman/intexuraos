@@ -18,10 +18,6 @@ variable "whatsapp_service_account" {
   type        = string
 }
 
-variable "srt_service_account" {
-  description = "SRT service account email for read-only bucket access (to generate signed URLs)"
-  type        = string
-}
 
 variable "labels" {
   description = "Labels to apply to resources"

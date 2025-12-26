@@ -11,6 +11,7 @@ import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
 import { generateThumbnail } from '../../infra/media/index.js';
 import type { Config } from '../../config.js';
+import type { TranscriptionState } from '../../domain/inbox/index.js';
 import { sendWhatsAppMessage, getMediaUrl, downloadMedia } from '../../whatsappClient.js';
 import {
   extractDisplayPhoneNumber,
@@ -843,49 +844,20 @@ async function processAudioMessage(
       return;
     }
 
-    // Step 5: Create transcription job via SRT service API
-    const { srtClient } = getServices();
+    const savedMessage = saveResult.value;
 
-    const createJobResult = await srtClient.createJob({
-      messageId: saveResult.value.id,
-      mediaId: audioMedia.id,
+    // Step 5: Start in-process async transcription (fire-and-forget)
+    // This runs in the background after webhook returns 200
+    void transcribeAudioAsync(
+      request.log,
+      savedMessage.id,
       userId,
-      gcsPath: uploadResult.value.gcsPath,
-      mimeType: audioMedia.mimeType,
-    });
-
-    if (!createJobResult.ok) {
-      request.log.error(
-        { error: createJobResult.error, eventId: savedEvent.id },
-        'Failed to create transcription job'
-      );
-      // Note: We don't fail the webhook here since the message is already saved
-      // The job can be created manually if needed
-    } else {
-      request.log.info(
-        { eventId: savedEvent.id, messageId: saveResult.value.id, jobId: createJobResult.value.id },
-        'Created transcription job'
-      );
-
-      // Step 6: Submit job to Speechmatics
-      const submitResult = await srtClient.submitJob(createJobResult.value.id);
-
-      if (!submitResult.ok) {
-        request.log.error(
-          { error: submitResult.error, jobId: createJobResult.value.id },
-          'Failed to submit transcription job to Speechmatics'
-        );
-        // Job created but not submitted - will be picked up by polling
-      } else {
-        request.log.info(
-          {
-            jobId: createJobResult.value.id,
-            speechmaticsJobId: submitResult.value.speechmaticsJobId,
-          },
-          'Transcription job submitted to Speechmatics'
-        );
-      }
-    }
+      uploadResult.value.gcsPath,
+      audioMedia.mimeType,
+      fromNumber,
+      savedMessage.waMessageId,
+      config
+    );
 
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
 
@@ -910,6 +882,381 @@ async function processAudioMessage(
       failureDetails: 'Unexpected error during audio processing',
     });
   }
+}
+
+/**
+ * Logger interface for transcription async function.
+ */
+interface TranscriptionLogger {
+  info(data: Record<string, unknown>, message: string): void;
+  error(data: Record<string, unknown>, message: string): void;
+}
+
+/**
+ * Polling configuration for transcription jobs.
+ */
+const TRANSCRIPTION_POLL_CONFIG = {
+  initialDelayMs: 2000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 1.5,
+  maxAttempts: 60, // ~5 minutes max with backoff
+};
+
+/**
+ * In-process async transcription handler.
+ *
+ * IMPORTANT: Cloud Run Considerations
+ * This function runs in the background after the webhook returns 200.
+ * Risks:
+ * - Container may be killed before transcription completes
+ * - Long audio files (>5 min) are at higher risk
+ * - Consider setting min_scale=1 for whatsapp-service for reliability
+ *
+ * Future improvement: Use Cloud Tasks for guaranteed delivery.
+ */
+async function transcribeAudioAsync(
+  logger: TranscriptionLogger,
+  messageId: string,
+  userId: string,
+  gcsPath: string,
+  mimeType: string,
+  userPhoneNumber: string,
+  originalWaMessageId: string,
+  config: Config
+): Promise<void> {
+  const { transcriptionService, messageRepository, mediaStorage } = getServices();
+  const startedAt = new Date().toISOString();
+
+  logger.info(
+    { event: 'transcription_start', messageId, userId, gcsPath },
+    'Starting in-process audio transcription'
+  );
+
+  // Initialize transcription state as pending
+  const initialState: TranscriptionState = {
+    status: 'pending',
+    startedAt,
+  };
+  await messageRepository.updateTranscription(userId, messageId, initialState);
+
+  try {
+    // Step 1: Get signed URL for audio file
+    logger.info(
+      { event: 'transcription_get_signed_url', messageId },
+      'Getting signed URL for audio file'
+    );
+
+    const signedUrlResult = await mediaStorage.getSignedUrl(gcsPath, 3600); // 1 hour expiry
+    if (!signedUrlResult.ok) {
+      const errorState: TranscriptionState = {
+        status: 'failed',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: {
+          code: 'SIGNED_URL_ERROR',
+          message: signedUrlResult.error.message,
+        },
+      };
+      await messageRepository.updateTranscription(userId, messageId, errorState);
+      await sendTranscriptionFailureMessage(
+        userPhoneNumber,
+        originalWaMessageId,
+        'Failed to access audio file',
+        config
+      );
+      logger.error(
+        { event: 'transcription_signed_url_error', messageId, error: signedUrlResult.error },
+        'Failed to get signed URL'
+      );
+      return;
+    }
+
+    // Step 2: Submit job to Speechmatics
+    logger.info(
+      { event: 'transcription_submit', messageId },
+      'Submitting transcription job to Speechmatics'
+    );
+
+    const submitResult = await transcriptionService.submitJob({
+      audioUrl: signedUrlResult.value,
+      mimeType,
+    });
+
+    if (!submitResult.ok) {
+      const errorState: TranscriptionState = {
+        status: 'failed',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: {
+          code: submitResult.error.code,
+          message: submitResult.error.message,
+        },
+      };
+      if (submitResult.error.apiCall !== undefined) {
+        errorState.lastApiCall = submitResult.error.apiCall;
+      }
+      await messageRepository.updateTranscription(userId, messageId, errorState);
+      await sendTranscriptionFailureMessage(
+        userPhoneNumber,
+        originalWaMessageId,
+        `Transcription submission failed: ${submitResult.error.message}`,
+        config
+      );
+      logger.error(
+        { event: 'transcription_submit_error', messageId, error: submitResult.error },
+        'Failed to submit transcription job'
+      );
+      return;
+    }
+
+    const jobId = submitResult.value.jobId;
+
+    // Update state to processing
+    const processingState: TranscriptionState = {
+      status: 'processing',
+      jobId,
+      startedAt,
+      lastApiCall: submitResult.value.apiCall,
+    };
+    await messageRepository.updateTranscription(userId, messageId, processingState);
+
+    logger.info(
+      { event: 'transcription_submitted', messageId, jobId },
+      'Transcription job submitted, starting poll'
+    );
+
+    // Step 3: Poll until completion
+    let delayMs = TRANSCRIPTION_POLL_CONFIG.initialDelayMs;
+    let attempts = 0;
+    let lastPollApiCall = submitResult.value.apiCall;
+
+    while (attempts < TRANSCRIPTION_POLL_CONFIG.maxAttempts) {
+      attempts++;
+      await sleep(delayMs);
+
+      logger.info(
+        { event: 'transcription_poll', messageId, jobId, attempt: attempts, delayMs },
+        'Polling transcription job status'
+      );
+
+      const pollResult = await transcriptionService.pollJob(jobId);
+
+      if (!pollResult.ok) {
+        logger.error(
+          { event: 'transcription_poll_error', messageId, jobId, error: pollResult.error },
+          'Failed to poll transcription status'
+        );
+        // Continue polling on transient errors
+        delayMs = Math.min(
+          delayMs * TRANSCRIPTION_POLL_CONFIG.backoffMultiplier,
+          TRANSCRIPTION_POLL_CONFIG.maxDelayMs
+        );
+        continue;
+      }
+
+      lastPollApiCall = pollResult.value.apiCall;
+
+      if (pollResult.value.status === 'done') {
+        logger.info(
+          { event: 'transcription_done', messageId, jobId },
+          'Transcription job completed'
+        );
+        break;
+      }
+
+      if (pollResult.value.status === 'rejected') {
+        const errorState: TranscriptionState = {
+          status: 'failed',
+          jobId,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          error: pollResult.value.error ?? { code: 'JOB_REJECTED', message: 'Job was rejected' },
+          lastApiCall: pollResult.value.apiCall,
+        };
+        await messageRepository.updateTranscription(userId, messageId, errorState);
+        await sendTranscriptionFailureMessage(
+          userPhoneNumber,
+          originalWaMessageId,
+          `Transcription failed: ${pollResult.value.error?.message ?? 'Job was rejected'}`,
+          config
+        );
+        logger.error(
+          { event: 'transcription_rejected', messageId, jobId, error: pollResult.value.error },
+          'Transcription job was rejected'
+        );
+        return;
+      }
+
+      // Exponential backoff
+      delayMs = Math.min(
+        delayMs * TRANSCRIPTION_POLL_CONFIG.backoffMultiplier,
+        TRANSCRIPTION_POLL_CONFIG.maxDelayMs
+      );
+    }
+
+    if (attempts >= TRANSCRIPTION_POLL_CONFIG.maxAttempts) {
+      const errorState: TranscriptionState = {
+        status: 'failed',
+        jobId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: { code: 'POLL_TIMEOUT', message: 'Transcription polling timed out' },
+        lastApiCall: lastPollApiCall,
+      };
+      await messageRepository.updateTranscription(userId, messageId, errorState);
+      await sendTranscriptionFailureMessage(
+        userPhoneNumber,
+        originalWaMessageId,
+        'Transcription timed out',
+        config
+      );
+      logger.error(
+        { event: 'transcription_timeout', messageId, jobId, attempts },
+        'Transcription polling timed out'
+      );
+      return;
+    }
+
+    // Step 4: Fetch transcript
+    logger.info(
+      { event: 'transcription_fetch', messageId, jobId },
+      'Fetching transcription result'
+    );
+
+    const transcriptResult = await transcriptionService.getTranscript(jobId);
+
+    if (!transcriptResult.ok) {
+      const errorState: TranscriptionState = {
+        status: 'failed',
+        jobId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: {
+          code: transcriptResult.error.code,
+          message: transcriptResult.error.message,
+        },
+      };
+      if (transcriptResult.error.apiCall !== undefined) {
+        errorState.lastApiCall = transcriptResult.error.apiCall;
+      }
+      await messageRepository.updateTranscription(userId, messageId, errorState);
+      await sendTranscriptionFailureMessage(
+        userPhoneNumber,
+        originalWaMessageId,
+        `Failed to fetch transcript: ${transcriptResult.error.message}`,
+        config
+      );
+      logger.error(
+        { event: 'transcription_fetch_error', messageId, jobId, error: transcriptResult.error },
+        'Failed to fetch transcription result'
+      );
+      return;
+    }
+
+    const transcript = transcriptResult.value.text;
+
+    // Step 5: Update message with completed transcription
+    const completedState: TranscriptionState = {
+      status: 'completed',
+      jobId,
+      text: transcript,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      lastApiCall: transcriptResult.value.apiCall,
+    };
+    await messageRepository.updateTranscription(userId, messageId, completedState);
+
+    logger.info(
+      {
+        event: 'transcription_completed',
+        messageId,
+        jobId,
+        transcriptLength: transcript.length,
+      },
+      'Transcription completed successfully'
+    );
+
+    // Step 6: Send transcript to user via WhatsApp (quoting original message)
+    await sendTranscriptionSuccessMessage(userPhoneNumber, originalWaMessageId, transcript, config);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorState: TranscriptionState = {
+      status: 'failed',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      error: { code: 'UNEXPECTED_ERROR', message: errorMessage },
+    };
+    await messageRepository.updateTranscription(userId, messageId, errorState);
+    await sendTranscriptionFailureMessage(
+      userPhoneNumber,
+      originalWaMessageId,
+      `Unexpected error: ${errorMessage}`,
+      config
+    );
+    logger.error(
+      { event: 'transcription_unexpected_error', messageId, error: errorMessage },
+      'Unexpected error during transcription'
+    );
+  }
+}
+
+/**
+ * Sleep for specified milliseconds.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Send transcription success message to user.
+ */
+async function sendTranscriptionSuccessMessage(
+  phoneNumber: string,
+  originalMessageId: string,
+  transcript: string,
+  config: Config
+): Promise<void> {
+  // Get the first phone number ID from config
+  const phoneNumberId = config.allowedPhoneNumberIds[0];
+  if (phoneNumberId === undefined) {
+    return;
+  }
+
+  const message = `🎙️ *Transcription:*\n\n${transcript}`;
+
+  await sendWhatsAppMessage(
+    phoneNumberId,
+    phoneNumber,
+    message,
+    config.accessToken,
+    originalMessageId
+  );
+}
+
+/**
+ * Send transcription failure message to user.
+ */
+async function sendTranscriptionFailureMessage(
+  phoneNumber: string,
+  originalMessageId: string,
+  errorDetails: string,
+  config: Config
+): Promise<void> {
+  // Get the first phone number ID from config
+  const phoneNumberId = config.allowedPhoneNumberIds[0];
+  if (phoneNumberId === undefined) {
+    return;
+  }
+
+  const message = `❌ *Transcription failed:*\n\n${errorDetails}`;
+
+  await sendWhatsAppMessage(
+    phoneNumberId,
+    phoneNumber,
+    message,
+    config.accessToken,
+    originalMessageId
+  );
 }
 
 /**

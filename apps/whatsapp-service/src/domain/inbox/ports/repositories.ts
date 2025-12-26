@@ -4,7 +4,7 @@
  */
 import type { Result } from '@intexuraos/common';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
-import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
+import type { WhatsAppMessage, TranscriptionState } from '../models/WhatsAppMessage.js';
 
 // Re-export InboxError for use in other ports
 export type { InboxError };
@@ -140,16 +140,12 @@ export interface WhatsAppMessageRepository {
   findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
 
   /**
-   * Update message transcription fields.
+   * Update message transcription state.
    */
   updateTranscription(
     userId: string,
     messageId: string,
-    transcription: {
-      transcriptionJobId: string;
-      transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
-      transcription?: string;
-    }
+    transcription: TranscriptionState
   ): Promise<Result<void, InboxError>>;
 
   /**

@@ -13,6 +13,7 @@ import type {
   WhatsAppUserMappingPublic,
   WhatsAppMessage,
   InboxError,
+  TranscriptionState,
 } from './domain/inbox/index.js';
 import {
   saveWebhookEvent,
@@ -117,11 +118,7 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
   async updateTranscription(
     userId: string,
     messageId: string,
-    transcription: {
-      transcriptionJobId: string;
-      transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
-      transcription?: string;
-    }
+    transcription: TranscriptionState
   ): Promise<Result<void, InboxError>> {
     return await updateTranscription(userId, messageId, transcription);
   }

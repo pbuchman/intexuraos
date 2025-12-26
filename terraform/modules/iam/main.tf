@@ -36,12 +36,6 @@ resource "google_service_account" "api_docs_hub" {
   description  = "Service account for api-docs-hub Cloud Run deployment"
 }
 
-# Service account for srt-service (speech recognition/transcription)
-resource "google_service_account" "srt_service" {
-  account_id   = "intexuraos-srt-svc-${var.environment}"
-  display_name = "IntexuraOS SRT Service (${var.environment})"
-  description  = "Service account for srt-service Cloud Run deployment"
-}
 
 # Auth service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "auth_service_secrets" {
@@ -79,14 +73,6 @@ resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
   member    = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
-# SRT service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "srt_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.srt_service.email}"
-}
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -116,12 +102,6 @@ resource "google_project_iam_member" "auth_service_firestore" {
   member  = "serviceAccount:${google_service_account.auth_service.email}"
 }
 
-# SRT service: Firestore access
-resource "google_project_iam_member" "srt_service_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.srt_service.email}"
-}
 
 # Both services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "auth_service_logging" {
@@ -162,12 +142,5 @@ resource "google_project_iam_member" "api_docs_hub_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.api_docs_hub.email}"
-}
-
-# SRT service: Cloud Logging
-resource "google_project_iam_member" "srt_service_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.srt_service.email}"
 }
 

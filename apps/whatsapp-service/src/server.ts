@@ -165,7 +165,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
-    srtServiceUrl: config.srtServiceUrl,
+    speechmaticsApiKey: config.speechmaticsApiKey,
   });
 
   const app = Fastify({

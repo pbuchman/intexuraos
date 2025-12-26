@@ -15,7 +15,7 @@ import {
   FakeMediaStorage,
   FakeEventPublisher,
   FakeMessageSender,
-  FakeSrtClient,
+  FakeSpeechTranscriptionPort,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -95,8 +95,7 @@ export const testConfig: Config = {
   mediaBucket: 'test-media-bucket',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
-  transcriptionCompletedSubscription: 'test-transcription-completed-sub',
-  srtServiceUrl: 'http://localhost:8084',
+  speechmaticsApiKey: 'test-speechmatics-api-key',
   gcpProjectId: 'test-project',
   port: 8080,
   host: '0.0.0.0',
@@ -316,7 +315,7 @@ export function setupTestContext(): TestContext {
       mediaStorage: context.mediaStorage,
       eventPublisher: context.eventPublisher,
       messageSender: new FakeMessageSender(),
-      srtClient: new FakeSrtClient(),
+      transcriptionService: new FakeSpeechTranscriptionPort(),
     });
 
     clearJwksCache();

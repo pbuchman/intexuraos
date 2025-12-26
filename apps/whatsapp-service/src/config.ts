@@ -69,17 +69,9 @@ const configSchema = z.object({
     .min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION is required'),
 
   /**
-   * Pub/Sub subscription for transcription completed events.
-   * The transcription worker subscribes to this to update messages.
+   * Speechmatics API key for audio transcription.
    */
-  transcriptionCompletedSubscription: z
-    .string()
-    .min(1, 'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION is required'),
-
-  /**
-   * SRT service URL for transcription API calls.
-   */
-  srtServiceUrl: z.string().url('INTEXURAOS_SRT_SERVICE_URL must be a valid URL'),
+  speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
 
   /**
    * GCP project ID.
@@ -113,9 +105,7 @@ export function loadConfig(): Config {
     mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
-    transcriptionCompletedSubscription:
-      process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'],
-    srtServiceUrl: process.env['INTEXURAOS_SRT_SERVICE_URL'],
+    speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -136,8 +126,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
-    'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION',
-    'INTEXURAOS_SRT_SERVICE_URL',
+    'INTEXURAOS_SPEECHMATICS_API_KEY',
     'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');

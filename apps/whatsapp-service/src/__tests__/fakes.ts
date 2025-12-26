@@ -25,6 +25,13 @@ import type {
   EventPublisherPort,
   MediaCleanupEvent,
   WhatsAppMessageSender,
+  TranscriptionState,
+  SpeechTranscriptionPort,
+  TranscriptionJobInput,
+  TranscriptionJobSubmitResult,
+  TranscriptionJobPollResult,
+  TranscriptionTextResult,
+  TranscriptionPortError,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -196,21 +203,13 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   updateTranscription(
     userId: string,
     messageId: string,
-    transcription: {
-      transcriptionJobId: string;
-      transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
-      transcription?: string;
-    }
+    transcription: TranscriptionState
   ): Promise<Result<void, InboxError>> {
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
     }
-    message.transcriptionJobId = transcription.transcriptionJobId;
-    message.transcriptionStatus = transcription.transcriptionStatus;
-    if (transcription.transcription !== undefined) {
-      message.transcription = transcription.transcription;
-    }
+    message.transcription = transcription;
     return Promise.resolve(ok(undefined));
   }
 
@@ -322,128 +321,149 @@ export class FakeMessageSender implements WhatsAppMessageSender {
 }
 
 /**
- * Fake SRT client for testing.
+ * Fake speech transcription service for testing.
  */
-interface FakeJob {
-  id: string;
-  messageId: string;
-  mediaId: string;
-  userId: string;
-  gcsPath: string;
-  mimeType: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  speechmaticsJobId?: string;
-  transcript?: string;
-  error?: string;
-  pollAttempts: number;
-  nextPollAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-}
-
-export class FakeSrtClient {
-  private jobs = new Map<string, FakeJob>();
+export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
+  private jobs = new Map<
+    string,
+    { status: 'running' | 'done' | 'rejected'; transcript?: string; error?: string }
+  >();
   private jobCounter = 0;
+  private shouldFail = false;
+  private failMessage = 'Fake transcription error';
 
-  createJob(request: {
-    messageId: string;
-    mediaId: string;
-    userId: string;
-    gcsPath: string;
-    mimeType: string;
-  }): Promise<
-    Result<
-      {
-        id: string;
-        messageId: string;
-        mediaId: string;
-        userId: string;
-        gcsPath: string;
-        mimeType: string;
-        status: 'pending' | 'processing' | 'completed' | 'failed';
-        pollAttempts: number;
-        createdAt: string;
-        updatedAt: string;
-      },
-      { code: string; message: string }
-    >
-  > {
+  /**
+   * Configure the fake to fail subsequent calls.
+   */
+  setFailMode(fail: boolean, message?: string): void {
+    this.shouldFail = fail;
+    if (message !== undefined) {
+      this.failMessage = message;
+    }
+  }
+
+  /**
+   * Set job completion result (for testing polling).
+   */
+  setJobResult(jobId: string, transcript: string): void {
+    const job = this.jobs.get(jobId);
+    if (job !== undefined) {
+      job.status = 'done';
+      job.transcript = transcript;
+    }
+  }
+
+  /**
+   * Set job failure (for testing error handling).
+   */
+  setJobFailed(jobId: string, error: string): void {
+    const job = this.jobs.get(jobId);
+    if (job !== undefined) {
+      job.status = 'rejected';
+      job.error = error;
+    }
+  }
+
+  submitJob(
+    input: TranscriptionJobInput
+  ): Promise<Result<TranscriptionJobSubmitResult, TranscriptionPortError>> {
+    if (this.shouldFail) {
+      return Promise.resolve(
+        err({
+          code: 'FAKE_ERROR',
+          message: this.failMessage,
+          apiCall: {
+            timestamp: new Date().toISOString(),
+            operation: 'submit',
+            success: false,
+            response: { error: this.failMessage },
+          },
+        })
+      );
+    }
+
     this.jobCounter++;
     const jobId = `fake-job-${String(this.jobCounter)}`;
-    const now = new Date().toISOString();
-    const job = {
-      id: jobId,
-      messageId: request.messageId,
-      mediaId: request.mediaId,
-      userId: request.userId,
-      gcsPath: request.gcsPath,
-      mimeType: request.mimeType,
-      status: 'pending' as const,
-      pollAttempts: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.jobs.set(jobId, job);
-    return Promise.resolve(ok(job));
+    this.jobs.set(jobId, { status: 'running' });
+
+    return Promise.resolve(
+      ok({
+        jobId,
+        apiCall: {
+          timestamp: new Date().toISOString(),
+          operation: 'submit',
+          success: true,
+          response: { jobId, audioUrl: input.audioUrl },
+        },
+      })
+    );
   }
 
-  submitJob(jobId: string): Promise<
-    Result<
-      {
-        id: string;
-        messageId: string;
-        mediaId: string;
-        userId: string;
-        gcsPath: string;
-        mimeType: string;
-        status: 'pending' | 'processing' | 'completed' | 'failed';
-        speechmaticsJobId?: string;
-        pollAttempts: number;
-        createdAt: string;
-        updatedAt: string;
-      },
-      { code: string; message: string }
-    >
-  > {
+  pollJob(jobId: string): Promise<Result<TranscriptionJobPollResult, TranscriptionPortError>> {
     const job = this.jobs.get(jobId);
     if (job === undefined) {
-      return Promise.resolve(err({ code: 'NOT_FOUND', message: `Job ${jobId} not found` }));
+      return Promise.resolve(
+        err({
+          code: 'NOT_FOUND',
+          message: `Job ${jobId} not found`,
+          apiCall: {
+            timestamp: new Date().toISOString(),
+            operation: 'poll',
+            success: false,
+          },
+        })
+      );
     }
-    job.status = 'processing';
-    job.speechmaticsJobId = 'fake-speechmatics-job-id';
-    job.updatedAt = new Date().toISOString();
-    return Promise.resolve(ok(job));
+
+    const result: TranscriptionJobPollResult = {
+      status: job.status,
+      apiCall: {
+        timestamp: new Date().toISOString(),
+        operation: 'poll',
+        success: true,
+        response: { status: job.status },
+      },
+    };
+
+    if (job.status === 'rejected' && job.error !== undefined) {
+      result.error = { code: 'JOB_REJECTED', message: job.error };
+    }
+
+    return Promise.resolve(ok(result));
   }
 
-  getJob(jobId: string): Promise<
-    Result<
-      {
-        id: string;
-        messageId: string;
-        mediaId: string;
-        userId: string;
-        gcsPath: string;
-        mimeType: string;
-        status: 'pending' | 'processing' | 'completed' | 'failed';
-        pollAttempts: number;
-        createdAt: string;
-        updatedAt: string;
-      } | null,
-      { code: string; message: string }
-    >
-  > {
+  getTranscript(jobId: string): Promise<Result<TranscriptionTextResult, TranscriptionPortError>> {
     const job = this.jobs.get(jobId);
-    return Promise.resolve(ok(job ?? null));
+    if (job?.transcript === undefined) {
+      return Promise.resolve(
+        err({
+          code: 'NOT_FOUND',
+          message: `Transcript for job ${jobId} not found`,
+          apiCall: {
+            timestamp: new Date().toISOString(),
+            operation: 'fetch_result',
+            success: false,
+          },
+        })
+      );
+    }
+
+    return Promise.resolve(
+      ok({
+        text: job.transcript,
+        apiCall: {
+          timestamp: new Date().toISOString(),
+          operation: 'fetch_result',
+          success: true,
+          response: { transcriptLength: job.transcript.length },
+        },
+      })
+    );
   }
 
   getJobs(): Map<
     string,
-    {
-      id: string;
-      status: 'pending' | 'processing' | 'completed' | 'failed';
-      speechmaticsJobId?: string;
-    }
+    { status: 'running' | 'done' | 'rejected'; transcript?: string; error?: string }
   > {
     return this.jobs;
   }
@@ -451,5 +471,6 @@ export class FakeSrtClient {
   clear(): void {
     this.jobs.clear();
     this.jobCounter = 0;
+    this.shouldFail = false;
   }
 }

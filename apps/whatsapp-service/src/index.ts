@@ -3,7 +3,6 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import {
   createCleanupWorker,
-  TranscriptionWorker,
   type CleanupWorker,
   type CleanupWorkerLogger,
 } from './workers/index.js';
@@ -37,14 +36,13 @@ async function main(): Promise<void> {
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
-    srtServiceUrl: config.srtServiceUrl,
+    speechmaticsApiKey: config.speechmaticsApiKey,
   });
 
   const app = await buildServer(config);
 
-  // Start workers (cleanup and transcription)
+  // Start workers (cleanup only - transcription is now in-process)
   let cleanupWorker: CleanupWorker | null = null;
-  let transcriptionWorker: TranscriptionWorker | null = null;
 
   // Only start workers in non-test environment
   if (process.env['NODE_ENV'] !== 'test' && process.env['VITEST'] === undefined) {
@@ -60,21 +58,10 @@ async function main(): Promise<void> {
       createWorkerLogger('CleanupWorker')
     );
     cleanupWorker.start();
-
-    // Transcription worker for transcription completed events
-    transcriptionWorker = new TranscriptionWorker(
-      config.gcpProjectId,
-      config.transcriptionCompletedSubscription,
-      services.messageRepository,
-      services.messageSender,
-      createWorkerLogger('TranscriptionWorker')
-    );
-    transcriptionWorker.start();
   }
 
   const close = (): void => {
     // Stop workers first
-    transcriptionWorker?.stop();
     const stopCleanupWorker = cleanupWorker !== null ? cleanupWorker.stop() : Promise.resolve();
 
     stopCleanupWorker

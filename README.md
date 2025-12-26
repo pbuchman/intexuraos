@@ -51,9 +51,9 @@ One of IntexuraOS's core features is automatic transcription of WhatsApp voice n
 
 ```
 ┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
-│   WhatsApp   │      │ whatsapp-service │      │   srt-service   │
-│  (User App)  │      │   (Webhook +     │      │  (Transcription │
-│              │      │    Storage)      │      │     via HTTP)   │
+│   WhatsApp   │      │ whatsapp-service │      │   Speechmatics  │
+│  (User App)  │      │   (Webhook +     │      │   (Batch API)   │
+│              │      │  Transcription)  │      │                 │
 └──────┬───────┘      └────────┬─────────┘      └────────┬────────┘
        │                       │                         │
        │ 1. Voice message      │                         │
@@ -66,108 +66,80 @@ One of IntexuraOS's core features is automatic transcription of WhatsApp voice n
        │                       │    (whatsapp-media      │
        │                       │     bucket)             │
        │                       │                         │
-       │                       │ 4. POST /v1/transcribe  │
-       │                       │    (create job)         │
+       │ 4. Confirmation       │                         │
+       │<──────────────────────│                         │
+       │    "Processing..."    │                         │
+       │                       │                         │
+       │                       │ 5. Submit job           │
+       │                       │    (async background)   │
        │                       │────────────────────────>│
        │                       │                         │
-       │                       │ 5. POST /v1/transcribe  │
-       │                       │    /:jobId/submit       │
+       │                       │ 6. Poll until done      │
        │                       │────────────────────────>│
-       │                       │                         │ 6. Submit to
-       │                       │                         │    Speechmatics
        │                       │                         │
-       │                       │                         │ 7. (Cloud Scheduler)
-       │                       │                         │    POST /v1/transcribe/poll
-       │                       │                         │    polls Speechmatics
-       │                       │                         │
-       │                       │ 8. Publish              │
-       │                       │    srt.transcription    │
-       │                       │    .completed           │
+       │                       │ 7. Fetch transcript     │
        │                       │<────────────────────────│
        │                       │                         │
-       │                       │ 9. Update message       │
-       │                       │    with transcription   │
-       │                       │                         │
-       │ 10. Reply with        │                         │
-       │     transcribed text  │                         │
+       │ 8. Reply with         │                         │
+       │    transcribed text   │                         │
        │<──────────────────────│                         │
        │                       │                         │
 ```
 
-### Component Responsibilities
+### Architecture
 
-| Component            | Responsibility                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| **whatsapp-service** | Receives webhooks, stores audio in GCS, calls SRT API, updates messages, sends replies   |
-| **srt-service**      | HTTP API for transcription jobs, integrates with Speechmatics, polls for results         |
-| **Pub/Sub**          | Notifies whatsapp-service when transcription completes via `srt.transcription.completed` |
-| **GCS**              | Stores audio files with signed URL access for Speechmatics                               |
-| **Firestore**        | Persists transcription jobs, message state, and transcription results                    |
-| **Speechmatics**     | External speech-to-text API (Polish language, standard operating point)                  |
+Transcription is handled **inline** by whatsapp-service using a fire-and-forget async function. This approach:
 
-### Data Flow Details
+- Minimizes infrastructure complexity (no separate service)
+- Reduces cold start latency (transcription starts immediately)
+- Simplifies deployment and monitoring
 
-1. **Webhook Reception** — WhatsApp sends message webhook to `/v1/whatsapp/webhook`
-2. **Audio Download** — Service fetches audio from Meta's CDN using message's media ID
-3. **GCS Upload** — Audio stored at `gs://intexuraos-whatsapp-media-{env}/{userId}/{messageId}/{mediaId}.ogg`
-4. **Job Creation** — whatsapp-service calls `POST /v1/transcribe` to create job in Firestore
-5. **Job Submission** — whatsapp-service calls `POST /v1/transcribe/:jobId/submit` to submit to Speechmatics
-6. **Speechmatics Submit** — srt-service submits job via batch API with `fetch_data.url` pointing to signed URL
-7. **Polling** — Cloud Scheduler calls `POST /v1/transcribe/poll` every 30s to check Speechmatics status
-8. **Completion Event** — `srt.transcription.completed` published to Pub/Sub with transcript text
-9. **Message Update** — whatsapp-service (via Pub/Sub subscription) updates message with `transcription` field
-10. **Reply** — User receives WhatsApp message: `📝 Transcription:\n\n{text}`
+**Trade-off:** Container termination may interrupt long transcriptions. For reliability, set `min_scale=1` on whatsapp-service in production.
 
-### Cost Optimization
-
-All services run with `min_instances = 0` to minimize idle costs:
-
-- **whatsapp-service**: Woken by webhooks, can tolerate ~15min delay for Pub/Sub messages
-- **srt-service**: Woken by HTTP requests only, no Pub/Sub subscriptions
-- **Cloud Run**: Keeps instances warm for ~15 minutes after last request
-
-### Transcription Job States
-
-```
-pending ──────> processing ──────> completed
-    │               │                  │
-    │               │                  └── transcription stored
-    │               │
-    │               └──> failed (Speechmatics error)
-    │
-    └──> failed (signed URL generation error)
-```
+See [docs/architecture/transcription.md](docs/architecture/transcription.md) for detailed architecture documentation.
 
 ### Configuration
 
 Environment variables required for transcription:
 
-| Variable                                          | Service          | Description                        |
-| ------------------------------------------------- | ---------------- | ---------------------------------- |
-| `INTEXURAOS_SPEECHMATICS_API_KEY`                 | srt-service      | Speechmatics API key (secret)      |
-| `INTEXURAOS_MEDIA_BUCKET_NAME`                    | srt-service      | GCS bucket for audio files         |
-| `INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC` | srt-service      | Topic for completion events        |
-| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`                | whatsapp-service | GCS bucket for media storage       |
-| `INTEXURAOS_SRT_SERVICE_URL`                      | whatsapp-service | SRT service URL for API calls      |
+| Variable                           | Service          | Description                   |
+| ---------------------------------- | ---------------- | ----------------------------- |
+| `INTEXURAOS_SPEECHMATICS_API_KEY`  | whatsapp-service | Speechmatics API key (secret) |
+| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET` | whatsapp-service | GCS bucket for media storage  |
+
+### Transcription States
+
+```
+pending ──────> processing ──────> completed
+    │               │                  │
+    │               │                  └── transcription stored, user notified
+    │               │
+    │               └──> failed (Speechmatics error)
+    │
+    └──> failed (signed URL / network error)
+```
+
 | `INTEXURAOS_TRANSCRIPTION_COMPLETED_SUBSCRIPTION` | whatsapp-service | Subscription for completion events |
 
 ### Monitoring
 
-Key log messages to watch:
+Key log messages to watch in whatsapp-service:
 
 ```
-# srt-service
-"Starting Pub/Sub subscription for audio stored events"
-"Processing audio stored event" { messageId, mediaId, userId }
-"Creating Speechmatics transcription job" { audioUrl, languageCode }
-"Got Speechmatics job status" { jobId, speechmaticsStatus }
-"Job completed and event published" { jobId }
+# Webhook handling
+"Audio message saved successfully" { messageId, gcsPath }
 
-# whatsapp-service
-"Starting Pub/Sub subscription for transcription completed events"
-"Processing transcription completed event" { messageId, jobId, status }
-"Message transcription updated" { messageId, hasTranscript }
-"Transcription reply sent" { messageId, toNumber }
+# Transcription flow
+"transcription_start" { messageId, userId, gcsPath }
+"transcription_submit" { messageId }
+"transcription_poll" { messageId, jobId, attempt }
+"transcription_done" { messageId, jobId }
+"transcription_completed" { messageId, transcriptLength }
+
+# Error conditions
+"transcription_submit_error" { messageId, error }
+"transcription_rejected" { messageId, error }
+"transcription_timeout" { messageId, attempts }
 ```
 
 ---
@@ -217,20 +189,13 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 │  │  │ src/infra/  │  │  src/infra/    │  │   src/infra/    │ │  │
 │  │  └─────────────┘  └────────────────┘  └────────┬────────┘ │  │
 │  │                                                │          │  │
-│  │                              Pub/Sub           │          │  │
-│  │                    ┌───────────────────────────┤          │  │
-│  │                    │                           │          │  │
-│  │                    ▼                           ▼          │  │
-│  │           ┌─────────────────┐         ┌──────────────┐    │  │
-│  │           │   srt-service   │         │     GCS      │    │  │
-│  │           │  (transcription)│────────>│ Media Bucket │    │  │
-│  │           └────────┬────────┘         └──────────────┘    │  │
-│  │                    │                                      │  │
-│  │                    ▼                                      │  │
-│  │           ┌─────────────────┐                             │  │
-│  │           │  Speechmatics   │                             │  │
-│  │           │  (External API) │                             │  │
-│  │           └─────────────────┘                             │  │
+│  │                                   ┌────────────┴────────┐ │  │
+│  │                                   │                     │ │  │
+│  │                                   ▼                     ▼ │  │
+│  │                           ┌──────────────┐     ┌────────┐ │  │
+│  │                           │     GCS      │     │  Spch  │ │  │
+│  │                           │ Media Bucket │     │ matics │ │  │
+│  │                           └──────────────┘     └────────┘ │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                               │                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
@@ -244,13 +209,12 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 
 Each app owns its domain logic and infrastructure adapters:
 
-| App                 | Domain (`src/domain/`)   | Infra (`src/infra/`)         |
-| ------------------- | ------------------------ | ---------------------------- |
-| auth-service        | identity (tokens, users) | auth0, firestore             |
-| promptvault-service | promptvault (prompts)    | notion, firestore            |
-| whatsapp-service    | inbox (messages, notes)  | notion, firestore, gcs       |
-| notion-service      | (orchestration only)     | notion, firestore            |
-| srt-service         | transcription (jobs)     | speechmatics, firestore, gcs |
+| App                 | Domain (`src/domain/`)   | Infra (`src/infra/`)                 |
+| ------------------- | ------------------------ | ------------------------------------ |
+| auth-service        | identity (tokens, users) | auth0, firestore                     |
+| promptvault-service | promptvault (prompts)    | notion, firestore                    |
+| whatsapp-service    | inbox (messages, notes)  | notion, firestore, gcs, speechmatics |
+| notion-service      | (orchestration only)     | notion, firestore                    |
 
 **Import rules** (enforced by `npm run verify:boundaries`):
 
@@ -318,8 +282,7 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 | ------------------- | ------------------------------------ | ---------------- |
 | auth-service        | OAuth2 flows, JWT validation         | `/v1/auth/*`     |
 | promptvault-service | Prompt templates, Notion integration | `/v1/*`          |
-| whatsapp-service    | WhatsApp webhook receiver            | `/v1/whatsapp/*` |
-| srt-service         | Speech recognition/transcription     | `/v1/*`          |
+| whatsapp-service    | WhatsApp webhook, transcription      | `/v1/whatsapp/*` |
 
 ### Security
 
