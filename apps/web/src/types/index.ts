@@ -81,6 +81,11 @@ export interface WhatsAppConnectResponse {
 }
 
 /**
+ * WhatsApp message media type
+ */
+export type WhatsAppMediaType = 'text' | 'image' | 'audio';
+
+/**
  * WhatsApp message from whatsapp-service
  */
 export interface WhatsAppMessage {
@@ -89,6 +94,9 @@ export interface WhatsAppMessage {
   fromNumber: string;
   timestamp: string;
   receivedAt: string;
+  mediaType: WhatsAppMediaType;
+  hasMedia: boolean;
+  caption: string | null;
 }
 
 /**

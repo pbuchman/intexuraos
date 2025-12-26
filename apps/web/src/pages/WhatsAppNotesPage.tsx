@@ -1,17 +1,25 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Layout, Card, Button } from '@/components';
+import { Layout, Card, Button, ImageModal, ImageThumbnail, AudioPlayer } from '@/components';
 import { useAuth } from '@/context';
 import { getWhatsAppMessages, deleteWhatsAppMessage, ApiError } from '@/services';
 import type { WhatsAppMessage } from '@/types';
-import { Trash2, MessageSquare, RefreshCw } from 'lucide-react';
+import { Trash2, MessageSquare, RefreshCw, Image, Mic } from 'lucide-react';
 
 interface MessageItemProps {
   message: WhatsAppMessage;
+  accessToken: string;
   onDelete: (id: string) => void;
+  onImageClick: (messageId: string) => void;
   isDeleting: boolean;
 }
 
-function MessageItem({ message, onDelete, isDeleting }: MessageItemProps): React.JSX.Element {
+function MessageItem({
+  message,
+  accessToken,
+  onDelete,
+  onImageClick,
+  isDeleting,
+}: MessageItemProps): React.JSX.Element {
   const receivedDate = new Date(message.receivedAt);
   const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
     day: '2-digit',
@@ -31,7 +39,55 @@ function MessageItem({ message, onDelete, isDeleting }: MessageItemProps): React
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="whitespace-pre-wrap break-words text-slate-800">{message.text}</p>
+          {/* Media type indicator */}
+          {message.mediaType !== 'text' && (
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
+              {message.mediaType === 'image' ? (
+                <>
+                  <Image className="h-3.5 w-3.5" />
+                  <span>Image</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3.5 w-3.5" />
+                  <span>Audio</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Image thumbnail */}
+          {message.mediaType === 'image' && message.hasMedia && (
+            <div className="mb-3">
+              <ImageThumbnail
+                messageId={message.id}
+                accessToken={accessToken}
+                onClick={(): void => {
+                  onImageClick(message.id);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Audio player */}
+          {message.mediaType === 'audio' && message.hasMedia && (
+            <div className="mb-3">
+              <AudioPlayer messageId={message.id} accessToken={accessToken} />
+            </div>
+          )}
+
+          {/* Text content */}
+          {message.text !== '' && (
+            <p className="whitespace-pre-wrap break-words text-slate-800">{message.text}</p>
+          )}
+
+          {/* Caption for media */}
+          {message.caption !== null && message.caption !== '' && (
+            <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
+              {message.caption}
+            </p>
+          )}
+
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <span>{formattedDate}</span>
             <span>•</span>
@@ -61,6 +117,8 @@ export function WhatsAppNotesPage(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [currentAccessToken, setCurrentAccessToken] = useState<string | null>(null);
 
   const fetchMessages = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -73,6 +131,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
         setError(null);
 
         const token = await getAccessToken();
+        setCurrentAccessToken(token);
         const response = await getWhatsAppMessages(token);
 
         setMessages(response.messages);
@@ -178,8 +237,12 @@ export function WhatsAppNotesPage(): React.JSX.Element {
             <MessageItem
               key={message.id}
               message={message}
+              accessToken={currentAccessToken ?? ''}
               onDelete={(id): void => {
                 void handleDelete(id);
+              }}
+              onImageClick={(id): void => {
+                setSelectedImageId(id);
               }}
               isDeleting={deletingIds.has(message.id)}
             />
@@ -192,6 +255,17 @@ export function WhatsAppNotesPage(): React.JSX.Element {
           Showing {String(messages.length)} message{messages.length === 1 ? '' : 's'}
         </p>
       ) : null}
+
+      {/* Image modal */}
+      {selectedImageId !== null && currentAccessToken !== null && (
+        <ImageModal
+          messageId={selectedImageId}
+          accessToken={currentAccessToken}
+          onClose={(): void => {
+            setSelectedImageId(null);
+          }}
+        />
+      )}
     </Layout>
   );
 }

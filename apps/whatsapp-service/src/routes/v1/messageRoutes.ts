@@ -43,6 +43,20 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         fromNumber: { type: 'string' },
                         timestamp: { type: 'string' },
                         receivedAt: { type: 'string', format: 'date-time' },
+                        mediaType: {
+                          type: 'string',
+                          enum: ['text', 'image', 'audio'],
+                          description: 'Type of message content',
+                        },
+                        hasMedia: {
+                          type: 'boolean',
+                          description: 'Whether message has media attached',
+                        },
+                        caption: {
+                          type: 'string',
+                          nullable: true,
+                          description: 'Media caption (for image/audio)',
+                        },
                       },
                     },
                   },
@@ -106,6 +120,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         fromNumber: msg.fromNumber,
         timestamp: msg.timestamp,
         receivedAt: msg.receivedAt,
+        mediaType: msg.mediaType,
+        hasMedia: msg.gcsPath !== undefined,
+        caption: msg.caption ?? null,
       }));
 
       return await reply.ok({
