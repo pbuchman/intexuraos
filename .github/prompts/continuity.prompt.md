@@ -101,6 +101,8 @@ Before creating or proposing any issue:
 5. **First iteration only:** After completing task generation, you MUST pause and ask the user:
 
    > "Task breakdown complete. Review the generated issues in `continuity/NNN-task-name/`. Proceed with execution?"
+   
+   This is MANDATORY, NON-NEGOTIABLE requirement.
 
    Wait for explicit confirmation before moving to Phase 3.
    On subsequent/resumed sessions, proceed without asking.
