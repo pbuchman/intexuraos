@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
+    "libphonenumber-js": "^1.12.33",
     "lucide-react": "^0.561.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
