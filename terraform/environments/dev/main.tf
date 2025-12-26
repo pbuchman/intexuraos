@@ -316,8 +316,12 @@ module "pubsub_audio_stored" {
   topic_name = "intexuraos-whatsapp-audio-stored-${var.environment}"
   labels     = local.common_labels
 
-  publisher_service_accounts  = [module.iam.service_accounts["whatsapp_service"]]
-  subscriber_service_accounts = [module.iam.service_accounts["srt_service"]]
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+  subscriber_service_accounts = {
+    srt_service = module.iam.service_accounts["srt_service"]
+  }
 
   depends_on = [
     google_project_service.apis,
@@ -333,8 +337,12 @@ module "pubsub_media_cleanup" {
   topic_name = "intexuraos-whatsapp-media-cleanup-${var.environment}"
   labels     = local.common_labels
 
-  publisher_service_accounts  = [module.iam.service_accounts["whatsapp_service"]]
-  subscriber_service_accounts = [module.iam.service_accounts["whatsapp_service"]]
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+  subscriber_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
 
   depends_on = [
     google_project_service.apis,

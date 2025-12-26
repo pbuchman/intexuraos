@@ -68,7 +68,7 @@ resource "google_pubsub_subscription" "dlq" {
 
 # Publisher IAM binding
 resource "google_pubsub_topic_iam_member" "publisher" {
-  for_each = toset(var.publisher_service_accounts)
+  for_each = var.publisher_service_accounts
 
   project = var.project_id
   topic   = google_pubsub_topic.main.name
@@ -78,7 +78,7 @@ resource "google_pubsub_topic_iam_member" "publisher" {
 
 # Subscriber IAM binding (main subscription)
 resource "google_pubsub_subscription_iam_member" "subscriber" {
-  for_each = toset(var.subscriber_service_accounts)
+  for_each = var.subscriber_service_accounts
 
   project      = var.project_id
   subscription = google_pubsub_subscription.main.name

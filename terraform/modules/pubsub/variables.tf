@@ -9,15 +9,15 @@ variable "topic_name" {
 }
 
 variable "publisher_service_accounts" {
-  description = "List of service account emails that can publish to this topic"
-  type        = list(string)
-  default     = []
+  description = "Map of service account names to emails that can publish to this topic. Keys are static identifiers, values are service account emails."
+  type        = map(string)
+  default     = {}
 }
 
 variable "subscriber_service_accounts" {
-  description = "List of service account emails that can subscribe to this topic"
-  type        = list(string)
-  default     = []
+  description = "Map of service account names to emails that can subscribe to this topic. Keys are static identifiers, values are service account emails."
+  type        = map(string)
+  default     = {}
 }
 
 variable "ack_deadline_seconds" {
