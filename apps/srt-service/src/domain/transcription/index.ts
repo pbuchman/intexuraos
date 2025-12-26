@@ -16,6 +16,7 @@ export type {
   SpeechmaticsClient,
   TranscriptionCompletedEvent,
   TranscriptionEventPublisher,
+  AudioStoragePort,
 } from './ports/index.js';
 
 // Usecases

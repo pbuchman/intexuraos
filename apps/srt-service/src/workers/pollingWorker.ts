@@ -54,14 +54,31 @@ async function processPendingJob(
   services: ServiceContainer,
   logger: WorkerLogger
 ): Promise<void> {
-  const { jobRepository, speechmaticsClient } = services;
+  const { jobRepository, speechmaticsClient, audioStorage } = services;
 
   logger.info('Submitting job to Speechmatics', { jobId: job.id, gcsPath: job.gcsPath });
 
-  // Create signed URL for audio file
-  // Note: This would need a GCS client to generate signed URL
-  // For now, we'll use the gcsPath directly (Speechmatics needs accessible URL)
-  const audioUrl = job.gcsPath; // TODO: Generate signed URL
+  // Generate signed URL for audio file (1 hour TTL)
+  const signedUrlResult = await audioStorage.getSignedUrl(job.gcsPath, 3600);
+
+  if (!signedUrlResult.ok) {
+    logger.error('Failed to generate signed URL for audio', {
+      jobId: job.id,
+      gcsPath: job.gcsPath,
+      error: signedUrlResult.error.message,
+    });
+
+    // Update job with error
+    await jobRepository.update(job.id, {
+      status: 'failed',
+      error: `Failed to generate audio URL: ${signedUrlResult.error.message}`,
+      updatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const audioUrl = signedUrlResult.value;
+  logger.info('Generated signed URL for audio', { jobId: job.id, gcsPath: job.gcsPath });
 
   const createResult = await speechmaticsClient.createJob(audioUrl);
 

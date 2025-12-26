@@ -11,3 +11,5 @@ export type {
 } from './speechmaticsClient.js';
 
 export type { TranscriptionCompletedEvent, TranscriptionEventPublisher } from './eventPublisher.js';
+
+export type { AudioStoragePort } from './audioStorage.js';

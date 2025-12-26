@@ -222,6 +222,7 @@ module "whatsapp_media_bucket" {
   region                   = var.region
   environment              = var.environment
   whatsapp_service_account = module.iam.service_accounts["whatsapp_service"]
+  srt_service_account      = module.iam.service_accounts["srt_service"]
   labels                   = local.common_labels
 
   depends_on = [
@@ -576,6 +577,7 @@ module "srt_service" {
     INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION     = module.pubsub_audio_stored.subscription_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
+    INTEXURAOS_MEDIA_BUCKET_NAME                    = module.whatsapp_media_bucket.bucket_name
   }
 
   depends_on = [

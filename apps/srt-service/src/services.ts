@@ -5,10 +5,12 @@
 import { FirestoreJobRepository } from './infra/firestore/index.js';
 import { SpeechmaticsBatchClient } from './infra/speechmatics/index.js';
 import { AudioStoredSubscriber, GcpTranscriptionEventPublisher } from './infra/pubsub/index.js';
+import { GcsAudioStorage } from './infra/gcs/index.js';
 import type {
   TranscriptionJobRepository,
   SpeechmaticsClient,
   TranscriptionEventPublisher,
+  AudioStoragePort,
 } from './domain/transcription/index.js';
 
 /**
@@ -19,6 +21,7 @@ export interface ServiceConfig {
   gcpProjectId: string;
   audioStoredSubscription: string;
   transcriptionCompletedTopic: string;
+  mediaBucketName: string;
 }
 
 /**
@@ -29,6 +32,7 @@ export interface ServiceContainer {
   speechmaticsClient: SpeechmaticsClient;
   audioStoredSubscriber: AudioStoredSubscriber;
   eventPublisher: TranscriptionEventPublisher;
+  audioStorage: AudioStoragePort;
 }
 
 let container: ServiceContainer | null = null;
@@ -60,6 +64,7 @@ export function getServices(): ServiceContainer {
       serviceConfig?.gcpProjectId ?? 'test-project',
       serviceConfig?.transcriptionCompletedTopic ?? 'test-topic'
     ),
+    audioStorage: new GcsAudioStorage(serviceConfig?.mediaBucketName ?? 'test-bucket'),
   };
   return container;
 }

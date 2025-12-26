@@ -31,6 +31,11 @@ const configSchema = z.object({
   gcpProjectId: z.string().min(1, 'GCP_PROJECT_ID is required'),
 
   /**
+   * GCS bucket name for WhatsApp media files.
+   */
+  mediaBucketName: z.string().min(1, 'MEDIA_BUCKET_NAME is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -53,6 +58,7 @@ export function loadConfig(): Config {
     audioStoredSubscription: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION'],
     transcriptionCompletedTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
+    mediaBucketName: process.env['INTEXURAOS_MEDIA_BUCKET_NAME'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -68,6 +74,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION',
     'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
+    'INTEXURAOS_MEDIA_BUCKET_NAME',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

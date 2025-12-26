@@ -64,15 +64,30 @@ export class CleanupWorker {
     this.isRunning = true;
     const subscription = this.pubsub.subscription(this.subscriptionName);
 
+    this.logger.info('Starting Pub/Sub subscription for media cleanup events', {
+      subscription: this.subscriptionName,
+    });
+
     subscription.on('message', (message: Message) => {
+      this.logger.info('Received Pub/Sub message', {
+        messageId: message.id,
+        publishTime: message.publishTime.toISOString(),
+        dataLength: message.data.length,
+      });
       void this.handleMessage(message);
     });
 
     subscription.on('error', (error: Error) => {
-      this.logger.error('Subscription error', { error: getErrorMessage(error) });
+      this.logger.error('Subscription error', {
+        subscription: this.subscriptionName,
+        error: getErrorMessage(error),
+        stack: error.stack,
+      });
     });
 
-    this.logger.info('Started listening', { subscription: this.subscriptionName });
+    this.logger.info('Cleanup worker started successfully', {
+      subscription: this.subscriptionName,
+    });
   }
 
   /**
@@ -96,10 +111,18 @@ export class CleanupWorker {
     let event: MediaCleanupEvent;
 
     try {
-      event = JSON.parse(message.data.toString()) as MediaCleanupEvent;
+      const rawData = message.data.toString();
+      event = JSON.parse(rawData) as MediaCleanupEvent;
+
+      this.logger.info('Processing Pub/Sub message', {
+        messageId: message.id,
+        messageBody: event,
+        action: 'process_media_cleanup_event',
+      });
     } catch (error) {
       // Malformed message - ack to prevent infinite redelivery
       this.logger.error('Failed to parse message, acking to prevent redelivery', {
+        messageId: message.id,
         error: getErrorMessage(error),
       });
       message.ack();
@@ -110,7 +133,11 @@ export class CleanupWorker {
     const eventType = event.type as string;
     if (eventType !== 'whatsapp.media.cleanup') {
       // Unknown event type - ack to prevent infinite redelivery
-      this.logger.warn('Unknown event type, acking', { eventType });
+      this.logger.warn('Unknown event type, acking', {
+        messageId: message.id,
+        eventType,
+        expectedType: 'whatsapp.media.cleanup',
+      });
       message.ack();
       return;
     }

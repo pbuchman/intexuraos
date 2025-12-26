@@ -33,3 +33,18 @@ resource "google_storage_bucket_iam_member" "whatsapp_service_admin" {
   member = "serviceAccount:${var.whatsapp_service_account}"
 }
 
+# SRT service: Read-only access to objects (to generate signed URLs for Speechmatics)
+resource "google_storage_bucket_iam_member" "srt_service_viewer" {
+  bucket = google_storage_bucket.whatsapp_media.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${var.srt_service_account}"
+}
+
+# SRT service: Service Account Token Creator (for signing GCS URLs)
+# This allows srt-service to sign URLs for its own service account
+resource "google_service_account_iam_member" "srt_service_token_creator" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.srt_service_account}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${var.srt_service_account}"
+}
+

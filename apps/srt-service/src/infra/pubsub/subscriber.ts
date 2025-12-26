@@ -2,6 +2,9 @@
  * Pub/Sub Subscriber for Audio Stored Events.
  */
 import { PubSub, type Message } from '@google-cloud/pubsub';
+import pino from 'pino';
+
+const logger = pino({ name: 'pubsub-subscriber' });
 
 /**
  * Audio stored event from whatsapp-service.
@@ -27,11 +30,13 @@ export type AudioStoredHandler = (event: AudioStoredEvent) => Promise<void>;
 export class AudioStoredSubscriber {
   private readonly pubsub: PubSub;
   private readonly subscriptionName: string;
+  private readonly projectId: string;
   private handler: AudioStoredHandler | null = null;
   private isRunning = false;
 
   constructor(projectId: string, subscriptionName: string) {
     this.pubsub = new PubSub({ projectId });
+    this.projectId = projectId;
     this.subscriptionName = subscriptionName;
   }
 
@@ -54,14 +59,41 @@ export class AudioStoredSubscriber {
     this.isRunning = true;
     const subscription = this.pubsub.subscription(this.subscriptionName);
 
+    logger.info(
+      {
+        projectId: this.projectId,
+        subscriptionName: this.subscriptionName,
+      },
+      'Starting Pub/Sub subscription for audio stored events'
+    );
+
     subscription.on('message', (message: Message) => {
+      logger.info(
+        {
+          messageId: message.id,
+          publishTime: message.publishTime.toISOString(),
+          dataLength: message.data.length,
+        },
+        'Received Pub/Sub message'
+      );
       void this.handleMessage(message);
     });
 
     subscription.on('error', (error: Error) => {
-      // Error handler for subscription errors
-      void error; // Log handled by Pub/Sub library
+      logger.error(
+        {
+          subscriptionName: this.subscriptionName,
+          error: error.message,
+          stack: error.stack,
+        },
+        'Pub/Sub subscription error'
+      );
     });
+
+    logger.info(
+      { subscriptionName: this.subscriptionName },
+      'Pub/Sub subscription started successfully'
+    );
   }
 
   /**
@@ -69,7 +101,7 @@ export class AudioStoredSubscriber {
    */
   stop(): void {
     this.isRunning = false;
-    // Note: Subscription cleanup handled by GC
+    logger.info({ subscriptionName: this.subscriptionName }, 'Stopping Pub/Sub subscription');
   }
 
   /**
@@ -77,12 +109,23 @@ export class AudioStoredSubscriber {
    */
   private async handleMessage(message: Message): Promise<void> {
     if (this.handler === null) {
+      logger.warn({ messageId: message.id }, 'No handler set, nacking message');
       message.nack();
       return;
     }
 
     try {
-      const data = JSON.parse(message.data.toString()) as unknown;
+      const rawData = message.data.toString();
+      const data = JSON.parse(rawData) as unknown;
+
+      logger.info(
+        {
+          messageId: message.id,
+          messageBody: data,
+          action: 'process_audio_stored_event',
+        },
+        'Processing Pub/Sub message'
+      );
 
       // Validate event structure
       if (
@@ -91,15 +134,31 @@ export class AudioStoredSubscriber {
         !('type' in data) ||
         data.type !== 'whatsapp.audio.stored'
       ) {
-        // Unexpected event type, acknowledge to prevent redelivery
+        logger.warn(
+          {
+            messageId: message.id,
+            messageBody: data,
+            expectedType: 'whatsapp.audio.stored',
+          },
+          'Unexpected event type, acknowledging to prevent redelivery'
+        );
         message.ack();
         return;
       }
 
       await this.handler(data as AudioStoredEvent);
+
+      logger.info({ messageId: message.id }, 'Message processed successfully, acknowledging');
       message.ack();
-    } catch {
-      // Failed to process message, nack for retry
+    } catch (error) {
+      logger.error(
+        {
+          messageId: message.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        'Failed to process message, nacking for retry'
+      );
       message.nack();
     }
   }

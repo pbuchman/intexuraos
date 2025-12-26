@@ -14,7 +14,50 @@ import type {
   SpeechmaticsJobStatus,
   TranscriptionEventPublisher,
   TranscriptionCompletedEvent,
+  AudioStoragePort,
 } from '../domain/transcription/index.js';
+
+/**
+ * Fake AudioStorage for testing.
+ */
+export class FakeAudioStorage implements AudioStoragePort {
+  private signedUrls = new Map<string, string>();
+  private shouldFail = false;
+  private failureMessage = 'Audio storage error';
+
+  getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, TranscriptionError>> {
+    if (this.shouldFail) {
+      return Promise.resolve(err({ code: 'PERSISTENCE_ERROR', message: this.failureMessage }));
+    }
+    const url =
+      this.signedUrls.get(gcsPath) ??
+      `https://storage.googleapis.com/fake-bucket/${gcsPath}?token=fake-token`;
+    return Promise.resolve(ok(url));
+  }
+
+  /**
+   * Set a specific signed URL for a path.
+   */
+  setSignedUrl(gcsPath: string, url: string): void {
+    this.signedUrls.set(gcsPath, url);
+  }
+
+  /**
+   * Make the storage return errors.
+   */
+  setFailure(shouldFail: boolean, message?: string): void {
+    this.shouldFail = shouldFail;
+    if (message !== undefined) {
+      this.failureMessage = message;
+    }
+  }
+
+  clear(): void {
+    this.signedUrls.clear();
+    this.shouldFail = false;
+    this.failureMessage = 'Audio storage error';
+  }
+}
 
 /**
  * Fake TranscriptionJobRepository for testing.

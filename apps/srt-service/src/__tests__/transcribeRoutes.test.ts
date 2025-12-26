@@ -5,7 +5,12 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeJobRepository, FakeSpeechmaticsClient, FakeEventPublisher } from './fakes.js';
+import {
+  FakeJobRepository,
+  FakeSpeechmaticsClient,
+  FakeEventPublisher,
+  FakeAudioStorage,
+} from './fakes.js';
 import { AudioStoredSubscriber } from '../infra/pubsub/index.js';
 import type { Config } from '../config.js';
 interface SuccessResponse<T> {
@@ -36,6 +41,7 @@ const testConfig: Config = {
   audioStoredSubscription: 'test-subscription',
   transcriptionCompletedTopic: 'test-transcription-completed',
   gcpProjectId: 'test-project',
+  mediaBucketName: 'test-media-bucket',
   port: 8085,
   host: '0.0.0.0',
 };
@@ -51,6 +57,7 @@ describe('Transcription Routes', () => {
       speechmaticsClient: fakeSpeechmaticsClient,
       audioStoredSubscriber: new AudioStoredSubscriber('test-project', 'test-subscription'),
       eventPublisher: new FakeEventPublisher(),
+      audioStorage: new FakeAudioStorage(),
     });
     app = await createServer(testConfig);
   });

@@ -52,15 +52,28 @@ export class TranscriptionWorker {
     this.isRunning = true;
     const subscription = this.pubsub.subscription(this.subscriptionName);
 
+    this.logger.info('Starting Pub/Sub subscription for transcription completed events', {
+      subscription: this.subscriptionName,
+    });
+
     subscription.on('message', (message: Message) => {
+      this.logger.info('Received Pub/Sub message', {
+        messageId: message.id,
+        publishTime: message.publishTime.toISOString(),
+        dataLength: message.data.length,
+      });
       void this.handleMessage(message);
     });
 
     subscription.on('error', (error: Error) => {
-      this.logger.error('Subscription error', { error: error.message });
+      this.logger.error('Subscription error', {
+        subscription: this.subscriptionName,
+        error: error.message,
+        stack: error.stack,
+      });
     });
 
-    this.logger.info('Transcription worker started', {
+    this.logger.info('Transcription worker started successfully', {
       subscription: this.subscriptionName,
     });
   }
@@ -78,7 +91,14 @@ export class TranscriptionWorker {
    */
   private async handleMessage(message: Message): Promise<void> {
     try {
-      const data = JSON.parse(message.data.toString()) as unknown;
+      const rawData = message.data.toString();
+      const data = JSON.parse(rawData) as unknown;
+
+      this.logger.info('Processing Pub/Sub message', {
+        messageId: message.id,
+        messageBody: data,
+        action: 'process_transcription_completed_event',
+      });
 
       // Validate event structure
       if (
@@ -88,7 +108,11 @@ export class TranscriptionWorker {
         data.type !== 'srt.transcription.completed'
       ) {
         // Unexpected event type, acknowledge to prevent redelivery
-        this.logger.error('Unexpected event type', { type: (data as { type?: unknown }).type });
+        this.logger.error('Unexpected event type', {
+          messageId: message.id,
+          type: (data as { type?: unknown }).type,
+          expectedType: 'srt.transcription.completed',
+        });
         message.ack();
         return;
       }

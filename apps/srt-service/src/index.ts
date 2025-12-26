@@ -17,6 +17,7 @@ async function main(): Promise<void> {
     gcpProjectId: config.gcpProjectId,
     audioStoredSubscription: config.audioStoredSubscription,
     transcriptionCompletedTopic: config.transcriptionCompletedTopic,
+    mediaBucketName: config.mediaBucketName,
   });
 
   const server = await createServer(config);

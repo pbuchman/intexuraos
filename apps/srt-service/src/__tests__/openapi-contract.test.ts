@@ -31,6 +31,7 @@ describe('srt-service OpenAPI contract', () => {
     audioStoredSubscription: 'test-subscription',
     transcriptionCompletedTopic: 'test-transcription-completed',
     gcpProjectId: 'test-project',
+    mediaBucketName: 'test-media-bucket',
     port: 8085,
     host: '0.0.0.0',
   };
