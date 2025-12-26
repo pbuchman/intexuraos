@@ -1,16 +1,38 @@
 import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
+import {
+  parsePhoneNumberWithError,
+  getCountries,
+  getCountryCallingCode,
+  type CountryCode,
+} from 'libphonenumber-js';
 
 /**
- * Phone number validation patterns for supported countries.
- * Pattern validates the full number with country code (digits only).
+ * Get list of all supported countries with their calling codes.
+ * Returns array sorted with PL and US first, then alphabetically by country code.
  */
-const PHONE_PATTERNS: Record<string, { pattern: RegExp; name: string }> = {
-  // Poland: +48 followed by 9 digits starting with non-zero
-  '48': { pattern: /^48[1-9]\d{8}$/, name: 'Poland' },
-  // USA: +1 followed by 10 digits, first digit 2-9
-  '1': { pattern: /^1[2-9]\d{9}$/, name: 'USA' },
-};
+export function getSupportedCountries(): { country: CountryCode; callingCode: string }[] {
+  const countries = getCountries();
+  const priorityCountries: CountryCode[] = ['PL', 'US'];
+
+  const priority = countries
+    .filter((c) => priorityCountries.includes(c))
+    .sort((a, b) => priorityCountries.indexOf(a) - priorityCountries.indexOf(b))
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  const rest = countries
+    .filter((c) => !priorityCountries.includes(c))
+    .sort()
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  return [...priority, ...rest];
+}
 
 /**
  * Normalize phone number to consistent format for storage and comparison.
@@ -36,41 +58,63 @@ export function normalizePhoneNumber(phoneNumber: string): string {
 export interface PhoneValidationResult {
   valid: boolean;
   normalized: string;
+  country?: CountryCode;
   error?: string;
 }
 
 /**
- * Validate phone number format for supported countries.
- * Returns normalized number if valid.
+ * Validate phone number format using libphonenumber-js.
+ * Supports all countries. Returns normalized number (E.164 without +) if valid.
  *
- * Supported countries: Poland (+48), USA (+1)
+ * @param phoneNumber - Phone number in any format (with or without +, spaces, dashes)
+ * @param defaultCountry - Optional default country code for numbers without country prefix
  */
-export function validatePhoneNumber(phoneNumber: string): PhoneValidationResult {
-  const normalized = normalizePhoneNumber(phoneNumber);
+export function validatePhoneNumber(
+  phoneNumber: string,
+  defaultCountry?: CountryCode
+): PhoneValidationResult {
+  const trimmed = phoneNumber.trim();
 
-  if (normalized.length === 0) {
-    return { valid: false, normalized, error: 'Phone number is required' };
+  if (trimmed.length === 0) {
+    return { valid: false, normalized: '', error: 'Phone number is required' };
   }
 
-  // Check against known country patterns
-  for (const [code, { pattern, name }] of Object.entries(PHONE_PATTERNS)) {
-    if (normalized.startsWith(code)) {
-      if (pattern.test(normalized)) {
-        return { valid: true, normalized };
-      }
+  try {
+    // Add + prefix if not present and no default country provided
+    // This helps parse numbers that include country code but lack +
+    const numberToParse =
+      !trimmed.startsWith('+') && defaultCountry === undefined ? `+${trimmed}` : trimmed;
+
+    const parsed = parsePhoneNumberWithError(numberToParse, defaultCountry);
+
+    if (!parsed.isValid()) {
       return {
         valid: false,
-        normalized,
-        error: `Invalid ${name} phone number format`,
+        normalized: normalizePhoneNumber(trimmed),
+        error: 'Invalid phone number format',
       };
     }
-  }
 
-  return {
-    valid: false,
-    normalized,
-    error: 'Unsupported country code. Supported: Poland (+48), USA (+1)',
-  };
+    // E.164 format without + prefix for storage consistency
+    const normalized = parsed.number.replace('+', '');
+
+    const result: PhoneValidationResult = {
+      valid: true,
+      normalized,
+    };
+
+    if (parsed.country !== undefined) {
+      result.country = parsed.country;
+    }
+
+    return result;
+  } catch {
+    return {
+      valid: false,
+      normalized: normalizePhoneNumber(trimmed),
+      error: 'Invalid phone number format',
+    };
+  }
 }
 
 /**

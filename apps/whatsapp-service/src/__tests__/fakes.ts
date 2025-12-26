@@ -5,7 +5,7 @@
  * They are designed to be exercised by route tests and use case tests.
  *
  * Coverage note: Some methods may show low coverage until all Tier 1 test issues
- * are completed (see docs/todo/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
+ * are completed (see docs/continuity/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
  */
 import type { Result } from '@intexuraos/common';
 import { ok, err } from '@intexuraos/common';

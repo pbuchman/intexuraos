@@ -15,7 +15,7 @@ describe('WhatsApp Mapping Routes', () => {
         method: 'POST',
         url: '/v1/whatsapp/connect',
         payload: {
-          phoneNumbers: ['+15551234567'],
+          phoneNumbers: ['+12125551234'],
         },
       });
 
@@ -36,7 +36,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15551234567'],
+          phoneNumbers: ['+12125551234'],
         },
       });
 
@@ -49,7 +49,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['15551234567']);
+      expect(body.data.phoneNumbers).toEqual(['12125551234']);
       expect(body.data.connected).toBe(true);
     });
 
@@ -83,7 +83,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15551111111'],
+          phoneNumbers: ['+12125551111'],
         },
       });
 
@@ -93,7 +93,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15552222222'],
+          phoneNumbers: ['+12125552222'],
         },
       });
 
@@ -105,7 +105,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['15552222222']);
+      expect(body.data.phoneNumbers).toEqual(['12125552222']);
     });
   });
 
@@ -152,7 +152,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15553333333'],
+          phoneNumbers: ['+12125553333'],
         },
       });
 
@@ -172,7 +172,7 @@ describe('WhatsApp Mapping Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.phoneNumbers).toEqual(['15553333333']);
+      expect(body.data.phoneNumbers).toEqual(['12125553333']);
       expect(body.data.connected).toBe(true);
     });
   });
@@ -220,7 +220,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15554444444'],
+          phoneNumbers: ['+12125554444'],
         },
       });
 
@@ -252,7 +252,7 @@ describe('WhatsApp Mapping Routes', () => {
         url: '/v1/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          phoneNumbers: ['+15555555555'],
+          phoneNumbers: ['+12125555555'],
         },
       });
 
