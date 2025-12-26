@@ -111,13 +111,13 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 | Task | Title                                    | Status  | Dependencies       |
 | ---- | ---------------------------------------- | ------- | ------------------ |
 | 4-0  | Test Coverage for whatsapp-service Media | ⬜ TODO | 2-0, 2-1, 2-2, 2-3 |
-| 4-1  | Test Coverage for srt-service            | ⬜ TODO | 2-4, 2-5, 2-6      |
+| 4-1  | Test Coverage for srt-service            | ✅ DONE | 2-4, 2-5, 2-6      |
 
 ### Tier 5: Documentation
 
 | Task | Title                 | Status  | Dependencies       |
 | ---- | --------------------- | ------- | ------------------ |
-| 5-0  | Documentation Updates | ⬜ TODO | All implementation |
+| 5-0  | Documentation Updates | ✅ DONE | All implementation |
 
 ### Tier 6: Final
 
@@ -144,15 +144,18 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 - Task 2-4: Implement srt-service Routes
 - Task 2-5: Implement srt-service Audio Event Worker
 - Task 2-6: Implement srt-service Polling Worker
+- Task 4-1: Test Coverage for srt-service
+- Task 5-0: Documentation Updates
 
 **Now:**
 
-- All Tier 2 backend tasks complete
-- Ready for Tier 3: Web UI (deferred)
+- All backend implementation complete
+- Tier 3 (Web UI) and Tier 4 (whatsapp-service tests) remaining
 
 **Next:**
 
-- Documentation update
+- Task 3-0: Update Web App for Media Display
+- Task 4-0: Test Coverage for whatsapp-service Media
 
 ---
 

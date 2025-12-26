@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **whatsapp-service**: WhatsApp media (image/audio) message support
+  - Download and store media in private GCS bucket
+  - Thumbnail generation for images (256px max edge)
+  - Signed URL access for media files
+  - Pub/Sub event publishing for audio files
+  - Async media cleanup on message deletion with DLQ
+- **srt-service**: Speech-to-text transcription service via Speechmatics
+  - Pub/Sub subscription for audio events from whatsapp-service
+  - Transcription job management with idempotency
+  - Background polling worker with exponential backoff
+  - RESTful API for job creation and status queries
+- Terraform modules for GCS media bucket and Pub/Sub topics
+- Environment variable standardization with `INTEXURAOS_` prefix
+
+### Changed
+
+- All Cloud Run services now have `max_scale = 1` for cost control
+
+---
+
+## [0.0.2] - 2025-12-22
+
+### Added
+
 - Initial project structure with hexagonal architecture
 - **auth-service**: OAuth2 Device Authorization Flow, ChatGPT Actions OAuth proxy
 - **promptvault-service**: Prompt template management with Notion integration

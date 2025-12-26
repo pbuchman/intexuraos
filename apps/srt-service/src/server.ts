@@ -214,6 +214,22 @@ export async function createServer(config: Config): Promise<FastifyInstance> {
     }
   );
 
+  // OpenAPI JSON endpoint
+  app.get(
+    '/openapi.json',
+    {
+      schema: {
+        description: 'OpenAPI specification',
+        tags: ['health'],
+        hide: true,
+      },
+    },
+    async (_req, reply) => {
+      const spec = app.swagger();
+      return await reply.type('application/json').send(spec);
+    }
+  );
+
   // Register v1 routes
   await app.register(v1Routes);
 
