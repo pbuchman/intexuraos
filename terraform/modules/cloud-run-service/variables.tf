@@ -83,6 +83,16 @@ variable "allow_unauthenticated" {
   default     = true
 }
 
+variable "invoker_service_accounts" {
+  description = <<-EOT
+    List of service account emails allowed to invoke this service.
+    Used for internal service-to-service communication with Google-signed ID tokens.
+    Only effective when allow_unauthenticated = false.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "labels" {
   description = "Labels to apply to resources"
   type        = map(string)

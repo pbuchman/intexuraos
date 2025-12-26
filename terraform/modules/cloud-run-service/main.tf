@@ -105,3 +105,14 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
+# Allow specific service accounts to invoke this service
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
+  for_each = toset(var.invoker_service_accounts)
+
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.service.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${each.value}"
+}
+

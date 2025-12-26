@@ -68,10 +68,10 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 ### Tier 0: Infrastructure
 | Task | Title | Status | Dependencies |
 |------|-------|--------|--------------|
-| 0-0 | Enforce max_scale = 1 for existing services | ⬜ TODO | - |
-| 0-1 | Create WhatsApp Media Bucket Terraform Module | ⬜ TODO | - |
-| 0-2 | Create Pub/Sub Terraform Module | ⬜ TODO | - |
-| 0-3 | Scaffold srt-service with Terraform | ⬜ TODO | - |
+| 0-0 | Enforce max_scale = 1 for existing services | ✅ DONE | - |
+| 0-1 | Create WhatsApp Media Bucket Terraform Module | ✅ DONE | - |
+| 0-2 | Create Pub/Sub Terraform Module | ✅ DONE | - |
+| 0-3 | Scaffold srt-service with Terraform | ✅ DONE | - |
 
 ### Tier 1: Independent Deliverables
 | Task | Title | Status | Dependencies |
@@ -125,12 +125,13 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 - Requirements clarification (Q1-Q6 + polling question)
 - Decision log populated
 - Task breakdown complete
+- Tier 0 complete (0-0, 0-1, 0-2, 0-3)
 
 **Now:**
-- Awaiting user confirmation to proceed with execution
+- Starting Tier 1 tasks
 
 **Next:**
-- Execute Tier 0 tasks (0-0 through 0-3)
+- Execute Tier 1 tasks (1-0 through 1-6)
 
 ---
 

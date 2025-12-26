@@ -96,35 +96,42 @@ locals {
       app_path  = "apps/auth-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     promptvault_service = {
       name      = "intexuraos-promptvault-service"
       app_path  = "apps/promptvault-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     notion_service = {
       name      = "intexuraos-notion-service"
       app_path  = "apps/notion-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     whatsapp_service = {
       name      = "intexuraos-whatsapp-service"
       app_path  = "apps/whatsapp-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     api_docs_hub = {
       name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
+    }
+    srt_service = {
+      name      = "intexuraos-srt-service"
+      app_path  = "apps/srt-service"
+      port      = 8080
+      min_scale = 1 # Always running for background polling worker
+      max_scale = 1
     }
   }
 
@@ -205,6 +212,25 @@ module "web_app" {
 }
 
 # -----------------------------------------------------------------------------
+# WhatsApp Media Bucket (private, no public access)
+# -----------------------------------------------------------------------------
+
+module "whatsapp_media_bucket" {
+  source = "../../modules/whatsapp-media-bucket"
+
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  whatsapp_service_account = module.iam.service_accounts["whatsapp_service"]
+  labels                   = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Firestore
 # -----------------------------------------------------------------------------
 
@@ -247,6 +273,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
+    # Speechmatics API secrets
+    "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
     # Web frontend service URLs (public, non-sensitive)
     "INTEXURAOS_AUTH_SERVICE_URL"        = "Auth service Cloud Run URL for web frontend"
     "INTEXURAOS_PROMPTVAULT_SERVICE_URL" = "PromptVault service Cloud Run URL for web frontend"
@@ -273,6 +301,44 @@ module "iam" {
   depends_on = [
     google_project_service.apis,
     module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Pub/Sub Topics
+# -----------------------------------------------------------------------------
+
+# Topic for audio stored events (whatsapp → srt-service)
+module "pubsub_audio_stored" {
+  source = "../../modules/pubsub"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-whatsapp-audio-stored-${var.environment}"
+  labels     = local.common_labels
+
+  publisher_service_accounts  = [module.iam.service_accounts["whatsapp_service"]]
+  subscriber_service_accounts = [module.iam.service_accounts["srt_service"]]
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# Topic for media cleanup events (whatsapp message deletion)
+module "pubsub_media_cleanup" {
+  source = "../../modules/pubsub"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels     = local.common_labels
+
+  publisher_service_accounts  = [module.iam.service_accounts["whatsapp_service"]]
+  subscriber_service_accounts = [module.iam.service_accounts["whatsapp_service"]]
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
   ]
 }
 
@@ -395,10 +461,20 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
   }
 
+  env_vars = {
+    WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
+    PUBSUB_AUDIO_STORED_TOPIC         = module.pubsub_audio_stored.topic_name
+    PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
+    PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+  }
+
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.whatsapp_media_bucket,
+    module.pubsub_audio_stored,
+    module.pubsub_media_cleanup,
   ]
 }
 
@@ -424,6 +500,7 @@ module "api_docs_hub" {
     PROMPTVAULT_SERVICE_OPENAPI_URL = "${module.promptvault_service.service_url}/openapi.json"
     NOTION_SERVICE_OPENAPI_URL      = "${module.notion_service.service_url}/openapi.json"
     WHATSAPP_SERVICE_OPENAPI_URL    = "${module.whatsapp_service.service_url}/openapi.json"
+    SRT_SERVICE_OPENAPI_URL         = "${module.srt_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -433,6 +510,46 @@ module "api_docs_hub" {
     module.promptvault_service,
     module.notion_service,
     module.whatsapp_service,
+    module.srt_service,
+  ]
+}
+
+# SRT Service - Speech Recognition/Transcription via Speechmatics
+module "srt_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.srt_service.name
+  service_account = module.iam.service_accounts["srt_service"]
+  port            = local.services.srt_service.port
+  min_scale       = local.services.srt_service.min_scale
+  max_scale       = local.services.srt_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/srt-service:latest"
+
+  # Internal-only service - no public access
+  allow_unauthenticated = false
+
+  # Only whatsapp-service can invoke this service
+  invoker_service_accounts = [module.iam.service_accounts["whatsapp_service"]]
+
+  secrets = {
+    INTEXURAOS_SPEECHMATICS_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_API_KEY"]
+  }
+
+  env_vars = {
+    PUBSUB_AUDIO_STORED_SUBSCRIPTION = module.pubsub_audio_stored.subscription_name
+    GCP_PROJECT_ID                   = var.project_id
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+    module.pubsub_audio_stored,
   ]
 }
 
@@ -497,6 +614,11 @@ output "api_docs_hub_url" {
   value       = module.api_docs_hub.service_url
 }
 
+output "srt_service_url" {
+  description = "SRT Service URL (internal-only)"
+  value       = module.srt_service.service_url
+}
+
 output "firestore_database" {
   description = "Firestore database name"
   value       = module.firestore.database_name
@@ -540,5 +662,20 @@ output "web_app_dns_a_record_hint" {
 output "web_app_cert_name" {
   description = "Managed SSL certificate name for web app"
   value       = module.web_app.web_app_cert_name
+}
+
+output "whatsapp_media_bucket_name" {
+  description = "WhatsApp media bucket name (private, signed URL access only)"
+  value       = module.whatsapp_media_bucket.bucket_name
+}
+
+output "pubsub_audio_stored_topic" {
+  description = "Pub/Sub topic for audio stored events"
+  value       = module.pubsub_audio_stored.topic_name
+}
+
+output "pubsub_media_cleanup_topic" {
+  description = "Pub/Sub topic for media cleanup events"
+  value       = module.pubsub_media_cleanup.topic_name
 }
 
