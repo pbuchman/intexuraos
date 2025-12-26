@@ -10,13 +10,13 @@ The Firestore adapter for WhatsAppMessageRepository needs to handle the new Tran
 
 Current signature:
 
-```typescript
+```ts-example
 updateTranscription(userId, messageId, { transcriptionJobId, transcriptionStatus, transcription? })
 ```
 
 New signature:
 
-```typescript
+```ts-example
 updateTranscription(userId, messageId, transcription: TranscriptionState)
 ```
 

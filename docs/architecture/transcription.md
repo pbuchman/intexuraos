@@ -113,12 +113,9 @@ Cloud Run may terminate containers at any time:
 
 For production reliability:
 
-```terraform
-module "whatsapp_service" {
-  # ...
-  min_scale = 1  # Keep one instance always warm
-  # ...
-}
+```hcl
+# In terraform/environments/dev/main.tf, module "whatsapp_service":
+min_scale = 1  # Keep one instance always warm
 ```
 
 ### Recovery

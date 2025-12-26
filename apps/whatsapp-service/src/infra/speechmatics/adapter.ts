@@ -184,16 +184,15 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
 
       // Add error details if rejected
       if (status === 'rejected' && response.job.errors !== undefined) {
-        const errorsValue = response.job.errors;
+        const errorsValue: unknown = response.job.errors;
         let errorMessage: string;
         if (Array.isArray(errorsValue)) {
           errorMessage = errorsValue
             .map((e: unknown) => (typeof e === 'string' ? e : JSON.stringify(e)))
             .join('; ');
-        } else if (typeof errorsValue === 'string') {
-          errorMessage = errorsValue;
         } else {
-          errorMessage = JSON.stringify(errorsValue);
+          errorMessage =
+            typeof errorsValue === 'string' ? errorsValue : JSON.stringify(errorsValue);
         }
         result.error = {
           code: 'JOB_REJECTED',
