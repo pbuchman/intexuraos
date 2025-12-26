@@ -8,6 +8,7 @@ import {
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
+  registerQuietHealthCheckLogging,
   type NotionLogger,
 } from '@intexuraos/common';
 import { v1Routes } from './routes/v1/routes.js';
@@ -286,12 +287,16 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: true,
+    disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
     ajv: {
       customOptions: {
         removeAdditional: false,
       },
     },
   });
+
+  // Register quiet health check logging (skips /health endpoint logs)
+  registerQuietHealthCheckLogging(app);
 
   // Create NotionLogger adapter from Fastify logger
   const notionLogger: NotionLogger = {
