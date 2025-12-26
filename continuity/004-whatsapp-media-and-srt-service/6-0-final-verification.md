@@ -15,6 +15,7 @@ Final verification before task completion. Must pass all CI checks and validate 
 ## Problem Statement
 
 Ensure all code changes pass:
+
 - TypeScript compilation
 - Linting
 - Tests with coverage
@@ -26,12 +27,14 @@ Ensure all code changes pass:
 ## Scope
 
 **In scope:**
+
 - Run full CI
 - Fix any issues found
 - Terraform fmt and validate
 - Verify no open issues
 
 **Out of scope:**
+
 - Terraform apply (requires manual approval)
 - Production deployment
 
@@ -86,4 +89,3 @@ terraform validate
 ## Rollback Plan
 
 Address specific failures; revert if major issues found.
-

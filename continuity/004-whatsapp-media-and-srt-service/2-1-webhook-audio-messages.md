@@ -15,6 +15,7 @@ WhatsApp webhook needs to accept audio messages. After storing audio in GCS, pub
 ## Problem Statement
 
 Modify processWhatsAppWebhook to:
+
 - Recognize audio message type
 - Download audio from WhatsApp API
 - Upload to GCS
@@ -27,6 +28,7 @@ Modify processWhatsAppWebhook to:
 ## Scope
 
 **In scope:**
+
 - Update webhook payload types for audio
 - Update classifyWebhook to accept audio type
 - Implement audio processing flow
@@ -34,6 +36,7 @@ Modify processWhatsAppWebhook to:
 - Handle caption/text if present
 
 **Out of scope:**
+
 - srt-service processing (separate task)
 - Transcription result storage
 
@@ -91,4 +94,3 @@ npm run test
 ## Rollback Plan
 
 Revert changes to processWhatsAppWebhook.ts and related files.
-

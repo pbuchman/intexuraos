@@ -11,6 +11,7 @@ import {
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
 import { validateConfigEnv, type Config } from './config.js';
+import { initServices } from './services.js';
 
 const SERVICE_NAME = 'srt-service';
 const SERVICE_VERSION = '0.0.1';
@@ -133,7 +134,14 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 /**
  * Creates and configures the Fastify server instance.
  */
-export async function createServer(_config: Config): Promise<FastifyInstance> {
+export async function createServer(config: Config): Promise<FastifyInstance> {
+  // Initialize service container with config
+  initServices({
+    speechmaticsApiKey: config.speechmaticsApiKey,
+    gcpProjectId: config.gcpProjectId,
+    audioStoredSubscription: config.audioStoredSubscription,
+  });
+
   const app = Fastify({
     logger: true,
     disableRequestLogging: true,
@@ -208,6 +216,5 @@ export async function createServer(_config: Config): Promise<FastifyInstance> {
   // Register v1 routes (placeholder - to be implemented in later tasks)
   // await app.register(createV1Routes);
 
-  return app;
+  return await app;
 }
-

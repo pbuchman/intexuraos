@@ -62,4 +62,3 @@ export function validateConfigEnv(): string[] {
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }
-

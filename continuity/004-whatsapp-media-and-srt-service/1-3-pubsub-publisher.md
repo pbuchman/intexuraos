@@ -7,6 +7,7 @@
 ## Context
 
 whatsapp-service needs to publish events to Pub/Sub:
+
 1. `whatsapp.audio.stored` — when audio is stored, triggers srt-service
 2. `whatsapp.media.cleanup` — when message deleted, triggers async cleanup
 
@@ -15,6 +16,7 @@ whatsapp-service needs to publish events to Pub/Sub:
 ## Problem Statement
 
 Create a Pub/Sub publisher port and adapter for whatsapp-service:
+
 - Publish structured events with message context
 - Handle publish errors gracefully
 - Support different event types
@@ -24,6 +26,7 @@ Create a Pub/Sub publisher port and adapter for whatsapp-service:
 ## Scope
 
 **In scope:**
+
 - Define event types/schemas
 - Create PubSubPublisherPort interface
 - Implement GcpPubSubPublisher adapter
@@ -33,6 +36,7 @@ Create a Pub/Sub publisher port and adapter for whatsapp-service:
 - Read topic names from config
 
 **Out of scope:**
+
 - Subscriber logic (srt-service task)
 - Cleanup worker (later task)
 - Integration with webhook
@@ -62,7 +66,7 @@ Create a Pub/Sub publisher port and adapter for whatsapp-service:
 - [ ] Implement GcpPubSubPublisher
 - [ ] Update config.ts with topic name env vars
 - [ ] Add to services.ts container
-- [ ] Create FakeEventPublisher in __tests__/fakes.ts
+- [ ] Create FakeEventPublisher in **tests**/fakes.ts
 - [ ] Export from domain index
 - [ ] Run npm install
 - [ ] Run npm run typecheck
@@ -94,4 +98,3 @@ npm run lint
 ## Rollback Plan
 
 Remove @google-cloud/pubsub, delete event types and publisher files.
-

@@ -22,7 +22,12 @@ export type {
   InboxResult,
 } from './models/InboxNote.js';
 
-export type { WhatsAppMessage, WhatsAppMessageMetadata } from './models/WhatsAppMessage.js';
+export type {
+  WhatsAppMessage,
+  WhatsAppMessageMetadata,
+  WhatsAppMediaType,
+  WhatsAppMediaInfo,
+} from './models/WhatsAppMessage.js';
 
 // Ports
 export type {
@@ -37,6 +42,13 @@ export type {
   WhatsAppWebhookEventRepository,
   WhatsAppMessageRepository,
 } from './ports/repositories.js';
+
+export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
+
+export type { EventPublisherPort } from './ports/eventPublisher.js';
+
+// Events
+export type { AudioStoredEvent, MediaCleanupEvent, WhatsAppEvent } from './events/index.js';
 
 // Use cases
 export {

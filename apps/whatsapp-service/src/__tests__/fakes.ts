@@ -20,6 +20,11 @@ import type {
   WhatsAppUserMappingPublic,
   WhatsAppMessage,
   InboxError,
+  MediaStoragePort,
+  UploadResult,
+  EventPublisherPort,
+  AudioStoredEvent,
+  MediaCleanupEvent,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -186,5 +191,94 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   clear(): void {
     this.messages.clear();
+  }
+}
+
+/**
+ * Fake media storage for testing.
+ */
+export class FakeMediaStorage implements MediaStoragePort {
+  private files = new Map<string, { buffer: Buffer; contentType: string }>();
+  private signedUrls = new Map<string, string>();
+
+  upload(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, InboxError>> {
+    const gcsPath = `whatsapp/${userId}/${messageId}/${mediaId}.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
+  uploadThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, InboxError>> {
+    const gcsPath = `whatsapp/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
+    this.files.set(gcsPath, { buffer, contentType });
+    return Promise.resolve(ok({ gcsPath }));
+  }
+
+  delete(gcsPath: string): Promise<Result<void, InboxError>> {
+    this.files.delete(gcsPath);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, InboxError>> {
+    const url = `https://storage.example.com/signed/${gcsPath}`;
+    this.signedUrls.set(gcsPath, url);
+    return Promise.resolve(ok(url));
+  }
+
+  getFile(gcsPath: string): { buffer: Buffer; contentType: string } | undefined {
+    return this.files.get(gcsPath);
+  }
+
+  getAllFiles(): Map<string, { buffer: Buffer; contentType: string }> {
+    return new Map(this.files);
+  }
+
+  clear(): void {
+    this.files.clear();
+    this.signedUrls.clear();
+  }
+}
+
+/**
+ * Fake event publisher for testing.
+ */
+export class FakeEventPublisher implements EventPublisherPort {
+  private audioStoredEvents: AudioStoredEvent[] = [];
+  private mediaCleanupEvents: MediaCleanupEvent[] = [];
+
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, InboxError>> {
+    this.audioStoredEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
+    this.mediaCleanupEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getAudioStoredEvents(): AudioStoredEvent[] {
+    return [...this.audioStoredEvents];
+  }
+
+  getMediaCleanupEvents(): MediaCleanupEvent[] {
+    return [...this.mediaCleanupEvents];
+  }
+
+  clear(): void {
+    this.audioStoredEvents = [];
+    this.mediaCleanupEvents = [];
   }
 }

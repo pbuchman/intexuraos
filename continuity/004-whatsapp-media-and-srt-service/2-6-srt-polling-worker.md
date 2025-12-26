@@ -15,6 +15,7 @@ srt-service needs a background worker that polls Speechmatics for non-final jobs
 ## Problem Statement
 
 Implement polling worker that:
+
 - Runs continuously (min_scale = 1)
 - Finds jobs in pending/processing status
 - Polls Speechmatics for status updates
@@ -26,6 +27,7 @@ Implement polling worker that:
 ## Scope
 
 **In scope:**
+
 - Create PollingWorker
 - Query Firestore for non-final jobs
 - Poll Speechmatics for each
@@ -35,6 +37,7 @@ Implement polling worker that:
 - Track last poll time per job
 
 **Out of scope:**
+
 - Speechmatics webhooks
 - External notification of completion
 
@@ -96,4 +99,3 @@ npm run lint
 ## Rollback Plan
 
 Remove pollingWorker.ts, revert model and adapter changes.
-

@@ -15,6 +15,7 @@ All new whatsapp-service media functionality must have test coverage meeting pro
 ## Problem Statement
 
 Ensure test coverage for:
+
 - Message model extensions
 - GCS adapter (via fakes)
 - Thumbnail generator
@@ -29,12 +30,14 @@ Ensure test coverage for:
 ## Scope
 
 **In scope:**
+
 - Unit tests for utility functions
 - Integration tests for routes (using fakes)
 - Fakes for GCS, Pub/Sub
 - Coverage verification
 
 **Out of scope:**
+
 - E2E tests against real services
 - srt-service tests (separate task)
 
@@ -88,4 +91,3 @@ npm run ci
 ## Rollback Plan
 
 N/A - tests only.
-

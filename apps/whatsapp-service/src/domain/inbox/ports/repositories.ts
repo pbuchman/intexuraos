@@ -6,6 +6,9 @@ import type { Result } from '@intexuraos/common';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 
+// Re-export InboxError for use in other ports
+export type { InboxError };
+
 /**
  * Processing status for webhook events.
  */

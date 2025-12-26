@@ -10,15 +10,15 @@ This task implements WhatsApp audio/image message support with a new srt-service
 
 Files follow `[tier]-[sequence]-[title].md` pattern:
 
-| Tier | Description |
-|------|-------------|
-| 0 | Setup/Infrastructure (Terraform, scaffolding) |
-| 1 | Independent deliverables (ports, adapters, utilities) |
-| 2 | Integration (webhook processing, routes, workers) |
-| 3 | UI integration (web app components) |
-| 4 | Verification (test coverage) |
-| 5 | Documentation |
-| 6 | Final verification |
+| Tier | Description                                           |
+| ---- | ----------------------------------------------------- |
+| 0    | Setup/Infrastructure (Terraform, scaffolding)         |
+| 1    | Independent deliverables (ports, adapters, utilities) |
+| 2    | Integration (webhook processing, routes, workers)     |
+| 3    | UI integration (web app components)                   |
+| 4    | Verification (test coverage)                          |
+| 5    | Documentation                                         |
+| 6    | Final verification                                    |
 
 ---
 
@@ -27,12 +27,14 @@ Files follow `[tier]-[sequence]-[title].md` pattern:
 Execute tasks in tier order. Within a tier, follow sequence number.
 
 ### Tier 0: Infrastructure
+
 - 0-0: Enforce max_scale = 1 for existing services
 - 0-1: Create WhatsApp Media Bucket Terraform Module
 - 0-2: Create Pub/Sub Terraform Module
 - 0-3: Scaffold srt-service with Terraform
 
 ### Tier 1: Independent Deliverables
+
 - 1-0: Extend WhatsAppMessage Model
 - 1-1: Add GCS Media Storage Port/Adapter
 - 1-2: Add Thumbnail Generation Service
@@ -42,6 +44,7 @@ Execute tasks in tier order. Within a tier, follow sequence number.
 - 1-6: Implement srt-service Infrastructure Layer
 
 ### Tier 2: Integration
+
 - 2-0: Extend Webhook for Image Messages
 - 2-1: Extend Webhook for Audio Messages + Publish Event
 - 2-2: Add Message Media Routes (Signed URLs)
@@ -51,16 +54,20 @@ Execute tasks in tier order. Within a tier, follow sequence number.
 - 2-6: Implement srt-service Polling Worker
 
 ### Tier 3: UI Integration
+
 - 3-0: Update Web App for Media Display
 
 ### Tier 4: Verification
+
 - 4-0: Test Coverage for whatsapp-service Media
 - 4-1: Test Coverage for srt-service
 
 ### Tier 5: Documentation
+
 - 5-0: Documentation Updates
 
 ### Tier 6: Final
+
 - 6-0: Final CI Verification and Terraform Apply
 
 ---
@@ -68,6 +75,7 @@ Execute tasks in tier order. Within a tier, follow sequence number.
 ## Idempotent Execution
 
 Each task is designed to be idempotent:
+
 - Check if changes already exist before applying
 - Use deterministic identifiers
 - Handle "already exists" as success
@@ -77,6 +85,7 @@ Each task is designed to be idempotent:
 ## Ledger Semantics
 
 CONTINUITY.md tracks:
+
 - **Goal**: Overall objective and success criteria
 - **Constraints**: Design decisions and assumptions
 - **State**: Done / Now / Next
@@ -124,4 +133,3 @@ npm run ci
 6. **DLQ** for cleanup failures (5 retries)
 7. **min_scale = 1** for srt-service (continuous polling)
 8. **max_scale = 1** for all services (cost control)
-

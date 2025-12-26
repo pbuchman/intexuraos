@@ -7,6 +7,7 @@
 ## Context
 
 srt-service needs infrastructure implementations:
+
 - Firestore adapter for job repository
 - Speechmatics Batch API client
 - Pub/Sub subscriber for audio.stored events
@@ -16,6 +17,7 @@ srt-service needs infrastructure implementations:
 ## Problem Statement
 
 Implement adapters for the ports defined in domain layer:
+
 - TranscriptionJobRepository → Firestore
 - SpeechmaticsClient → Speechmatics Batch API
 - AudioStoredSubscriber → Pub/Sub pull
@@ -25,6 +27,7 @@ Implement adapters for the ports defined in domain layer:
 ## Scope
 
 **In scope:**
+
 - Firestore repository with idempotency check
 - Speechmatics client with API key auth
 - Pub/Sub pull subscriber skeleton
@@ -32,6 +35,7 @@ Implement adapters for the ports defined in domain layer:
 - Config for API key, subscription name
 
 **Out of scope:**
+
 - Background polling worker (later task)
 - Route handlers
 
@@ -90,4 +94,3 @@ npm run lint
 ## Rollback Plan
 
 Delete infra/ directory contents, revert services.ts and config.ts.
-

@@ -15,6 +15,7 @@ When user deletes a message, media files in GCS must be deleted. Use async clean
 ## Problem Statement
 
 Extend DELETE /v1/whatsapp/messages/:id to:
+
 - Delete message from Firestore immediately
 - Publish cleanup event for GCS deletion
 - Cleanup worker processes events with retries
@@ -25,6 +26,7 @@ Extend DELETE /v1/whatsapp/messages/:id to:
 ## Scope
 
 **In scope:**
+
 - Modify delete route to publish cleanup event
 - Create cleanup worker (Pub/Sub subscriber)
 - Worker deletes GCS objects (original + thumbnail)
@@ -32,6 +34,7 @@ Extend DELETE /v1/whatsapp/messages/:id to:
 - Add worker startup to server.ts
 
 **Out of scope:**
+
 - DLQ monitoring (manual inspection)
 - Transcription job cleanup
 
@@ -90,4 +93,3 @@ npm run test
 ## Rollback Plan
 
 Revert delete route changes, remove cleanup worker.
-

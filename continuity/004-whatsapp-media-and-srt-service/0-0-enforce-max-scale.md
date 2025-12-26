@@ -19,11 +19,13 @@ Current services may have `max_scale = 2` or higher. Need to audit and enforce `
 ## Scope
 
 **In scope:**
+
 - Audit `locals.services` in `terraform/environments/dev/main.tf`
 - Set `max_scale = 1` for all services
 - Verify Terraform plan shows expected changes
 
 **Out of scope:**
+
 - Production environment (if exists)
 - New services (handled in later tasks)
 
@@ -70,4 +72,3 @@ terraform validate
 ## Rollback Plan
 
 Revert `max_scale` values to previous settings in `locals.services`.
-

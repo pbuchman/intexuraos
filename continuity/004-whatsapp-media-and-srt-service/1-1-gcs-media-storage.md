@@ -13,6 +13,7 @@ whatsapp-service needs to upload, download, and delete media from GCS bucket. Al
 ## Problem Statement
 
 Create a port (interface) and adapter (implementation) for GCS operations:
+
 - Upload media (original + thumbnail)
 - Delete media
 - Generate signed URLs with configurable TTL
@@ -23,6 +24,7 @@ Create a port (interface) and adapter (implementation) for GCS operations:
 ## Scope
 
 **In scope:**
+
 - Define `MediaStoragePort` interface in domain layer
 - Implement `GcsMediaStorageAdapter` in infra layer
 - Path generation: `whatsapp/{userId}/{messageId}/{mediaId}.{ext}`
@@ -32,6 +34,7 @@ Create a port (interface) and adapter (implementation) for GCS operations:
 - Create fake for testing
 
 **Out of scope:**
+
 - Thumbnail generation logic (separate task)
 - Actual webhook integration
 
@@ -59,7 +62,7 @@ Create a port (interface) and adapter (implementation) for GCS operations:
 - [ ] Implement GcsMediaStorageAdapter
 - [ ] Add @google-cloud/storage to package.json
 - [ ] Add to services.ts container
-- [ ] Create FakeMediaStorageRepository in __tests__/fakes.ts
+- [ ] Create FakeMediaStorageRepository in **tests**/fakes.ts
 - [ ] Export from domain index
 - [ ] Update config.ts to read WHATSAPP_MEDIA_BUCKET
 - [ ] Run npm run typecheck
@@ -90,4 +93,3 @@ npm run lint
 ## Rollback Plan
 
 Remove port, adapter, and related changes. Remove @google-cloud/storage dependency.
-

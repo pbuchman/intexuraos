@@ -13,6 +13,7 @@ WhatsApp media (images, audio) must be stored in a private GCS bucket. Access is
 ## Problem Statement
 
 Need a dedicated, secure GCS bucket for WhatsApp media files with:
+
 - Uniform bucket-level access (IAM only, no ACLs)
 - No public access
 - whatsapp-service has objectAdmin role
@@ -23,6 +24,7 @@ Need a dedicated, secure GCS bucket for WhatsApp media files with:
 ## Scope
 
 **In scope:**
+
 - Create `terraform/modules/whatsapp-media-bucket/`
 - main.tf, variables.tf, outputs.tf
 - IAM binding for whatsapp-service SA
@@ -30,6 +32,7 @@ Need a dedicated, secure GCS bucket for WhatsApp media files with:
 - Add bucket name as env var to whatsapp-service
 
 **Out of scope:**
+
 - Application code to use the bucket
 - Signed URL generation logic
 
@@ -81,4 +84,3 @@ terraform validate
 ## Rollback Plan
 
 Remove module call from dev/main.tf, delete module directory.
-

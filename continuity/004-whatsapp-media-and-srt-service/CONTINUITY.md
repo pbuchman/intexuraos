@@ -9,6 +9,7 @@
 ## Goal
 
 Implement WhatsApp audio/image message support with:
+
 1. Private GCS bucket for media storage (signed URL access only)
 2. Thumbnail generation (256px max edge, using sharp)
 3. Pub/Sub event-driven architecture for async workflows
@@ -16,6 +17,7 @@ Implement WhatsApp audio/image message support with:
 5. Web app media display (thumbnails, modal, HTML5 audio player)
 
 **Success Criteria:**
+
 - WhatsApp webhook accepts text, image, and audio messages
 - Media stored in private GCS bucket with deterministic paths
 - Thumbnails generated and stored for images
@@ -45,15 +47,15 @@ Implement WhatsApp audio/image message support with:
 
 ## Key Decisions
 
-| Timestamp  | Decision | Rationale |
-|------------|----------|-----------|
-| 2025-12-26 | Signed URLs for media access | Browser never gets bucket creds; supports range requests |
-| 2025-12-26 | sharp for thumbnail generation | Server-side in whatsapp-service; 256px max edge |
-| 2025-12-26 | Pub/Sub for async orchestration | Decoupled services; whatsapp → srt via events |
-| 2025-12-26 | Pull subscription for srt-service | Worker controls acking, retries, idempotency |
-| 2025-12-26 | DLQ for cleanup failures | 5 retries, then dead-letter for inspection |
-| 2025-12-26 | Background polling worker | Continuous; requires min_scale = 1 |
-| 2025-12-26 | Own srtJobId | Strong idempotency; one job per (messageId, mediaId) |
+| Timestamp  | Decision                          | Rationale                                                |
+| ---------- | --------------------------------- | -------------------------------------------------------- |
+| 2025-12-26 | Signed URLs for media access      | Browser never gets bucket creds; supports range requests |
+| 2025-12-26 | sharp for thumbnail generation    | Server-side in whatsapp-service; 256px max edge          |
+| 2025-12-26 | Pub/Sub for async orchestration   | Decoupled services; whatsapp → srt via events            |
+| 2025-12-26 | Pull subscription for srt-service | Worker controls acking, retries, idempotency             |
+| 2025-12-26 | DLQ for cleanup failures          | 5 retries, then dead-letter for inspection               |
+| 2025-12-26 | Background polling worker         | Continuous; requires min_scale = 1                       |
+| 2025-12-26 | Own srtJobId                      | Strong idempotency; one job per (messageId, mediaId)     |
 
 ---
 
@@ -66,72 +68,83 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 ## Task Breakdown
 
 ### Tier 0: Infrastructure
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 0-0 | Enforce max_scale = 1 for existing services | ✅ DONE | - |
-| 0-1 | Create WhatsApp Media Bucket Terraform Module | ✅ DONE | - |
-| 0-2 | Create Pub/Sub Terraform Module | ✅ DONE | - |
-| 0-3 | Scaffold srt-service with Terraform | ✅ DONE | - |
+
+| Task | Title                                         | Status  | Dependencies |
+| ---- | --------------------------------------------- | ------- | ------------ |
+| 0-0  | Enforce max_scale = 1 for existing services   | ✅ DONE | -            |
+| 0-1  | Create WhatsApp Media Bucket Terraform Module | ✅ DONE | -            |
+| 0-2  | Create Pub/Sub Terraform Module               | ✅ DONE | -            |
+| 0-3  | Scaffold srt-service with Terraform           | ✅ DONE | -            |
 
 ### Tier 1: Independent Deliverables
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 1-0 | Extend WhatsAppMessage Model | ⬜ TODO | - |
-| 1-1 | Add GCS Media Storage Port/Adapter | ⬜ TODO | - |
-| 1-2 | Add Thumbnail Generation Service | ⬜ TODO | - |
-| 1-3 | Add Pub/Sub Publisher to whatsapp-service | ⬜ TODO | - |
-| 1-4 | Add WhatsApp Media Download Client | ⬜ TODO | - |
-| 1-5 | Implement srt-service Domain Layer | ⬜ TODO | 0-3 |
-| 1-6 | Implement srt-service Infrastructure Layer | ⬜ TODO | 1-5 |
+
+| Task | Title                                      | Status  | Dependencies |
+| ---- | ------------------------------------------ | ------- | ------------ |
+| 1-0  | Extend WhatsAppMessage Model               | ✅ DONE | -            |
+| 1-1  | Add GCS Media Storage Port/Adapter         | ✅ DONE | -            |
+| 1-2  | Add Thumbnail Generation Service           | ✅ DONE | -            |
+| 1-3  | Add Pub/Sub Publisher to whatsapp-service  | ✅ DONE | -            |
+| 1-4  | Add WhatsApp Media Download Client         | ✅ DONE | -            |
+| 1-5  | Implement srt-service Domain Layer         | ✅ DONE | 0-3          |
+| 1-6  | Implement srt-service Infrastructure Layer | ✅ DONE | 1-5          |
 
 ### Tier 2: Integration
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 2-0 | Extend Webhook for Image Messages | ⬜ TODO | 1-0, 1-1, 1-2, 1-4 |
-| 2-1 | Extend Webhook for Audio Messages + Publish Event | ⬜ TODO | 1-0, 1-1, 1-3, 1-4 |
-| 2-2 | Add Message Media Routes (Signed URLs) | ⬜ TODO | 1-0, 1-1, 2-0, 2-1 |
-| 2-3 | Implement Message Deletion with Async Cleanup | ⬜ TODO | 1-0, 1-1, 1-3 |
-| 2-4 | Implement srt-service Routes | ⬜ TODO | 1-5, 1-6 |
-| 2-5 | Implement srt-service Audio Event Worker | ⬜ TODO | 1-5, 1-6, 2-4 |
-| 2-6 | Implement srt-service Polling Worker | ⬜ TODO | 1-5, 1-6 |
+
+| Task | Title                                             | Status  | Dependencies       |
+| ---- | ------------------------------------------------- | ------- | ------------------ |
+| 2-0  | Extend Webhook for Image Messages                 | ⬜ TODO | 1-0, 1-1, 1-2, 1-4 |
+| 2-1  | Extend Webhook for Audio Messages + Publish Event | ⬜ TODO | 1-0, 1-1, 1-3, 1-4 |
+| 2-2  | Add Message Media Routes (Signed URLs)            | ⬜ TODO | 1-0, 1-1, 2-0, 2-1 |
+| 2-3  | Implement Message Deletion with Async Cleanup     | ⬜ TODO | 1-0, 1-1, 1-3      |
+| 2-4  | Implement srt-service Routes                      | ⬜ TODO | 1-5, 1-6           |
+| 2-5  | Implement srt-service Audio Event Worker          | ⬜ TODO | 1-5, 1-6, 2-4      |
+| 2-6  | Implement srt-service Polling Worker              | ⬜ TODO | 1-5, 1-6           |
 
 ### Tier 3: UI Integration
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 3-0 | Update Web App for Media Display | ⬜ TODO | 2-0, 2-1, 2-2 |
+
+| Task | Title                            | Status  | Dependencies  |
+| ---- | -------------------------------- | ------- | ------------- |
+| 3-0  | Update Web App for Media Display | ⬜ TODO | 2-0, 2-1, 2-2 |
 
 ### Tier 4: Verification
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 4-0 | Test Coverage for whatsapp-service Media | ⬜ TODO | 2-0, 2-1, 2-2, 2-3 |
-| 4-1 | Test Coverage for srt-service | ⬜ TODO | 2-4, 2-5, 2-6 |
+
+| Task | Title                                    | Status  | Dependencies       |
+| ---- | ---------------------------------------- | ------- | ------------------ |
+| 4-0  | Test Coverage for whatsapp-service Media | ⬜ TODO | 2-0, 2-1, 2-2, 2-3 |
+| 4-1  | Test Coverage for srt-service            | ⬜ TODO | 2-4, 2-5, 2-6      |
 
 ### Tier 5: Documentation
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 5-0 | Documentation Updates | ⬜ TODO | All implementation |
+
+| Task | Title                 | Status  | Dependencies       |
+| ---- | --------------------- | ------- | ------------------ |
+| 5-0  | Documentation Updates | ⬜ TODO | All implementation |
 
 ### Tier 6: Final
-| Task | Title | Status | Dependencies |
-|------|-------|--------|--------------|
-| 6-0 | Final CI Verification | ⬜ TODO | All tasks |
+
+| Task | Title                 | Status  | Dependencies |
+| ---- | --------------------- | ------- | ------------ |
+| 6-0  | Final CI Verification | ⬜ TODO | All tasks    |
 
 ---
 
 ## State
 
 **Done:**
+
 - Initial planning session
 - Requirements clarification (Q1-Q6 + polling question)
 - Decision log populated
 - Task breakdown complete
 - Tier 0 complete (0-0, 0-1, 0-2, 0-3)
+- Tier 1 complete (1-0 through 1-6)
 
 **Now:**
-- Starting Tier 1 tasks
+
+- Ready for Tier 2 integration tasks
 
 **Next:**
-- Execute Tier 1 tasks (1-0 through 1-6)
+
+- Execute Tier 2 tasks (2-0 through 2-6)
 
 ---
 
@@ -144,6 +157,7 @@ None — all design ambiguities resolved.
 ## Working Set
 
 Files to create/modify:
+
 - `terraform/modules/whatsapp-media-bucket/`
 - `terraform/modules/pubsub/`
 - `terraform/environments/dev/main.tf`
@@ -158,4 +172,3 @@ Files to create/modify:
 - `apps/web/src/components/AudioPlayer.tsx`
 - `docs/architecture/api-contracts.md`
 - `CHANGELOG.md`
-

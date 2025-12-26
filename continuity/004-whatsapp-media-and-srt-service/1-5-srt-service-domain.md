@@ -7,6 +7,7 @@
 ## Context
 
 srt-service needs a domain layer for transcription jobs:
+
 - Own job IDs (not Speechmatics IDs)
 - Job state machine (pending → processing → completed/failed)
 - Strong idempotency by (messageId, mediaId)
@@ -16,6 +17,7 @@ srt-service needs a domain layer for transcription jobs:
 ## Problem Statement
 
 Define the domain model and ports for transcription jobs:
+
 - TranscriptionJob model with internal ID
 - Job repository port
 - Speechmatics client port
@@ -26,6 +28,7 @@ Define the domain model and ports for transcription jobs:
 ## Scope
 
 **In scope:**
+
 - Define TranscriptionJob model
 - Define TranscriptionJobStatus enum
 - Define TranscriptionJobRepository port
@@ -33,6 +36,7 @@ Define the domain model and ports for transcription jobs:
 - Define error types
 
 **Out of scope:**
+
 - Infrastructure implementations (later tasks)
 - Polling worker logic
 
@@ -92,4 +96,3 @@ npm run lint
 ## Rollback Plan
 
 Delete domain/transcription/ directory.
-

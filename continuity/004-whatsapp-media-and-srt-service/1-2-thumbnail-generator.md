@@ -13,6 +13,7 @@ Images received via WhatsApp need thumbnails for efficient display in the web ap
 ## Problem Statement
 
 Create a thumbnail generation service using sharp library:
+
 - Resize to 256px max on longest edge
 - Maintain aspect ratio
 - Output as JPEG for smaller size
@@ -23,6 +24,7 @@ Create a thumbnail generation service using sharp library:
 ## Scope
 
 **In scope:**
+
 - Add sharp dependency
 - Create thumbnail generation utility
 - Define interface for thumbnail generator
@@ -30,6 +32,7 @@ Create a thumbnail generation service using sharp library:
 - Output as JPEG with reasonable quality
 
 **Out of scope:**
+
 - Integration with webhook (later task)
 - GCS upload (uses existing adapter)
 
@@ -85,4 +88,3 @@ npm run test
 ## Rollback Plan
 
 Remove sharp dependency, delete thumbnailGenerator.ts and tests.
-

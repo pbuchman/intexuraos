@@ -15,6 +15,7 @@ srt-service must have test coverage meeting project thresholds.
 ## Problem Statement
 
 Ensure test coverage for:
+
 - TranscriptionJob model
 - Firestore repository (via fakes)
 - Speechmatics client (mocked)
@@ -27,12 +28,14 @@ Ensure test coverage for:
 ## Scope
 
 **In scope:**
+
 - Unit tests for domain models
 - Integration tests for routes (using fakes)
 - Fakes for repository, Speechmatics
 - Coverage verification
 
 **Out of scope:**
+
 - E2E tests against real Speechmatics
 - Real Pub/Sub integration
 
@@ -85,4 +88,3 @@ npm run ci
 ## Rollback Plan
 
 N/A - tests only.
-

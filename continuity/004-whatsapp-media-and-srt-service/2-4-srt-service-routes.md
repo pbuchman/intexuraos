@@ -9,6 +9,7 @@
 ## Context
 
 srt-service needs HTTP routes for:
+
 1. Internal endpoint to create transcription job (called by worker)
 2. Status endpoint for other services to query job state
 
@@ -17,6 +18,7 @@ srt-service needs HTTP routes for:
 ## Problem Statement
 
 Implement Fastify routes:
+
 - POST /v1/transcribe — create job (internal use by worker)
 - GET /v1/transcribe/:jobId — get job status by srtJobId
 
@@ -25,6 +27,7 @@ Implement Fastify routes:
 ## Scope
 
 **In scope:**
+
 - POST /v1/transcribe with { messageId, mediaId, gcsPath }
 - Idempotency check before creating job
 - Call Speechmatics API to create job
@@ -34,6 +37,7 @@ Implement Fastify routes:
 - OpenAPI schema
 
 **Out of scope:**
+
 - Background polling (separate task)
 - Web UI for transcripts
 
@@ -100,4 +104,3 @@ npm run test
 ## Rollback Plan
 
 Remove transcribeRoutes.ts, revert server.ts.
-

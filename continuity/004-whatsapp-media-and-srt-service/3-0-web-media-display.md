@@ -9,6 +9,7 @@
 ## Context
 
 Web app needs to display media in the WhatsApp messages list:
+
 - Images: show thumbnail, click opens modal with full-size + download
 - Audio: show mini-player with play/pause and seeking
 
@@ -17,6 +18,7 @@ Web app needs to display media in the WhatsApp messages list:
 ## Problem Statement
 
 Extend WhatsAppNotesPage and related components:
+
 - Detect message mediaType
 - Fetch signed URLs from API
 - Display thumbnail for images
@@ -28,6 +30,7 @@ Extend WhatsAppNotesPage and related components:
 ## Scope
 
 **In scope:**
+
 - Extend WhatsAppMessage type in frontend
 - Create ImageModal component
 - Create AudioPlayer component
@@ -36,6 +39,7 @@ Extend WhatsAppNotesPage and related components:
 - Handle loading/error states
 
 **Out of scope:**
+
 - Transcription display (future)
 - Video messages
 
@@ -97,4 +101,3 @@ npm run lint
 ## Rollback Plan
 
 Revert component changes, remove new components.
-
