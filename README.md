@@ -54,6 +54,20 @@ The project includes a ChatGPT custom model (GPT) for prompt review and manageme
 
 ---
 
+## LLM-Assisted Development
+
+This project is developed with LLMs as **senior reviewers, architects, and automation components** — not autocomplete tools. Key practices:
+
+- **Explicit constraints** — All LLM interactions include project rules (`.github/copilot-instructions.md`) enforcing architecture boundaries, TypeScript strictness, and test coverage thresholds
+- **Verification-first** — LLMs must run `npm run ci` before claiming task completion; no silent assumptions
+- **Structured prompts** — Reusable prompt templates in `.github/prompts/` for refactoring, documentation, and multi-step orchestration
+
+### Continuity Ledger Pattern
+
+For complex multi-step tasks, we use a **continuity ledger** — a compaction-safe markdown file (`CONTINUITY.md`) that logs every decision, reasoning step, and state transition. This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.prompt.md](.github/prompts/continuity.prompt.md) for the orchestration protocol.
+
+---
+
 ## Architecture
 
 ```
