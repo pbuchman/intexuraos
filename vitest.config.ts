@@ -72,20 +72,10 @@ export default defineConfig({
         '**/workers/**',
       ],
       thresholds: {
-        // Updated after coverage improvement work (Dec 2024)
-        // Phase 2: Raised to 90% target after completing all Tier 1 coverage tasks
-        // Infra adapters excluded as they are thin SDK wrappers tested via integration
-        // Branch threshold lowered to 80% during Tier 2 feature work (will be restored in Tier 4)
-        //
-        // 2024-12-26: Temporarily lowered to 88% during inline transcription refactor
-        // JUSTIFIED: New in-process transcription code (webhookRoutes.ts lines 900-1260) coordinates
-        // calls to infra adapters and external APIs. This is effectively infra-level integration code.
-        // Functions affected: transcribeAudioAsync, sleep, sendTranscriptionSuccessMessage, sendTranscriptionFailureMessage
-        // TODO: Restore to 90% after adding integration tests for transcription flow
-        lines: 88,
-        branches: 80,
-        functions: 75,
-        statements: 88,
+        lines: 90,
+        branches: 90,
+        functions: 90,
+        statements: 90,
       },
     },
   },
