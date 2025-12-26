@@ -4,7 +4,11 @@
 import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import { randomUUID } from 'node:crypto';
 import type { InboxError } from './webhookEventRepository.js';
-import type { WhatsAppMessage, WhatsAppMessageMetadata } from '../../domain/inbox/index.js';
+import type {
+  WhatsAppMessage,
+  WhatsAppMessageMetadata,
+  TranscriptionState,
+} from '../../domain/inbox/index.js';
 
 // Re-export for convenience
 export type { WhatsAppMessage, WhatsAppMessageMetadata };
@@ -120,16 +124,12 @@ export async function findById(
 }
 
 /**
- * Update message transcription fields.
+ * Update message transcription state.
  */
 export async function updateTranscription(
   userId: string,
   messageId: string,
-  transcription: {
-    transcriptionJobId: string;
-    transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
-    transcription?: string;
-  }
+  transcription: TranscriptionState
 ): Promise<Result<void, InboxError>> {
   try {
     const db = getFirestore();
@@ -150,16 +150,9 @@ export async function updateTranscription(
       });
     }
 
-    const updateData: Record<string, unknown> = {
-      transcriptionJobId: transcription.transcriptionJobId,
-      transcriptionStatus: transcription.transcriptionStatus,
-    };
-
-    if (transcription.transcription !== undefined) {
-      updateData['transcription'] = transcription.transcription;
-    }
-
-    await db.collection(COLLECTION_NAME).doc(messageId).update(updateData);
+    await db.collection(COLLECTION_NAME).doc(messageId).update({
+      transcription,
+    });
     return ok(undefined);
   } catch (error) {
     return err({

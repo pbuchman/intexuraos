@@ -27,6 +27,11 @@ export type {
   WhatsAppMessageMetadata,
   WhatsAppMediaType,
   WhatsAppMediaInfo,
+  TranscriptionState,
+  TranscriptionStatus,
+  TranscriptionApiOperation,
+  TranscriptionError,
+  TranscriptionApiCall,
 } from './models/WhatsAppMessage.js';
 
 // Ports
@@ -48,6 +53,16 @@ export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
 export type { EventPublisherPort } from './ports/eventPublisher.js';
 
 export type { WhatsAppMessageSender } from './ports/messageSender.js';
+
+export type {
+  SpeechTranscriptionPort,
+  TranscriptionJobInput,
+  TranscriptionJobSubmitResult,
+  TranscriptionJobStatus,
+  TranscriptionJobPollResult,
+  TranscriptionTextResult,
+  TranscriptionPortError,
+} from './ports/transcription.js';
 
 // Events
 export type {

@@ -10,7 +10,7 @@ import {
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher } from './infra/pubsub/index.js';
 import { WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
-import { SrtServiceClient, type SrtServiceClientPort } from './infra/srt/index.js';
+import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -18,6 +18,7 @@ import type {
   MediaStoragePort,
   EventPublisherPort,
   WhatsAppMessageSender,
+  SpeechTranscriptionPort,
 } from './domain/inbox/index.js';
 
 /**
@@ -29,7 +30,7 @@ export interface ServiceConfig {
   mediaCleanupTopic: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
-  srtServiceUrl: string;
+  speechmaticsApiKey: string;
 }
 
 /**
@@ -43,7 +44,7 @@ export interface ServiceContainer {
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
-  srtClient: SrtServiceClientPort;
+  transcriptionService: SpeechTranscriptionPort;
 }
 
 let container: ServiceContainer | null = null;
@@ -75,7 +76,9 @@ export function getServices(): ServiceContainer {
       serviceConfig?.whatsappAccessToken ?? 'test-token',
       serviceConfig?.whatsappPhoneNumberId ?? 'test-phone-id'
     ),
-    srtClient: new SrtServiceClient(serviceConfig?.srtServiceUrl ?? 'http://localhost:8080'),
+    transcriptionService: new SpeechmaticsTranscriptionAdapter(
+      serviceConfig?.speechmaticsApiKey ?? 'test-api-key'
+    ),
   };
   return container;
 }

@@ -7,5 +7,3 @@ export {
   type CleanupWorkerConfig,
   type CleanupWorkerLogger,
 } from './cleanupWorker.js';
-
-export { TranscriptionWorker } from './transcriptionWorker.js';

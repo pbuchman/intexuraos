@@ -7,7 +7,6 @@
     { "path": "apps/whatsapp-service" },
     { "path": "apps/notion-service" },
     { "path": "apps/api-docs-hub" },
-    { "path": "apps/srt-service" },
     { "path": "apps/web" }
   ]
 }

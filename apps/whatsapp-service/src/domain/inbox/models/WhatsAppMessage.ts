@@ -34,6 +34,75 @@ export interface WhatsAppMediaInfo {
 }
 
 /**
+ * Status of audio transcription.
+ */
+export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Operation types for speech-to-text API calls.
+ */
+export type TranscriptionApiOperation = 'submit' | 'poll' | 'fetch_result';
+
+/**
+ * Error information for failed transcriptions.
+ */
+export interface TranscriptionError {
+  code: string;
+  message: string;
+}
+
+/**
+ * Last API call tracking for debugging.
+ */
+export interface TranscriptionApiCall {
+  timestamp: string;
+  operation: TranscriptionApiOperation;
+  success: boolean;
+  response?: unknown;
+}
+
+/**
+ * Transcription state for audio messages.
+ * Tracks the entire lifecycle of speech-to-text processing.
+ */
+export interface TranscriptionState {
+  /**
+   * Current transcription status.
+   */
+  status: TranscriptionStatus;
+
+  /**
+   * Provider job ID (e.g., Speechmatics job ID).
+   */
+  jobId?: string;
+
+  /**
+   * Transcription result text.
+   */
+  text?: string;
+
+  /**
+   * Error details if transcription failed.
+   */
+  error?: TranscriptionError;
+
+  /**
+   * Last API call details for debugging.
+   */
+  lastApiCall?: TranscriptionApiCall;
+
+  /**
+   * When transcription processing started (ISO 8601).
+   */
+  startedAt?: string;
+
+  /**
+   * When transcription completed or failed (ISO 8601).
+   */
+  completedAt?: string;
+}
+
+/**
  * WhatsApp message stored in Firestore.
  */
 export interface WhatsAppMessage {
@@ -94,19 +163,10 @@ export interface WhatsAppMessage {
   caption?: string;
 
   /**
-   * Reference to transcription job (for audio messages).
+   * Transcription state for audio messages.
+   * Contains job ID, status, result, and API call tracking.
    */
-  transcriptionJobId?: string;
-
-  /**
-   * Transcription status for audio messages.
-   */
-  transcriptionStatus?: 'pending' | 'processing' | 'completed' | 'failed';
-
-  /**
-   * Transcription text (when completed).
-   */
-  transcription?: string;
+  transcription?: TranscriptionState;
 
   /**
    * Timestamp from WhatsApp (Unix epoch string).
