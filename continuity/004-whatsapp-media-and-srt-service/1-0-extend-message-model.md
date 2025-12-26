@@ -7,6 +7,7 @@
 ## Context
 
 WhatsApp messages can now include audio or image media. The domain model must capture:
+
 - Media type (audio/image/text)
 - Media metadata (mediaId, mimeType, fileSize)
 - GCS paths for original and thumbnail
@@ -24,6 +25,7 @@ Current `WhatsAppMessage` model only supports text messages. Need to extend for 
 ## Scope
 
 **In scope:**
+
 - Extend `WhatsAppMessage` interface with media fields
 - Add `WhatsAppMediaType` type
 - Add `WhatsAppMediaInfo` interface
@@ -31,6 +33,7 @@ Current `WhatsAppMessage` model only supports text messages. Need to extend for 
 - Update Firestore adapter to handle new fields
 
 **Out of scope:**
+
 - Webhook processing logic (next task)
 - GCS operations
 
@@ -86,4 +89,3 @@ npm run lint
 ## Rollback Plan
 
 Revert changes to WhatsAppMessage.ts and related files.
-

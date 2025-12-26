@@ -7,6 +7,7 @@
 ## Context
 
 Event-driven architecture requires Pub/Sub topics and subscriptions for:
+
 1. `whatsapp.audio.stored` — triggers srt-service transcription
 2. `whatsapp.media.cleanup` — async media deletion from GCS
 3. Dead-letter topics for both
@@ -16,6 +17,7 @@ Event-driven architecture requires Pub/Sub topics and subscriptions for:
 ## Problem Statement
 
 Need reusable Pub/Sub Terraform module that creates:
+
 - Topics with configurable names
 - Pull subscriptions with retry policy
 - Dead-letter topic and subscription per main topic
@@ -26,6 +28,7 @@ Need reusable Pub/Sub Terraform module that creates:
 ## Scope
 
 **In scope:**
+
 - Create `terraform/modules/pubsub/`
 - Support for creating topic + pull subscription + DLQ
 - IAM: publisher role for whatsapp-service, subscriber role for srt-service
@@ -35,6 +38,7 @@ Need reusable Pub/Sub Terraform module that creates:
   - Dead-letter topics for both
 
 **Out of scope:**
+
 - Push subscriptions
 - Application code
 
@@ -88,4 +92,3 @@ terraform validate
 ## Rollback Plan
 
 Remove module calls from dev/main.tf, delete module directory.
-

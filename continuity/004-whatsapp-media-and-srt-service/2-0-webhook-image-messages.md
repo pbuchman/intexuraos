@@ -9,6 +9,7 @@
 ## Context
 
 WhatsApp webhook currently only accepts text messages. Need to extend to accept image messages with:
+
 - Image download from WhatsApp API
 - Thumbnail generation
 - Storage in GCS
@@ -19,6 +20,7 @@ WhatsApp webhook currently only accepts text messages. Need to extend to accept 
 ## Problem Statement
 
 Modify processWhatsAppWebhook use case to:
+
 - Recognize image message type
 - Extract media_id from payload
 - Download image via WhatsApp API
@@ -32,6 +34,7 @@ Modify processWhatsAppWebhook use case to:
 ## Scope
 
 **In scope:**
+
 - Update webhook payload types for image
 - Update classifyWebhook to accept image type
 - Implement image processing flow
@@ -39,6 +42,7 @@ Modify processWhatsAppWebhook use case to:
 - Extract and store caption if present
 
 **Out of scope:**
+
 - Audio messages (next task)
 - Web display (later task)
 
@@ -99,4 +103,3 @@ npm run test
 ## Rollback Plan
 
 Revert changes to processWhatsAppWebhook.ts and related files.
-

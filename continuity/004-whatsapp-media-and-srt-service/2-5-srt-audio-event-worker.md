@@ -15,6 +15,7 @@ srt-service subscribes to `whatsapp.audio.stored` events via Pub/Sub pull subscr
 ## Problem Statement
 
 Implement Pub/Sub pull worker that:
+
 - Pulls messages from subscription
 - Extracts event data (userId, messageId, mediaId, gcsPath)
 - Calls internal transcribe route/use case
@@ -26,6 +27,7 @@ Implement Pub/Sub pull worker that:
 ## Scope
 
 **In scope:**
+
 - Create AudioEventWorker
 - Pull from subscription
 - Process each message
@@ -34,6 +36,7 @@ Implement Pub/Sub pull worker that:
 - Start worker in server.ts (continuous)
 
 **Out of scope:**
+
 - Polling worker (separate task)
 - HTTP route for external trigger
 
@@ -94,4 +97,3 @@ npm run lint
 ## Rollback Plan
 
 Remove audioEventWorker.ts, revert server.ts.
-

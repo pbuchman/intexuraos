@@ -15,6 +15,7 @@ Web app needs to access media in private GCS bucket. Backend must generate short
 ## Problem Statement
 
 Add routes to messageRoutes.ts for media access:
+
 - GET /v1/whatsapp/messages/:id/media → signed URL for original
 - GET /v1/whatsapp/messages/:id/thumbnail → signed URL for thumbnail
 - Verify ownership before generating URL
@@ -24,6 +25,7 @@ Add routes to messageRoutes.ts for media access:
 ## Scope
 
 **In scope:**
+
 - Add /media endpoint returning signed URL
 - Add /thumbnail endpoint returning signed URL
 - Verify user owns the message
@@ -31,6 +33,7 @@ Add routes to messageRoutes.ts for media access:
 - Configurable TTL (default 15 min)
 
 **Out of scope:**
+
 - Audio player logic (web task)
 - Image modal (web task)
 
@@ -89,4 +92,3 @@ npm run test
 ## Rollback Plan
 
 Remove new routes from messageRoutes.ts.
-

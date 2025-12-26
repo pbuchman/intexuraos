@@ -12,6 +12,7 @@ import {
 } from '@intexuraos/common';
 import { createV1Routes } from './routes/v1/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
+import { initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';
 const SERVICE_VERSION = '0.0.1';
@@ -157,6 +158,14 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 }
 
 export async function buildServer(config: Config): Promise<FastifyInstance> {
+  // Initialize service container with config
+  initServices({
+    mediaBucket: config.mediaBucket,
+    gcpProjectId: config.gcpProjectId,
+    audioStoredTopic: config.audioStoredTopic,
+    mediaCleanupTopic: config.mediaCleanupTopic,
+  });
+
   const app = Fastify({
     logger: true,
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks

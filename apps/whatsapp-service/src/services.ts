@@ -7,11 +7,25 @@ import {
   UserMappingRepositoryAdapter,
   MessageRepositoryAdapter,
 } from './adapters.js';
+import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
+import { GcpPubSubPublisher } from './infra/pubsub/index.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
   WhatsAppMessageRepository,
+  MediaStoragePort,
+  EventPublisherPort,
 } from './domain/inbox/index.js';
+
+/**
+ * Configuration for service initialization.
+ */
+export interface ServiceConfig {
+  mediaBucket: string;
+  gcpProjectId: string;
+  audioStoredTopic: string;
+  mediaCleanupTopic: string;
+}
 
 /**
  * Service container holding all adapter instances.
@@ -21,18 +35,36 @@ export interface ServiceContainer {
   webhookEventRepository: WhatsAppWebhookEventRepository;
   userMappingRepository: WhatsAppUserMappingRepository;
   messageRepository: WhatsAppMessageRepository;
+  mediaStorage: MediaStoragePort;
+  eventPublisher: EventPublisherPort;
 }
 
 let container: ServiceContainer | null = null;
+let serviceConfig: ServiceConfig | null = null;
+
+/**
+ * Initialize the service container with configuration.
+ * Must be called before getServices().
+ */
+export function initServices(config: ServiceConfig): void {
+  serviceConfig = config;
+}
 
 /**
  * Get or create the service container.
+ * Requires initServices() to be called first in production.
  */
 export function getServices(): ServiceContainer {
   container ??= {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
+    mediaStorage: new GcsMediaStorageAdapter(serviceConfig?.mediaBucket ?? 'test-bucket'),
+    eventPublisher: new GcpPubSubPublisher(
+      serviceConfig?.gcpProjectId ?? 'test-project',
+      serviceConfig?.audioStoredTopic ?? 'test-audio-stored',
+      serviceConfig?.mediaCleanupTopic ?? 'test-media-cleanup'
+    ),
   };
   return container;
 }

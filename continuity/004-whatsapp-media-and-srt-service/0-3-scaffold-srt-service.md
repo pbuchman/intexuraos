@@ -7,6 +7,7 @@
 ## Context
 
 srt-service is a new Cloud Run service for speech transcription via Speechmatics. It needs:
+
 - Dedicated service account
 - Internal-only ingress (no public access)
 - min_scale = 1 (for background polling worker)
@@ -18,6 +19,7 @@ srt-service is a new Cloud Run service for speech transcription via Speechmatics
 ## Problem Statement
 
 Create the infrastructure for srt-service following existing service patterns:
+
 - Service account with Firestore, Secret Manager, Logging access
 - Cloud Run service with internal ingress
 - Speechmatics API key in Secret Manager
@@ -28,6 +30,7 @@ Create the infrastructure for srt-service following existing service patterns:
 ## Scope
 
 **In scope:**
+
 - Add srt_service to `locals.services`
 - Create service account in IAM module
 - Add `INTEXURAOS_SPEECHMATICS_API_KEY` secret
@@ -39,6 +42,7 @@ Create the infrastructure for srt-service following existing service patterns:
 - Update api-docs-hub env vars
 
 **Out of scope:**
+
 - Application logic (later tasks)
 - Pub/Sub subscription (already in 0-2)
 
@@ -108,4 +112,3 @@ npm run typecheck
 ## Rollback Plan
 
 Remove srt_service from locals, IAM, secrets, and module calls. Delete apps/srt-service/.
-

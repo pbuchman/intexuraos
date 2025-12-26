@@ -15,6 +15,7 @@ All new functionality must be documented according to project standards.
 ## Problem Statement
 
 Update documentation for:
+
 - API contracts (new endpoints)
 - Architecture (event flow)
 - Setup guides (new secrets, Pub/Sub)
@@ -25,12 +26,14 @@ Update documentation for:
 ## Scope
 
 **In scope:**
+
 - docs/architecture/api-contracts.md
 - New setup guide for srt-service secrets
 - Update README if needed
 - CHANGELOG.md entry
 
 **Out of scope:**
+
 - External user docs
 - Video tutorials
 
@@ -81,4 +84,3 @@ cat CHANGELOG.md
 ## Rollback Plan
 
 Revert documentation files.
-

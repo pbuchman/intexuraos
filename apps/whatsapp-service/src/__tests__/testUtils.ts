@@ -12,6 +12,8 @@ import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,
   FakeWhatsAppMessageRepository,
+  FakeMediaStorage,
+  FakeEventPublisher,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -88,6 +90,10 @@ export const testConfig: Config = {
   accessToken: 'test-access-token',
   allowedWabaIds: ['102290129340398', '419561257915477'],
   allowedPhoneNumberIds: ['123456789012345', '987654321098765'],
+  mediaBucket: 'test-media-bucket',
+  audioStoredTopic: 'test-audio-stored',
+  mediaCleanupTopic: 'test-media-cleanup',
+  gcpProjectId: 'test-project',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -151,6 +157,8 @@ export interface TestContext {
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;
   userMappingRepository: FakeWhatsAppUserMappingRepository;
   messageRepository: FakeWhatsAppMessageRepository;
+  mediaStorage: FakeMediaStorage;
+  eventPublisher: FakeEventPublisher;
 }
 
 /**
@@ -162,6 +170,8 @@ export function setupTestContext(): TestContext {
     webhookEventRepository: null as unknown as FakeWhatsAppWebhookEventRepository,
     userMappingRepository: null as unknown as FakeWhatsAppUserMappingRepository,
     messageRepository: null as unknown as FakeWhatsAppMessageRepository,
+    mediaStorage: null as unknown as FakeMediaStorage,
+    eventPublisher: null as unknown as FakeEventPublisher,
   };
 
   beforeAll(async () => {
@@ -176,11 +186,15 @@ export function setupTestContext(): TestContext {
     context.webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
     context.userMappingRepository = new FakeWhatsAppUserMappingRepository();
     context.messageRepository = new FakeWhatsAppMessageRepository();
+    context.mediaStorage = new FakeMediaStorage();
+    context.eventPublisher = new FakeEventPublisher();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
       userMappingRepository: context.userMappingRepository,
       messageRepository: context.messageRepository,
+      mediaStorage: context.mediaStorage,
+      eventPublisher: context.eventPublisher,
     });
 
     clearJwksCache();

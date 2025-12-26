@@ -51,6 +51,26 @@ const configSchema = z.object({
     .transform((val) => val.split(',').map((id) => id.trim())),
 
   /**
+   * GCS bucket name for WhatsApp media files.
+   */
+  mediaBucket: z.string().min(1, 'INTEXURAOS_WHATSAPP_MEDIA_BUCKET is required'),
+
+  /**
+   * Pub/Sub topic for audio stored events (triggers srt-service).
+   */
+  audioStoredTopic: z.string().min(1, 'PUBSUB_AUDIO_STORED_TOPIC is required'),
+
+  /**
+   * Pub/Sub topic for media cleanup events.
+   */
+  mediaCleanupTopic: z.string().min(1, 'PUBSUB_MEDIA_CLEANUP_TOPIC is required'),
+
+  /**
+   * GCP project ID.
+   */
+  gcpProjectId: z.string().min(1, 'GCP_PROJECT_ID is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -74,6 +94,10 @@ export function loadConfig(): Config {
     accessToken: process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'],
     allowedWabaIds: process.env['INTEXURAOS_WHATSAPP_WABA_ID'],
     allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
+    mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
+    audioStoredTopic: process.env['PUBSUB_AUDIO_STORED_TOPIC'],
+    mediaCleanupTopic: process.env['PUBSUB_MEDIA_CLEANUP_TOPIC'],
+    gcpProjectId: process.env['GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -90,6 +114,10 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
     'INTEXURAOS_WHATSAPP_WABA_ID',
     'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
+    'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
+    'PUBSUB_AUDIO_STORED_TOPIC',
+    'PUBSUB_MEDIA_CLEANUP_TOPIC',
+    'GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

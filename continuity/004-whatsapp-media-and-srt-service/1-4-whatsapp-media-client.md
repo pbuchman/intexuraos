@@ -7,6 +7,7 @@
 ## Context
 
 When WhatsApp sends a webhook with audio/image, it includes a `media_id`. We must call WhatsApp's Graph API to:
+
 1. Get media URL from media_id
 2. Download the actual media binary
 
@@ -15,6 +16,7 @@ When WhatsApp sends a webhook with audio/image, it includes a `media_id`. We mus
 ## Problem Statement
 
 Create a client to download media from WhatsApp API:
+
 - GET /v21.0/{media_id} → returns download URL
 - GET download URL with auth → returns binary
 - Handle errors and retries
@@ -24,6 +26,7 @@ Create a client to download media from WhatsApp API:
 ## Scope
 
 **In scope:**
+
 - Add getMediaUrl(mediaId) → MediaUrlResponse
 - Add downloadMedia(url) → Buffer
 - Handle auth with access token
@@ -31,6 +34,7 @@ Create a client to download media from WhatsApp API:
 - Add types for WhatsApp media response
 
 **Out of scope:**
+
 - Integration with webhook (later task)
 - GCS upload (uses existing adapter)
 
@@ -50,7 +54,7 @@ Create a client to download media from WhatsApp API:
 
 - [ ] Define MediaUrlResponse interface (url, mime_type, sha256, file_size)
 - [ ] Add getMediaUrl(mediaId, accessToken) function
-- [ ] Add downloadMedia(url, accessToken) function  
+- [ ] Add downloadMedia(url, accessToken) function
 - [ ] Handle HTTP errors with meaningful messages
 - [ ] Add timeout handling
 - [ ] Export new functions
@@ -81,4 +85,3 @@ npm run lint
 ## Rollback Plan
 
 Remove new functions from whatsappClient.ts.
-

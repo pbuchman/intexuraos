@@ -360,6 +360,7 @@ async function processWebhookAsync(
       fromNumber,
       toNumber,
       text: messageText,
+      mediaType: 'text',
       timestamp,
       receivedAt: new Date().toISOString(),
       webhookEventId: savedEvent.id,
