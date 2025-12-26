@@ -1,5 +1,121 @@
 import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
+import {
+  parsePhoneNumberWithError,
+  getCountries,
+  getCountryCallingCode,
+  type CountryCode,
+} from 'libphonenumber-js';
+
+/**
+ * Get list of all supported countries with their calling codes.
+ * Returns array sorted with PL and US first, then alphabetically by country code.
+ */
+export function getSupportedCountries(): { country: CountryCode; callingCode: string }[] {
+  const countries = getCountries();
+  const priorityCountries: CountryCode[] = ['PL', 'US'];
+
+  const priority = countries
+    .filter((c) => priorityCountries.includes(c))
+    .sort((a, b) => priorityCountries.indexOf(a) - priorityCountries.indexOf(b))
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  const rest = countries
+    .filter((c) => !priorityCountries.includes(c))
+    .sort()
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  return [...priority, ...rest];
+}
+
+/**
+ * Normalize phone number to consistent format for storage and comparison.
+ *
+ * Storage format: digits only, no "+" prefix (e.g., "48123456789")
+ *
+ * This ensures:
+ * - User saves "+48123456789" → stored as "48123456789"
+ * - Webhook sends "48123456789" → matches stored "48123456789"
+ *
+ * @example normalizePhoneNumber("+48123456789") => "48123456789"
+ * @example normalizePhoneNumber("48123456789") => "48123456789"
+ * @example normalizePhoneNumber("+1-555-123-4567") => "15551234567"
+ */
+export function normalizePhoneNumber(phoneNumber: string): string {
+  // Remove all non-digit characters (including +, spaces, dashes, parentheses)
+  return phoneNumber.replace(/\D/g, '');
+}
+
+/**
+ * Validation result for phone number.
+ */
+export interface PhoneValidationResult {
+  valid: boolean;
+  normalized: string;
+  country?: CountryCode;
+  error?: string;
+}
+
+/**
+ * Validate phone number format using libphonenumber-js.
+ * Supports all countries. Returns normalized number (E.164 without +) if valid.
+ *
+ * @param phoneNumber - Phone number in any format (with or without +, spaces, dashes)
+ * @param defaultCountry - Optional default country code for numbers without country prefix
+ */
+export function validatePhoneNumber(
+  phoneNumber: string,
+  defaultCountry?: CountryCode
+): PhoneValidationResult {
+  const trimmed = phoneNumber.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, normalized: '', error: 'Phone number is required' };
+  }
+
+  try {
+    // Add + prefix if not present and no default country provided
+    // This helps parse numbers that include country code but lack +
+    const numberToParse =
+      !trimmed.startsWith('+') && defaultCountry === undefined ? `+${trimmed}` : trimmed;
+
+    const parsed = parsePhoneNumberWithError(numberToParse, defaultCountry);
+
+    if (!parsed.isValid()) {
+      return {
+        valid: false,
+        normalized: normalizePhoneNumber(trimmed),
+        error: 'Invalid phone number format',
+      };
+    }
+
+    // E.164 format without + prefix for storage consistency
+    const normalized = parsed.number.replace('+', '');
+
+    const result: PhoneValidationResult = {
+      valid: true,
+      normalized,
+    };
+
+    if (parsed.country !== undefined) {
+      result.country = parsed.country;
+    }
+
+    return result;
+  } catch {
+    return {
+      valid: false,
+      normalized: normalizePhoneNumber(trimmed),
+      error: 'Invalid phone number format',
+    };
+  }
+}
 
 /**
  * Handle Zod validation errors.
@@ -52,6 +168,16 @@ interface WebhookValue {
   messages?: {
     from?: string;
     id?: string;
+    timestamp?: string;
+    type?: string;
+    text?: {
+      body?: string;
+    };
+  }[];
+  contacts?: {
+    profile?: {
+      name?: string;
+    };
   }[];
 }
 
@@ -163,4 +289,60 @@ export function extractMessageId(payload: unknown): string | null {
   const message = value?.messages?.[0];
   if (message === undefined) return null;
   return typeof message.id === 'string' ? message.id : null;
+}
+
+/**
+ * Extract message text content from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].text.body
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageText(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.text?.body === 'string' ? message.text.body : null;
+}
+
+/**
+ * Extract message timestamp from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].timestamp
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageTimestamp(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.timestamp === 'string' ? message.timestamp : null;
+}
+
+/**
+ * Extract sender profile name from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.contacts[0].profile.name
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#contacts-object
+ */
+export function extractSenderName(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const contact = value?.contacts?.[0];
+  if (contact === undefined) return null;
+  return typeof contact.profile?.name === 'string' ? contact.profile.name : null;
+}
+
+/**
+ * Extract message type from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].type
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageType(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.type === 'string' ? message.type : null;
 }

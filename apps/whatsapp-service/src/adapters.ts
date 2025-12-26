@@ -6,10 +6,12 @@ import type { Result } from '@intexuraos/common';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
+  WhatsAppMessageRepository,
   WhatsAppWebhookEvent,
   WebhookProcessingStatus,
   IgnoredReason,
   WhatsAppUserMappingPublic,
+  WhatsAppMessage,
   InboxError,
 } from './domain/inbox/index.js';
 import {
@@ -21,7 +23,10 @@ import {
   findUserByPhoneNumber,
   disconnectUserMapping,
   isUserConnected,
-  getNotionToken,
+  saveMessage,
+  getMessagesByUser,
+  getMessage,
+  deleteMessage,
 } from './infra/firestore/index.js';
 
 /**
@@ -57,10 +62,9 @@ export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventReposi
 export class UserMappingRepositoryAdapter implements WhatsAppUserMappingRepository {
   async saveMapping(
     userId: string,
-    phoneNumbers: string[],
-    inboxNotesDbId: string
+    phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
-    return await saveUserMapping(userId, phoneNumbers, inboxNotesDbId);
+    return await saveUserMapping(userId, phoneNumbers);
   }
 
   async getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
@@ -81,10 +85,27 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
 }
 
 /**
- * Notion connection repository adapter for getting tokens.
+ * Class adapter for WhatsAppMessageRepository.
  */
-export class NotionConnectionRepositoryAdapter {
-  async getToken(userId: string): Promise<Result<string | null, InboxError>> {
-    return await getNotionToken(userId);
+export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
+  async saveMessage(
+    message: Omit<WhatsAppMessage, 'id'>
+  ): Promise<Result<WhatsAppMessage, InboxError>> {
+    return await saveMessage(message);
+  }
+
+  async getMessagesByUser(
+    userId: string,
+    limit?: number
+  ): Promise<Result<WhatsAppMessage[], InboxError>> {
+    return await getMessagesByUser(userId, limit);
+  }
+
+  async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    return await getMessage(messageId);
+  }
+
+  async deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    return await deleteMessage(messageId);
   }
 }

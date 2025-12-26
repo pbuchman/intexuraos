@@ -1,13 +1,18 @@
 import { useEffect, useState, useCallback, type FormEvent } from 'react';
-import { Layout, Button, Input, Card } from '@/components';
+import { Layout, Button, Card } from '@/components';
+import { PhoneInput } from '@/components/ui';
 import { useAuth } from '@/context';
 import { getWhatsAppStatus, connectWhatsApp, disconnectWhatsApp, ApiError } from '@/services';
 import type { WhatsAppStatus } from '@/types';
 import { Plus, X } from 'lucide-react';
 
+interface PhoneEntry {
+  value: string;
+  isValid: boolean;
+}
+
 interface FormState {
-  phoneNumbers: string[];
-  inboxNotesDbId: string;
+  phoneNumbers: PhoneEntry[];
 }
 
 export function WhatsAppConnectionPage(): React.JSX.Element {
@@ -20,8 +25,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
-    phoneNumbers: [''],
-    inboxNotesDbId: '',
+    phoneNumbers: [{ value: '', isValid: false }],
   });
 
   const fetchStatus = useCallback(async (): Promise<void> => {
@@ -32,8 +36,14 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       setStatus(whatsappStatus);
       if (whatsappStatus) {
         setForm({
-          phoneNumbers: whatsappStatus.phoneNumbers.length > 0 ? whatsappStatus.phoneNumbers : [''],
-          inboxNotesDbId: whatsappStatus.inboxNotesDbId,
+          phoneNumbers:
+            whatsappStatus.phoneNumbers.length > 0
+              ? whatsappStatus.phoneNumbers.map((p) => ({
+                  // Add + prefix if not present for display
+                  value: p.startsWith('+') ? p : `+${p}`,
+                  isValid: true, // Existing numbers are assumed valid
+                }))
+              : [{ value: '', isValid: false }],
         });
       }
     } catch (e) {
@@ -50,7 +60,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   const handleAddPhoneNumber = (): void => {
     setForm((prev) => ({
       ...prev,
-      phoneNumbers: [...prev.phoneNumbers, ''],
+      phoneNumbers: [...prev.phoneNumbers, { value: '', isValid: false }],
     }));
   };
 
@@ -61,10 +71,10 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
     }));
   };
 
-  const handlePhoneChange = (index: number, value: string): void => {
+  const handlePhoneChange = (index: number, value: string, isValid: boolean): void => {
     setForm((prev) => ({
       ...prev,
-      phoneNumbers: prev.phoneNumbers.map((p, i) => (i === index ? value : p)),
+      phoneNumbers: prev.phoneNumbers.map((p, i) => (i === index ? { value, isValid } : p)),
     }));
   };
 
@@ -73,24 +83,29 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
     setError(null);
     setSuccessMessage(null);
 
-    const validPhoneNumbers = form.phoneNumbers.map((p) => p.trim()).filter((p) => p.length > 0);
+    // Filter to non-empty phone numbers
+    const nonEmptyPhones = form.phoneNumbers.filter((p) => p.value.trim().length > 0);
 
-    if (validPhoneNumbers.length === 0) {
+    if (nonEmptyPhones.length === 0) {
       setError('At least one phone number is required');
       return;
     }
 
-    if (!form.inboxNotesDbId.trim()) {
-      setError('Inbox Notes Database ID is required');
+    // Check all non-empty numbers are valid
+    const invalidPhones = nonEmptyPhones.filter((p) => !p.isValid);
+    if (invalidPhones.length > 0) {
+      setError('Please fix invalid phone numbers before saving');
       return;
     }
+
+    // Extract values for API
+    const validPhoneNumbers = nonEmptyPhones.map((p) => p.value);
 
     try {
       setIsSaving(true);
       const token = await getAccessToken();
       await connectWhatsApp(token, {
         phoneNumbers: validPhoneNumbers,
-        inboxNotesDbId: form.inboxNotesDbId.trim(),
       });
       setSuccessMessage('WhatsApp connection saved successfully');
       await fetchStatus();
@@ -110,7 +125,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await disconnectWhatsApp(token);
       setSuccessMessage('WhatsApp disconnected successfully');
-      setForm({ phoneNumbers: [''], inboxNotesDbId: '' });
+      setForm({ phoneNumbers: [{ value: '', isValid: false }] });
       setStatus(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to disconnect WhatsApp');
@@ -134,7 +149,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900">WhatsApp Connection</h2>
         <p className="text-slate-600">
-          Connect your WhatsApp phone numbers to forward messages to Notion
+          Connect your WhatsApp phone numbers to save messages as notes
         </p>
       </div>
 
@@ -153,16 +168,17 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div className="space-y-3">
               <label className="block text-sm font-medium text-slate-700">Phone Numbers</label>
+              <p className="text-sm text-slate-500">
+                Select your country and enter your phone number. Currently supports Poland and USA.
+              </p>
               {form.phoneNumbers.map((phone, index) => (
                 <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="+48123456789"
-                    value={phone}
-                    onChange={(e) => {
-                      handlePhoneChange(index, e.target.value);
+                  <PhoneInput
+                    value={phone.value}
+                    onChange={(value, isValid) => {
+                      handlePhoneChange(index, value, isValid);
                     }}
-                    className="block flex-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="flex-1"
                   />
                   {form.phoneNumbers.length > 1 ? (
                     <button
@@ -187,15 +203,6 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                 Add another phone number
               </button>
             </div>
-
-            <Input
-              label="Inbox Notes Database ID"
-              placeholder="Enter your Notion database ID"
-              value={form.inboxNotesDbId}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, inboxNotesDbId: e.target.value }));
-              }}
-            />
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" isLoading={isSaving}>
@@ -231,16 +238,12 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                       key={index}
                       className="mr-2 inline-block rounded bg-slate-100 px-2 py-1 font-mono text-sm text-slate-900"
                     >
-                      {phone}
+                      +{phone.replace(/^\+/, '')}
                     </span>
                   ))}
                 </dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-600">Inbox Database ID</dt>
-                <dd className="font-mono text-slate-900">{status.inboxNotesDbId}</dd>
-              </div>
-              {status.updatedAt ? (
+              {status.updatedAt !== '' ? (
                 <div className="flex justify-between">
                   <dt className="text-slate-600">Last Updated</dt>
                   <dd className="text-slate-900">{new Date(status.updatedAt).toLocaleString()}</dd>

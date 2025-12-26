@@ -9,6 +9,7 @@ import {
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
+  registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
 import { v1AuthRoutes } from './routes/v1/routes.js';
 
@@ -203,7 +204,13 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 }
 
 export async function buildServer(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
+  });
+
+  // Register quiet health check logging (skips /health endpoint logs)
+  registerQuietHealthCheckLogging(app);
 
   // CORS for cross-origin OpenAPI access (api-docs-hub)
   await app.register(fastifyCors, {

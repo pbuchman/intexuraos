@@ -5,17 +5,20 @@
  * They are designed to be exercised by route tests and use case tests.
  *
  * Coverage note: Some methods may show low coverage until all Tier 1 test issues
- * are completed (see docs/todo/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
+ * are completed (see docs/continuity/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
  */
 import type { Result } from '@intexuraos/common';
 import { ok, err } from '@intexuraos/common';
+import { normalizePhoneNumber } from '../routes/v1/shared.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
+  WhatsAppMessageRepository,
   WhatsAppWebhookEvent,
   WebhookProcessingStatus,
   IgnoredReason,
   WhatsAppUserMappingPublic,
+  WhatsAppMessage,
   InboxError,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
@@ -92,20 +95,20 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
 
   saveMapping(
     userId: string,
-    phoneNumbers: string[],
-    inboxNotesDbId: string
+    phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
     const now = new Date().toISOString();
+    // Normalize phone numbers (remove leading "+") to match real implementation
+    const normalizedPhoneNumbers = phoneNumbers.map(normalizePhoneNumber);
     const mapping = {
       userId,
-      phoneNumbers,
-      inboxNotesDbId,
+      phoneNumbers: normalizedPhoneNumbers,
       connected: true,
       createdAt: now,
       updatedAt: now,
     };
     this.mappings.set(userId, mapping);
-    for (const phone of phoneNumbers) {
+    for (const phone of normalizedPhoneNumbers) {
       this.phoneIndex.set(phone, userId);
     }
     const { userId: _, ...publicMapping } = mapping;
@@ -120,7 +123,9 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
-    return Promise.resolve(ok(this.phoneIndex.get(phoneNumber) ?? null));
+    // Normalize phone number to match stored format (without "+")
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
   }
 
   disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
@@ -146,22 +151,40 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
 }
 
 /**
- * Fake Notion connection repository for testing.
+ * Fake WhatsApp message repository for testing.
  */
-export class FakeNotionConnectionRepository {
-  private connections = new Map<string, { token: string; connected: boolean }>();
+export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository {
+  private messages = new Map<string, WhatsAppMessage>();
 
-  getToken(userId: string): Promise<Result<string | null, InboxError>> {
-    const conn = this.connections.get(userId);
-    if (conn?.connected !== true) return Promise.resolve(ok(null));
-    return Promise.resolve(ok(conn.token));
+  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
+    const id = randomUUID();
+    const fullMessage: WhatsAppMessage = { id, ...message };
+    this.messages.set(id, fullMessage);
+    return Promise.resolve(ok(fullMessage));
   }
 
-  setConnection(userId: string, token: string, connected = true): void {
-    this.connections.set(userId, { token, connected });
+  getMessagesByUser(userId: string, limit = 100): Promise<Result<WhatsAppMessage[], InboxError>> {
+    const userMessages = Array.from(this.messages.values())
+      .filter((m) => m.userId === userId)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, limit);
+    return Promise.resolve(ok(userMessages));
+  }
+
+  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    return Promise.resolve(ok(this.messages.get(messageId) ?? null));
+  }
+
+  deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    this.messages.delete(messageId);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getAll(): WhatsAppMessage[] {
+    return Array.from(this.messages.values());
   }
 
   clear(): void {
-    this.connections.clear();
+    this.messages.clear();
   }
 }

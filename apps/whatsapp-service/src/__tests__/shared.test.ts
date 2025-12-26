@@ -6,14 +6,191 @@ import { z } from 'zod';
 import type { FastifyReply } from 'fastify';
 import {
   handleValidationError,
+  normalizePhoneNumber,
+  validatePhoneNumber,
+  getSupportedCountries,
   extractWabaId,
   extractPhoneNumberId,
   extractDisplayPhoneNumber,
   extractSenderPhoneNumber,
   extractMessageId,
+  extractMessageText,
+  extractMessageTimestamp,
+  extractSenderName,
+  extractMessageType,
 } from '../routes/v1/shared.js';
 
 describe('shared utilities', () => {
+  describe('normalizePhoneNumber', () => {
+    it('removes leading + from phone number', () => {
+      expect(normalizePhoneNumber('+15551234567')).toBe('15551234567');
+    });
+
+    it('returns unchanged if no leading +', () => {
+      expect(normalizePhoneNumber('15551234567')).toBe('15551234567');
+    });
+
+    it('handles empty string', () => {
+      expect(normalizePhoneNumber('')).toBe('');
+    });
+
+    it('removes all non-digit characters', () => {
+      expect(normalizePhoneNumber('+1 (555) 123-4567')).toBe('15551234567');
+      expect(normalizePhoneNumber('+48 123 456 789')).toBe('48123456789');
+    });
+
+    it('removes plus signs anywhere in the string', () => {
+      expect(normalizePhoneNumber('+1+2+3')).toBe('123');
+    });
+
+    it('ensures stored +48XX matches webhook 48XX', () => {
+      // User saves +48123456789 in UI
+      const storedNumber = normalizePhoneNumber('+48123456789');
+      // Webhook sends 48123456789 (no +)
+      const webhookNumber = normalizePhoneNumber('48123456789');
+      // Both should normalize to the same value
+      expect(storedNumber).toBe(webhookNumber);
+      expect(storedNumber).toBe('48123456789');
+    });
+  });
+
+  describe('getSupportedCountries', () => {
+    it('returns PL and US as first two entries', () => {
+      const countries = getSupportedCountries();
+      expect(countries[0]?.country).toBe('PL');
+      expect(countries[1]?.country).toBe('US');
+    });
+
+    it('includes calling codes', () => {
+      const countries = getSupportedCountries();
+      const pl = countries.find((c) => c.country === 'PL');
+      const us = countries.find((c) => c.country === 'US');
+      expect(pl?.callingCode).toBe('48');
+      expect(us?.callingCode).toBe('1');
+    });
+
+    it('returns many countries', () => {
+      const countries = getSupportedCountries();
+      // libphonenumber-js has 200+ countries
+      expect(countries.length).toBeGreaterThan(100);
+    });
+  });
+
+  describe('validatePhoneNumber', () => {
+    describe('Poland (+48)', () => {
+      it('accepts valid Polish phone number with +', () => {
+        const result = validatePhoneNumber('+48123456789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+        expect(result.country).toBe('PL');
+      });
+
+      it('accepts valid Polish phone number without +', () => {
+        const result = validatePhoneNumber('48123456789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+        expect(result.country).toBe('PL');
+      });
+
+      it('accepts Polish phone number with spaces', () => {
+        const result = validatePhoneNumber('+48 123 456 789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+        expect(result.country).toBe('PL');
+      });
+
+      it('rejects Polish phone number starting with 0', () => {
+        const result = validatePhoneNumber('+48012345678');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+
+      it('rejects Polish phone number with wrong length', () => {
+        const result = validatePhoneNumber('+4812345678'); // 8 digits
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+    });
+
+    describe('USA (+1)', () => {
+      it('accepts valid US phone number with +', () => {
+        const result = validatePhoneNumber('+12125551234');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('12125551234');
+        expect(result.country).toBe('US');
+      });
+
+      it('accepts valid US phone number without +', () => {
+        const result = validatePhoneNumber('12125551234');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('12125551234');
+        expect(result.country).toBe('US');
+      });
+
+      it('accepts US phone number with formatting', () => {
+        const result = validatePhoneNumber('+1 (212) 555-4567');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('12125554567');
+        expect(result.country).toBe('US');
+      });
+
+      it('rejects US phone number starting with 0 or 1', () => {
+        const result = validatePhoneNumber('+10125551234');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+
+      it('rejects US phone number with wrong length', () => {
+        const result = validatePhoneNumber('+1212555123'); // 9 digits
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+    });
+
+    describe('other countries', () => {
+      it('accepts UK phone number', () => {
+        const result = validatePhoneNumber('+442071234567');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('442071234567');
+        expect(result.country).toBe('GB');
+      });
+
+      it('accepts German phone number', () => {
+        const result = validatePhoneNumber('+4915112345678');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('4915112345678');
+        expect(result.country).toBe('DE');
+      });
+
+      it('accepts French phone number', () => {
+        const result = validatePhoneNumber('+33612345678');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('33612345678');
+        expect(result.country).toBe('FR');
+      });
+    });
+
+    describe('edge cases', () => {
+      it('rejects empty string', () => {
+        const result = validatePhoneNumber('');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('required');
+      });
+
+      it('rejects whitespace only', () => {
+        const result = validatePhoneNumber('   ');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('required');
+      });
+
+      it('rejects invalid number', () => {
+        const result = validatePhoneNumber('+1234');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+    });
+  });
+
   describe('handleValidationError', () => {
     it('converts Zod error to API error response', () => {
       const schema = z.object({
@@ -311,6 +488,128 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { messages: [{ id: 12345 }] } }] }],
       };
       expect(extractMessageId(payload)).toBeNull();
+    });
+  });
+
+  describe('extractMessageText', () => {
+    it('extracts text body from valid message', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ text: { body: 'Hello world!' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageText(payload)).toBe('Hello world!');
+    });
+
+    it('returns null for message without text', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'image' }] } }] }],
+      };
+      expect(extractMessageText(payload)).toBeNull();
+    });
+
+    it('returns null for null payload', () => {
+      expect(extractMessageText(null)).toBeNull();
+    });
+  });
+
+  describe('extractMessageTimestamp', () => {
+    it('extracts timestamp from valid message', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ timestamp: '1234567890' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageTimestamp(payload)).toBe('1234567890');
+    });
+
+    it('returns null for message without timestamp', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ id: 'test' }] } }] }],
+      };
+      expect(extractMessageTimestamp(payload)).toBeNull();
+    });
+  });
+
+  describe('extractSenderName', () => {
+    it('extracts sender name from contacts', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  contacts: [{ profile: { name: 'John Doe' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractSenderName(payload)).toBe('John Doe');
+    });
+
+    it('returns null when contacts not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractSenderName(payload)).toBeNull();
+    });
+
+    it('returns null when profile name not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { contacts: [{}] } }] }],
+      };
+      expect(extractSenderName(payload)).toBeNull();
+    });
+  });
+
+  describe('extractMessageType', () => {
+    it('extracts message type', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'text' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractMessageType(payload)).toBe('text');
+    });
+
+    it('returns null for message without type', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ id: 'test' }] } }] }],
+      };
+      expect(extractMessageType(payload)).toBeNull();
+    });
+
+    it('returns null for non-string type', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 123 }] } }] }],
+      };
+      expect(extractMessageType(payload)).toBeNull();
     });
   });
 });

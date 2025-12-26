@@ -5,14 +5,14 @@
 Derived from the Latin _intexere_ (to weave together) and _textura_ (structure), **IntexuraOS** is the integration fabric that interlaces external signals into your central model of truth.
 **Notion models the world. IntexuraOS executes.**
 
-![Node.js 22+](https://img.shields.io/badge/Node.js-22+-5FA04E?logo=node.js&logoColor=white)
-![TypeScript 5.7](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
-![Fastify](https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white)
-![Cloud Run](https://img.shields.io/badge/Google%20Cloud-Run-4285F4?logo=googlecloud&logoColor=white)
-![Firestore](https://img.shields.io/badge/Firestore-Native-FFCA28?logo=firebase&logoColor=black)
-![Terraform](https://img.shields.io/badge/Terraform-1.5+-844FBA?logo=terraform&logoColor=white)
-![Auth0](https://img.shields.io/badge/Auth0-OAuth2-EB5424?logo=auth0&logoColor=white)
-![Coverage 89%+](https://img.shields.io/badge/Coverage-90%25+-brightgreen)
+![Node.js 22+](https://img.shields.io/badge/Node.js-22+-22B8CF?logo=node.js&logoColor=white)
+![TypeScript 5.7](https://img.shields.io/badge/TypeScript-5.7-22B8CF?logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-5.x-22B8CF?logo=fastify&logoColor=white)
+![Cloud Run](https://img.shields.io/badge/Google%20Cloud-Run-22B8CF?logo=googlecloud&logoColor=white)
+![Firestore](https://img.shields.io/badge/Firestore-Native-22B8CF?logo=firebase&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-1.5+-22B8CF?logo=terraform&logoColor=white)
+![Auth0](https://img.shields.io/badge/Auth0-OAuth2-22B8CF?logo=auth0&logoColor=white)
+![Coverage 90%+](https://img.shields.io/badge/Coverage-90%25+-22B8CF)
 
 ---
 
@@ -51,6 +51,20 @@ The project includes a ChatGPT custom model (GPT) for prompt review and manageme
 - Review prompts using 10-dimension weighted scoring
 - Iterative improvement loop until score ≥ 8.0
 - Direct save to Notion via OAuth-authenticated API
+
+---
+
+## LLM-Assisted Development
+
+This project is developed with LLMs as **senior reviewers, architects, and automation components** — not autocomplete tools. Key practices:
+
+- **Explicit constraints** — All LLM interactions include project rules (`.github/copilot-instructions.md`) enforcing architecture boundaries, TypeScript strictness, and test coverage thresholds
+- **Verification-first** — LLMs must run `npm run ci` before claiming task completion; no silent assumptions
+- **Structured prompts** — Reusable prompt templates in `.github/prompts/` for refactoring, documentation, and multi-step orchestration
+
+### Continuity Ledger Pattern
+
+For complex multi-step tasks, we use a **continuity ledger** — a compaction-safe markdown file (`CONTINUITY.md`) that logs every decision, reasoning step, and state transition. This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.prompt.md](.github/prompts/continuity.prompt.md) for the orchestration protocol.
 
 ---
 

@@ -10,13 +10,13 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { z } from 'zod';
 import { requireAuth } from '@intexuraos/common';
 import { getServices } from '../../services.js';
+import { validatePhoneNumber } from './shared.js';
 
 /**
  * Request body schema for connecting WhatsApp mapping.
  */
 const connectRequestSchema = z.object({
   phoneNumbers: z.array(z.string().min(1)).min(1, 'At least one phone number is required'),
-  inboxNotesDbId: z.string().min(1, 'Inbox Notes database ID is required'),
 });
 
 type ConnectRequest = z.infer<typeof connectRequestSchema>;
@@ -31,21 +31,17 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         summary: 'Connect WhatsApp mapping',
         description:
           'Save or update WhatsApp phone number mapping for the authenticated user. ' +
-          'Maps phone numbers to user ID and stores Notion Inbox Notes database ID. ' +
+          'Maps phone numbers to user ID for message storage. ' +
           'Enforces global uniqueness: a phone number can only be mapped to one user.',
         tags: ['whatsapp'],
         body: {
           type: 'object',
-          required: ['phoneNumbers', 'inboxNotesDbId'],
+          required: ['phoneNumbers'],
           properties: {
             phoneNumbers: {
               type: 'array',
               items: { type: 'string' },
               description: 'WhatsApp phone numbers to map to this user (E.164 format recommended)',
-            },
-            inboxNotesDbId: {
-              type: 'string',
-              description: 'Notion Inbox Notes database ID (data source ID)',
             },
           },
         },
@@ -59,7 +55,6 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   phoneNumbers: { type: 'array', items: { type: 'string' } },
-                  inboxNotesDbId: { type: 'string' },
                   connected: { type: 'boolean' },
                   createdAt: { type: 'string', format: 'date-time' },
                   updatedAt: { type: 'string', format: 'date-time' },
@@ -118,15 +113,33 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
       }
 
-      const { phoneNumbers, inboxNotesDbId } = parseResult.data;
+      const { phoneNumbers } = parseResult.data;
+
+      // Validate and normalize phone numbers
+      const validationErrors: { phoneNumber: string; error: string }[] = [];
+      const normalizedPhoneNumbers: string[] = [];
+
+      for (const phoneNumber of phoneNumbers) {
+        const validation = validatePhoneNumber(phoneNumber);
+        if (!validation.valid) {
+          validationErrors.push({
+            phoneNumber,
+            error: validation.error ?? 'Invalid phone number',
+          });
+        } else {
+          normalizedPhoneNumbers.push(validation.normalized);
+        }
+      }
+
+      if (validationErrors.length > 0) {
+        return await reply.fail('INVALID_REQUEST', 'Invalid phone number format', undefined, {
+          errors: validationErrors,
+        });
+      }
 
       // Save mapping
       const { userMappingRepository } = getServices();
-      const result = await userMappingRepository.saveMapping(
-        user.userId,
-        phoneNumbers,
-        inboxNotesDbId
-      );
+      const result = await userMappingRepository.saveMapping(user.userId, normalizedPhoneNumbers);
 
       if (!result.ok) {
         // Phone conflict returns VALIDATION_ERROR with details
@@ -171,10 +184,6 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     type: 'array',
                     items: { type: 'string' },
                     description: 'Mapped phone numbers',
-                  },
-                  inboxNotesDbId: {
-                    type: 'string',
-                    description: 'Notion Inbox Notes database ID',
                   },
                   connected: {
                     type: 'boolean',
@@ -248,7 +257,6 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   phoneNumbers: { type: 'array', items: { type: 'string' } },
-                  inboxNotesDbId: { type: 'string' },
                   connected: { type: 'boolean', enum: [false] },
                   createdAt: { type: 'string', format: 'date-time' },
                   updatedAt: { type: 'string', format: 'date-time' },

@@ -10,10 +10,6 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
 import type { Config } from '../../config.js';
-import type { InboxError, InboxNote, InboxNotesRepository } from '../../domain/inbox/index.js';
-import { ProcessWhatsAppWebhookUseCase } from '../../domain/inbox/index.js';
-import { createInboxNote } from '../../infra/notion/index.js';
-import type { Result } from '@intexuraos/common';
 import { sendWhatsAppMessage } from '../../whatsappClient.js';
 import {
   extractDisplayPhoneNumber,
@@ -21,6 +17,10 @@ import {
   extractPhoneNumberId,
   extractSenderPhoneNumber,
   extractWabaId,
+  extractMessageText,
+  extractMessageTimestamp,
+  extractSenderName,
+  extractMessageType,
   handleValidationError,
 } from './shared.js';
 
@@ -260,6 +260,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
 /**
  * Process webhook asynchronously after returning 200 to Meta.
+ * Validates user mapping and saves message to Firestore.
  */
 async function processWebhookAsync(
   request: FastifyRequest<{ Body: WebhookPayload }>,
@@ -267,87 +268,140 @@ async function processWebhookAsync(
   config: Config
 ): Promise<void> {
   try {
-    const { webhookEventRepository, userMappingRepository, notionConnectionRepository } =
-      getServices();
+    const { webhookEventRepository, userMappingRepository, messageRepository } = getServices();
 
-    // Find user by phone number to get their Notion config
+    // Find user by phone number
     const fromNumber = extractSenderPhoneNumber(request.body);
     if (fromNumber === null) {
       request.log.debug({ eventId: savedEvent.id }, 'No sender phone number found');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'NO_SENDER',
+          message: 'No sender phone number in webhook payload',
+        },
+      });
+      return;
     }
 
-    // Get user mapping and Notion config
-    let notionToken: string | undefined;
-    let inboxNotesDbId: string | undefined;
+    // Extract message text (only support text messages)
+    const messageText = extractMessageText(request.body);
+    const messageType = extractMessageType(request.body);
 
-    if (fromNumber !== null) {
-      const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
-      if (userIdResult.ok && userIdResult.value !== null) {
-        const userId = userIdResult.value;
-
-        const mappingResult = await userMappingRepository.getMapping(userId);
-        if (mappingResult.ok && mappingResult.value !== null) {
-          inboxNotesDbId = mappingResult.value.inboxNotesDbId;
-        }
-
-        const tokenResult = await notionConnectionRepository.getToken(userId);
-        if (tokenResult.ok && tokenResult.value !== null) {
-          notionToken = tokenResult.value;
-        }
-      }
+    if (messageType !== 'text' || messageText === null) {
+      request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring non-text message');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'UNSUPPORTED_MESSAGE_TYPE',
+          message: `Only text messages are supported. Received: ${messageType ?? 'unknown'}`,
+          details: { messageType },
+        },
+      });
+      return;
     }
 
-    // Create Notion repository adapter if we have the config
-    let inboxNotesRepo: InboxNotesRepository | null = null;
-    if (notionToken !== undefined && inboxNotesDbId !== undefined) {
-      const token = notionToken;
-      const dbId = inboxNotesDbId;
-      inboxNotesRepo = {
-        createNote: async (note: InboxNote): Promise<Result<InboxNote, InboxError>> => {
-          const result = await createInboxNote(token, dbId, note);
-          if (!result.ok) {
-            return { ok: false, error: { code: 'INTERNAL_ERROR', message: result.error.message } };
-          }
-          return result;
-        },
-        getNote: (): Promise<Result<InboxNote | null, InboxError>> => {
-          return Promise.reject(new Error('Not implemented'));
-        },
-        updateNote: (): Promise<Result<InboxNote, InboxError>> => {
-          return Promise.reject(new Error('Not implemented'));
-        },
-      };
-    }
-
-    // Create and execute the use case
-    const useCase = new ProcessWhatsAppWebhookUseCase(
-      { allowedPhoneNumberIds: config.allowedPhoneNumberIds },
-      webhookEventRepository,
-      userMappingRepository,
-      inboxNotesRepo as never
-    );
-
-    const result = await useCase.execute(
-      savedEvent.id,
-      request.body as unknown as Parameters<typeof useCase.execute>[1]
-    );
-
-    if (!result.ok) {
+    // Look up user by phone number
+    const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
+    if (!userIdResult.ok) {
       request.log.error(
-        { error: result.error, eventId: savedEvent.id },
-        'Webhook processing failed'
+        { error: userIdResult.error, eventId: savedEvent.id },
+        'Failed to look up user by phone number'
       );
-    } else {
-      request.log.info(
-        { status: result.value.status, eventId: savedEvent.id },
-        'Webhook processed'
-      );
-
-      // Send confirmation message if successfully processed
-      if (result.value.status === 'PROCESSED' && fromNumber !== null) {
-        await sendConfirmationMessage(request, savedEvent, fromNumber, config);
-      }
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: userIdResult.error.message,
+      });
+      return;
     }
+
+    if (userIdResult.value === null) {
+      request.log.info(
+        { eventId: savedEvent.id, fromNumber },
+        'No user mapping found for phone number'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'USER_UNMAPPED', {
+        ignoredReason: {
+          code: 'USER_UNMAPPED',
+          message: `No user mapping found for phone number: ${fromNumber}`,
+          details: { phoneNumber: fromNumber },
+        },
+      });
+      return;
+    }
+
+    const userId = userIdResult.value;
+
+    // Check if user mapping is connected
+    const mappingResult = await userMappingRepository.getMapping(userId);
+    if (!mappingResult.ok || mappingResult.value?.connected !== true) {
+      request.log.info(
+        { eventId: savedEvent.id, userId },
+        'User mapping exists but is disconnected'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'USER_UNMAPPED', {
+        ignoredReason: {
+          code: 'USER_DISCONNECTED',
+          message: 'User mapping exists but is disconnected',
+          details: { userId },
+        },
+      });
+      return;
+    }
+
+    // Extract message details
+    const waMessageId = extractMessageId(request.body) ?? `unknown-${savedEvent.id}`;
+    const toNumber = extractDisplayPhoneNumber(request.body) ?? '';
+    const timestamp = extractMessageTimestamp(request.body) ?? '';
+    const senderName = extractSenderName(request.body);
+    const phoneNumberId = extractPhoneNumberId(request.body);
+
+    // Build message object
+    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      text: messageText,
+      timestamp,
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    };
+
+    // Add metadata only if we have any values
+    if (senderName !== null || phoneNumberId !== null) {
+      const metadata: { senderName?: string; phoneNumberId?: string } = {};
+      if (senderName !== null) {
+        metadata.senderName = senderName;
+      }
+      if (phoneNumberId !== null) {
+        metadata.phoneNumberId = phoneNumberId;
+      }
+      messageToSave.metadata = metadata;
+    }
+
+    // Save message to Firestore
+    const saveResult = await messageRepository.saveMessage(messageToSave);
+
+    if (!saveResult.ok) {
+      request.log.error(
+        { error: saveResult.error, eventId: savedEvent.id },
+        'Failed to save message'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to save message: ${saveResult.error.message}`,
+      });
+      return;
+    }
+
+    const savedMessage = saveResult.value;
+
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+    request.log.info(
+      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+      'Message saved successfully'
+    );
+
+    // Send confirmation message
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },

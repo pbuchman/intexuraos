@@ -21,7 +21,10 @@ export {
 } from './userMappingRepository.js';
 
 export {
-  type NotionConnectionPublic,
-  getNotionToken,
-  isNotionConnected,
-} from './notionConnectionRepository.js';
+  type WhatsAppMessage,
+  type WhatsAppMessageMetadata,
+  saveMessage,
+  getMessagesByUser,
+  getMessage,
+  deleteMessage,
+} from './messageRepository.js';

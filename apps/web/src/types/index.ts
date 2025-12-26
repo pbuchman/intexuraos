@@ -65,7 +65,6 @@ export interface NotionConnectResponse {
  */
 export interface WhatsAppStatus {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -76,10 +75,28 @@ export interface WhatsAppStatus {
  */
 export interface WhatsAppConnectResponse {
   phoneNumbers: string[];
-  inboxNotesDbId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * WhatsApp message from whatsapp-service
+ */
+export interface WhatsAppMessage {
+  id: string;
+  text: string;
+  fromNumber: string;
+  timestamp: string;
+  receivedAt: string;
+}
+
+/**
+ * WhatsApp messages list response
+ */
+export interface WhatsAppMessagesResponse {
+  messages: WhatsAppMessage[];
+  fromNumber: string | null;
 }
 
 /**

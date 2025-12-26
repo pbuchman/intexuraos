@@ -2,7 +2,13 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
 import { config } from '@/config';
-import { LoginPage, DashboardPage, NotionConnectionPage, WhatsAppConnectionPage } from '@/pages';
+import {
+  LoginPage,
+  DashboardPage,
+  NotionConnectionPage,
+  WhatsAppConnectionPage,
+  WhatsAppNotesPage,
+} from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
@@ -72,6 +78,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <WhatsAppConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/whatsapp-notes"
+        element={
+          <ProtectedRoute>
+            <WhatsAppNotesPage />
           </ProtectedRoute>
         }
       />

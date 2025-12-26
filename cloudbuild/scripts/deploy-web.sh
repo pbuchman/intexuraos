@@ -18,6 +18,22 @@ log "  Source: apps/web/dist/"
 # Sync all files with automatic content-type detection
 gsutil -m rsync -r -d apps/web/dist/ "gs://${BUCKET}/"
 
+# Set cache-control headers:
+# - index.html: never cache (always fetch fresh to get new asset references)
+# - Assets in /assets/: cache forever (filenames include content hash)
+log "Setting cache-control headers..."
+
+# index.html - no caching
+gsutil setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" \
+  -h "Content-Type:text/html; charset=utf-8" \
+  "gs://${BUCKET}/index.html"
+
+# Hashed assets (JS/CSS) - cache for 1 year (immutable due to content hash in filename)
+gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" \
+  "gs://${BUCKET}/assets/*.js" 2>/dev/null || true
+gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" \
+  "gs://${BUCKET}/assets/*.css" 2>/dev/null || true
+
 # Set correct content-type for common web assets
 gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/*.png" 2>/dev/null || true
 gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/favicon.png" 2>/dev/null || true
