@@ -17,7 +17,10 @@ import {
   Copy,
   Check,
   ExternalLink,
+  X,
 } from 'lucide-react';
+
+const TEXT_PREVIEW_LIMIT = 800;
 
 /**
  * URL regex pattern for detecting links in text.
@@ -62,14 +65,115 @@ interface MessageItemProps {
   accessToken: string;
   onDelete: (id: string) => void;
   onImageClick: (messageId: string) => void;
+  onNoteClick: (message: WhatsAppMessage) => void;
   isDeleting: boolean;
+}
+
+/**
+ * Modal to display full note content (and optional image).
+ */
+interface NoteDetailModalProps {
+  message: WhatsAppMessage;
+  accessToken: string;
+  onClose: () => void;
+}
+
+function NoteDetailModal({
+  message,
+  accessToken,
+  onClose,
+}: NoteDetailModalProps): React.JSX.Element {
+  const receivedDate = new Date(message.receivedAt);
+  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return (): void => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
+          <div className="text-sm text-slate-500">
+            {formattedDate} • {formattedTime}
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          {/* Image if present */}
+          {message.mediaType === 'image' && message.hasMedia && (
+            <div className="mb-4">
+              <ImageThumbnail
+                messageId={message.id}
+                accessToken={accessToken}
+                onClick={(): void => {
+                  // Already in modal, do nothing
+                }}
+              />
+            </div>
+          )}
+
+          {/* Text content */}
+          {message.text !== '' && (
+            <p className="whitespace-pre-wrap break-words text-slate-800">
+              <TextWithLinks text={message.text} />
+            </p>
+          )}
+
+          {/* Caption for media */}
+          {message.caption !== null &&
+            message.caption !== '' &&
+            message.caption !== message.text && (
+              <p className="mt-3 whitespace-pre-wrap break-words text-slate-600 italic">
+                <TextWithLinks text={message.caption} />
+              </p>
+            )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MessageItem({
   message,
   accessToken,
   onDelete,
-  onImageClick,
+  onImageClick: _onImageClick,
+  onNoteClick,
   isDeleting,
 }: MessageItemProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
@@ -175,25 +279,13 @@ function MessageItem({
           {/* Image thumbnail */}
           {message.mediaType === 'image' && message.hasMedia && (
             <div className="mb-3">
-              <div className="flex items-start gap-3">
-                <ImageThumbnail
-                  messageId={message.id}
-                  accessToken={accessToken}
-                  onClick={(): void => {
-                    onImageClick(message.id);
-                  }}
-                />
-                <button
-                  onClick={(): void => {
-                    void handleOpenFullSize(message.id);
-                  }}
-                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                  title="Open full size in new tab"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Open full size</span>
-                </button>
-              </div>
+              <ImageThumbnail
+                messageId={message.id}
+                accessToken={accessToken}
+                onClick={(): void => {
+                  onNoteClick(message);
+                }}
+              />
             </div>
           )}
 
@@ -226,24 +318,73 @@ function MessageItem({
 
           {/* Text content with clickable links */}
           {message.text !== '' && (
-            <p className="whitespace-pre-wrap break-words text-slate-800">
-              <TextWithLinks text={message.text} />
-            </p>
+            <div
+              onClick={(): void => {
+                onNoteClick(message);
+              }}
+              className={
+                message.mediaType !== 'audio'
+                  ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors'
+                  : ''
+              }
+            >
+              <p className="whitespace-pre-wrap break-words text-slate-800">
+                {message.text.length > TEXT_PREVIEW_LIMIT ? (
+                  <>
+                    <TextWithLinks text={message.text.slice(0, TEXT_PREVIEW_LIMIT)} />
+                    <span className="text-slate-400">...</span>
+                    <span className="ml-1 text-sm text-blue-600 hover:underline">show more</span>
+                  </>
+                ) : (
+                  <TextWithLinks text={message.text} />
+                )}
+              </p>
+            </div>
           )}
 
           {/* Caption for media with clickable links - only show if different from text */}
           {message.caption !== null &&
             message.caption !== '' &&
             message.caption !== message.text && (
-              <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
-                <TextWithLinks text={message.caption} />
-              </p>
+              <div
+                onClick={(): void => {
+                  onNoteClick(message);
+                }}
+                className="cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors"
+              >
+                <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
+                  {message.caption.length > TEXT_PREVIEW_LIMIT ? (
+                    <>
+                      <TextWithLinks text={message.caption.slice(0, TEXT_PREVIEW_LIMIT)} />
+                      <span className="text-slate-400">...</span>
+                      <span className="ml-1 text-sm text-blue-600 hover:underline">show more</span>
+                    </>
+                  ) : (
+                    <TextWithLinks text={message.caption} />
+                  )}
+                </p>
+              </div>
             )}
 
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <span>{formattedDate}</span>
             <span>•</span>
             <span>{formattedTime}</span>
+            {message.mediaType === 'image' && message.hasMedia && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={(): void => {
+                    void handleOpenFullSize(message.id);
+                  }}
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                  title="Open full size in new tab"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Full size</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -291,6 +432,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [selectedNote, setSelectedNote] = useState<WhatsAppMessage | null>(null);
   const [currentAccessToken, setCurrentAccessToken] = useState<string | null>(null);
 
   const fetchMessages = useCallback(
@@ -417,6 +559,9 @@ export function WhatsAppNotesPage(): React.JSX.Element {
               onImageClick={(id): void => {
                 setSelectedImageId(id);
               }}
+              onNoteClick={(msg): void => {
+                setSelectedNote(msg);
+              }}
               isDeleting={deletingIds.has(message.id)}
             />
           ))
@@ -436,6 +581,17 @@ export function WhatsAppNotesPage(): React.JSX.Element {
           accessToken={currentAccessToken}
           onClose={(): void => {
             setSelectedImageId(null);
+          }}
+        />
+      )}
+
+      {/* Note detail modal */}
+      {selectedNote !== null && currentAccessToken !== null && (
+        <NoteDetailModal
+          message={selectedNote}
+          accessToken={currentAccessToken}
+          onClose={(): void => {
+            setSelectedNote(null);
           }}
         />
       )}
