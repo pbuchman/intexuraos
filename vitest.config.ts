@@ -4,11 +4,7 @@ export default defineConfig({
   test: {
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      'speechmatics-js-sdk/**', // Vendored SDK for reference only
-    ],
+    exclude: ['**/node_modules/**', '**/dist/**'],
     // Run tests sequentially to avoid race conditions in shared state
     pool: 'forks',
     poolOptions: {

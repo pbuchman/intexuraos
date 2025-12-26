@@ -131,7 +131,6 @@ export default tseslint.config(
       '**/*.cjs',
       'docker/**',
       'scripts/**',
-      'speechmatics-js-sdk/**', // Vendored SDK for reference only
     ],
   }
 );
