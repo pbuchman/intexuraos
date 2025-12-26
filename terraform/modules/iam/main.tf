@@ -150,6 +150,13 @@ resource "google_project_iam_member" "whatsapp_service_logging" {
   member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
+# WhatsApp service: Service Account Token Creator (for signing GCS URLs)
+resource "google_service_account_iam_member" "whatsapp_service_token_creator" {
+  service_account_id = google_service_account.whatsapp_service.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.whatsapp_service.email}"
+}
+
 # API Docs Hub: Cloud Logging
 resource "google_project_iam_member" "api_docs_hub_logging" {
   project = var.project_id

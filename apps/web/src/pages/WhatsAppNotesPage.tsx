@@ -1,9 +1,52 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Layout, Card, Button, ImageModal, ImageThumbnail, AudioPlayer } from '@/components';
 import { useAuth } from '@/context';
-import { getWhatsAppMessages, deleteWhatsAppMessage, ApiError } from '@/services';
+import {
+  getWhatsAppMessages,
+  deleteWhatsAppMessage,
+  getMessageMediaUrl,
+  ApiError,
+} from '@/services';
 import type { WhatsAppMessage } from '@/types';
-import { Trash2, MessageSquare, RefreshCw, Image, Mic } from 'lucide-react';
+import { Trash2, MessageSquare, RefreshCw, Image, Mic, Copy, Check, ExternalLink } from 'lucide-react';
+
+/**
+ * URL regex pattern for detecting links in text.
+ */
+const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+
+/**
+ * Renders text with clickable links.
+ */
+function TextWithLinks({ text }: { text: string }): React.JSX.Element {
+  const parts = text.split(URL_REGEX);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (URL_REGEX.test(part)) {
+          // Reset regex lastIndex after test
+          URL_REGEX.lastIndex = 0;
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+              onClick={(e): void => {
+                e.stopPropagation();
+              }}
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
 
 interface MessageItemProps {
   message: WhatsAppMessage;
@@ -20,6 +63,9 @@ function MessageItem({
   onImageClick,
   isDeleting,
 }: MessageItemProps): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const receivedDate = new Date(message.receivedAt);
   const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
     day: '2-digit',
@@ -31,16 +77,76 @@ function MessageItem({
     minute: '2-digit',
   });
 
+  const handleCopy = async (): Promise<void> => {
+    const textToCopy = message.caption ?? message.text;
+    if (textToCopy === '') return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      // Clipboard API failed, ignore
+    }
+  };
+
+  const handleDeleteClick = (): void => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = (): void => {
+    setShowDeleteConfirm(false);
+    onDelete(message.id);
+  };
+
+  const handleDeleteCancel = (): void => {
+    setShowDeleteConfirm(false);
+  };
+
+  const handleOpenFullSize = async (messageId: string): Promise<void> => {
+    try {
+      const response = await getMessageMediaUrl(accessToken, messageId);
+      window.open(response.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      // Failed to get URL, ignore
+    }
+  };
+
+  const hasTextContent = message.text !== '' || (message.caption !== null && message.caption !== '');
+
   return (
     <div
       className={`group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 ${
         isDeleting ? 'scale-95 opacity-50' : 'hover:border-slate-300 hover:shadow-md'
       }`}
     >
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="mb-2 text-sm text-red-700">Are you sure you want to delete this message?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDeleteConfirm}
+              className="rounded bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Delete
+            </button>
+            <button
+              onClick={handleDeleteCancel}
+              className="rounded bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          {/* Media type indicator */}
-          {message.mediaType !== 'text' && (
+          {/* Media type indicator - only show for actual image/audio messages */}
+          {(message.mediaType === 'image' || message.mediaType === 'audio') && (
             <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
               {message.mediaType === 'image' ? (
                 <>
@@ -59,13 +165,25 @@ function MessageItem({
           {/* Image thumbnail */}
           {message.mediaType === 'image' && message.hasMedia && (
             <div className="mb-3">
-              <ImageThumbnail
-                messageId={message.id}
-                accessToken={accessToken}
-                onClick={(): void => {
-                  onImageClick(message.id);
-                }}
-              />
+              <div className="flex items-start gap-3">
+                <ImageThumbnail
+                  messageId={message.id}
+                  accessToken={accessToken}
+                  onClick={(): void => {
+                    onImageClick(message.id);
+                  }}
+                />
+                <button
+                  onClick={(): void => {
+                    void handleOpenFullSize(message.id);
+                  }}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                  title="Open full size in new tab"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Open full size</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -76,17 +194,21 @@ function MessageItem({
             </div>
           )}
 
-          {/* Text content */}
+          {/* Text content with clickable links */}
           {message.text !== '' && (
-            <p className="whitespace-pre-wrap break-words text-slate-800">{message.text}</p>
-          )}
-
-          {/* Caption for media */}
-          {message.caption !== null && message.caption !== '' && (
-            <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
-              {message.caption}
+            <p className="whitespace-pre-wrap break-words text-slate-800">
+              <TextWithLinks text={message.text} />
             </p>
           )}
+
+          {/* Caption for media with clickable links - only show if different from text */}
+          {message.caption !== null &&
+            message.caption !== '' &&
+            message.caption !== message.text && (
+              <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
+                <TextWithLinks text={message.caption} />
+              </p>
+            )}
 
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <span>{formattedDate}</span>
@@ -94,16 +216,37 @@ function MessageItem({
             <span>{formattedTime}</span>
           </div>
         </div>
-        <button
-          onClick={(): void => {
-            onDelete(message.id);
-          }}
-          disabled={isDeleting}
-          className="shrink-0 rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="Delete message"
-        >
-          <Trash2 className="h-5 w-5" />
-        </button>
+
+        {/* Action buttons */}
+        <div className="flex shrink-0 gap-1">
+          {/* Copy button */}
+          {hasTextContent && (
+            <button
+              onClick={(): void => {
+                void handleCopy();
+              }}
+              className={`rounded-lg p-2 transition-all ${
+                copied
+                  ? 'bg-green-50 text-green-600'
+                  : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100'
+              }`}
+              aria-label={copied ? 'Copied!' : 'Copy message'}
+              title={copied ? 'Copied!' : 'Copy message'}
+            >
+              {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+            </button>
+          )}
+
+          {/* Delete button */}
+          <button
+            onClick={handleDeleteClick}
+            disabled={isDeleting || showDeleteConfirm}
+            className="rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Delete message"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
