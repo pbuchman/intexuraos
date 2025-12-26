@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { intexuraFastifyPlugin } from '@intexuraos/common';
+import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common';
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
@@ -60,7 +60,13 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 }
 
 export async function buildServer(config: Config): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
+  });
+
+  // Register quiet health check logging (skips /health endpoint logs)
+  registerQuietHealthCheckLogging(app);
 
   await app.register(intexuraFastifyPlugin);
 

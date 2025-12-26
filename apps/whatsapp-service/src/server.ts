@@ -8,6 +8,7 @@ import {
   fastifyAuthPlugin,
   getErrorMessage,
   getFirestore,
+  registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
 import { createV1Routes } from './routes/v1/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
@@ -158,8 +159,11 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 export async function buildServer(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
     logger: true,
-    // Enable raw body access for signature validation
+    disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
   });
+
+  // Register quiet health check logging (skips /health endpoint logs)
+  registerQuietHealthCheckLogging(app);
 
   // Add content type parser to capture raw body
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {

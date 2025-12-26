@@ -7,6 +7,7 @@ import type { FastifyReply } from 'fastify';
 import {
   handleValidationError,
   normalizePhoneNumber,
+  validatePhoneNumber,
   extractWabaId,
   extractPhoneNumberId,
   extractDisplayPhoneNumber,
@@ -32,8 +33,105 @@ describe('shared utilities', () => {
       expect(normalizePhoneNumber('')).toBe('');
     });
 
-    it('only removes leading +', () => {
-      expect(normalizePhoneNumber('+1+2+3')).toBe('1+2+3');
+    it('removes all non-digit characters', () => {
+      expect(normalizePhoneNumber('+1 (555) 123-4567')).toBe('15551234567');
+      expect(normalizePhoneNumber('+48 123 456 789')).toBe('48123456789');
+    });
+
+    it('removes plus signs anywhere in the string', () => {
+      expect(normalizePhoneNumber('+1+2+3')).toBe('123');
+    });
+
+    it('ensures stored +48XX matches webhook 48XX', () => {
+      // User saves +48123456789 in UI
+      const storedNumber = normalizePhoneNumber('+48123456789');
+      // Webhook sends 48123456789 (no +)
+      const webhookNumber = normalizePhoneNumber('48123456789');
+      // Both should normalize to the same value
+      expect(storedNumber).toBe(webhookNumber);
+      expect(storedNumber).toBe('48123456789');
+    });
+  });
+
+  describe('validatePhoneNumber', () => {
+    describe('Poland (+48)', () => {
+      it('accepts valid Polish phone number with +', () => {
+        const result = validatePhoneNumber('+48123456789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+      });
+
+      it('accepts valid Polish phone number without +', () => {
+        const result = validatePhoneNumber('48123456789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+      });
+
+      it('accepts Polish phone number with spaces', () => {
+        const result = validatePhoneNumber('+48 123 456 789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('48123456789');
+      });
+
+      it('rejects Polish phone number starting with 0', () => {
+        const result = validatePhoneNumber('+48012345678');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Poland');
+      });
+
+      it('rejects Polish phone number with wrong length', () => {
+        const result = validatePhoneNumber('+4812345678'); // 8 digits
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Poland');
+      });
+    });
+
+    describe('USA (+1)', () => {
+      it('accepts valid US phone number with +', () => {
+        const result = validatePhoneNumber('+15551234567');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('15551234567');
+      });
+
+      it('accepts valid US phone number without +', () => {
+        const result = validatePhoneNumber('15551234567');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('15551234567');
+      });
+
+      it('accepts US phone number with formatting', () => {
+        const result = validatePhoneNumber('+1 (555) 123-4567');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('15551234567');
+      });
+
+      it('rejects US phone number starting with 0 or 1', () => {
+        const result = validatePhoneNumber('+10551234567');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('USA');
+      });
+
+      it('rejects US phone number with wrong length', () => {
+        const result = validatePhoneNumber('+1555123456'); // 9 digits
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('USA');
+      });
+    });
+
+    describe('unsupported countries', () => {
+      it('rejects unsupported country code', () => {
+        const result = validatePhoneNumber('+44123456789'); // UK
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Unsupported');
+      });
+    });
+
+    describe('edge cases', () => {
+      it('rejects empty string', () => {
+        const result = validatePhoneNumber('');
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('required');
+      });
     });
   });
 

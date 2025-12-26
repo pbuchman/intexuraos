@@ -10,7 +10,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { z } from 'zod';
 import { requireAuth } from '@intexuraos/common';
 import { getServices } from '../../services.js';
-import { normalizePhoneNumber } from './shared.js';
+import { validatePhoneNumber } from './shared.js';
 
 /**
  * Request body schema for connecting WhatsApp mapping.
@@ -115,8 +115,27 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { phoneNumbers } = parseResult.data;
 
-      // Normalize phone numbers (remove leading "+")
-      const normalizedPhoneNumbers = phoneNumbers.map(normalizePhoneNumber);
+      // Validate and normalize phone numbers
+      const validationErrors: { phoneNumber: string; error: string }[] = [];
+      const normalizedPhoneNumbers: string[] = [];
+
+      for (const phoneNumber of phoneNumbers) {
+        const validation = validatePhoneNumber(phoneNumber);
+        if (!validation.valid) {
+          validationErrors.push({
+            phoneNumber,
+            error: validation.error ?? 'Invalid phone number',
+          });
+        } else {
+          normalizedPhoneNumbers.push(validation.normalized);
+        }
+      }
+
+      if (validationErrors.length > 0) {
+        return await reply.fail('INVALID_REQUEST', 'Invalid phone number format', undefined, {
+          errors: validationErrors,
+        });
+      }
 
       // Save mapping
       const { userMappingRepository } = getServices();

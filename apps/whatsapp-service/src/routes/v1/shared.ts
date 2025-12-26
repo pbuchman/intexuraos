@@ -2,15 +2,75 @@ import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 
 /**
- * Normalize phone number by removing leading "+" if present.
- * WhatsApp webhook payloads typically send numbers WITHOUT the "+",
- * so we normalize all stored numbers to match.
+ * Phone number validation patterns for supported countries.
+ * Pattern validates the full number with country code (digits only).
+ */
+const PHONE_PATTERNS: Record<string, { pattern: RegExp; name: string }> = {
+  // Poland: +48 followed by 9 digits starting with non-zero
+  '48': { pattern: /^48[1-9]\d{8}$/, name: 'Poland' },
+  // USA: +1 followed by 10 digits, first digit 2-9
+  '1': { pattern: /^1[2-9]\d{9}$/, name: 'USA' },
+};
+
+/**
+ * Normalize phone number to consistent format for storage and comparison.
  *
- * @example normalizePhoneNumber("+15551234567") => "15551234567"
- * @example normalizePhoneNumber("15551234567") => "15551234567"
+ * Storage format: digits only, no "+" prefix (e.g., "48123456789")
+ *
+ * This ensures:
+ * - User saves "+48123456789" → stored as "48123456789"
+ * - Webhook sends "48123456789" → matches stored "48123456789"
+ *
+ * @example normalizePhoneNumber("+48123456789") => "48123456789"
+ * @example normalizePhoneNumber("48123456789") => "48123456789"
+ * @example normalizePhoneNumber("+1-555-123-4567") => "15551234567"
  */
 export function normalizePhoneNumber(phoneNumber: string): string {
-  return phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
+  // Remove all non-digit characters (including +, spaces, dashes, parentheses)
+  return phoneNumber.replace(/\D/g, '');
+}
+
+/**
+ * Validation result for phone number.
+ */
+export interface PhoneValidationResult {
+  valid: boolean;
+  normalized: string;
+  error?: string;
+}
+
+/**
+ * Validate phone number format for supported countries.
+ * Returns normalized number if valid.
+ *
+ * Supported countries: Poland (+48), USA (+1)
+ */
+export function validatePhoneNumber(phoneNumber: string): PhoneValidationResult {
+  const normalized = normalizePhoneNumber(phoneNumber);
+
+  if (normalized.length === 0) {
+    return { valid: false, normalized, error: 'Phone number is required' };
+  }
+
+  // Check against known country patterns
+  for (const [code, { pattern, name }] of Object.entries(PHONE_PATTERNS)) {
+    if (normalized.startsWith(code)) {
+      if (pattern.test(normalized)) {
+        return { valid: true, normalized };
+      }
+      return {
+        valid: false,
+        normalized,
+        error: `Invalid ${name} phone number format`,
+      };
+    }
+  }
+
+  return {
+    valid: false,
+    normalized,
+    error: 'Unsupported country code. Supported: Poland (+48), USA (+1)',
+  };
 }
 
 /**
