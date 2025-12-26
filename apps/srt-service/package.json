@@ -1,0 +1,35 @@
+{
+  "name": "@intexuraos/srt-service",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist .tsbuildinfo",
+    "start": "DOTENV_CONFIG_PATH=.env node -r dotenv/config dist/index.js",
+    "dev": "DOTENV_CONFIG_PATH=.env node --watch -r dotenv/config dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.1",
+    "@google-cloud/firestore": "^7.11.0",
+    "@google-cloud/pubsub": "^4.9.0",
+    "@intexuraos/common": "*",
+    "fastify": "^5.1.0",
+    "zod": "^3.24.1"
+  }
+}
+
