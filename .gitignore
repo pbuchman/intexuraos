@@ -19,6 +19,7 @@ terraform/.terraform/
 terraform/**/.terraform/
 terraform.tfstate
 terraform.tfstate.backup
+tfplan
 *.tfstate
 *.tfstate.*
 *.tfvars
