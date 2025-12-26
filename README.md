@@ -1,6 +1,6 @@
-<p align="center">
+<div style="text-align: center">
   <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
-</p>
+</div>
 
 Derived from the Latin _intexere_ (to weave together) and _textura_ (structure), **IntexuraOS** is the integration fabric that interlaces external signals into your central model of truth.
 **Notion models the world. IntexuraOS executes.**
@@ -173,7 +173,7 @@ Key log messages to watch:
 
 The project includes a ChatGPT custom model (GPT) for prompt review and management:
 
-📂 **[chatgpt-prompts-model/](chatgpt-prompts-model/)** — Notion Prompt Vault
+📂 **[chatgpt-prompts-model/](chatgpt-prompts-model/README.md)** — Notion Prompt Vault
 
 - Review prompts using 10-dimension weighted scoring
 - Iterative improvement loop until score ≥ 8.0
@@ -333,7 +333,7 @@ List endpoints return:
 {
   "success": true,
   "data": {
-    "items": [...],
+    "items": [],
     "hasMore": true,
     "nextCursor": "cursor_abc123"
   }
