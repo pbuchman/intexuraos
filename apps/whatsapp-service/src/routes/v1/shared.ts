@@ -173,6 +173,17 @@ interface WebhookValue {
     text?: {
       body?: string;
     };
+    image?: {
+      id?: string;
+      mime_type?: string;
+      sha256?: string;
+      caption?: string;
+    };
+    audio?: {
+      id?: string;
+      mime_type?: string;
+      sha256?: string;
+    };
   }[];
   contacts?: {
     profile?: {
@@ -345,4 +356,80 @@ export function extractMessageType(payload: unknown): string | null {
   const message = value?.messages?.[0];
   if (message === undefined) return null;
   return typeof message.type === 'string' ? message.type : null;
+}
+
+/**
+ * Image media info from webhook payload.
+ */
+export interface ImageMediaInfo {
+  id: string;
+  mimeType: string;
+  sha256?: string;
+  caption?: string;
+}
+
+/**
+ * Audio media info from webhook payload.
+ */
+export interface AudioMediaInfo {
+  id: string;
+  mimeType: string;
+  sha256?: string;
+}
+
+/**
+ * Extract image media info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].image
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#media-messages
+ */
+export function extractImageMedia(payload: unknown): ImageMediaInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const image = message.image;
+  if (image === undefined) return null;
+  if (typeof image.id !== 'string' || typeof image.mime_type !== 'string') return null;
+
+  const result: ImageMediaInfo = {
+    id: image.id,
+    mimeType: image.mime_type,
+  };
+
+  if (typeof image.sha256 === 'string') {
+    result.sha256 = image.sha256;
+  }
+  if (typeof image.caption === 'string') {
+    result.caption = image.caption;
+  }
+
+  return result;
+}
+
+/**
+ * Extract audio media info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].audio
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#media-messages
+ */
+export function extractAudioMedia(payload: unknown): AudioMediaInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const audio = message.audio;
+  if (audio === undefined) return null;
+  if (typeof audio.id !== 'string' || typeof audio.mime_type !== 'string') return null;
+
+  const result: AudioMediaInfo = {
+    id: audio.id,
+    mimeType: audio.mime_type,
+  };
+
+  if (typeof audio.sha256 === 'string') {
+    result.sha256 = audio.sha256;
+  }
+
+  return result;
 }

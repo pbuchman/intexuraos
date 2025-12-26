@@ -92,8 +92,8 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 
 | Task | Title                                             | Status  | Dependencies       |
 | ---- | ------------------------------------------------- | ------- | ------------------ |
-| 2-0  | Extend Webhook for Image Messages                 | ⬜ TODO | 1-0, 1-1, 1-2, 1-4 |
-| 2-1  | Extend Webhook for Audio Messages + Publish Event | ⬜ TODO | 1-0, 1-1, 1-3, 1-4 |
+| 2-0  | Extend Webhook for Image Messages                 | ✅ DONE | 1-0, 1-1, 1-2, 1-4 |
+| 2-1  | Extend Webhook for Audio Messages + Publish Event | ✅ DONE | 1-0, 1-1, 1-3, 1-4 |
 | 2-2  | Add Message Media Routes (Signed URLs)            | ⬜ TODO | 1-0, 1-1, 2-0, 2-1 |
 | 2-3  | Implement Message Deletion with Async Cleanup     | ⬜ TODO | 1-0, 1-1, 1-3      |
 | 2-4  | Implement srt-service Routes                      | ⬜ TODO | 1-5, 1-6           |
@@ -137,14 +137,16 @@ User requirements specify event-driven architecture with Pub/Sub as backbone. In
 - Task breakdown complete
 - Tier 0 complete (0-0, 0-1, 0-2, 0-3)
 - Tier 1 complete (1-0 through 1-6)
+- Task 2-0: Extend Webhook for Image Messages
+- Task 2-1: Extend Webhook for Audio Messages + Publish Event
 
 **Now:**
 
-- Ready for Tier 2 integration tasks
+- Ready for Task 2-2: Add Message Media Routes (Signed URLs)
 
 **Next:**
 
-- Execute Tier 2 tasks (2-0 through 2-6)
+- Execute remaining Tier 2 tasks (2-2 through 2-6)
 
 ---
 

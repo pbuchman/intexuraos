@@ -9,8 +9,9 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
+import { generateThumbnail } from '../../infra/media/index.js';
 import type { Config } from '../../config.js';
-import { sendWhatsAppMessage } from '../../whatsappClient.js';
+import { sendWhatsAppMessage, getMediaUrl, downloadMedia } from '../../whatsappClient.js';
 import {
   extractDisplayPhoneNumber,
   extractMessageId,
@@ -21,7 +22,11 @@ import {
   extractMessageTimestamp,
   extractSenderName,
   extractMessageType,
+  extractImageMedia,
+  extractAudioMedia,
   handleValidationError,
+  type ImageMediaInfo,
+  type AudioMediaInfo,
 } from './shared.js';
 
 /**
@@ -286,14 +291,55 @@ async function processWebhookAsync(
     // Extract message text (only support text messages)
     const messageText = extractMessageText(request.body);
     const messageType = extractMessageType(request.body);
+    const imageMedia = extractImageMedia(request.body);
+    const audioMedia = extractAudioMedia(request.body);
 
-    if (messageType !== 'text' || messageText === null) {
-      request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring non-text message');
+    // Validate message type
+    const supportedTypes = ['text', 'image', 'audio'];
+    if (messageType === null || !supportedTypes.includes(messageType)) {
+      request.log.info(
+        { eventId: savedEvent.id, messageType },
+        'Ignoring unsupported message type'
+      );
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, and audio messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
+        },
+      });
+      return;
+    }
+
+    // Validate message content
+    if (messageType === 'text' && messageText === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring text message without body');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'EMPTY_TEXT_MESSAGE',
+          message: 'Text message has no body',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'image' && imageMedia === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring image message without media info');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'NO_IMAGE_MEDIA',
+          message: 'Image message has no media info',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'audio' && audioMedia === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring audio message without media info');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'NO_AUDIO_MEDIA',
+          message: 'Audio message has no media info',
         },
       });
       return;
@@ -353,13 +399,49 @@ async function processWebhookAsync(
     const senderName = extractSenderName(request.body);
     const phoneNumberId = extractPhoneNumberId(request.body);
 
-    // Build message object
+    // Handle image message processing
+    if (messageType === 'image' && imageMedia !== null) {
+      await processImageMessage(
+        request,
+        savedEvent,
+        config,
+        userId,
+        waMessageId,
+        fromNumber,
+        toNumber,
+        timestamp,
+        senderName,
+        phoneNumberId,
+        imageMedia
+      );
+      return;
+    }
+
+    // Handle audio message processing
+    if (messageType === 'audio' && audioMedia !== null) {
+      await processAudioMessage(
+        request,
+        savedEvent,
+        config,
+        userId,
+        waMessageId,
+        fromNumber,
+        toNumber,
+        timestamp,
+        senderName,
+        phoneNumberId,
+        audioMedia
+      );
+      return;
+    }
+
+    // Build text message object
     const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
       userId,
       waMessageId,
       fromNumber,
       toNumber,
-      text: messageText,
+      text: messageText ?? '',
       mediaType: 'text',
       timestamp,
       receivedAt: new Date().toISOString(),
@@ -408,6 +490,406 @@ async function processWebhookAsync(
       { error, eventId: savedEvent.id },
       'Unexpected error during webhook processing'
     );
+  }
+}
+
+/**
+ * Get file extension from MIME type.
+ */
+function getExtensionFromMimeType(mimeType: string): string {
+  const mimeToExt: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'audio/ogg': 'ogg',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+  };
+  return mimeToExt[mimeType] ?? 'bin';
+}
+
+/**
+ * Process image message: download, generate thumbnail, upload to GCS, save to Firestore.
+ */
+async function processImageMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  config: Config,
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  imageMedia: ImageMediaInfo
+): Promise<void> {
+  const { webhookEventRepository, messageRepository, mediaStorage } = getServices();
+
+  try {
+    // Step 1: Get media URL from WhatsApp
+    request.log.info(
+      { eventId: savedEvent.id, mediaId: imageMedia.id },
+      'Fetching image URL from WhatsApp'
+    );
+
+    const mediaUrlResult = await getMediaUrl(imageMedia.id, config.accessToken);
+    if (!mediaUrlResult.success || mediaUrlResult.data === undefined) {
+      request.log.error(
+        { error: mediaUrlResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
+        'Failed to get media URL'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to get media URL: ${mediaUrlResult.error ?? 'unknown error'}`,
+      });
+      return;
+    }
+
+    // Step 2: Download the image
+    request.log.info(
+      { eventId: savedEvent.id, mediaId: imageMedia.id },
+      'Downloading image from WhatsApp'
+    );
+
+    const downloadResult = await downloadMedia(mediaUrlResult.data.url, config.accessToken);
+    if (!downloadResult.success || downloadResult.buffer === undefined) {
+      request.log.error(
+        { error: downloadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
+        'Failed to download media'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to download media: ${downloadResult.error ?? 'unknown error'}`,
+      });
+      return;
+    }
+
+    const imageBuffer = downloadResult.buffer;
+    const extension = getExtensionFromMimeType(imageMedia.mimeType);
+
+    // Step 3: Generate thumbnail
+    request.log.info({ eventId: savedEvent.id, mediaId: imageMedia.id }, 'Generating thumbnail');
+
+    const thumbnailResult = await generateThumbnail(imageBuffer);
+    if (!thumbnailResult.ok) {
+      request.log.error(
+        { error: thumbnailResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
+        'Failed to generate thumbnail'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to generate thumbnail: ${thumbnailResult.error.message}`,
+      });
+      return;
+    }
+
+    // Step 4: Upload original image to GCS
+    request.log.info({ eventId: savedEvent.id, mediaId: imageMedia.id }, 'Uploading image to GCS');
+
+    const uploadResult = await mediaStorage.upload(
+      userId,
+      waMessageId,
+      imageMedia.id,
+      extension,
+      imageBuffer,
+      imageMedia.mimeType
+    );
+
+    if (!uploadResult.ok) {
+      request.log.error(
+        { error: uploadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
+        'Failed to upload image to GCS'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to upload image: ${uploadResult.error.message}`,
+      });
+      return;
+    }
+
+    // Step 5: Upload thumbnail to GCS
+    request.log.info(
+      { eventId: savedEvent.id, mediaId: imageMedia.id },
+      'Uploading thumbnail to GCS'
+    );
+
+    const thumbnailUploadResult = await mediaStorage.uploadThumbnail(
+      userId,
+      waMessageId,
+      imageMedia.id,
+      'jpg', // Thumbnails are always JPEG
+      thumbnailResult.value.buffer,
+      thumbnailResult.value.mimeType
+    );
+
+    if (!thumbnailUploadResult.ok) {
+      request.log.error(
+        { error: thumbnailUploadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
+        'Failed to upload thumbnail to GCS'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to upload thumbnail: ${thumbnailUploadResult.error.message}`,
+      });
+      return;
+    }
+
+    // Step 6: Save message to Firestore
+    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      text: imageMedia.caption ?? '',
+      mediaType: 'image',
+      media: {
+        id: imageMedia.id,
+        mimeType: imageMedia.mimeType,
+        fileSize: imageBuffer.length,
+      },
+      gcsPath: uploadResult.value.gcsPath,
+      thumbnailGcsPath: thumbnailUploadResult.value.gcsPath,
+      timestamp,
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    };
+
+    // Add optional media sha256
+    if (imageMedia.sha256 !== undefined && messageToSave.media !== undefined) {
+      messageToSave.media.sha256 = imageMedia.sha256;
+    }
+
+    // Add caption if present
+    if (imageMedia.caption !== undefined) {
+      messageToSave.caption = imageMedia.caption;
+    }
+
+    // Add metadata only if we have any values
+    if (senderName !== null || phoneNumberId !== null) {
+      const metadata: { senderName?: string; phoneNumberId?: string } = {};
+      if (senderName !== null) {
+        metadata.senderName = senderName;
+      }
+      if (phoneNumberId !== null) {
+        metadata.phoneNumberId = phoneNumberId;
+      }
+      messageToSave.metadata = metadata;
+    }
+
+    const saveResult = await messageRepository.saveMessage(messageToSave);
+
+    if (!saveResult.ok) {
+      request.log.error(
+        { error: saveResult.error, eventId: savedEvent.id },
+        'Failed to save image message'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to save message: ${saveResult.error.message}`,
+      });
+      return;
+    }
+
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        messageId: saveResult.value.id,
+        gcsPath: uploadResult.value.gcsPath,
+        thumbnailGcsPath: thumbnailUploadResult.value.gcsPath,
+      },
+      'Image message saved successfully'
+    );
+
+    // Send confirmation message
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
+  } catch (error) {
+    request.log.error(
+      { error, eventId: savedEvent.id },
+      'Unexpected error during image message processing'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+      failureDetails: 'Unexpected error during image processing',
+    });
+  }
+}
+
+/**
+ * Process audio message: download, upload to GCS, save to Firestore, publish event.
+ */
+async function processAudioMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  config: Config,
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  audioMedia: AudioMediaInfo
+): Promise<void> {
+  const { webhookEventRepository, messageRepository, mediaStorage, eventPublisher } = getServices();
+
+  try {
+    // Step 1: Get media URL from WhatsApp
+    request.log.info(
+      { eventId: savedEvent.id, mediaId: audioMedia.id },
+      'Fetching audio URL from WhatsApp'
+    );
+
+    const mediaUrlResult = await getMediaUrl(audioMedia.id, config.accessToken);
+    if (!mediaUrlResult.success || mediaUrlResult.data === undefined) {
+      request.log.error(
+        { error: mediaUrlResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
+        'Failed to get audio URL'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to get audio URL: ${mediaUrlResult.error ?? 'unknown error'}`,
+      });
+      return;
+    }
+
+    // Step 2: Download the audio
+    request.log.info(
+      { eventId: savedEvent.id, mediaId: audioMedia.id },
+      'Downloading audio from WhatsApp'
+    );
+
+    const downloadResult = await downloadMedia(mediaUrlResult.data.url, config.accessToken);
+    if (!downloadResult.success || downloadResult.buffer === undefined) {
+      request.log.error(
+        { error: downloadResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
+        'Failed to download audio'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to download audio: ${downloadResult.error ?? 'unknown error'}`,
+      });
+      return;
+    }
+
+    const audioBuffer = downloadResult.buffer;
+    const extension = getExtensionFromMimeType(audioMedia.mimeType);
+
+    // Step 3: Upload audio to GCS
+    request.log.info({ eventId: savedEvent.id, mediaId: audioMedia.id }, 'Uploading audio to GCS');
+
+    const uploadResult = await mediaStorage.upload(
+      userId,
+      waMessageId,
+      audioMedia.id,
+      extension,
+      audioBuffer,
+      audioMedia.mimeType
+    );
+
+    if (!uploadResult.ok) {
+      request.log.error(
+        { error: uploadResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
+        'Failed to upload audio to GCS'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to upload audio: ${uploadResult.error.message}`,
+      });
+      return;
+    }
+
+    // Step 4: Save message to Firestore
+    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      text: '',
+      mediaType: 'audio',
+      media: {
+        id: audioMedia.id,
+        mimeType: audioMedia.mimeType,
+        fileSize: audioBuffer.length,
+      },
+      gcsPath: uploadResult.value.gcsPath,
+      timestamp,
+      receivedAt: new Date().toISOString(),
+      webhookEventId: savedEvent.id,
+    };
+
+    // Add optional media sha256
+    if (audioMedia.sha256 !== undefined && messageToSave.media !== undefined) {
+      messageToSave.media.sha256 = audioMedia.sha256;
+    }
+
+    // Add metadata only if we have any values
+    if (senderName !== null || phoneNumberId !== null) {
+      const metadata: { senderName?: string; phoneNumberId?: string } = {};
+      if (senderName !== null) {
+        metadata.senderName = senderName;
+      }
+      if (phoneNumberId !== null) {
+        metadata.phoneNumberId = phoneNumberId;
+      }
+      messageToSave.metadata = metadata;
+    }
+
+    const saveResult = await messageRepository.saveMessage(messageToSave);
+
+    if (!saveResult.ok) {
+      request.log.error(
+        { error: saveResult.error, eventId: savedEvent.id },
+        'Failed to save audio message'
+      );
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+        failureDetails: `Failed to save message: ${saveResult.error.message}`,
+      });
+      return;
+    }
+
+    // Step 5: Publish AudioStoredEvent for transcription
+    const publishResult = await eventPublisher.publishAudioStored({
+      type: 'whatsapp.audio.stored',
+      userId,
+      messageId: saveResult.value.id,
+      mediaId: audioMedia.id,
+      gcsPath: uploadResult.value.gcsPath,
+      mimeType: audioMedia.mimeType,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!publishResult.ok) {
+      request.log.error(
+        { error: publishResult.error, eventId: savedEvent.id },
+        'Failed to publish audio stored event'
+      );
+      // Note: We don't fail the webhook here since the message is already saved
+      // The event can be replayed if needed
+    } else {
+      request.log.info(
+        { eventId: savedEvent.id, messageId: saveResult.value.id },
+        'Published audio stored event for transcription'
+      );
+    }
+
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        messageId: saveResult.value.id,
+        gcsPath: uploadResult.value.gcsPath,
+      },
+      'Audio message saved successfully'
+    );
+
+    // Send confirmation message
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
+  } catch (error) {
+    request.log.error(
+      { error, eventId: savedEvent.id },
+      'Unexpected error during audio message processing'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+      failureDetails: 'Unexpected error during audio processing',
+    });
   }
 }
 

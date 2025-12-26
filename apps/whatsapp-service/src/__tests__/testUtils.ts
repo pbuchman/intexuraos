@@ -152,6 +152,122 @@ export function createWebhookPayload(): object {
   };
 }
 
+/**
+ * Create a WhatsApp image message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createImageWebhookPayload(options?: {
+  caption?: string;
+  mediaId?: string;
+}): object {
+  const mediaId = options?.mediaId ?? 'test-media-id-12345';
+  const imageMessage: {
+    from: string;
+    id: string;
+    timestamp: string;
+    type: string;
+    image: {
+      id: string;
+      mime_type: string;
+      sha256: string;
+      caption?: string;
+    };
+  } = {
+    from: '15551234567',
+    id: 'wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+    timestamp: '1234567890',
+    type: 'image',
+    image: {
+      id: mediaId,
+      mime_type: 'image/jpeg',
+      sha256: 'abc123def456',
+    },
+  };
+
+  if (options?.caption !== undefined) {
+    imageMessage.image.caption = options.caption;
+  }
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [imageMessage],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Create a WhatsApp audio message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createAudioWebhookPayload(options?: { mediaId?: string }): object {
+  const mediaId = options?.mediaId ?? 'test-audio-id-12345';
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: 'wamid.audio.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+                  timestamp: '1234567890',
+                  type: 'audio',
+                  audio: {
+                    id: mediaId,
+                    mime_type: 'audio/ogg',
+                    sha256: 'xyz789abc',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;
