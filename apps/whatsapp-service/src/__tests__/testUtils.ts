@@ -15,6 +15,7 @@ import {
   FakeMediaStorage,
   FakeEventPublisher,
   FakeMessageSender,
+  FakeSrtClient,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -92,10 +93,10 @@ export const testConfig: Config = {
   allowedWabaIds: ['102290129340398', '419561257915477'],
   allowedPhoneNumberIds: ['123456789012345', '987654321098765'],
   mediaBucket: 'test-media-bucket',
-  audioStoredTopic: 'test-audio-stored',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   transcriptionCompletedSubscription: 'test-transcription-completed-sub',
+  srtServiceUrl: 'http://localhost:8084',
   gcpProjectId: 'test-project',
   port: 8080,
   host: '0.0.0.0',
@@ -315,6 +316,7 @@ export function setupTestContext(): TestContext {
       mediaStorage: context.mediaStorage,
       eventPublisher: context.eventPublisher,
       messageSender: new FakeMessageSender(),
+      srtClient: new FakeSrtClient(),
     });
 
     clearJwksCache();

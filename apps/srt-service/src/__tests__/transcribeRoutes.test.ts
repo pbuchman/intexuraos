@@ -11,7 +11,6 @@ import {
   FakeEventPublisher,
   FakeAudioStorage,
 } from './fakes.js';
-import { AudioStoredSubscriber } from '../infra/pubsub/index.js';
 import type { Config } from '../config.js';
 interface SuccessResponse<T> {
   success: true;
@@ -38,7 +37,6 @@ interface TranscriptionJobData {
 }
 const testConfig: Config = {
   speechmaticsApiKey: 'test-api-key',
-  audioStoredSubscription: 'test-subscription',
   transcriptionCompletedTopic: 'test-transcription-completed',
   gcpProjectId: 'test-project',
   mediaBucketName: 'test-media-bucket',
@@ -55,7 +53,6 @@ describe('Transcription Routes', () => {
     setServices({
       jobRepository: fakeJobRepo,
       speechmaticsClient: fakeSpeechmaticsClient,
-      audioStoredSubscriber: new AudioStoredSubscriber('test-project', 'test-subscription'),
       eventPublisher: new FakeEventPublisher(),
       audioStorage: new FakeAudioStorage(),
     });

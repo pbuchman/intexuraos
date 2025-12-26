@@ -14,11 +14,6 @@ const configSchema = z.object({
   speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
 
   /**
-   * Pub/Sub subscription for audio stored events.
-   */
-  audioStoredSubscription: z.string().min(1, 'PUBSUB_AUDIO_STORED_SUBSCRIPTION is required'),
-
-  /**
    * Pub/Sub topic for transcription completed events.
    */
   transcriptionCompletedTopic: z
@@ -55,7 +50,6 @@ export type Config = z.infer<typeof configSchema>;
 export function loadConfig(): Config {
   return configSchema.parse({
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
-    audioStoredSubscription: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION'],
     transcriptionCompletedTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     mediaBucketName: process.env['INTEXURAOS_MEDIA_BUCKET_NAME'],
@@ -71,7 +65,6 @@ export function loadConfig(): Config {
 export function validateConfigEnv(): string[] {
   const required = [
     'INTEXURAOS_SPEECHMATICS_API_KEY',
-    'INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION',
     'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_MEDIA_BUCKET_NAME',

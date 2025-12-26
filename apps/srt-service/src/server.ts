@@ -140,7 +140,6 @@ export async function createServer(config: Config): Promise<FastifyInstance> {
   initServices({
     speechmaticsApiKey: config.speechmaticsApiKey,
     gcpProjectId: config.gcpProjectId,
-    audioStoredSubscription: config.audioStoredSubscription,
     transcriptionCompletedTopic: config.transcriptionCompletedTopic,
     mediaBucketName: config.mediaBucketName,
   });

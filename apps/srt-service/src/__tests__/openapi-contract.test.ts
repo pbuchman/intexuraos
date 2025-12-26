@@ -28,7 +28,6 @@ describe('srt-service OpenAPI contract', () => {
 
   const testConfig: Config = {
     speechmaticsApiKey: 'test-api-key',
-    audioStoredSubscription: 'test-subscription',
     transcriptionCompletedTopic: 'test-transcription-completed',
     gcpProjectId: 'test-project',
     mediaBucketName: 'test-media-bucket',

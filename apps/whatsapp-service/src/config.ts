@@ -56,11 +56,6 @@ const configSchema = z.object({
   mediaBucket: z.string().min(1, 'INTEXURAOS_WHATSAPP_MEDIA_BUCKET is required'),
 
   /**
-   * Pub/Sub topic for audio stored events (triggers srt-service).
-   */
-  audioStoredTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC is required'),
-
-  /**
    * Pub/Sub topic for media cleanup events.
    */
   mediaCleanupTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC is required'),
@@ -80,6 +75,11 @@ const configSchema = z.object({
   transcriptionCompletedSubscription: z
     .string()
     .min(1, 'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION is required'),
+
+  /**
+   * SRT service URL for transcription API calls.
+   */
+  srtServiceUrl: z.string().url('INTEXURAOS_SRT_SERVICE_URL must be a valid URL'),
 
   /**
    * GCP project ID.
@@ -111,11 +111,11 @@ export function loadConfig(): Config {
     allowedWabaIds: process.env['INTEXURAOS_WHATSAPP_WABA_ID'],
     allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
     mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
-    audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
     transcriptionCompletedSubscription:
       process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'],
+    srtServiceUrl: process.env['INTEXURAOS_SRT_SERVICE_URL'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -134,10 +134,10 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_WABA_ID',
     'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
     'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
-    'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
     'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION',
+    'INTEXURAOS_SRT_SERVICE_URL',
     'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');

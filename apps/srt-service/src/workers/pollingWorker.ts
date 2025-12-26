@@ -4,11 +4,19 @@
  * Uses exponential backoff per job.
  */
 import type { ServiceContainer } from '../services.js';
-import type { WorkerLogger } from './audioEventWorker.js';
 import type {
   TranscriptionJob,
   TranscriptionCompletedEvent,
 } from '../domain/transcription/index.js';
+
+/**
+ * Logger interface for worker components.
+ * Follows pino-style signature: (msg: string, obj?: object) OR (obj: object, msg?: string)
+ */
+export interface WorkerLogger {
+  info: ((msg: string, obj?: object) => void) & ((obj: object, msg?: string) => void);
+  error: ((msg: string, obj?: object) => void) & ((obj: object, msg?: string) => void);
+}
 
 /**
  * Polling configuration.

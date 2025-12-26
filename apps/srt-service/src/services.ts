@@ -4,7 +4,7 @@
  */
 import { FirestoreJobRepository } from './infra/firestore/index.js';
 import { SpeechmaticsBatchClient } from './infra/speechmatics/index.js';
-import { AudioStoredSubscriber, GcpTranscriptionEventPublisher } from './infra/pubsub/index.js';
+import { GcpTranscriptionEventPublisher } from './infra/pubsub/index.js';
 import { GcsAudioStorage } from './infra/gcs/index.js';
 import type {
   TranscriptionJobRepository,
@@ -19,7 +19,6 @@ import type {
 export interface ServiceConfig {
   speechmaticsApiKey: string;
   gcpProjectId: string;
-  audioStoredSubscription: string;
   transcriptionCompletedTopic: string;
   mediaBucketName: string;
 }
@@ -30,7 +29,6 @@ export interface ServiceConfig {
 export interface ServiceContainer {
   jobRepository: TranscriptionJobRepository;
   speechmaticsClient: SpeechmaticsClient;
-  audioStoredSubscriber: AudioStoredSubscriber;
   eventPublisher: TranscriptionEventPublisher;
   audioStorage: AudioStoragePort;
 }
@@ -55,10 +53,6 @@ export function getServices(): ServiceContainer {
     jobRepository: new FirestoreJobRepository(),
     speechmaticsClient: new SpeechmaticsBatchClient(
       serviceConfig?.speechmaticsApiKey ?? 'test-api-key'
-    ),
-    audioStoredSubscriber: new AudioStoredSubscriber(
-      serviceConfig?.gcpProjectId ?? 'test-project',
-      serviceConfig?.audioStoredSubscription ?? 'test-subscription'
     ),
     eventPublisher: new GcpTranscriptionEventPublisher(
       serviceConfig?.gcpProjectId ?? 'test-project',

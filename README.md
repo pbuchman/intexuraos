@@ -53,7 +53,7 @@ One of IntexuraOS's core features is automatic transcription of WhatsApp voice n
 ┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
 │   WhatsApp   │      │ whatsapp-service │      │   srt-service   │
 │  (User App)  │      │   (Webhook +     │      │  (Transcription │
-│              │      │    Storage)      │      │     Worker)     │
+│              │      │    Storage)      │      │     via HTTP)   │
 └──────┬───────┘      └────────┬─────────┘      └────────┬────────┘
        │                       │                         │
        │ 1. Voice message      │                         │
@@ -66,32 +66,29 @@ One of IntexuraOS's core features is automatic transcription of WhatsApp voice n
        │                       │    (whatsapp-media      │
        │                       │     bucket)             │
        │                       │                         │
-       │                       │ 4. Publish              │
-       │                       │    whatsapp.audio.stored│
+       │                       │ 4. POST /v1/transcribe  │
+       │                       │    (create job)         │
        │                       │────────────────────────>│
        │                       │                         │
-       │                       │                         │ 5. Create job
-       │                       │                         │    (Firestore)
-       │                       │                         │
-       │                       │                         │ 6. Generate
-       │                       │                         │    signed URL
-       │                       │                         │
-       │                       │                         │ 7. Submit to
+       │                       │ 5. POST /v1/transcribe  │
+       │                       │    /:jobId/submit       │
+       │                       │────────────────────────>│
+       │                       │                         │ 6. Submit to
        │                       │                         │    Speechmatics
        │                       │                         │
-       │                       │                         │ 8. Poll for
-       │                       │                         │    completion
-       │                       │                         │    (exp. backoff)
+       │                       │                         │ 7. (Cloud Scheduler)
+       │                       │                         │    POST /v1/transcribe/poll
+       │                       │                         │    polls Speechmatics
        │                       │                         │
-       │                       │ 9. Publish              │
+       │                       │ 8. Publish              │
        │                       │    srt.transcription    │
        │                       │    .completed           │
        │                       │<────────────────────────│
        │                       │                         │
-       │                       │ 10. Update message      │
-       │                       │     with transcription  │
+       │                       │ 9. Update message       │
+       │                       │    with transcription   │
        │                       │                         │
-       │ 11. Reply with        │                         │
+       │ 10. Reply with        │                         │
        │     transcribed text  │                         │
        │<──────────────────────│                         │
        │                       │                         │
@@ -99,28 +96,35 @@ One of IntexuraOS's core features is automatic transcription of WhatsApp voice n
 
 ### Component Responsibilities
 
-| Component            | Responsibility                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| **whatsapp-service** | Receives webhooks, stores audio in GCS, updates messages, sends replies                 |
-| **srt-service**      | Manages transcription jobs, integrates with Speechmatics, polls for results             |
-| **Pub/Sub**          | Decouples services via `whatsapp.audio.stored` and `srt.transcription.completed` events |
-| **GCS**              | Stores audio files with signed URL access for Speechmatics                              |
-| **Firestore**        | Persists transcription jobs, message state, and transcription results                   |
-| **Speechmatics**     | External speech-to-text API (Polish language, standard operating point)                 |
+| Component            | Responsibility                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| **whatsapp-service** | Receives webhooks, stores audio in GCS, calls SRT API, updates messages, sends replies   |
+| **srt-service**      | HTTP API for transcription jobs, integrates with Speechmatics, polls for results         |
+| **Pub/Sub**          | Notifies whatsapp-service when transcription completes via `srt.transcription.completed` |
+| **GCS**              | Stores audio files with signed URL access for Speechmatics                               |
+| **Firestore**        | Persists transcription jobs, message state, and transcription results                    |
+| **Speechmatics**     | External speech-to-text API (Polish language, standard operating point)                  |
 
 ### Data Flow Details
 
 1. **Webhook Reception** — WhatsApp sends message webhook to `/v1/whatsapp/webhook`
 2. **Audio Download** — Service fetches audio from Meta's CDN using message's media ID
 3. **GCS Upload** — Audio stored at `gs://intexuraos-whatsapp-media-{env}/{userId}/{messageId}/{mediaId}.ogg`
-4. **Event Publishing** — `whatsapp.audio.stored` event published to Pub/Sub with GCS path
-5. **Job Creation** — srt-service creates job in `transcription_jobs` collection (status: `pending`)
-6. **Signed URL** — srt-service generates GCS signed URL (1 hour TTL) for Speechmatics
-7. **Speechmatics Submit** — Job submitted via batch API with `fetch_data.url` pointing to signed URL
-8. **Polling** — Exponential backoff polling (5s → 10s → 20s → ... → 1h max)
-9. **Completion Event** — `srt.transcription.completed` published with transcript text
-10. **Message Update** — whatsapp-service updates message with `transcription` field
-11. **Reply** — User receives WhatsApp message: `📝 Transcription:\n\n{text}`
+4. **Job Creation** — whatsapp-service calls `POST /v1/transcribe` to create job in Firestore
+5. **Job Submission** — whatsapp-service calls `POST /v1/transcribe/:jobId/submit` to submit to Speechmatics
+6. **Speechmatics Submit** — srt-service submits job via batch API with `fetch_data.url` pointing to signed URL
+7. **Polling** — Cloud Scheduler calls `POST /v1/transcribe/poll` every 30s to check Speechmatics status
+8. **Completion Event** — `srt.transcription.completed` published to Pub/Sub with transcript text
+9. **Message Update** — whatsapp-service (via Pub/Sub subscription) updates message with `transcription` field
+10. **Reply** — User receives WhatsApp message: `📝 Transcription:\n\n{text}`
+
+### Cost Optimization
+
+All services run with `min_instances = 0` to minimize idle costs:
+
+- **whatsapp-service**: Woken by webhooks, can tolerate ~15min delay for Pub/Sub messages
+- **srt-service**: Woken by HTTP requests only, no Pub/Sub subscriptions
+- **Cloud Run**: Keeps instances warm for ~15 minutes after last request
 
 ### Transcription Job States
 
@@ -142,10 +146,9 @@ Environment variables required for transcription:
 | ------------------------------------------------- | ---------------- | ---------------------------------- |
 | `INTEXURAOS_SPEECHMATICS_API_KEY`                 | srt-service      | Speechmatics API key (secret)      |
 | `INTEXURAOS_MEDIA_BUCKET_NAME`                    | srt-service      | GCS bucket for audio files         |
-| `INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION`     | srt-service      | Subscription for audio events      |
 | `INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC` | srt-service      | Topic for completion events        |
 | `INTEXURAOS_WHATSAPP_MEDIA_BUCKET`                | whatsapp-service | GCS bucket for media storage       |
-| `INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC`            | whatsapp-service | Topic for audio stored events      |
+| `INTEXURAOS_SRT_SERVICE_URL`                      | whatsapp-service | SRT service URL for API calls      |
 | `INTEXURAOS_TRANSCRIPTION_COMPLETED_SUBSCRIPTION` | whatsapp-service | Subscription for completion events |
 
 ### Monitoring

@@ -130,7 +130,7 @@ locals {
       name      = "intexuraos-srt-service"
       app_path  = "apps/srt-service"
       port      = 8080
-      min_scale = 1 # Always running for background polling worker
+      min_scale = 0 # No background workers - polling triggered by HTTP requests
       max_scale = 1
     }
   }
@@ -309,26 +309,6 @@ module "iam" {
 # Pub/Sub Topics
 # -----------------------------------------------------------------------------
 
-# Topic for audio stored events (whatsapp → srt-service)
-module "pubsub_audio_stored" {
-  source = "../../modules/pubsub"
-
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-audio-stored-${var.environment}"
-  labels     = local.common_labels
-
-  publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-  subscriber_service_accounts = {
-    srt_service = module.iam.service_accounts["srt_service"]
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.iam,
-  ]
-}
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
@@ -493,10 +473,10 @@ module "whatsapp_service" {
 
   env_vars = {
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                       = module.whatsapp_media_bucket.bucket_name
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC                   = module.pubsub_audio_stored.topic_name
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC                  = module.pubsub_media_cleanup.topic_name
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION           = module.pubsub_media_cleanup.subscription_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION = module.pubsub_transcription_completed.subscription_name
+    INTEXURAOS_SRT_SERVICE_URL                             = module.srt_service.service_url
     INTEXURAOS_GCP_PROJECT_ID                              = var.project_id
   }
 
@@ -505,9 +485,9 @@ module "whatsapp_service" {
     module.iam,
     module.secret_manager,
     module.whatsapp_media_bucket,
-    module.pubsub_audio_stored,
     module.pubsub_media_cleanup,
     module.pubsub_transcription_completed,
+    module.srt_service,
   ]
 }
 
@@ -574,7 +554,6 @@ module "srt_service" {
   }
 
   env_vars = {
-    INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION     = module.pubsub_audio_stored.subscription_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_MEDIA_BUCKET_NAME                    = module.whatsapp_media_bucket.bucket_name
@@ -584,7 +563,6 @@ module "srt_service" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
-    module.pubsub_audio_stored,
     module.pubsub_transcription_completed,
   ]
 }
@@ -705,10 +683,6 @@ output "whatsapp_media_bucket_name" {
   value       = module.whatsapp_media_bucket.bucket_name
 }
 
-output "pubsub_audio_stored_topic" {
-  description = "Pub/Sub topic for audio stored events"
-  value       = module.pubsub_audio_stored.topic_name
-}
 
 output "pubsub_media_cleanup_topic" {
   description = "Pub/Sub topic for media cleanup events"

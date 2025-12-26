@@ -29,3 +29,5 @@ tfplan
 # Affected services output (Cloud Build)
 affected.json
 
+speechmatics-js-sdk/
+

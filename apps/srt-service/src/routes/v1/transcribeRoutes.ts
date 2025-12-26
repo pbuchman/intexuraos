@@ -249,6 +249,174 @@ export const transcribeRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     }
   );
 
+  // POST /v1/transcribe/:jobId/submit — Submit a pending job to Speechmatics
+  fastify.post<{ Params: GetJobParams }>(
+    '/v1/transcribe/:jobId/submit',
+    {
+      schema: {
+        operationId: 'submitTranscriptionJob',
+        summary: 'Submit a pending job to Speechmatics',
+        description:
+          'Submits a pending transcription job to Speechmatics for processing. ' +
+          'The job must be in pending status. Returns the updated job with processing status.',
+        tags: ['transcription'],
+        params: {
+          type: 'object',
+          required: ['jobId'],
+          properties: {
+            jobId: { type: 'string', description: 'Internal job ID' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Job submitted successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: { $ref: 'TranscriptionJob#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Job not in pending status',
+            $ref: 'TranscriptionError#',
+          },
+          404: {
+            description: 'Job not found',
+            $ref: 'TranscriptionError#',
+          },
+          500: {
+            description: 'Internal error',
+            $ref: 'TranscriptionError#',
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: GetJobParams }>, reply: FastifyReply) => {
+      const { jobId } = request.params;
+      const { jobRepository, speechmaticsClient, audioStorage } = getServices();
+
+      // Get job
+      const jobResult = await jobRepository.getById(jobId);
+
+      if (!jobResult.ok) {
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: jobResult.error.message,
+          },
+        });
+      }
+
+      if (jobResult.value === null) {
+        return await reply.code(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: `Job ${jobId} not found`,
+          },
+        });
+      }
+
+      const job = jobResult.value;
+
+      // Only submit pending jobs
+      if (job.status !== 'pending') {
+        return await reply.code(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_STATUS',
+            message: `Job is in ${job.status} status, expected pending`,
+          },
+        });
+      }
+
+      // Generate signed URL for audio
+      const signedUrlResult = await audioStorage.getSignedUrl(job.gcsPath, 3600);
+
+      if (!signedUrlResult.ok) {
+        // Update job with error
+        await jobRepository.update(job.id, {
+          status: 'failed',
+          error: `Failed to generate audio URL: ${signedUrlResult.error.message}`,
+          updatedAt: new Date().toISOString(),
+        });
+
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'SIGNED_URL_ERROR',
+            message: signedUrlResult.error.message,
+          },
+        });
+      }
+
+      // Submit to Speechmatics
+      const submitResult = await speechmaticsClient.createJob(signedUrlResult.value);
+
+      if (!submitResult.ok) {
+        // Update job with error
+        await jobRepository.update(job.id, {
+          status: 'failed',
+          error: submitResult.error.message,
+          updatedAt: new Date().toISOString(),
+        });
+
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'SPEECHMATICS_ERROR',
+            message: submitResult.error.message,
+          },
+        });
+      }
+
+      // Update job to processing
+      const nextPollAt = new Date(Date.now() + 5000).toISOString(); // 5 seconds initial poll
+      const updateResult = await jobRepository.update(job.id, {
+        status: 'processing',
+        speechmaticsJobId: submitResult.value.id,
+        nextPollAt,
+        pollAttempts: 0,
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (!updateResult.ok) {
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: updateResult.error.message,
+          },
+        });
+      }
+
+      // Get updated job
+      const updatedJobResult = await jobRepository.getById(jobId);
+
+      if (!updatedJobResult.ok || updatedJobResult.value === null) {
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Failed to retrieve updated job',
+          },
+        });
+      }
+
+      fastify.log.info(
+        { jobId: job.id, speechmaticsJobId: submitResult.value.id },
+        'Job submitted to Speechmatics'
+      );
+
+      return await reply.code(200).send({
+        success: true,
+        data: updatedJobResult.value,
+      });
+    }
+  );
+
   // POST /v1/transcribe/poll — Poll processing jobs for completion (called by Cloud Scheduler)
   fastify.post(
     '/v1/transcribe/poll',

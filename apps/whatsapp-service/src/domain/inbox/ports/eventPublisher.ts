@@ -4,20 +4,12 @@
  */
 import type { Result } from '@intexuraos/common';
 import type { InboxError } from './repositories.js';
-import type { AudioStoredEvent, MediaCleanupEvent } from '../events/index.js';
+import type { MediaCleanupEvent } from '../events/index.js';
 
 /**
  * Port for publishing events to external systems.
  */
 export interface EventPublisherPort {
-  /**
-   * Publish an audio stored event.
-   * Triggers transcription in srt-service.
-   *
-   * @param event - Audio stored event data
-   */
-  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, InboxError>>;
-
   /**
    * Publish a media cleanup event.
    * Triggers async media deletion.

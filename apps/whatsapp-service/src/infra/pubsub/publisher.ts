@@ -7,7 +7,6 @@ import pino from 'pino';
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
 import type {
   EventPublisherPort,
-  AudioStoredEvent,
   MediaCleanupEvent,
   InboxError,
 } from '../../domain/inbox/index.js';
@@ -19,43 +18,11 @@ const logger = pino({ name: 'pubsub-publisher' });
  */
 export class GcpPubSubPublisher implements EventPublisherPort {
   private readonly pubsub: PubSub;
-  private readonly audioStoredTopic: string;
   private readonly mediaCleanupTopic: string;
 
-  constructor(projectId: string, audioStoredTopic: string, mediaCleanupTopic: string) {
+  constructor(projectId: string, mediaCleanupTopic: string) {
     this.pubsub = new PubSub({ projectId });
-    this.audioStoredTopic = audioStoredTopic;
     this.mediaCleanupTopic = mediaCleanupTopic;
-  }
-
-  async publishAudioStored(event: AudioStoredEvent): Promise<Result<void, InboxError>> {
-    try {
-      const topic = this.pubsub.topic(this.audioStoredTopic);
-      const data = Buffer.from(JSON.stringify(event));
-
-      logger.info(
-        { topic: this.audioStoredTopic, event, messageBody: event },
-        'Publishing audio stored event to Pub/Sub'
-      );
-
-      await topic.publishMessage({ data });
-
-      logger.info(
-        { topic: this.audioStoredTopic, messageId: event.messageId },
-        'Successfully published audio stored event'
-      );
-
-      return ok(undefined);
-    } catch (error) {
-      logger.error(
-        { topic: this.audioStoredTopic, error: getErrorMessage(error) },
-        'Failed to publish audio stored event'
-      );
-      return err({
-        code: 'INTERNAL_ERROR',
-        message: `Failed to publish audio stored event: ${getErrorMessage(error, 'Unknown Pub/Sub error')}`,
-      });
-    }
   }
 
   async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {

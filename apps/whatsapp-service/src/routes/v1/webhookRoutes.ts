@@ -729,7 +729,7 @@ async function processAudioMessage(
   phoneNumberId: string | null,
   audioMedia: AudioMediaInfo
 ): Promise<void> {
-  const { webhookEventRepository, messageRepository, mediaStorage, eventPublisher } = getServices();
+  const { webhookEventRepository, messageRepository, mediaStorage } = getServices();
 
   try {
     // Step 1: Get media URL from WhatsApp
@@ -843,29 +843,48 @@ async function processAudioMessage(
       return;
     }
 
-    // Step 5: Publish AudioStoredEvent for transcription
-    const publishResult = await eventPublisher.publishAudioStored({
-      type: 'whatsapp.audio.stored',
-      userId,
+    // Step 5: Create transcription job via SRT service API
+    const { srtClient } = getServices();
+
+    const createJobResult = await srtClient.createJob({
       messageId: saveResult.value.id,
       mediaId: audioMedia.id,
+      userId,
       gcsPath: uploadResult.value.gcsPath,
       mimeType: audioMedia.mimeType,
-      timestamp: new Date().toISOString(),
     });
 
-    if (!publishResult.ok) {
+    if (!createJobResult.ok) {
       request.log.error(
-        { error: publishResult.error, eventId: savedEvent.id },
-        'Failed to publish audio stored event'
+        { error: createJobResult.error, eventId: savedEvent.id },
+        'Failed to create transcription job'
       );
       // Note: We don't fail the webhook here since the message is already saved
-      // The event can be replayed if needed
+      // The job can be created manually if needed
     } else {
       request.log.info(
-        { eventId: savedEvent.id, messageId: saveResult.value.id },
-        'Published audio stored event for transcription'
+        { eventId: savedEvent.id, messageId: saveResult.value.id, jobId: createJobResult.value.id },
+        'Created transcription job'
       );
+
+      // Step 6: Submit job to Speechmatics
+      const submitResult = await srtClient.submitJob(createJobResult.value.id);
+
+      if (!submitResult.ok) {
+        request.log.error(
+          { error: submitResult.error, jobId: createJobResult.value.id },
+          'Failed to submit transcription job to Speechmatics'
+        );
+        // Job created but not submitted - will be picked up by polling
+      } else {
+        request.log.info(
+          {
+            jobId: createJobResult.value.id,
+            speechmaticsJobId: submitResult.value.speechmaticsJobId,
+          },
+          'Transcription job submitted to Speechmatics'
+        );
+      }
     }
 
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});

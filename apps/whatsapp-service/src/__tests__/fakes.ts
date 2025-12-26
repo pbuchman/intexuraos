@@ -23,7 +23,6 @@ import type {
   MediaStoragePort,
   UploadResult,
   EventPublisherPort,
-  AudioStoredEvent,
   MediaCleanupEvent,
   WhatsAppMessageSender,
 } from '../domain/inbox/index.js';
@@ -286,21 +285,11 @@ export class FakeMediaStorage implements MediaStoragePort {
  * Fake event publisher for testing.
  */
 export class FakeEventPublisher implements EventPublisherPort {
-  private audioStoredEvents: AudioStoredEvent[] = [];
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
-
-  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, InboxError>> {
-    this.audioStoredEvents.push(event);
-    return Promise.resolve(ok(undefined));
-  }
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
     this.mediaCleanupEvents.push(event);
     return Promise.resolve(ok(undefined));
-  }
-
-  getAudioStoredEvents(): AudioStoredEvent[] {
-    return [...this.audioStoredEvents];
   }
 
   getMediaCleanupEvents(): MediaCleanupEvent[] {
@@ -308,7 +297,6 @@ export class FakeEventPublisher implements EventPublisherPort {
   }
 
   clear(): void {
-    this.audioStoredEvents = [];
     this.mediaCleanupEvents = [];
   }
 }
@@ -330,5 +318,138 @@ export class FakeMessageSender implements WhatsAppMessageSender {
 
   clear(): void {
     this.sentMessages = [];
+  }
+}
+
+/**
+ * Fake SRT client for testing.
+ */
+interface FakeJob {
+  id: string;
+  messageId: string;
+  mediaId: string;
+  userId: string;
+  gcsPath: string;
+  mimeType: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  speechmaticsJobId?: string;
+  transcript?: string;
+  error?: string;
+  pollAttempts: number;
+  nextPollAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export class FakeSrtClient {
+  private jobs = new Map<string, FakeJob>();
+  private jobCounter = 0;
+
+  createJob(request: {
+    messageId: string;
+    mediaId: string;
+    userId: string;
+    gcsPath: string;
+    mimeType: string;
+  }): Promise<
+    Result<
+      {
+        id: string;
+        messageId: string;
+        mediaId: string;
+        userId: string;
+        gcsPath: string;
+        mimeType: string;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        pollAttempts: number;
+        createdAt: string;
+        updatedAt: string;
+      },
+      { code: string; message: string }
+    >
+  > {
+    this.jobCounter++;
+    const jobId = `fake-job-${String(this.jobCounter)}`;
+    const now = new Date().toISOString();
+    const job = {
+      id: jobId,
+      messageId: request.messageId,
+      mediaId: request.mediaId,
+      userId: request.userId,
+      gcsPath: request.gcsPath,
+      mimeType: request.mimeType,
+      status: 'pending' as const,
+      pollAttempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.jobs.set(jobId, job);
+    return Promise.resolve(ok(job));
+  }
+
+  submitJob(jobId: string): Promise<
+    Result<
+      {
+        id: string;
+        messageId: string;
+        mediaId: string;
+        userId: string;
+        gcsPath: string;
+        mimeType: string;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        speechmaticsJobId?: string;
+        pollAttempts: number;
+        createdAt: string;
+        updatedAt: string;
+      },
+      { code: string; message: string }
+    >
+  > {
+    const job = this.jobs.get(jobId);
+    if (job === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: `Job ${jobId} not found` }));
+    }
+    job.status = 'processing';
+    job.speechmaticsJobId = 'fake-speechmatics-job-id';
+    job.updatedAt = new Date().toISOString();
+    return Promise.resolve(ok(job));
+  }
+
+  getJob(jobId: string): Promise<
+    Result<
+      {
+        id: string;
+        messageId: string;
+        mediaId: string;
+        userId: string;
+        gcsPath: string;
+        mimeType: string;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        pollAttempts: number;
+        createdAt: string;
+        updatedAt: string;
+      } | null,
+      { code: string; message: string }
+    >
+  > {
+    const job = this.jobs.get(jobId);
+    return Promise.resolve(ok(job ?? null));
+  }
+
+  getJobs(): Map<
+    string,
+    {
+      id: string;
+      status: 'pending' | 'processing' | 'completed' | 'failed';
+      speechmaticsJobId?: string;
+    }
+  > {
+    return this.jobs;
+  }
+
+  clear(): void {
+    this.jobs.clear();
+    this.jobCounter = 0;
   }
 }

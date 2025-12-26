@@ -34,10 +34,10 @@ async function main(): Promise<void> {
   initServices({
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
-    audioStoredTopic: config.audioStoredTopic,
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
+    srtServiceUrl: config.srtServiceUrl,
   });
 
   const app = await buildServer(config);

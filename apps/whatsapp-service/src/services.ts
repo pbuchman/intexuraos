@@ -10,6 +10,7 @@ import {
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher } from './infra/pubsub/index.js';
 import { WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
+import { SrtServiceClient, type SrtServiceClientPort } from './infra/srt/index.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -25,10 +26,10 @@ import type {
 export interface ServiceConfig {
   mediaBucket: string;
   gcpProjectId: string;
-  audioStoredTopic: string;
   mediaCleanupTopic: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
+  srtServiceUrl: string;
 }
 
 /**
@@ -42,6 +43,7 @@ export interface ServiceContainer {
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
+  srtClient: SrtServiceClientPort;
 }
 
 let container: ServiceContainer | null = null;
@@ -67,13 +69,13 @@ export function getServices(): ServiceContainer {
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig?.mediaBucket ?? 'test-bucket'),
     eventPublisher: new GcpPubSubPublisher(
       serviceConfig?.gcpProjectId ?? 'test-project',
-      serviceConfig?.audioStoredTopic ?? 'test-audio-stored',
       serviceConfig?.mediaCleanupTopic ?? 'test-media-cleanup'
     ),
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig?.whatsappAccessToken ?? 'test-token',
       serviceConfig?.whatsappPhoneNumberId ?? 'test-phone-id'
     ),
+    srtClient: new SrtServiceClient(serviceConfig?.srtServiceUrl ?? 'http://localhost:8080'),
   };
   return container;
 }
