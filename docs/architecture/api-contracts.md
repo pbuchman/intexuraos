@@ -518,6 +518,65 @@ Get non-secret auth configuration for troubleshooting.
 
 ---
 
+## whatsapp-service Media Endpoints
+
+### GET /v1/whatsapp/messages/:messageId/media
+
+Get a signed URL for the original media file (image or audio).
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://storage.googleapis.com/...",
+    "expiresAt": "2025-12-26T12:30:00.000Z"
+  }
+}
+```
+
+| Field       | Type     | Description                          |
+| ----------- | -------- | ------------------------------------ |
+| `url`       | `string` | Signed URL for media access (15 min) |
+| `expiresAt` | `string` | URL expiration timestamp             |
+
+#### Error Responses
+
+| Condition            | Error Code     | HTTP Status |
+| -------------------- | -------------- | ----------- |
+| Not authenticated    | `UNAUTHORIZED` | 401         |
+| Message not found    | `NOT_FOUND`    | 404         |
+| Not owner of message | `NOT_FOUND`    | 404         |
+| Message has no media | `NOT_FOUND`    | 404         |
+
+### GET /v1/whatsapp/messages/:messageId/thumbnail
+
+Get a signed URL for the thumbnail image (256px max edge).
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://storage.googleapis.com/...",
+    "expiresAt": "2025-12-26T12:30:00.000Z"
+  }
+}
+```
+
+#### Error Responses
+
+| Condition                | Error Code     | HTTP Status |
+| ------------------------ | -------------- | ----------- |
+| Not authenticated        | `UNAUTHORIZED` | 401         |
+| Message not found        | `NOT_FOUND`    | 404         |
+| Not owner of message     | `NOT_FOUND`    | 404         |
+| Message has no thumbnail | `NOT_FOUND`    | 404         |
+
+---
+
 ## srt-service Endpoints
 
 srt-service handles speech-to-text transcription via Speechmatics Batch API.

@@ -43,8 +43,8 @@ export type Config = z.infer<typeof configSchema>;
 export function loadConfig(): Config {
   return configSchema.parse({
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
-    audioStoredSubscription: process.env['PUBSUB_AUDIO_STORED_SUBSCRIPTION'],
-    gcpProjectId: process.env['GCP_PROJECT_ID'],
+    audioStoredSubscription: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION'],
+    gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
