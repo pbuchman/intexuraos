@@ -2,6 +2,19 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import { execSync } from 'child_process';
+
+// Get build metadata
+function getBuildMetadata(): { sha: string; date: string } {
+  let sha = 'unknown';
+  try {
+    sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    // Git not available or not a git repo
+  }
+  const date = new Date().toISOString();
+  return { sha, date };
+}
 
 export default defineConfig(({ mode }) => {
   // Load env from .env files
@@ -18,8 +31,22 @@ export default defineConfig(({ mode }) => {
   // Merge: file env takes precedence over shell env
   const env = { ...shellEnv, ...fileEnv };
 
+  // Get build metadata for injection into HTML
+  const buildMeta = getBuildMetadata();
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'inject-build-metadata',
+        transformIndexHtml(html): string {
+          return html
+            .replaceAll('__BUILD_SHA__', buildMeta.sha)
+            .replaceAll('__BUILD_DATE__', buildMeta.date);
+        },
+      },
+    ],
     // Expose INTEXURAOS_ prefixed env vars to the client
     envPrefix: 'INTEXURAOS_',
     define: {
