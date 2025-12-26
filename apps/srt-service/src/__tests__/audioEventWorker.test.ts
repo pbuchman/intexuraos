@@ -49,7 +49,8 @@ describe('Audio Event Worker', () => {
       expect(jobs[0]?.messageId).toBe('msg-456');
       expect(jobs[0]?.mediaId).toBe('media-789');
       expect(jobs[0]?.userId).toBe('user-123');
-      expect(jobs[0]?.status).toBe('pending');
+      // Job is immediately submitted to Speechmatics, so status is 'processing'
+      expect(jobs[0]?.status).toBe('processing');
     });
     it('returns without error for duplicate event (idempotent)', async () => {
       const handler = createAudioEventHandler(services, logger);

@@ -249,5 +249,196 @@ export const transcribeRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     }
   );
 
+  // POST /v1/transcribe/poll — Poll processing jobs for completion (called by Cloud Scheduler)
+  fastify.post(
+    '/v1/transcribe/poll',
+    {
+      schema: {
+        operationId: 'pollTranscriptionJobs',
+        summary: 'Poll processing jobs for completion',
+        description:
+          'Polls Speechmatics for status updates on processing jobs. ' +
+          'Designed to be called by Cloud Scheduler every 30 seconds.',
+        tags: ['transcription'],
+        response: {
+          200: {
+            description: 'Poll cycle completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  processedCount: {
+                    type: 'integer',
+                    description: 'Number of jobs polled',
+                  },
+                  completedCount: {
+                    type: 'integer',
+                    description: 'Number of jobs completed in this cycle',
+                  },
+                  failedCount: {
+                    type: 'integer',
+                    description: 'Number of jobs failed in this cycle',
+                  },
+                },
+                required: ['processedCount', 'completedCount', 'failedCount'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          500: {
+            description: 'Internal error',
+            $ref: 'TranscriptionError#',
+          },
+        },
+      },
+    },
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      const { jobRepository, speechmaticsClient, eventPublisher } = getServices();
+
+      const jobsResult = await jobRepository.getJobsReadyToPoll(10);
+
+      if (!jobsResult.ok) {
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: jobsResult.error.message,
+          },
+        });
+      }
+
+      const jobs = jobsResult.value;
+      let processedCount = 0;
+      let completedCount = 0;
+      let failedCount = 0;
+
+      for (const job of jobs) {
+        processedCount++;
+
+        if (job.speechmaticsJobId === undefined) {
+          fastify.log.error({ jobId: job.id }, 'Processing job missing Speechmatics job ID');
+          continue;
+        }
+
+        const statusResult = await speechmaticsClient.getJobStatus(job.speechmaticsJobId);
+
+        if (!statusResult.ok) {
+          fastify.log.error(
+            { jobId: job.id, error: statusResult.error.message },
+            'Failed to get job status from Speechmatics'
+          );
+
+          // Calculate next poll with backoff
+          const nextPollDelay = 5000 * Math.pow(2, job.pollAttempts + 1);
+          const cappedDelay = Math.min(nextPollDelay, 3600000); // Max 1 hour
+          const nextPollAt = new Date(Date.now() + cappedDelay).toISOString();
+
+          await jobRepository.update(job.id, {
+            pollAttempts: job.pollAttempts + 1,
+            nextPollAt,
+            updatedAt: new Date().toISOString(),
+          });
+          continue;
+        }
+
+        const status = statusResult.value;
+
+        switch (status.status) {
+          case 'done': {
+            // Job completed successfully
+            const now = new Date().toISOString();
+
+            await jobRepository.update(job.id, {
+              status: 'completed',
+              transcript: status.transcript ?? '',
+              completedAt: now,
+              updatedAt: now,
+            });
+
+            // Publish completion event
+            await eventPublisher.publishCompleted({
+              type: 'srt.transcription.completed',
+              jobId: job.id,
+              messageId: job.messageId,
+              mediaId: job.mediaId,
+              userId: job.userId,
+              status: 'completed',
+              transcript: status.transcript ?? '',
+              timestamp: now,
+            });
+
+            fastify.log.info(
+              { jobId: job.id, speechmaticsJobId: job.speechmaticsJobId },
+              'Job completed and event published'
+            );
+            completedCount++;
+            break;
+          }
+
+          case 'rejected':
+          case 'deleted': {
+            // Job failed
+            const now = new Date().toISOString();
+            const errorMessage = status.error ?? `Job ${status.status}`;
+
+            await jobRepository.update(job.id, {
+              status: 'failed',
+              error: errorMessage,
+              completedAt: now,
+              updatedAt: now,
+            });
+
+            // Publish failure event
+            await eventPublisher.publishCompleted({
+              type: 'srt.transcription.completed',
+              jobId: job.id,
+              messageId: job.messageId,
+              mediaId: job.mediaId,
+              userId: job.userId,
+              status: 'failed',
+              error: errorMessage,
+              timestamp: now,
+            });
+
+            fastify.log.error(
+              { jobId: job.id, speechmaticsJobId: job.speechmaticsJobId, error: errorMessage },
+              'Job failed'
+            );
+            failedCount++;
+            break;
+          }
+
+          case 'accepted':
+          case 'running': {
+            // Job still in progress, schedule next poll with backoff
+            const nextPollDelay = 5000 * Math.pow(2, job.pollAttempts + 1);
+            const cappedDelay = Math.min(nextPollDelay, 3600000);
+            const nextPollAt = new Date(Date.now() + cappedDelay).toISOString();
+
+            await jobRepository.update(job.id, {
+              pollAttempts: job.pollAttempts + 1,
+              nextPollAt,
+              updatedAt: new Date().toISOString(),
+            });
+            break;
+          }
+        }
+      }
+
+      fastify.log.info({ processedCount, completedCount, failedCount }, 'Poll cycle completed');
+
+      return await reply.code(200).send({
+        success: true,
+        data: {
+          processedCount,
+          completedCount,
+          failedCount,
+        },
+      });
+    }
+  );
+
   done();
 };

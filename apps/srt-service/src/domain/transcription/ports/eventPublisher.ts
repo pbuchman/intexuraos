@@ -24,6 +24,11 @@ export interface TranscriptionCompletedEvent {
   messageId: string;
 
   /**
+   * WhatsApp media ID.
+   */
+  mediaId: string;
+
+  /**
    * Transcription job ID (srt-service internal ID).
    */
   jobId: string;
