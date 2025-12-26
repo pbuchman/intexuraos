@@ -350,6 +350,27 @@ module "pubsub_media_cleanup" {
   ]
 }
 
+# Topic for transcription completed events (srt-service → whatsapp-service)
+module "pubsub_transcription_completed" {
+  source = "../../modules/pubsub"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-srt-transcription-completed-${var.environment}"
+  labels     = local.common_labels
+
+  publisher_service_accounts = {
+    srt_service = module.iam.service_accounts["srt_service"]
+  }
+  subscriber_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Run Services
 # -----------------------------------------------------------------------------
@@ -470,11 +491,12 @@ module "whatsapp_service" {
   }
 
   env_vars = {
-    INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
-    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC         = module.pubsub_audio_stored.topic_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
-    INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET                       = module.whatsapp_media_bucket.bucket_name
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC                   = module.pubsub_audio_stored.topic_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC                  = module.pubsub_media_cleanup.topic_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION           = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION = module.pubsub_transcription_completed.subscription_name
+    INTEXURAOS_GCP_PROJECT_ID                              = var.project_id
   }
 
   depends_on = [
@@ -484,6 +506,7 @@ module "whatsapp_service" {
     module.whatsapp_media_bucket,
     module.pubsub_audio_stored,
     module.pubsub_media_cleanup,
+    module.pubsub_transcription_completed,
   ]
 }
 
@@ -550,8 +573,9 @@ module "srt_service" {
   }
 
   env_vars = {
-    INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION = module.pubsub_audio_stored.subscription_name
-    INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
+    INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION     = module.pubsub_audio_stored.subscription_name
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
+    INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
   }
 
   depends_on = [
@@ -559,6 +583,7 @@ module "srt_service" {
     module.iam,
     module.secret_manager,
     module.pubsub_audio_stored,
+    module.pubsub_transcription_completed,
   ]
 }
 

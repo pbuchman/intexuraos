@@ -14,6 +14,7 @@ import {
   FakeWhatsAppMessageRepository,
   FakeMediaStorage,
   FakeEventPublisher,
+  FakeMessageSender,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -94,6 +95,7 @@ export const testConfig: Config = {
   audioStoredTopic: 'test-audio-stored',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
+  transcriptionCompletedSubscription: 'test-transcription-completed-sub',
   gcpProjectId: 'test-project',
   port: 8080,
   host: '0.0.0.0',
@@ -312,6 +314,7 @@ export function setupTestContext(): TestContext {
       messageRepository: context.messageRepository,
       mediaStorage: context.mediaStorage,
       eventPublisher: context.eventPublisher,
+      messageSender: new FakeMessageSender(),
     });
 
     clearJwksCache();

@@ -4,12 +4,21 @@
  */
 import { loadConfig } from './config.js';
 import { createServer } from './server.js';
-import { getServices } from './services.js';
+import { initServices, getServices } from './services.js';
 import { startAudioEventWorker, startPollingWorker } from './workers/index.js';
 import type { WorkerLogger } from './workers/index.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Initialize services with config
+  initServices({
+    speechmaticsApiKey: config.speechmaticsApiKey,
+    gcpProjectId: config.gcpProjectId,
+    audioStoredSubscription: config.audioStoredSubscription,
+    transcriptionCompletedTopic: config.transcriptionCompletedTopic,
+  });
+
   const server = await createServer(config);
 
   try {

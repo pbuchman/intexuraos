@@ -9,3 +9,5 @@ export type {
   JobStatusResponse,
   SpeechmaticsClient,
 } from './speechmaticsClient.js';
+
+export type { TranscriptionCompletedEvent, TranscriptionEventPublisher } from './eventPublisher.js';

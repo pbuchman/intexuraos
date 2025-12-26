@@ -5,7 +5,10 @@
  */
 import type { ServiceContainer } from '../services.js';
 import type { WorkerLogger } from './audioEventWorker.js';
-import type { TranscriptionJob } from '../domain/transcription/index.js';
+import type {
+  TranscriptionJob,
+  TranscriptionCompletedEvent,
+} from '../domain/transcription/index.js';
 
 /**
  * Polling configuration.
@@ -151,29 +154,77 @@ async function pollProcessingJob(
         updates.transcript = status.transcript;
       }
       await jobRepository.update(job.id, updates);
-      logger.info('Job completed', { jobId: job.id });
+
+      // Publish completion event
+      const { eventPublisher } = services;
+      const completedEvent: TranscriptionCompletedEvent = {
+        type: 'srt.transcription.completed',
+        userId: job.userId,
+        messageId: job.messageId,
+        jobId: job.id,
+        status: 'completed',
+        timestamp: now,
+      };
+      if (status.transcript !== undefined) {
+        completedEvent.transcript = status.transcript;
+      }
+      await eventPublisher.publishCompleted(completedEvent);
+
+      logger.info('Job completed and event published', { jobId: job.id });
       break;
     }
 
     case 'rejected': {
       // Job failed
+      const now = new Date().toISOString();
+      const errorMessage = status.error ?? 'Job rejected by Speechmatics';
+
       await jobRepository.update(job.id, {
         status: 'failed',
-        error: status.error ?? 'Job rejected by Speechmatics',
-        updatedAt: new Date().toISOString(),
+        error: errorMessage,
+        updatedAt: now,
       });
-      logger.error('Job rejected', { jobId: job.id, error: status.error });
+
+      // Publish failure event
+      const { eventPublisher } = services;
+      await eventPublisher.publishCompleted({
+        type: 'srt.transcription.completed',
+        userId: job.userId,
+        messageId: job.messageId,
+        jobId: job.id,
+        status: 'failed',
+        error: errorMessage,
+        timestamp: now,
+      });
+
+      logger.error('Job rejected and event published', { jobId: job.id, error: errorMessage });
       break;
     }
 
     case 'deleted': {
       // Job was deleted
+      const now = new Date().toISOString();
+      const errorMessage = 'Job deleted from Speechmatics';
+
       await jobRepository.update(job.id, {
         status: 'failed',
-        error: 'Job deleted from Speechmatics',
-        updatedAt: new Date().toISOString(),
+        error: errorMessage,
+        updatedAt: now,
       });
-      logger.error('Job deleted', { jobId: job.id });
+
+      // Publish failure event
+      const { eventPublisher } = services;
+      await eventPublisher.publishCompleted({
+        type: 'srt.transcription.completed',
+        userId: job.userId,
+        messageId: job.messageId,
+        jobId: job.id,
+        status: 'failed',
+        error: errorMessage,
+        timestamp: now,
+      });
+
+      logger.error('Job deleted and event published', { jobId: job.id });
       break;
     }
 

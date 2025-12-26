@@ -74,6 +74,14 @@ const configSchema = z.object({
     .min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION is required'),
 
   /**
+   * Pub/Sub subscription for transcription completed events.
+   * The transcription worker subscribes to this to update messages.
+   */
+  transcriptionCompletedSubscription: z
+    .string()
+    .min(1, 'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION is required'),
+
+  /**
    * GCP project ID.
    */
   gcpProjectId: z.string().min(1, 'INTEXURAOS_GCP_PROJECT_ID is required'),
@@ -106,6 +114,8 @@ export function loadConfig(): Config {
     audioStoredTopic: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
+    transcriptionCompletedSubscription:
+      process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -127,6 +137,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
+    'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION',
     'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');

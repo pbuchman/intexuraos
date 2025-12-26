@@ -9,7 +9,7 @@ import type {
   TranscriptionError,
 } from '../../domain/transcription/index.js';
 
-const SPEECHMATICS_API_BASE = 'https://asr.api.speechmatics.com/v2';
+const SPEECHMATICS_API_BASE = 'https://eu1.asr.api.speechmatics.com/v2';
 const DEFAULT_LANGUAGE = 'pl';
 const REQUEST_TIMEOUT_MS = 30000;
 

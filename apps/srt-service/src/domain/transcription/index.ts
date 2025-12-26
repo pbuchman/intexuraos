@@ -14,6 +14,8 @@ export type {
   CreateJobResponse,
   JobStatusResponse,
   SpeechmaticsClient,
+  TranscriptionCompletedEvent,
+  TranscriptionEventPublisher,
 } from './ports/index.js';
 
 // Usecases

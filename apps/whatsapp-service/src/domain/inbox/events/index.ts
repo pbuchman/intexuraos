@@ -1,4 +1,9 @@
 /**
  * Events exports.
  */
-export type { AudioStoredEvent, MediaCleanupEvent, WhatsAppEvent } from './events.js';
+export type {
+  AudioStoredEvent,
+  MediaCleanupEvent,
+  TranscriptionCompletedEvent,
+  WhatsAppEvent,
+} from './events.js';

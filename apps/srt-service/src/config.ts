@@ -19,6 +19,13 @@ const configSchema = z.object({
   audioStoredSubscription: z.string().min(1, 'PUBSUB_AUDIO_STORED_SUBSCRIPTION is required'),
 
   /**
+   * Pub/Sub topic for transcription completed events.
+   */
+  transcriptionCompletedTopic: z
+    .string()
+    .min(1, 'PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC is required'),
+
+  /**
    * GCP Project ID.
    */
   gcpProjectId: z.string().min(1, 'GCP_PROJECT_ID is required'),
@@ -44,6 +51,7 @@ export function loadConfig(): Config {
   return configSchema.parse({
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
     audioStoredSubscription: process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION'],
+    transcriptionCompletedTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
@@ -58,6 +66,7 @@ export function validateConfigEnv(): string[] {
   const required = [
     'INTEXURAOS_SPEECHMATICS_API_KEY',
     'INTEXURAOS_PUBSUB_AUDIO_STORED_SUBSCRIPTION',
+    'INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');

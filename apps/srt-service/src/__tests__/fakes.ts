@@ -12,6 +12,8 @@ import type {
   CreateJobResponse,
   JobStatusResponse,
   SpeechmaticsJobStatus,
+  TranscriptionEventPublisher,
+  TranscriptionCompletedEvent,
 } from '../domain/transcription/index.js';
 
 /**
@@ -165,5 +167,25 @@ export class FakeSpeechmaticsClient implements SpeechmaticsClient {
   clear(): void {
     this.jobs.clear();
     this.nextJobId = 1;
+  }
+}
+
+/**
+ * Fake TranscriptionEventPublisher for testing.
+ */
+export class FakeEventPublisher implements TranscriptionEventPublisher {
+  private events: TranscriptionCompletedEvent[] = [];
+
+  publishCompleted(event: TranscriptionCompletedEvent): Promise<Result<void, TranscriptionError>> {
+    this.events.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getPublishedEvents(): TranscriptionCompletedEvent[] {
+    return [...this.events];
+  }
+
+  clear(): void {
+    this.events = [];
   }
 }

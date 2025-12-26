@@ -6,3 +6,5 @@ export {
   type AudioStoredEvent,
   type AudioStoredHandler,
 } from './subscriber.js';
+
+export { GcpTranscriptionEventPublisher } from './publisher.js';

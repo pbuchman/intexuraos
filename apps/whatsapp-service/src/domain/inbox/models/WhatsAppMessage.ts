@@ -99,6 +99,16 @@ export interface WhatsAppMessage {
   transcriptionJobId?: string;
 
   /**
+   * Transcription status for audio messages.
+   */
+  transcriptionStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+
+  /**
+   * Transcription text (when completed).
+   */
+  transcription?: string;
+
+  /**
    * Timestamp from WhatsApp (Unix epoch string).
    */
   timestamp: string;

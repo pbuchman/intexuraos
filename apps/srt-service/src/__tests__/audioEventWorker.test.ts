@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createAudioEventHandler } from '../workers/audioEventWorker.js';
-import { FakeJobRepository, FakeSpeechmaticsClient } from './fakes.js';
+import { FakeJobRepository, FakeSpeechmaticsClient, FakeEventPublisher } from './fakes.js';
 import { AudioStoredSubscriber } from '../infra/pubsub/index.js';
 import type { AudioStoredEvent } from '../infra/pubsub/index.js';
 import type { ServiceContainer } from '../services.js';
@@ -18,6 +18,7 @@ describe('Audio Event Worker', () => {
       jobRepository: fakeJobRepo,
       speechmaticsClient: new FakeSpeechmaticsClient(),
       audioStoredSubscriber: new AudioStoredSubscriber('test-project', 'test-subscription'),
+      eventPublisher: new FakeEventPublisher(),
     };
     logger = {
       info: vi.fn(),

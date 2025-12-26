@@ -47,8 +47,15 @@ export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
 
 export type { EventPublisherPort } from './ports/eventPublisher.js';
 
+export type { WhatsAppMessageSender } from './ports/messageSender.js';
+
 // Events
-export type { AudioStoredEvent, MediaCleanupEvent, WhatsAppEvent } from './events/index.js';
+export type {
+  AudioStoredEvent,
+  MediaCleanupEvent,
+  TranscriptionCompletedEvent,
+  WhatsAppEvent,
+} from './events/index.js';
 
 // Use cases
 export {

@@ -135,6 +135,24 @@ export interface WhatsAppMessageRepository {
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
 
   /**
+   * Find a message by user ID and message ID.
+   */
+  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+
+  /**
+   * Update message transcription fields.
+   */
+  updateTranscription(
+    userId: string,
+    messageId: string,
+    transcription: {
+      transcriptionJobId: string;
+      transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
+      transcription?: string;
+    }
+  ): Promise<Result<void, InboxError>>;
+
+  /**
    * Delete a message.
    */
   deleteMessage(messageId: string): Promise<Result<void, InboxError>>;

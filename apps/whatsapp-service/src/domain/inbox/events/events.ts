@@ -73,6 +73,51 @@ export interface MediaCleanupEvent {
 }
 
 /**
+ * Event published when transcription is completed.
+ */
+export interface TranscriptionCompletedEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'srt.transcription.completed';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * WhatsApp message ID.
+   */
+  messageId: string;
+
+  /**
+   * Transcription job ID (srt-service internal ID).
+   */
+  jobId: string;
+
+  /**
+   * Status of transcription.
+   */
+  status: 'completed' | 'failed';
+
+  /**
+   * Transcription text (when completed successfully).
+   */
+  transcript?: string;
+
+  /**
+   * Error message (when failed).
+   */
+  error?: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Union of all event types for type safety.
  */
-export type WhatsAppEvent = AudioStoredEvent | MediaCleanupEvent;
+export type WhatsAppEvent = AudioStoredEvent | MediaCleanupEvent | TranscriptionCompletedEvent;

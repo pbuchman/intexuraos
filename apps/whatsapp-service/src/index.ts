@@ -3,16 +3,17 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import {
   createCleanupWorker,
+  TranscriptionWorker,
   type CleanupWorker,
   type CleanupWorkerLogger,
 } from './workers/index.js';
-import { getServices } from './services.js';
+import { initServices, getServices } from './services.js';
 
 /**
- * Create a logger for the cleanup worker using pino.
+ * Create a logger for workers using pino.
  */
-function createWorkerLogger(): CleanupWorkerLogger {
-  const logger = pino({ name: 'CleanupWorker' });
+function createWorkerLogger(name: string): CleanupWorkerLogger {
+  const logger = pino({ name });
   return {
     info: (msg: string, data?: Record<string, unknown>): void => {
       logger.info(data ?? {}, msg);
@@ -28,29 +29,55 @@ function createWorkerLogger(): CleanupWorkerLogger {
 
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Initialize services with config
+  initServices({
+    mediaBucket: config.mediaBucket,
+    gcpProjectId: config.gcpProjectId,
+    audioStoredTopic: config.audioStoredTopic,
+    mediaCleanupTopic: config.mediaCleanupTopic,
+    whatsappAccessToken: config.accessToken,
+    whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
+  });
+
   const app = await buildServer(config);
 
-  // Start cleanup worker for media deletion events
+  // Start workers (cleanup and transcription)
   let cleanupWorker: CleanupWorker | null = null;
+  let transcriptionWorker: TranscriptionWorker | null = null;
 
-  // Only start worker in non-test environment
+  // Only start workers in non-test environment
   if (process.env['NODE_ENV'] !== 'test' && process.env['VITEST'] === undefined) {
+    const services = getServices();
+
+    // Cleanup worker for media deletion events
     cleanupWorker = createCleanupWorker(
       {
         projectId: config.gcpProjectId,
         subscriptionName: config.mediaCleanupSubscription,
       },
-      getServices().mediaStorage,
-      createWorkerLogger()
+      services.mediaStorage,
+      createWorkerLogger('CleanupWorker')
     );
     cleanupWorker.start();
+
+    // Transcription worker for transcription completed events
+    transcriptionWorker = new TranscriptionWorker(
+      config.gcpProjectId,
+      config.transcriptionCompletedSubscription,
+      services.messageRepository,
+      services.messageSender,
+      createWorkerLogger('TranscriptionWorker')
+    );
+    transcriptionWorker.start();
   }
 
   const close = (): void => {
-    // Stop cleanup worker first
-    const stopWorker = cleanupWorker !== null ? cleanupWorker.stop() : Promise.resolve();
+    // Stop workers first
+    transcriptionWorker?.stop();
+    const stopCleanupWorker = cleanupWorker !== null ? cleanupWorker.stop() : Promise.resolve();
 
-    stopWorker
+    stopCleanupWorker
       .then(() => app.close())
       .then(
         () => {

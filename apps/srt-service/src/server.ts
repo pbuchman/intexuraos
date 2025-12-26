@@ -141,6 +141,7 @@ export async function createServer(config: Config): Promise<FastifyInstance> {
     speechmaticsApiKey: config.speechmaticsApiKey,
     gcpProjectId: config.gcpProjectId,
     audioStoredSubscription: config.audioStoredSubscription,
+    transcriptionCompletedTopic: config.transcriptionCompletedTopic,
   });
 
   const app = Fastify({

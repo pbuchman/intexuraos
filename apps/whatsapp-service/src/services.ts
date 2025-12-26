@@ -9,12 +9,14 @@ import {
 } from './adapters.js';
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher } from './infra/pubsub/index.js';
+import { WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
   WhatsAppMessageRepository,
   MediaStoragePort,
   EventPublisherPort,
+  WhatsAppMessageSender,
 } from './domain/inbox/index.js';
 
 /**
@@ -25,6 +27,8 @@ export interface ServiceConfig {
   gcpProjectId: string;
   audioStoredTopic: string;
   mediaCleanupTopic: string;
+  whatsappAccessToken: string;
+  whatsappPhoneNumberId: string;
 }
 
 /**
@@ -37,6 +41,7 @@ export interface ServiceContainer {
   messageRepository: WhatsAppMessageRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
+  messageSender: WhatsAppMessageSender;
 }
 
 let container: ServiceContainer | null = null;
@@ -64,6 +69,10 @@ export function getServices(): ServiceContainer {
       serviceConfig?.gcpProjectId ?? 'test-project',
       serviceConfig?.audioStoredTopic ?? 'test-audio-stored',
       serviceConfig?.mediaCleanupTopic ?? 'test-media-cleanup'
+    ),
+    messageSender: new WhatsAppCloudApiSender(
+      serviceConfig?.whatsappAccessToken ?? 'test-token',
+      serviceConfig?.whatsappPhoneNumberId ?? 'test-phone-id'
     ),
   };
   return container;

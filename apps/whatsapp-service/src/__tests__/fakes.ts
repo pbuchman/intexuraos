@@ -25,6 +25,7 @@ import type {
   EventPublisherPort,
   AudioStoredEvent,
   MediaCleanupEvent,
+  WhatsAppMessageSender,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -185,6 +186,35 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(undefined));
   }
 
+  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    const message = this.messages.get(messageId);
+    if (message?.userId !== userId) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(ok(message));
+  }
+
+  updateTranscription(
+    userId: string,
+    messageId: string,
+    transcription: {
+      transcriptionJobId: string;
+      transcriptionStatus: 'pending' | 'processing' | 'completed' | 'failed';
+      transcription?: string;
+    }
+  ): Promise<Result<void, InboxError>> {
+    const message = this.messages.get(messageId);
+    if (message?.userId !== userId) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
+    }
+    message.transcriptionJobId = transcription.transcriptionJobId;
+    message.transcriptionStatus = transcription.transcriptionStatus;
+    if (transcription.transcription !== undefined) {
+      message.transcription = transcription.transcription;
+    }
+    return Promise.resolve(ok(undefined));
+  }
+
   getAll(): WhatsAppMessage[] {
     return Array.from(this.messages.values());
   }
@@ -280,5 +310,25 @@ export class FakeEventPublisher implements EventPublisherPort {
   clear(): void {
     this.audioStoredEvents = [];
     this.mediaCleanupEvents = [];
+  }
+}
+
+/**
+ * Fake message sender for testing.
+ */
+export class FakeMessageSender implements WhatsAppMessageSender {
+  private sentMessages: { phoneNumber: string; message: string }[] = [];
+
+  sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, InboxError>> {
+    this.sentMessages.push({ phoneNumber, message });
+    return Promise.resolve(ok(undefined));
+  }
+
+  getSentMessages(): { phoneNumber: string; message: string }[] {
+    return [...this.sentMessages];
+  }
+
+  clear(): void {
+    this.sentMessages = [];
   }
 }

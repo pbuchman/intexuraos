@@ -72,6 +72,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
 
     const missing = validateConfigEnv();
@@ -90,6 +91,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
+    process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
 
     const missing = validateConfigEnv();
@@ -125,6 +127,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC'] = 'test-topic';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
+    process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_SUBSCRIPTION'] =
+      'test-transcription-sub';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
 
     const config = loadConfig();

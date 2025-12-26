@@ -8,7 +8,16 @@ import {
   ApiError,
 } from '@/services';
 import type { WhatsAppMessage } from '@/types';
-import { Trash2, MessageSquare, RefreshCw, Image, Mic, Copy, Check, ExternalLink } from 'lucide-react';
+import {
+  Trash2,
+  MessageSquare,
+  RefreshCw,
+  Image,
+  Mic,
+  Copy,
+  Check,
+  ExternalLink,
+} from 'lucide-react';
 
 /**
  * URL regex pattern for detecting links in text.
@@ -114,7 +123,8 @@ function MessageItem({
     }
   };
 
-  const hasTextContent = message.text !== '' || (message.caption !== null && message.caption !== '');
+  const hasTextContent =
+    message.text !== '' || (message.caption !== null && message.caption !== '');
 
   return (
     <div
@@ -191,6 +201,26 @@ function MessageItem({
           {message.mediaType === 'audio' && message.hasMedia && (
             <div className="mb-3">
               <AudioPlayer messageId={message.id} accessToken={accessToken} />
+
+              {/* Transcription status/content */}
+              {message.transcriptionStatus === 'pending' ||
+              message.transcriptionStatus === 'processing' ? (
+                <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  <span>Transcription in progress...</span>
+                </div>
+              ) : message.transcriptionStatus === 'completed' &&
+                message.transcription !== undefined &&
+                message.transcription !== '' ? (
+                <div className="mt-2 rounded-md bg-slate-50 p-3">
+                  <p className="text-xs font-medium text-slate-500 mb-1">Transcription:</p>
+                  <p className="whitespace-pre-wrap text-sm text-slate-700">
+                    <TextWithLinks text={message.transcription} />
+                  </p>
+                </div>
+              ) : message.transcriptionStatus === 'failed' ? (
+                <div className="mt-2 text-sm text-red-500">Transcription failed</div>
+              ) : null}
             </div>
           )}
 

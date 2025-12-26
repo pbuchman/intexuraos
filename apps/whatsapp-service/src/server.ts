@@ -164,6 +164,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     gcpProjectId: config.gcpProjectId,
     audioStoredTopic: config.audioStoredTopic,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    whatsappAccessToken: config.accessToken,
+    whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
   });
 
   const app = Fastify({
