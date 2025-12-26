@@ -98,6 +98,13 @@ Before creating or proposing any issue:
 - Ledger semantics
 - Resume procedure after interruption
 
+5. **First iteration only:** After completing task generation, you MUST pause and ask the user:
+
+   > "Task breakdown complete. Review the generated issues in `continuity/NNN-task-name/`. Proceed with execution?"
+
+   Wait for explicit confirmation before moving to Phase 3.
+   On subsequent/resumed sessions, proceed without asking.
+
 ---
 
 ## Phase 3 — Continuity Ledger Rules
