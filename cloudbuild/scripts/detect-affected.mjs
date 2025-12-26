@@ -63,6 +63,16 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
+  'srt-service': [
+    'apps/srt-service/',
+    'packages/common/',
+    'terraform/',
+    'cloudbuild/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
   'api-docs-hub': [
     'apps/api-docs-hub/',
     'packages/common/',
