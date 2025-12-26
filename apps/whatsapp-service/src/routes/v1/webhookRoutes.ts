@@ -485,7 +485,7 @@ async function processWebhookAsync(
     );
 
     // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'text');
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },
@@ -702,7 +702,7 @@ async function processImageMessage(
     );
 
     // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'image');
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },
@@ -872,7 +872,7 @@ async function processAudioMessage(
     );
 
     // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
+    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'audio');
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },
@@ -1260,22 +1260,43 @@ async function sendTranscriptionFailureMessage(
 }
 
 /**
+ * Message types for confirmation messages.
+ */
+type ConfirmationMessageType = 'text' | 'image' | 'audio';
+
+/**
+ * Get confirmation message text based on message type.
+ */
+function getConfirmationMessageText(messageType: ConfirmationMessageType): string {
+  switch (messageType) {
+    case 'audio':
+      return '✅ Voice message saved. Transcription in progress...';
+    case 'image':
+      return '✅ Image saved.';
+    case 'text':
+      return '✅ Message saved.';
+  }
+}
+
+/**
  * Send confirmation message back to the sender.
  */
 async function sendConfirmationMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   fromNumber: string,
-  config: Config
+  config: Config,
+  messageType: ConfirmationMessageType
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
   if (phoneNumberId !== null) {
+    const confirmationText = getConfirmationMessageText(messageType);
     const sendResult = await sendWhatsAppMessage(
       phoneNumberId,
       fromNumber,
-      'Message added to the processing queue',
+      confirmationText,
       config.accessToken,
       originalMessageId ?? undefined
     );
