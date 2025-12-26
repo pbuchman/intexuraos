@@ -51,17 +51,17 @@ Update documentation for:
 
 ## Step Checklist
 
-- [ ] Update api-contracts.md with media endpoints
-- [ ] Update api-contracts.md with srt-service endpoints
-- [ ] Document Pub/Sub event schemas
-- [ ] Document INTEXURAOS_SPEECHMATICS_API_KEY secret
-- [ ] Document new env vars for services
-- [ ] Add architecture diagram for event flow (ASCII or description)
-- [ ] Add CHANGELOG entry for media + srt-service
-- [ ] Verify .env.default files are up to date with all required env vars
-  - [ ] apps/whatsapp-service/.env.default (add PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION)
-  - [ ] apps/srt-service/.env.default (verify all required vars)
-- [ ] Verify docs render correctly
+- [x] Update api-contracts.md with media endpoints
+- [x] Update api-contracts.md with srt-service endpoints
+- [x] Document Pub/Sub event schemas
+- [x] Document INTEXURAOS_SPEECHMATICS_API_KEY secret
+- [x] Document new env vars for services
+- [x] Add architecture diagram for event flow (ASCII or description)
+- [x] Add CHANGELOG entry for media + srt-service
+- [x] Verify .env.default files are up to date with all required env vars
+  - [x] apps/whatsapp-service/.env.default (added PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION)
+  - [x] apps/srt-service/.env.default (created with all required vars)
+- [x] Verify docs render correctly
 
 ---
 
