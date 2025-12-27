@@ -6,7 +6,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr } from '@intexuraos/common';
+import { isErr, handleValidationError } from '@intexuraos/common';
 import type { AuthTokens, AuthTokenRepository } from '../../domain/identity/index.js';
 import { getServices } from '../../services.js';
 import {
@@ -17,7 +17,7 @@ import {
   type TokenResponse,
 } from './schemas.js';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
-import { loadAuth0Config, handleValidationError } from './shared.js';
+import { loadAuth0Config } from './shared.js';
 
 export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /v1/auth/device/start

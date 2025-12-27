@@ -1,11 +1,8 @@
 /**
  * Tests for shared utilities in whatsapp-service.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
-import type { FastifyReply } from 'fastify';
+import { describe, it, expect } from 'vitest';
 import {
-  handleValidationError,
   normalizePhoneNumber,
   validatePhoneNumber,
   getSupportedCountries,
@@ -190,31 +187,6 @@ describe('shared utilities', () => {
         expect(result.valid).toBe(false);
         expect(result.error).toContain('Invalid');
       });
-    });
-  });
-
-  describe('handleValidationError', () => {
-    it('converts Zod error to API error response', () => {
-      const schema = z.object({
-        phoneNumbers: z.array(z.string().min(1)).min(1, 'At least one phone number required'),
-      });
-
-      const result = schema.safeParse({ phoneNumbers: [] });
-      expect(result.success).toBe(false);
-
-      if (!result.success) {
-        const mockFail = vi.fn().mockReturnThis();
-        const mockReply = {
-          fail: mockFail,
-        } as unknown as FastifyReply;
-
-        handleValidationError(result.error, mockReply);
-
-        expect(mockFail).toHaveBeenCalledTimes(1);
-        const callArgs = mockFail.mock.calls[0] as unknown[];
-        expect(callArgs[0]).toBe('INVALID_REQUEST');
-        expect(callArgs[1]).toBe('Validation failed');
-      }
     });
   });
 

@@ -5,10 +5,10 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr } from '@intexuraos/common';
+import { isErr, handleValidationError } from '@intexuraos/common';
 import type { AuthTokens } from '../../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
-import { loadAuth0Config, handleValidationError } from './shared.js';
+import { loadAuth0Config } from './shared.js';
 import { getServices } from '../../services.js';
 
 export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
