@@ -101,9 +101,9 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
 
   async getMessagesByUser(
     userId: string,
-    limit?: number
-  ): Promise<Result<WhatsAppMessage[], InboxError>> {
-    return await getMessagesByUser(userId, limit);
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+    return await getMessagesByUser(userId, options);
   }
 
   async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {

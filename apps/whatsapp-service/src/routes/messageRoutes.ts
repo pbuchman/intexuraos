@@ -13,25 +13,39 @@ interface MessageParams {
   message_id: string;
 }
 
+interface ListQuerystring {
+  limit?: number;
+  cursor?: string;
+}
+
 export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /whatsapp/messages — list user's messages
-  fastify.get(
+  fastify.get<{ Querystring: ListQuerystring }>(
     '/whatsapp/messages',
     {
       schema: {
         operationId: 'getWhatsAppMessages',
         summary: 'Get WhatsApp messages',
         description:
-          'Get all WhatsApp messages for the authenticated user, sorted by newest first.',
+          'Get paginated WhatsApp messages for the authenticated user, sorted by newest first.',
         tags: ['whatsapp'],
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+            cursor: { type: 'string' },
+          },
+        },
         response: {
           200: {
             description: 'Messages retrieved successfully',
             type: 'object',
+            required: ['success', 'data'],
             properties: {
               success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
+                required: ['messages'],
                 properties: {
                   messages: {
                     type: 'array',
@@ -116,11 +130,14 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     nullable: true,
                     description: 'User registered phone number',
                   },
+                  nextCursor: {
+                    type: 'string',
+                    description: 'Cursor for fetching next page of results',
+                  },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized - invalid or missing token',
@@ -145,27 +162,37 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Querystring: ListQuerystring }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
       }
 
+      const { limit, cursor } = request.query;
       const { messageRepository, userMappingRepository } = getServices();
 
       // Get user's registered phone number for display
       const mappingResult = await userMappingRepository.getMapping(user.userId);
       const fromNumber = mappingResult.ok ? mappingResult.value?.phoneNumbers[0] : null;
 
-      // Get messages
-      const messagesResult = await messageRepository.getMessagesByUser(user.userId);
+      // Build pagination options (only include defined values)
+      const options: { limit?: number; cursor?: string } = {};
+      if (limit !== undefined) {
+        options.limit = limit;
+      }
+      if (cursor !== undefined) {
+        options.cursor = cursor;
+      }
+
+      // Get messages with pagination
+      const messagesResult = await messageRepository.getMessagesByUser(user.userId, options);
 
       if (!messagesResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messagesResult.error.message);
       }
 
       // Transform to API response format
-      const messages = messagesResult.value.map((msg) => {
+      const messages = messagesResult.value.messages.map((msg) => {
         const base: Record<string, unknown> = {
           id: msg.id,
           text: msg.text,
@@ -192,10 +219,16 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return base;
       });
 
-      return await reply.ok({
+      const response: Record<string, unknown> = {
         messages,
         fromNumber: fromNumber ?? null,
-      });
+      };
+
+      if (messagesResult.value.nextCursor !== undefined) {
+        response['nextCursor'] = messagesResult.value.nextCursor;
+      }
+
+      return await reply.ok(response);
     }
   );
 

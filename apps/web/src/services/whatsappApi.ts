@@ -38,12 +38,21 @@ export async function disconnectWhatsApp(accessToken: string): Promise<void> {
   );
 }
 
-export async function getWhatsAppMessages(accessToken: string): Promise<WhatsAppMessagesResponse> {
-  return await apiRequest<WhatsAppMessagesResponse>(
-    config.whatsappServiceUrl,
-    '/whatsapp/messages',
-    accessToken
-  );
+export async function getWhatsAppMessages(
+  accessToken: string,
+  options?: { limit?: number; cursor?: string }
+): Promise<WhatsAppMessagesResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+  if (options?.cursor !== undefined) {
+    params.set('cursor', options.cursor);
+  }
+  const queryString = params.toString();
+  const path = queryString !== '' ? `/whatsapp/messages?${queryString}` : '/whatsapp/messages';
+
+  return await apiRequest<WhatsAppMessagesResponse>(config.whatsappServiceUrl, path, accessToken);
 }
 
 export async function deleteWhatsAppMessage(accessToken: string, messageId: string): Promise<void> {

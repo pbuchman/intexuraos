@@ -17,6 +17,32 @@ export type { WhatsAppMessage, WhatsAppMessageMetadata };
 const COLLECTION_NAME = 'whatsapp_messages';
 
 /**
+ * Decode a cursor string to pagination data.
+ */
+function decodeCursor(cursor: string | undefined): { receivedAt: string; id: string } | undefined {
+  if (cursor === undefined) {
+    return undefined;
+  }
+  try {
+    const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+    const parsed = JSON.parse(decoded) as { receivedAt?: string; id?: string };
+    if (typeof parsed.receivedAt === 'string' && typeof parsed.id === 'string') {
+      return { receivedAt: parsed.receivedAt, id: parsed.id };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Encode pagination data to a cursor string.
+ */
+function encodeCursor(receivedAt: string, id: string): string {
+  return Buffer.from(JSON.stringify({ receivedAt, id })).toString('base64');
+}
+
+/**
  * Save a new WhatsApp message.
  */
 export async function saveMessage(
@@ -39,22 +65,50 @@ export async function saveMessage(
 
 /**
  * Get messages for a user, ordered by receivedAt descending (newest first).
+ * Supports cursor-based pagination.
  */
 export async function getMessagesByUser(
   userId: string,
-  limit = 100
-): Promise<Result<WhatsAppMessage[], InboxError>> {
+  options: { limit?: number; cursor?: string } = {}
+): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+  const limit = options.limit ?? 50;
+
   try {
     const db = getFirestore();
-    const snapshot = await db
+    let query = db
       .collection(COLLECTION_NAME)
       .where('userId', '==', userId)
-      .orderBy('receivedAt', 'desc')
-      .limit(limit)
-      .get();
+      .orderBy('receivedAt', 'desc');
 
-    const messages = snapshot.docs.map((doc) => doc.data() as WhatsAppMessage);
-    return ok(messages);
+    // Apply cursor if provided
+    const cursorData = decodeCursor(options.cursor);
+    if (cursorData !== undefined) {
+      query = query.startAfter(cursorData.receivedAt);
+    }
+
+    // Fetch one extra to determine if there are more results
+    const snapshot = await query.limit(limit + 1).get();
+
+    const docs = snapshot.docs;
+    const hasMore = docs.length > limit;
+
+    // Take only the requested number of results
+    const resultDocs = hasMore ? docs.slice(0, limit) : docs;
+
+    const messages = resultDocs.map((doc) => doc.data() as WhatsAppMessage);
+
+    const result: { messages: WhatsAppMessage[]; nextCursor?: string } = { messages };
+
+    // Set next cursor if there are more results
+    if (hasMore && resultDocs.length > 0) {
+      const lastDoc = resultDocs[resultDocs.length - 1];
+      if (lastDoc !== undefined) {
+        const lastData = lastDoc.data() as WhatsAppMessage;
+        result.nextCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
+      }
+    }
+
+    return ok(result);
   } catch (error) {
     return err({
       code: 'PERSISTENCE_ERROR',

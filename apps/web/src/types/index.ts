@@ -156,6 +156,7 @@ export interface WhatsAppMessage {
 export interface WhatsAppMessagesResponse {
   messages: WhatsAppMessage[];
   fromNumber: string | null;
+  nextCursor?: string;
 }
 
 /**
