@@ -49,3 +49,10 @@ export {
   NotionClient,
   type BlockObjectResponse,
 } from './notion.js';
+
+// Testing utilities
+export {
+  createFakeFirestore,
+  type FakeFirestore,
+  type FakeFirestoreConfig,
+} from './testing/index.js';
