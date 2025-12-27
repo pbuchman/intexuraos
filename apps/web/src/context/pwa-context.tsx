@@ -50,8 +50,7 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
   useEffect((): void => {
     const standaloneMediaQuery = window.matchMedia('(display-mode: standalone)').matches;
     const navigatorStandalone =
-      'standalone' in navigator &&
-      (navigator as { standalone?: boolean }).standalone === true;
+      'standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true;
     const isStandalone = standaloneMediaQuery || navigatorStandalone;
     setIsInstalled(isStandalone);
 
