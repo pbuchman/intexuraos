@@ -7,15 +7,17 @@ Create a new `mobile-notifications` service that:
 1. Receives mobile device notifications via authenticated webhook
 2. Links notifications to users via secure signature tokens
 3. Provides REST API for listing/deleting notifications
-4. Includes web UI for viewing notifications
+4. Includes web UI for viewing and managing notifications
 
 **Success Criteria:**
 
 1. Service deployed and functional
 2. 90% test coverage (no changes to vitest.config.ts)
 3. API documented in API Hub
-4. Web view accessible at `#/mobile-notifications`
-5. All CI checks pass
+4. Connection page at `#/mobile-notifications` (generate signature, view status)
+5. Notifications list page at `#/mobile-notifications/list` (view, delete)
+6. Xiaomi/Tasker setup documentation complete
+7. All CI checks pass
 
 ---
 
@@ -26,6 +28,7 @@ Create a new `mobile-notifications` service that:
 - Idempotency via `notification_id` per user
 - Pagination: cursor-based, default limit 50
 - Coverage thresholds: 90% across all metrics
+- No disconnect option - user regenerates signature to invalidate
 
 ---
 
@@ -56,6 +59,22 @@ Create a new `mobile-notifications` service that:
 
 - userId, source, device, app, title, text, timestamp, receivedAt, notification_id
 
+### 2024-12-27: Web UI requirements clarification
+
+**Connection page (`#/mobile-notifications`):**
+
+- Generate signature button (shown once with copy option)
+- Regenerate signature when one exists
+- Status block showing last notification received time
+- No disable option (user regenerates to invalidate)
+- Link to Xiaomi/Tasker setup documentation
+
+**Notifications list page (`#/mobile-notifications/list`):**
+
+- Android-style notification cards
+- Delete with confirmation
+- Pagination (load more)
+
 ---
 
 ## Reasoning Narrative
@@ -75,6 +94,8 @@ Routes kept minimal - business logic in usecases.
 - [x] Created continuity folder
 - [x] Created INSTRUCTIONS.md
 - [x] Created all issue files (0-0 through 4-1)
+- [x] Added 3-1-create-connection-page.md (new requirement)
+- [x] Updated 2-3-update-documentation.md with Xiaomi setup guide
 
 ### Now:
 
@@ -107,9 +128,10 @@ None - all clarified in requirements document.
 - 2-0-create-routes.md
 - 2-1-add-to-api-hub.md
 - 2-2-add-terraform.md
-- 2-3-update-documentation.md
+- 2-3-update-documentation.md (updated with Xiaomi guide)
 - 2-4-add-cloudbuild.md
-- 3-0-create-web-view.md
+- 3-0-create-web-view.md (notifications list)
+- 3-1-create-connection-page.md (NEW - connection/setup page)
 - 4-0-coverage-verification.md
 - 4-1-final-cleanup.md
 

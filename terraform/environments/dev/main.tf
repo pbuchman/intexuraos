@@ -119,6 +119,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    mobile_notifications_service = {
+      name      = "intexuraos-mobile-notifications-service"
+      app_path  = "apps/mobile-notifications-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
     api_docs_hub = {
       name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
@@ -460,6 +467,35 @@ module "whatsapp_service" {
   ]
 }
 
+# Mobile Notifications Service - Mobile device notification capture
+module "mobile_notifications_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.mobile_notifications_service.name
+  service_account = module.iam.service_accounts["mobile_notifications_service"]
+  port            = local.services.mobile_notifications_service.port
+  min_scale       = local.services.mobile_notifications_service.min_scale
+  max_scale       = local.services.mobile_notifications_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
+
+  secrets = {
+    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # API Docs Hub - Aggregated OpenAPI documentation
 module "api_docs_hub" {
   source = "../../modules/cloud-run-service"
@@ -478,10 +514,11 @@ module "api_docs_hub" {
 
   # Plain env vars for OpenAPI URLs (not secrets)
   env_vars = {
-    AUTH_SERVICE_OPENAPI_URL        = "${module.auth_service.service_url}/openapi.json"
-    PROMPTVAULT_SERVICE_OPENAPI_URL = "${module.promptvault_service.service_url}/openapi.json"
-    NOTION_SERVICE_OPENAPI_URL      = "${module.notion_service.service_url}/openapi.json"
-    WHATSAPP_SERVICE_OPENAPI_URL    = "${module.whatsapp_service.service_url}/openapi.json"
+    AUTH_SERVICE_OPENAPI_URL                  = "${module.auth_service.service_url}/openapi.json"
+    PROMPTVAULT_SERVICE_OPENAPI_URL           = "${module.promptvault_service.service_url}/openapi.json"
+    NOTION_SERVICE_OPENAPI_URL                = "${module.notion_service.service_url}/openapi.json"
+    WHATSAPP_SERVICE_OPENAPI_URL              = "${module.whatsapp_service.service_url}/openapi.json"
+    MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL  = "${module.mobile_notifications_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -491,6 +528,7 @@ module "api_docs_hub" {
     module.promptvault_service,
     module.notion_service,
     module.whatsapp_service,
+    module.mobile_notifications_service,
   ]
 }
 
@@ -548,6 +586,11 @@ output "notion_service_url" {
 output "whatsapp_service_url" {
   description = "WhatsApp Service URL"
   value       = module.whatsapp_service.service_url
+}
+
+output "mobile_notifications_service_url" {
+  description = "Mobile Notifications Service URL"
+  value       = module.mobile_notifications_service.service_url
 }
 
 output "api_docs_hub_url" {
