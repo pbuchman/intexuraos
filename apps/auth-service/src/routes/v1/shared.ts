@@ -1,6 +1,3 @@
-import type { FastifyReply } from 'fastify';
-import { ZodError } from 'zod';
-
 /**
  * Auth0 configuration from environment.
  */
@@ -39,18 +36,4 @@ export function loadAuth0Config(): Auth0Config | null {
     jwksUrl: `https://${domain}/.well-known/jwks.json`,
     issuer: `https://${domain}/`,
   };
-}
-
-/**
- * Handle Zod validation errors.
- * Converts Zod errors to standard API error response.
- */
-export function handleValidationError(error: ZodError, reply: FastifyReply): FastifyReply {
-  const details = error.errors.map((e) => ({
-    path: e.path.join('.'),
-    message: e.message,
-  }));
-  return reply.fail('INVALID_REQUEST', 'Validation failed', undefined, {
-    errors: details,
-  });
 }

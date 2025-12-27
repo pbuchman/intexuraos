@@ -5,8 +5,8 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
+import { handleValidationError } from '@intexuraos/common';
 import { webhookRequestSchema } from './schemas.js';
-import { handleValidationError } from './shared.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /v1/webhooks/notion (no auth required)

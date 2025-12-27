@@ -7,10 +7,9 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth, handleValidationError } from '@intexuraos/common';
 import { connectRequestSchema } from './schemas.js';
 import { getServices } from '../../services.js';
-import { handleValidationError } from './shared.js';
 
 export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /v1/integrations/notion/connect

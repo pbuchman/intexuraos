@@ -343,7 +343,20 @@ function MessageItem({
                   </p>
                 </div>
               ) : message.transcriptionStatus === 'failed' ? (
-                <div className="mt-2 text-sm text-red-500">Transcription failed</div>
+                <div className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-600">
+                  <p className="font-medium">Transcription failed</p>
+                  {message.transcriptionError !== undefined && (
+                    <div className="mt-1 text-xs text-red-500">
+                      <p>
+                        <span className="font-medium">Code:</span> {message.transcriptionError.code}
+                      </p>
+                      <p>
+                        <span className="font-medium">Details:</span>{' '}
+                        {message.transcriptionError.message}
+                      </p>
+                    </div>
+                  )}
+                </div>
               ) : null}
             </div>
           )}

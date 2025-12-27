@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth, handleValidationError } from '@intexuraos/common';
 import {
   createPrompt,
   listPrompts,
@@ -18,7 +18,7 @@ import {
 } from '../../domain/promptvault/index.js';
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
 import { getServices } from '../../services.js';
-import { handleValidationError, mapDomainErrorCode } from './shared.js';
+import { mapDomainErrorCode } from './shared.js';
 
 export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /v1/tools/notion/promptvault/main-page
