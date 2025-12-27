@@ -62,6 +62,23 @@ docs/           → All documentation
 
 ---
 
+## Protected Files (Require Explicit User Permission)
+
+The following configuration sections **MUST NOT be modified without explicit user permission**:
+
+| File               | Protected Section     | Reason                                  |
+| ------------------ | --------------------- | --------------------------------------- |
+| `vitest.config.ts` | `coverage.thresholds` | Coverage thresholds are project policy  |
+| `vitest.config.ts` | `coverage.exclude`    | Exclusions require justification review |
+
+**LLM agents must:**
+
+1. **Never** modify these sections autonomously
+2. **Ask for explicit permission** before proposing changes
+3. **Document justification** when requesting permission to modify
+
+---
+
 ## New Service Checklist
 
 When creating a new service (e.g., splitting an existing service):
