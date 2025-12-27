@@ -17,6 +17,7 @@ export function getConfig(): AppConfig {
     promptVaultServiceUrl: getEnvVar('INTEXURAOS_PROMPTVAULT_SERVICE_URL'),
     whatsappServiceUrl: getEnvVar('INTEXURAOS_WHATSAPP_SERVICE_URL'),
     notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
+    mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
   };
 }
 

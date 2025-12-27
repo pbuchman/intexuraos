@@ -7,6 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
+  Bell,
+  BellRing,
 } from 'lucide-react';
 
 interface NavItem {
@@ -20,6 +22,8 @@ const navItems: NavItem[] = [
   { to: '/notion', label: 'Notion Connection', icon: FileText },
   { to: '/whatsapp', label: 'WhatsApp Connection', icon: MessageCircle },
   { to: '/whatsapp-notes', label: 'WhatsApp Notes', icon: MessageSquare },
+  { to: '/mobile-notifications', label: 'Mobile Setup', icon: Bell },
+  { to: '/mobile-notifications/list', label: 'Notifications', icon: BellRing },
 ];
 
 export function Sidebar(): React.JSX.Element {

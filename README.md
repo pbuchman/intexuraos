@@ -25,6 +25,7 @@ IntexuraOS is the execution layer for a personal operating system where **Notion
 - 🎙️ WhatsApp voice notes → automatic transcription with reply
 - 🤖 ChatGPT custom GPT actions that read/write to your Notion databases
 - 📱 WhatsApp → Notion inbox for capturing notes, tasks, and ideas on the go
+- 📲 Mobile notifications → capture Android notifications via Tasker
 - 🔐 Secure OAuth2 authentication with Device Authorization Flow for CLI/testing
 - 📋 Prompt template management and versioning via PromptVault
 
@@ -209,12 +210,13 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 
 Each app owns its domain logic and infrastructure adapters:
 
-| App                 | Domain (`src/domain/`)   | Infra (`src/infra/`)                 |
-| ------------------- | ------------------------ | ------------------------------------ |
-| auth-service        | identity (tokens, users) | auth0, firestore                     |
-| promptvault-service | promptvault (prompts)    | notion, firestore                    |
-| whatsapp-service    | inbox (messages, notes)  | notion, firestore, gcs, speechmatics |
-| notion-service      | (orchestration only)     | notion, firestore                    |
+| App                          | Domain (`src/domain/`)   | Infra (`src/infra/`)                 |
+| ---------------------------- | ------------------------ | ------------------------------------ |
+| auth-service                 | identity (tokens, users) | auth0, firestore                     |
+| promptvault-service          | promptvault (prompts)    | notion, firestore                    |
+| whatsapp-service             | inbox (messages, notes)  | notion, firestore, gcs, speechmatics |
+| notion-service               | (orchestration only)     | notion, firestore                    |
+| mobile-notifications-service | notifications            | firestore                            |
 
 **Import rules** (enforced by `npm run verify:boundaries`):
 
@@ -278,11 +280,12 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 
 ### Services
 
-| Service             | Purpose                              | Base Path        |
-| ------------------- | ------------------------------------ | ---------------- |
-| auth-service        | OAuth2 flows, JWT validation         | `/v1/auth/*`     |
-| promptvault-service | Prompt templates, Notion integration | `/v1/*`          |
-| whatsapp-service    | WhatsApp webhook, transcription      | `/v1/whatsapp/*` |
+| Service                      | Purpose                                 | Base Path                    |
+| ---------------------------- | --------------------------------------- | ---------------------------- |
+| auth-service                 | OAuth2 flows, JWT validation            | `/v1/auth/*`                 |
+| promptvault-service          | Prompt templates, Notion integration    | `/v1/*`                      |
+| whatsapp-service             | WhatsApp webhook, transcription         | `/v1/whatsapp/*`             |
+| mobile-notifications-service | Android notification capture via Tasker | `/v1/mobile-notifications/*` |
 
 ### Security
 
@@ -687,7 +690,8 @@ docs/
 │   ├── 04-cloud-run-services.md       # Service deployment
 │   ├── 05-local-dev-with-gcp-deps.md  # Local development
 │   ├── 06-auth0.md                    # Authentication setup
-│   └── 07-whatsapp-business-cloud-api.md  # WhatsApp integration
+│   ├── 07-whatsapp-business-cloud-api.md  # WhatsApp integration
+│   └── mobile-notifications-xiaomi.md # Tasker/AutoNotification setup
 ├── notion-inbox.md                    # Notion database schema
 └── assets/branding/                   # Logo and icon assets
 ```
