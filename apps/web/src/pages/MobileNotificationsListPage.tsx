@@ -123,20 +123,20 @@ function NotificationCard({
       {/* Title */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-slate-900">{notification.title}</h3>
+          <h3 className="break-all font-semibold text-slate-900">{notification.title}</h3>
           {/* Body text */}
           {notification.text !== '' ? (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600 wrap-anywhere">
               {notification.text}
             </p>
           ) : null}
         </div>
 
-        {/* Delete button */}
+        {/* Delete button - always visible for mobile accessibility */}
         <button
           onClick={handleDeleteClick}
           disabled={isDeleting || showDeleteConfirm}
-          className="shrink-0 rounded-lg p-2 text-slate-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Delete notification"
         >
           <Trash2 className="h-5 w-5" />

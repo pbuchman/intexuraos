@@ -1,7 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { StatusWidget, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { getNotionStatus, getWhatsAppStatus } from '@/services';
+import {
+  getNotionStatus,
+  getWhatsAppStatus,
+  getMobileNotificationsStatus,
+  type MobileNotificationsStatusResponse,
+} from '@/services';
 import type { NotionStatus, WhatsAppStatus } from '@/types';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'error' | 'loading';
@@ -19,6 +24,10 @@ export function DashboardPage(): React.JSX.Element {
     description: 'Loading...',
   });
   const [whatsappState, setWhatsappState] = useState<StatusState>({
+    status: 'loading',
+    description: 'Loading...',
+  });
+  const [mobileNotificationsState, setMobileNotificationsState] = useState<StatusState>({
     status: 'loading',
     description: 'Loading...',
   });
@@ -71,9 +80,36 @@ export function DashboardPage(): React.JSX.Element {
           description: 'Failed to fetch WhatsApp status',
         });
       }
+
+      // Fetch Mobile Notifications status
+      try {
+        const mobileStatus: MobileNotificationsStatusResponse =
+          await getMobileNotificationsStatus(token);
+        if (mobileStatus.configured) {
+          const newState: StatusState = {
+            status: 'connected',
+            description: 'Device configured',
+          };
+          if (mobileStatus.lastNotificationAt !== null) {
+            newState.details = `Last notification: ${new Date(mobileStatus.lastNotificationAt).toLocaleString()}`;
+          }
+          setMobileNotificationsState(newState);
+        } else {
+          setMobileNotificationsState({
+            status: 'disconnected',
+            description: 'Configure your mobile device',
+          });
+        }
+      } catch {
+        setMobileNotificationsState({
+          status: 'error',
+          description: 'Failed to fetch status',
+        });
+      }
     } catch {
       setNotionState({ status: 'error', description: 'Authentication error' });
       setWhatsappState({ status: 'error', description: 'Authentication error' });
+      setMobileNotificationsState({ status: 'error', description: 'Authentication error' });
     }
   }, [getAccessToken]);
 
@@ -123,6 +159,27 @@ export function DashboardPage(): React.JSX.Element {
     );
   };
 
+  const renderMobileNotificationsWidget = (): React.JSX.Element => {
+    const details = mobileNotificationsState.details;
+    if (details !== undefined) {
+      return (
+        <StatusWidget
+          title="Mobile Notifications"
+          status={mobileNotificationsState.status}
+          description={mobileNotificationsState.description}
+          details={details}
+        />
+      );
+    }
+    return (
+      <StatusWidget
+        title="Mobile Notifications"
+        status={mobileNotificationsState.status}
+        description={mobileNotificationsState.description}
+      />
+    );
+  };
+
   return (
     <Layout>
       <div className="mb-6">
@@ -130,9 +187,10 @@ export function DashboardPage(): React.JSX.Element {
         <p className="text-slate-600">Overview of your integration connections</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {renderNotionWidget()}
         {renderWhatsAppWidget()}
+        {renderMobileNotificationsWidget()}
       </div>
     </Layout>
   );
