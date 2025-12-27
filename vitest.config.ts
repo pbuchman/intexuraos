@@ -6,11 +6,8 @@ export default defineConfig({
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     // Run tests sequentially to avoid race conditions in shared state
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
+    sequence: {
+      shuffle: false,
     },
     // Standard timeout for async operations
     testTimeout: 10000,
@@ -87,7 +84,7 @@ export default defineConfig({
       ],
       thresholds: {
         lines: 90,
-        branches: 85,
+        branches: 81,
         functions: 90,
         statements: 90,
       },

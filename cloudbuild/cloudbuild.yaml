@@ -294,8 +294,8 @@ steps:
 
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'web'
-    waitFor: ['npm-ci', 'detect-affected']
+    id: 'fetch-web-secrets'
+    waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -312,14 +312,37 @@ steps:
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
         INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
         EOF
+          echo "Secrets written to /workspace/apps/web/.env"
+        else
+          echo "web not affected, skipping secret fetch."
+        fi
 
+  - name: 'node:22-slim'
+    id: 'build-web'
+    waitFor: ['npm-ci', 'fetch-web-secrets']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "=== Building web ==="
           npm run --workspace=@intexuraos/web build
+        else
+          echo "web not affected, skipping build."
+        fi
 
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-web'
+    waitFor: ['build-web']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
           echo "=== Deploying web ==="
           bash cloudbuild/scripts/deploy-web.sh
         else
-          echo "web not affected, skipping."
+          echo "web not affected, skipping deploy."
         fi
     env:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
@@ -343,4 +366,3 @@ options:
     - 'DOCKER_BUILDKIT=1'
 
 timeout: 1800s
-
