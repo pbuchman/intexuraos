@@ -157,6 +157,26 @@ The project includes a ChatGPT custom model (GPT) for prompt review and manageme
 
 ---
 
+## Web App (PWA)
+
+IntexuraOS includes a React-based Progressive Web App that can be installed on mobile devices:
+
+📱 **Add to Home Screen** — Works like a native app without app store distribution
+
+- **Android**: Tap the install banner or use browser menu → "Add to Home Screen"
+- **iOS**: Open in Safari → Share → "Add to Home Screen"
+
+✨ **Features**:
+
+- Standalone mode (no browser UI)
+- Automatic updates on deployment
+- Offline asset caching
+- iOS safe area support
+
+See [docs/setup/09-pwa.md](docs/setup/09-pwa.md) for full documentation.
+
+---
+
 ## LLM-Assisted Development
 
 This project is developed with LLMs as **senior reviewers, architects, and automation components** — not autocomplete tools. Key practices:
