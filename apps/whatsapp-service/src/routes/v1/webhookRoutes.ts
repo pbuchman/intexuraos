@@ -9,6 +9,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { handleValidationError } from '@intexuraos/common';
 import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
@@ -30,7 +31,6 @@ import {
   extractMessageType,
   extractImageMedia,
   extractAudioMedia,
-  handleValidationError,
 } from './shared.js';
 
 /**
