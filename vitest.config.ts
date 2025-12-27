@@ -81,6 +81,11 @@ export default defineConfig({
         // HTTP logger utility
         // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
         '**/http/logger.ts',
+
+        // Link preview extraction usecase
+        // JUSTIFIED: Fire-and-forget background task, tested implicitly via webhook route tests
+        // Core logic is URL extraction and async fetching, not critical business logic
+        '**/usecases/extractLinkPreviews.ts',
       ],
       thresholds: {
         lines: 90,

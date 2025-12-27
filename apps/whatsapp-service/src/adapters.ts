@@ -14,6 +14,7 @@ import type {
   WhatsAppMessage,
   InboxError,
   TranscriptionState,
+  LinkPreviewState,
 } from './domain/inbox/index.js';
 import {
   saveWebhookEvent,
@@ -29,6 +30,7 @@ import {
   getMessage,
   findById,
   updateTranscription,
+  updateLinkPreview,
   deleteMessage,
 } from './infra/firestore/index.js';
 
@@ -121,6 +123,14 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
     transcription: TranscriptionState
   ): Promise<Result<void, InboxError>> {
     return await updateTranscription(userId, messageId, transcription);
+  }
+
+  async updateLinkPreview(
+    userId: string,
+    messageId: string,
+    linkPreview: LinkPreviewState
+  ): Promise<Result<void, InboxError>> {
+    return await updateLinkPreview(userId, messageId, linkPreview);
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, InboxError>> {

@@ -18,6 +18,7 @@ import {
   ProcessImageMessageUseCase,
   ProcessAudioMessageUseCase,
   TranscribeAudioUseCase,
+  ExtractLinkPreviewsUseCase,
 } from '../domain/inbox/index.js';
 import {
   extractDisplayPhoneNumber,
@@ -632,6 +633,22 @@ async function handleTextMessage(
   const savedMessage = saveResult.value;
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+  // Start link preview extraction in background (fire-and-forget)
+  const services = getServices();
+  const extractLinkPreviewsUseCase = new ExtractLinkPreviewsUseCase({
+    messageRepository: services.messageRepository,
+    linkPreviewFetcher: services.linkPreviewFetcher,
+  });
+
+  void extractLinkPreviewsUseCase.execute(
+    {
+      messageId: savedMessage.id,
+      userId,
+      text: messageText,
+    },
+    request.log
+  );
 
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },
