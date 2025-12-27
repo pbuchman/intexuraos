@@ -66,6 +66,7 @@ interface MessageItemProps {
   onDelete: (id: string) => void;
   onImageClick: (messageId: string) => void;
   onNoteClick: (message: WhatsAppMessage) => void;
+  onTranscriptionClick: (message: WhatsAppMessage) => void;
   isDeleting: boolean;
 }
 
@@ -181,7 +182,7 @@ function NoteDetailModal({
         <div className="p-4">
           {/* Text content */}
           {message.text !== '' && (
-            <p className="whitespace-pre-wrap break-words text-slate-800">
+            <p className="whitespace-pre-wrap break-word text-slate-800">
               <TextWithLinks text={message.text} />
             </p>
           )}
@@ -190,10 +191,130 @@ function NoteDetailModal({
           {message.caption !== null &&
             message.caption !== '' &&
             message.caption !== message.text && (
-              <p className="mt-3 whitespace-pre-wrap break-words text-slate-600 italic">
+              <p className="mt-3 whitespace-pre-wrap break-word text-slate-600 italic">
                 <TextWithLinks text={message.caption} />
               </p>
             )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Modal to display full transcription content.
+ */
+function TranscriptionDetailModal({
+  message,
+  onClose,
+}: {
+  message: WhatsAppMessage;
+  onClose: () => void;
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  const receivedDate = new Date(message.receivedAt);
+  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const transcriptionText = message.transcription ?? '';
+  const hasContent = transcriptionText !== '';
+
+  const handleCopy = async (): Promise<void> => {
+    if (!hasContent) return;
+
+    try {
+      await navigator.clipboard.writeText(transcriptionText);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      // Clipboard API failed, ignore
+    }
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return (): void => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg bg-white shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
+          <div className="flex items-center gap-2">
+            <Mic className="h-4 w-4 text-slate-500" />
+            <span className="text-sm font-medium text-slate-700">Transcription</span>
+            <span className="text-sm text-slate-500">
+              • {formattedDate} • {formattedTime}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasContent && (
+              <button
+                onClick={(): void => {
+                  void handleCopy();
+                }}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                  copied
+                    ? 'bg-green-50 text-green-600'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+                aria-label={copied ? 'Copied!' : 'Copy transcription'}
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          <p className="whitespace-pre-wrap break-word text-slate-800">
+            <TextWithLinks text={transcriptionText} />
+          </p>
         </div>
       </div>
     </div>
@@ -206,9 +327,11 @@ function MessageItem({
   onDelete,
   onImageClick,
   onNoteClick,
+  onTranscriptionClick,
   isDeleting,
 }: MessageItemProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
+  const [copiedTranscription, setCopiedTranscription] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const receivedDate = new Date(message.receivedAt);
@@ -231,6 +354,20 @@ function MessageItem({
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
+      }, 2000);
+    } catch {
+      // Clipboard API failed, ignore
+    }
+  };
+
+  const handleCopyTranscription = async (): Promise<void> => {
+    if (message.transcription === undefined || message.transcription === '') return;
+
+    try {
+      await navigator.clipboard.writeText(message.transcription);
+      setCopiedTranscription(true);
+      setTimeout(() => {
+        setCopiedTranscription(false);
       }, 2000);
     } catch {
       // Clipboard API failed, ignore
@@ -337,10 +474,46 @@ function MessageItem({
                 message.transcription !== undefined &&
                 message.transcription !== '' ? (
                 <div className="mt-2 rounded-md bg-slate-50 p-3">
-                  <p className="text-xs font-medium text-slate-500 mb-1">Transcription:</p>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">
-                    <TextWithLinks text={message.transcription} />
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-slate-500">Transcription:</p>
+                    <button
+                      onClick={(e): void => {
+                        e.stopPropagation();
+                        void handleCopyTranscription();
+                      }}
+                      className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-all ${
+                        copiedTranscription
+                          ? 'bg-green-100 text-green-600'
+                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      }`}
+                      aria-label={copiedTranscription ? 'Copied!' : 'Copy transcription'}
+                    >
+                      {copiedTranscription ? (
+                        <>
+                          <Check className="h-3 w-3" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div
+                    onClick={(): void => {
+                      onTranscriptionClick(message);
+                    }}
+                    className="cursor-pointer hover:bg-slate-100 -mx-1 px-1 py-1 rounded transition-colors"
+                  >
+                    <p className="whitespace-pre-wrap text-sm text-slate-700">
+                      <TextWithLinks text={message.transcription} />
+                    </p>
+                    {message.transcription.length > TEXT_PREVIEW_LIMIT && (
+                      <span className="text-sm text-blue-600 hover:underline">show more</span>
+                    )}
+                  </div>
                 </div>
               ) : message.transcriptionStatus === 'failed' ? (
                 <div className="mt-2 rounded-md bg-red-50 p-3 text-sm text-red-600">
@@ -373,7 +546,7 @@ function MessageItem({
                   : ''
               }
             >
-              <p className="whitespace-pre-wrap break-words text-slate-800">
+              <p className="whitespace-pre-wrap break-word text-slate-800">
                 {message.text.length > TEXT_PREVIEW_LIMIT ? (
                   <>
                     <TextWithLinks text={message.text.slice(0, TEXT_PREVIEW_LIMIT)} />
@@ -397,7 +570,7 @@ function MessageItem({
                 }}
                 className="cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-1 rounded transition-colors"
               >
-                <p className="mt-2 whitespace-pre-wrap break-words text-slate-600 italic">
+                <p className="mt-2 whitespace-pre-wrap break-word text-slate-600 italic">
                   {message.caption.length > TEXT_PREVIEW_LIMIT ? (
                     <>
                       <TextWithLinks text={message.caption.slice(0, TEXT_PREVIEW_LIMIT)} />
@@ -478,6 +651,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<WhatsAppMessage | null>(null);
+  const [selectedTranscription, setSelectedTranscription] = useState<WhatsAppMessage | null>(null);
   const [currentAccessToken, setCurrentAccessToken] = useState<string | null>(null);
 
   const fetchMessages = useCallback(
@@ -607,6 +781,9 @@ export function WhatsAppNotesPage(): React.JSX.Element {
               onNoteClick={(msg): void => {
                 setSelectedNote(msg);
               }}
+              onTranscriptionClick={(msg): void => {
+                setSelectedTranscription(msg);
+              }}
               isDeleting={deletingIds.has(message.id)}
             />
           ))
@@ -636,6 +813,16 @@ export function WhatsAppNotesPage(): React.JSX.Element {
           message={selectedNote}
           onClose={(): void => {
             setSelectedNote(null);
+          }}
+        />
+      )}
+
+      {/* Transcription detail modal */}
+      {selectedTranscription !== null && (
+        <TranscriptionDetailModal
+          message={selectedTranscription}
+          onClose={(): void => {
+            setSelectedTranscription(null);
           }}
         />
       )}
