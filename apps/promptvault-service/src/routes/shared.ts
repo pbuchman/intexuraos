@@ -1,4 +1,4 @@
-import type { PromptVaultErrorCode } from '../../domain/promptvault/index.js';
+import type { PromptVaultErrorCode } from '../domain/promptvault/index.js';
 
 /**
  * Map domain error codes to HTTP error codes.

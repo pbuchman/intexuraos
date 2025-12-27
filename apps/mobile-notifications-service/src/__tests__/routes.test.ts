@@ -69,10 +69,10 @@ describe('Connect Routes', () => {
     nock.cleanAll();
   });
 
-  it('POST /v1/mobile-notifications/connect returns 401 without auth', async () => {
+  it('POST /mobile-notifications/connect returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       payload: {},
     });
 
@@ -82,13 +82,13 @@ describe('Connect Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('POST /v1/mobile-notifications/connect creates connection with valid auth', async () => {
+  it('POST /mobile-notifications/connect creates connection with valid auth', async () => {
     // Mock JWKS endpoint
     nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -100,7 +100,7 @@ describe('Connect Routes', () => {
     expect([200, 401]).toContain(response.statusCode);
   });
 
-  it('POST /v1/mobile-notifications/connect returns 500 on repository failure', async () => {
+  it('POST /mobile-notifications/connect returns 500 on repository failure', async () => {
     fakeSignatureRepo.setFailNextSave(true);
 
     // Mock JWKS endpoint
@@ -108,7 +108,7 @@ describe('Connect Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -160,10 +160,10 @@ describe('Webhook Routes', () => {
     nock.cleanAll();
   });
 
-  it('POST /v1/webhooks/mobile-notifications returns 400 without signature header', async () => {
+  it('POST /mobile-notifications/webhooks returns 400 without signature header', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       payload: {
         source: 'tasker',
         device: 'test-phone',
@@ -182,10 +182,10 @@ describe('Webhook Routes', () => {
     expect(body.error.code).toBe('INVALID_REQUEST');
   });
 
-  it('POST /v1/webhooks/mobile-notifications returns ignored for invalid signature', async () => {
+  it('POST /mobile-notifications/webhooks returns ignored for invalid signature', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': 'invalid-signature',
       },
@@ -211,7 +211,7 @@ describe('Webhook Routes', () => {
     expect(body.data.reason).toBe('invalid_signature');
   });
 
-  it('POST /v1/webhooks/mobile-notifications accepts notification with valid signature', async () => {
+  it('POST /mobile-notifications/webhooks accepts notification with valid signature', async () => {
     // Create a connection first
     const signature = 'test-signature-token';
     const signatureHash = hashSignature(signature);
@@ -222,7 +222,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -253,7 +253,7 @@ describe('Webhook Routes', () => {
     expect(notifications[0]?.userId).toBe(TEST_USER_ID);
   });
 
-  it('POST /v1/webhooks/mobile-notifications ignores duplicate notification', async () => {
+  it('POST /mobile-notifications/webhooks ignores duplicate notification', async () => {
     // Create a connection first
     const signature = 'test-signature-token';
     const signatureHash = hashSignature(signature);
@@ -279,7 +279,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -350,19 +350,19 @@ describe('Notification Routes', () => {
     nock.cleanAll();
   });
 
-  it('GET /v1/mobile-notifications returns 401 without auth', async () => {
+  it('GET /mobile-notifications returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/v1/mobile-notifications',
+      url: '/mobile-notifications',
     });
 
     expect(response.statusCode).toBe(401);
   });
 
-  it('DELETE /v1/mobile-notifications/:id returns 401 without auth', async () => {
+  it('DELETE /mobile-notifications/:notification_id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/v1/mobile-notifications/notif-123',
+      url: '/mobile-notifications/notif-123',
     });
 
     expect(response.statusCode).toBe(401);

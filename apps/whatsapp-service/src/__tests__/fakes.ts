@@ -9,7 +9,7 @@
  */
 import type { Result } from '@intexuraos/common';
 import { ok, err } from '@intexuraos/common';
-import { normalizePhoneNumber } from '../routes/v1/shared.js';
+import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,

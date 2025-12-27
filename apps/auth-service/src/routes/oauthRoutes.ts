@@ -1,8 +1,8 @@
 /**
  * OAuth2 Routes (ChatGPT Actions Compatible)
  *
- * POST /v1/auth/oauth/token     - Exchange authorization code for tokens
- * GET  /v1/auth/oauth/authorize - Redirect to Auth0 authorization page
+ * POST /auth/oauth/token     - Exchange authorization code for tokens
+ * GET  /auth/oauth/authorize - Redirect to Auth0 authorization page
  */
 
 import type { FastifyPluginCallback } from 'fastify';
@@ -11,9 +11,9 @@ import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
 import { loadAuth0Config } from './shared.js';
 
 export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /v1/auth/oauth/token
+  // POST /auth/oauth/token
   fastify.post(
-    '/v1/auth/oauth/token',
+    '/auth/oauth/token',
     {
       schema: {
         operationId: 'oauthToken',
@@ -187,9 +187,9 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/auth/oauth/authorize
+  // GET /auth/oauth/authorize
   fastify.get(
-    '/v1/auth/oauth/authorize',
+    '/auth/oauth/authorize',
     {
       schema: {
         operationId: 'oauthAuthorize',

@@ -27,7 +27,7 @@ export interface ApiErrorResponse {
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 /**
- * User info from /v1/auth/me
+ * User info from /auth/me
  */
 export interface UserInfo {
   userId: string;

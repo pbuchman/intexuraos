@@ -1,12 +1,12 @@
 /**
  * Notification routes for mobile-notifications-service.
- * GET /v1/mobile-notifications - List notifications.
- * DELETE /v1/mobile-notifications/:id - Delete notification.
+ * GET /mobile-notifications - List notifications.
+ * DELETE /mobile-notifications/:notification_id - Delete notification.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common';
-import { getServices } from '../../services.js';
-import { listNotifications, deleteNotification } from '../../domain/notifications/index.js';
+import { getServices } from '../services.js';
+import { listNotifications, deleteNotification } from '../domain/notifications/index.js';
 import { listNotificationsResponseSchema } from './schemas.js';
 
 interface ListQuerystring {
@@ -15,13 +15,13 @@ interface ListQuerystring {
 }
 
 interface DeleteParams {
-  id: string;
+  notification_id: string;
 }
 
 export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // GET /v1/mobile-notifications
+  // GET /mobile-notifications
   fastify.get<{ Querystring: ListQuerystring }>(
-    '/v1/mobile-notifications',
+    '/mobile-notifications',
     {
       schema: {
         operationId: 'listMobileNotifications',
@@ -95,9 +95,9 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
     }
   );
 
-  // DELETE /v1/mobile-notifications/:id
+  // DELETE /mobile-notifications/:notification_id
   fastify.delete<{ Params: DeleteParams }>(
-    '/v1/mobile-notifications/:id',
+    '/mobile-notifications/:notification_id',
     {
       schema: {
         operationId: 'deleteMobileNotification',
@@ -107,9 +107,9 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
-          required: ['id'],
+          required: ['notification_id'],
           properties: {
-            id: { type: 'string' },
+            notification_id: { type: 'string' },
           },
         },
         response: {
@@ -162,7 +162,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return;
       }
 
-      const { id } = request.params;
+      const { notification_id: id } = request.params;
 
       const result = await deleteNotification(
         { notificationId: id, userId: user.userId },

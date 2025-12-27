@@ -1,8 +1,8 @@
 /**
  * WhatsApp Webhook Routes
  *
- * GET  /v1/webhooks/whatsapp - Webhook verification endpoint
- * POST /v1/webhooks/whatsapp - Webhook event receiver
+ * GET  /whatsapp/webhooks - Webhook verification endpoint
+ * POST /whatsapp/webhooks - Webhook event receiver
  *
  * This file handles HTTP transport concerns (validation, signature, response).
  * Business logic is delegated to domain usecases.
@@ -11,14 +11,14 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { handleValidationError } from '@intexuraos/common';
 import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
-import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
-import { getServices } from '../../services.js';
-import type { Config } from '../../config.js';
+import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
+import { getServices } from '../services.js';
+import type { Config } from '../config.js';
 import {
   ProcessImageMessageUseCase,
   ProcessAudioMessageUseCase,
   TranscribeAudioUseCase,
-} from '../../domain/inbox/index.js';
+} from '../domain/inbox/index.js';
 import {
   extractDisplayPhoneNumber,
   extractMessageId,
@@ -38,9 +38,9 @@ import {
  */
 export function createWebhookRoutes(config: Config): FastifyPluginCallback {
   return (fastify, _opts, done) => {
-    // GET /v1/webhooks/whatsapp - Webhook verification endpoint
+    // GET /whatsapp/webhooks - Webhook verification endpoint
     fastify.get(
-      '/v1/webhooks/whatsapp',
+      '/whatsapp/webhooks',
       {
         schema: {
           operationId: 'verifyWhatsAppWebhook',
@@ -108,9 +108,9 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
       }
     );
 
-    // POST /v1/webhooks/whatsapp - Webhook event receiver
+    // POST /whatsapp/webhooks - Webhook event receiver
     fastify.post(
-      '/v1/webhooks/whatsapp',
+      '/whatsapp/webhooks',
       {
         schema: {
           operationId: 'receiveWhatsAppWebhook',

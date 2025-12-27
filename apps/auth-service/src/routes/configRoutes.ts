@@ -1,7 +1,7 @@
 /**
  * Auth Configuration Routes
  *
- * GET /v1/auth/config - Get non-secret auth configuration
+ * GET /auth/config - Get non-secret auth configuration
  */
 
 import type { FastifyPluginCallback } from 'fastify';
@@ -9,9 +9,9 @@ import type { AuthConfigResponse } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
 
 export const configRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // GET /v1/auth/config
+  // GET /auth/config
   fastify.get(
-    '/v1/auth/config',
+    '/auth/config',
     {
       schema: {
         operationId: 'getAuthConfig',

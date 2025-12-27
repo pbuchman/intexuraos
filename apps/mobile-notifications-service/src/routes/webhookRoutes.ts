@@ -1,17 +1,17 @@
 /**
  * Webhook routes for mobile-notifications-service.
- * POST /v1/webhooks/mobile-notifications - Receive notification from mobile device.
+ * POST /mobile-notifications/webhooks - Receive notification from mobile device.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { getServices } from '../../services.js';
-import { processNotification, type WebhookPayload } from '../../domain/notifications/index.js';
+import { getServices } from '../services.js';
+import { processNotification, type WebhookPayload } from '../domain/notifications/index.js';
 import { webhookRequestSchema, webhookResponseSchema } from './schemas.js';
 
 const SIGNATURE_HEADER = 'x-mobile-notifications-signature';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: WebhookPayload }>(
-    '/v1/webhooks/mobile-notifications',
+    '/mobile-notifications/webhooks',
     {
       schema: {
         operationId: 'receiveMobileNotification',

@@ -5,7 +5,7 @@ import type { WhatsAppStatus, WhatsAppConnectResponse, WhatsAppMessagesResponse 
 export async function getWhatsAppStatus(accessToken: string): Promise<WhatsAppStatus | null> {
   return await apiRequest<WhatsAppStatus | null>(
     config.whatsappServiceUrl,
-    '/v1/whatsapp/status',
+    '/whatsapp/status',
     accessToken
   );
 }
@@ -20,7 +20,7 @@ export async function connectWhatsApp(
 ): Promise<WhatsAppConnectResponse> {
   return await apiRequest<WhatsAppConnectResponse>(
     config.whatsappServiceUrl,
-    '/v1/whatsapp/connect',
+    '/whatsapp/connect',
     accessToken,
     {
       method: 'POST',
@@ -32,7 +32,7 @@ export async function connectWhatsApp(
 export async function disconnectWhatsApp(accessToken: string): Promise<void> {
   await apiRequest<{ disconnected: boolean }>(
     config.whatsappServiceUrl,
-    '/v1/whatsapp/disconnect',
+    '/whatsapp/disconnect',
     accessToken,
     { method: 'DELETE' }
   );
@@ -41,7 +41,7 @@ export async function disconnectWhatsApp(accessToken: string): Promise<void> {
 export async function getWhatsAppMessages(accessToken: string): Promise<WhatsAppMessagesResponse> {
   return await apiRequest<WhatsAppMessagesResponse>(
     config.whatsappServiceUrl,
-    '/v1/whatsapp/messages',
+    '/whatsapp/messages',
     accessToken
   );
 }
@@ -49,7 +49,7 @@ export async function getWhatsAppMessages(accessToken: string): Promise<WhatsApp
 export async function deleteWhatsAppMessage(accessToken: string, messageId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.whatsappServiceUrl,
-    `/v1/whatsapp/messages/${messageId}`,
+    `/whatsapp/messages/${messageId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -72,7 +72,7 @@ export async function getMessageMediaUrl(
 ): Promise<MediaUrlResponse> {
   return await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
-    `/v1/whatsapp/messages/${messageId}/media`,
+    `/whatsapp/messages/${messageId}/media`,
     accessToken
   );
 }
@@ -86,7 +86,7 @@ export async function getMessageThumbnailUrl(
 ): Promise<MediaUrlResponse> {
   return await apiRequest<MediaUrlResponse>(
     config.whatsappServiceUrl,
-    `/v1/whatsapp/messages/${messageId}/thumbnail`,
+    `/whatsapp/messages/${messageId}/thumbnail`,
     accessToken
   );
 }

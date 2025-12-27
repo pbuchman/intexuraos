@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * POST /v1/tools/notion/promptvault/prompts
+ * POST /prompt-vault/prompts
  *
  * Schema constraints:
  * - title: max 200 characters (Notion page title practical limit)
@@ -22,7 +22,7 @@ export const createPromptRequestSchema = z
 export type CreatePromptRequest = z.infer<typeof createPromptRequestSchema>;
 
 /**
- * PATCH /v1/tools/notion/promptvault/prompts/{promptId}
+ * PATCH /prompt-vault/prompts/:prompt_id
  *
  * At least one of title or prompt must be provided.
  */

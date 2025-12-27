@@ -1,11 +1,11 @@
 /**
  * Connect routes for mobile-notifications-service.
- * POST /v1/mobile-notifications/connect - Create a new signature connection.
+ * POST /mobile-notifications/connect - Create a new signature connection.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common';
-import { getServices } from '../../services.js';
-import { createConnection } from '../../domain/notifications/index.js';
+import { getServices } from '../services.js';
+import { createConnection } from '../domain/notifications/index.js';
 import { connectRequestSchema, connectResponseSchema } from './schemas.js';
 
 interface ConnectBody {
@@ -14,7 +14,7 @@ interface ConnectBody {
 
 export const connectRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: ConnectBody }>(
-    '/v1/mobile-notifications/connect',
+    '/mobile-notifications/connect',
     {
       schema: {
         operationId: 'connectMobileNotifications',

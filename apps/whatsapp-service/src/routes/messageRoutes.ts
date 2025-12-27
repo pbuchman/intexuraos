@@ -1,22 +1,22 @@
 /**
  * Routes for WhatsApp message management.
- * - GET /v1/whatsapp/messages — list user's messages
- * - GET /v1/whatsapp/messages/:messageId/media — get signed URL for original media
- * - GET /v1/whatsapp/messages/:messageId/thumbnail — get signed URL for thumbnail
- * - DELETE /v1/whatsapp/messages/:messageId — delete a message
+ * - GET /whatsapp/messages — list user's messages
+ * - GET /whatsapp/messages/:message_id/media — get signed URL for original media
+ * - GET /whatsapp/messages/:message_id/thumbnail — get signed URL for thumbnail
+ * - DELETE /whatsapp/messages/:message_id — delete a message
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common';
-import { getServices } from '../../services.js';
+import { getServices } from '../services.js';
 
 interface MessageParams {
-  messageId: string;
+  message_id: string;
 }
 
 export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // GET /v1/whatsapp/messages — list user's messages
+  // GET /whatsapp/messages — list user's messages
   fastify.get(
-    '/v1/whatsapp/messages',
+    '/whatsapp/messages',
     {
       schema: {
         operationId: 'getWhatsAppMessages',
@@ -164,9 +164,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/whatsapp/messages/:messageId/media — get signed URL for original media
+  // GET /whatsapp/messages/:message_id/media — get signed URL for original media
   fastify.get<{ Params: MessageParams }>(
-    '/v1/whatsapp/messages/:messageId/media',
+    '/whatsapp/messages/:message_id/media',
     {
       schema: {
         operationId: 'getWhatsAppMessageMedia',
@@ -175,9 +175,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['whatsapp'],
         params: {
           type: 'object',
-          required: ['messageId'],
+          required: ['message_id'],
           properties: {
-            messageId: { type: 'string', description: 'Message ID' },
+            message_id: { type: 'string', description: 'Message ID' },
           },
         },
         response: {
@@ -241,7 +241,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const { messageId } = request.params;
+      const { message_id: messageId } = request.params;
       const { messageRepository, mediaStorage } = getServices();
 
       const messageResult = await messageRepository.getMessage(messageId);
@@ -279,9 +279,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/whatsapp/messages/:messageId/thumbnail — get signed URL for thumbnail
+  // GET /whatsapp/messages/:message_id/thumbnail — get signed URL for thumbnail
   fastify.get<{ Params: MessageParams }>(
-    '/v1/whatsapp/messages/:messageId/thumbnail',
+    '/whatsapp/messages/:message_id/thumbnail',
     {
       schema: {
         operationId: 'getWhatsAppMessageThumbnail',
@@ -291,9 +291,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['whatsapp'],
         params: {
           type: 'object',
-          required: ['messageId'],
+          required: ['message_id'],
           properties: {
-            messageId: { type: 'string', description: 'Message ID' },
+            message_id: { type: 'string', description: 'Message ID' },
           },
         },
         response: {
@@ -357,7 +357,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const { messageId } = request.params;
+      const { message_id: messageId } = request.params;
       const { messageRepository, mediaStorage } = getServices();
 
       const messageResult = await messageRepository.getMessage(messageId);
@@ -395,9 +395,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // DELETE /v1/whatsapp/messages/:messageId — delete a message
+  // DELETE /whatsapp/messages/:message_id — delete a message
   fastify.delete<{ Params: MessageParams }>(
-    '/v1/whatsapp/messages/:messageId',
+    '/whatsapp/messages/:message_id',
     {
       schema: {
         operationId: 'deleteWhatsAppMessage',
@@ -406,9 +406,9 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['whatsapp'],
         params: {
           type: 'object',
-          required: ['messageId'],
+          required: ['message_id'],
           properties: {
-            messageId: { type: 'string', description: 'Message ID to delete' },
+            message_id: { type: 'string', description: 'Message ID to delete' },
           },
         },
         response: {
@@ -466,7 +466,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const { messageId } = request.params;
+      const { message_id: messageId } = request.params;
       const { messageRepository, eventPublisher } = getServices();
 
       // First, verify the message exists and belongs to the user

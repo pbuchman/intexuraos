@@ -1,20 +1,20 @@
 /**
  * Notion Integration Routes
  *
- * POST   /v1/integrations/notion/connect    - Connect Notion integration
- * GET    /v1/integrations/notion/status     - Get integration status
- * DELETE /v1/integrations/notion/disconnect - Disconnect integration
+ * POST   /notion/connect    - Connect Notion integration
+ * GET    /notion/status     - Get integration status
+ * DELETE /notion/disconnect - Disconnect integration
  */
 
 import type { FastifyPluginCallback } from 'fastify';
 import { requireAuth, handleValidationError } from '@intexuraos/common';
 import { connectRequestSchema } from './schemas.js';
-import { getServices } from '../../services.js';
+import { getServices } from '../services.js';
 
 export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /v1/integrations/notion/connect
+  // POST /notion/connect
   fastify.post(
-    '/v1/integrations/notion/connect',
+    '/notion/connect',
     {
       schema: {
         operationId: 'connectNotion',
@@ -129,9 +129,9 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     }
   );
 
-  // GET /v1/integrations/notion/status
+  // GET /notion/status
   fastify.get(
-    '/v1/integrations/notion/status',
+    '/notion/status',
     {
       schema: {
         operationId: 'getNotionStatus',
@@ -195,9 +195,9 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
     }
   );
 
-  // DELETE /v1/integrations/notion/disconnect
+  // DELETE /notion/disconnect
   fastify.delete(
-    '/v1/integrations/notion/disconnect',
+    '/notion/disconnect',
     {
       schema: {
         operationId: 'disconnectNotion',

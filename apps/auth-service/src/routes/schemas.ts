@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * POST /v1/auth/device/start
+ * POST /auth/device/start
  * Request device authorization code from Auth0.
  */
 export const deviceStartRequestSchema = z.object({
@@ -24,7 +24,7 @@ export interface DeviceStartResponse {
 }
 
 /**
- * POST /v1/auth/device/poll
+ * POST /auth/device/poll
  * Poll for token after user authorization.
  */
 export const devicePollRequestSchema = z.object({
@@ -46,7 +46,7 @@ export interface TokenResponse {
 }
 
 /**
- * POST /v1/auth/refresh
+ * POST /auth/refresh
  * Refresh access token using stored refresh token.
  */
 export const refreshTokenRequestSchema = z.object({
@@ -56,7 +56,7 @@ export const refreshTokenRequestSchema = z.object({
 export type RefreshTokenRequest = z.infer<typeof refreshTokenRequestSchema>;
 
 /**
- * POST /v1/auth/oauth/token
+ * POST /auth/oauth/token
  * OAuth2 token endpoint for ChatGPT Actions (Authorization Code flow).
  */
 export const oauthTokenRequestSchema = z.object({
@@ -72,7 +72,7 @@ export const oauthTokenRequestSchema = z.object({
 export type OAuthTokenRequest = z.infer<typeof oauthTokenRequestSchema>;
 
 /**
- * GET /v1/auth/config
+ * GET /auth/config
  * Non-secret auth configuration for troubleshooting.
  */
 export interface AuthConfigResponse {

@@ -1,10 +1,10 @@
 /**
  * Tests for prompt CRUD routes:
- * - GET /v1/tools/notion/promptvault/main-page
- * - GET /v1/tools/notion/promptvault/prompts
- * - POST /v1/tools/notion/promptvault/prompts
- * - GET /v1/tools/notion/promptvault/prompts/:promptId
- * - PATCH /v1/tools/notion/promptvault/prompts/:promptId
+ * - GET /prompt-vault/main-page
+ * - GET /prompt-vault/prompts
+ * - POST /prompt-vault/prompts
+ * - GET /prompt-vault/prompts/:prompt_id
+ * - PATCH /prompt-vault/prompts/:prompt_id
  */
 import {
   describe,
@@ -36,13 +36,13 @@ async function setupConnection(
 describe('Prompt Routes', () => {
   const ctx = setupTestContext();
 
-  describe('GET /v1/tools/notion/promptvault/main-page', () => {
+  describe('GET /prompt-vault/main-page', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-main' });
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/main-page',
+        url: '/prompt-vault/main-page',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -64,7 +64,7 @@ describe('Prompt Routes', () => {
       // Then get main page
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/main-page',
+        url: '/prompt-vault/main-page',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -86,13 +86,13 @@ describe('Prompt Routes', () => {
     });
   });
 
-  describe('GET /v1/tools/notion/promptvault/prompts (listPrompts)', () => {
+  describe('GET /prompt-vault/prompts (listPrompts)', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-list-prompts' });
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -113,7 +113,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -127,13 +127,13 @@ describe('Prompt Routes', () => {
     });
   });
 
-  describe('POST /v1/tools/notion/promptvault/prompts (createPrompt)', () => {
+  describe('POST /prompt-vault/prompts (createPrompt)', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-create-prompt' });
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'Test Prompt',
@@ -158,7 +158,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'My New Prompt',
@@ -184,7 +184,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
@@ -205,7 +205,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'Test Title',
@@ -226,7 +226,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/tools/notion/promptvault/prompts',
+        url: '/prompt-vault/prompts',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'x'.repeat(201),
@@ -244,13 +244,13 @@ describe('Prompt Routes', () => {
     });
   });
 
-  describe('GET /v1/tools/notion/promptvault/prompts/:promptId (getPrompt)', () => {
+  describe('GET /prompt-vault/prompts/:prompt_id (getPrompt)', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-get-prompt' });
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/prompts/some-prompt-id',
+        url: '/prompt-vault/prompts/some-prompt-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -271,7 +271,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/tools/notion/promptvault/prompts/nonexistent-id',
+        url: '/prompt-vault/prompts/nonexistent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -285,13 +285,13 @@ describe('Prompt Routes', () => {
     });
   });
 
-  describe('PATCH /v1/tools/notion/promptvault/prompts/:promptId (updatePrompt)', () => {
+  describe('PATCH /prompt-vault/prompts/:prompt_id (updatePrompt)', () => {
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-update-prompt' });
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/v1/tools/notion/promptvault/prompts/some-prompt-id',
+        url: '/prompt-vault/prompts/some-prompt-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'Updated Title',
@@ -312,7 +312,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/v1/tools/notion/promptvault/prompts/some-id',
+        url: '/prompt-vault/prompts/some-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
       });
@@ -334,7 +334,7 @@ describe('Prompt Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/v1/tools/notion/promptvault/prompts/nonexistent-id',
+        url: '/prompt-vault/prompts/nonexistent-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           title: 'New Title',

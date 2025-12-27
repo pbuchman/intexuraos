@@ -1,19 +1,19 @@
 /**
  * Tests for WhatsApp user mapping routes:
- * - POST /v1/whatsapp/connect
- * - GET /v1/whatsapp/status
- * - DELETE /v1/whatsapp/disconnect
+ * - POST /whatsapp/connect
+ * - GET /whatsapp/status
+ * - DELETE /whatsapp/disconnect
  */
 import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
 
 describe('WhatsApp Mapping Routes', () => {
   const ctx = setupTestContext();
 
-  describe('POST /v1/whatsapp/connect', () => {
+  describe('POST /whatsapp/connect', () => {
     it('returns 401 when no authorization header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         payload: {
           phoneNumbers: ['+12125551234'],
         },
@@ -33,7 +33,7 @@ describe('WhatsApp Mapping Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125551234'],
@@ -58,7 +58,7 @@ describe('WhatsApp Mapping Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: [],
@@ -80,7 +80,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Create initial mapping
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125551111'],
@@ -90,7 +90,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Update mapping
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125552222'],
@@ -109,11 +109,11 @@ describe('WhatsApp Mapping Routes', () => {
     });
   });
 
-  describe('GET /v1/whatsapp/status', () => {
+  describe('GET /whatsapp/status', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/status',
+        url: '/whatsapp/status',
       });
 
       expect(response.statusCode).toBe(401);
@@ -130,7 +130,7 @@ describe('WhatsApp Mapping Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/status',
+        url: '/whatsapp/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -149,7 +149,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Create mapping first
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125553333'],
@@ -159,7 +159,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Get status
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/status',
+        url: '/whatsapp/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -177,11 +177,11 @@ describe('WhatsApp Mapping Routes', () => {
     });
   });
 
-  describe('DELETE /v1/whatsapp/disconnect', () => {
+  describe('DELETE /whatsapp/disconnect', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/disconnect',
+        url: '/whatsapp/disconnect',
       });
 
       expect(response.statusCode).toBe(401);
@@ -198,7 +198,7 @@ describe('WhatsApp Mapping Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/disconnect',
+        url: '/whatsapp/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -217,7 +217,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Create mapping first
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125554444'],
@@ -227,7 +227,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Disconnect
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/disconnect',
+        url: '/whatsapp/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -249,7 +249,7 @@ describe('WhatsApp Mapping Routes', () => {
       // Create mapping
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/whatsapp/connect',
+        url: '/whatsapp/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           phoneNumbers: ['+12125555555'],
@@ -259,14 +259,14 @@ describe('WhatsApp Mapping Routes', () => {
       // Disconnect
       await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/disconnect',
+        url: '/whatsapp/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 
       // Verify status shows disconnected
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/status',
+        url: '/whatsapp/status',
         headers: { authorization: `Bearer ${token}` },
       });
 

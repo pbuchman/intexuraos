@@ -1,20 +1,20 @@
 /**
  * Token Management Routes
  *
- * POST /v1/auth/refresh - Refresh access token using stored refresh token
+ * POST /auth/refresh - Refresh access token using stored refresh token
  */
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr, handleValidationError } from '@intexuraos/common';
-import type { AuthTokens } from '../../domain/identity/index.js';
+import type { AuthTokens } from '../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
-import { getServices } from '../../services.js';
+import { getServices } from '../services.js';
 
 export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /v1/auth/refresh
+  // POST /auth/refresh
   fastify.post(
-    '/v1/auth/refresh',
+    '/auth/refresh',
     {
       schema: {
         operationId: 'refreshToken',

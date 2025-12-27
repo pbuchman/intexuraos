@@ -11,7 +11,7 @@ import {
   registerQuietHealthCheckLogging,
   type NotionLogger,
 } from '@intexuraos/common';
-import { v1Routes } from './routes/v1/routes.js';
+import { notionRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
 
 const SERVICE_NAME = 'notion-service';
@@ -467,8 +467,8 @@ export async function buildServer(): Promise<FastifyInstance> {
     routePrefix: '/docs',
   });
 
-  // Register v1 routes
-  await app.register(v1Routes);
+  // Register notion routes
+  await app.register(notionRoutes);
 
   // OpenAPI JSON endpoint
   app.get(

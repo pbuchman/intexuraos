@@ -101,9 +101,9 @@ describe('promptvault-service OpenAPI contract', () => {
     const paths = openapiSpec.paths;
 
     // Prompt CRUD endpoints
-    expect(paths?.['/v1/tools/notion/promptvault/main-page']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/prompts']).toBeDefined();
-    expect(paths?.['/v1/tools/notion/promptvault/prompts/{promptId}']).toBeDefined();
+    expect(paths?.['/prompt-vault/main-page']).toBeDefined();
+    expect(paths?.['/prompt-vault/prompts']).toBeDefined();
+    expect(paths?.['/prompt-vault/prompts/{prompt_id}']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
 
     // Integration and webhook endpoints moved to notion-service
@@ -116,10 +116,7 @@ describe('promptvault-service OpenAPI contract', () => {
   it('protected endpoints require bearerAuth security', () => {
     const paths = openapiSpec.paths;
 
-    const protectedEndpoints = [
-      '/v1/tools/notion/promptvault/main-page',
-      '/v1/tools/notion/promptvault/prompts',
-    ];
+    const protectedEndpoints = ['/prompt-vault/main-page', '/prompt-vault/prompts'];
 
     for (const endpoint of protectedEndpoints) {
       const methods = paths?.[endpoint];
