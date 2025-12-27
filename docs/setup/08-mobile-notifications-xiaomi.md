@@ -2,7 +2,7 @@
 
 **Device:** Redmi Note 13 Pro 5G  
 **OS:** HyperOS (Android 14)  
-**Goal:** Intercept notifications from specific apps (e.g., WhatsApp) and send them via HTTP POST to IntexuraOS.
+**Goal:** Intercept notifications from specific apps (e.g., Zen, Revolut), sanitize data, and send via HTTP POST with a robust retry flow.
 
 ---
 
@@ -12,9 +12,9 @@ Xiaomi's HyperOS aggressively kills background processes. The following manual o
 
 ### 1.1. Background Autostart
 
-1. Navigate to **Settings** → **Apps** → **Background autostart**.
+1. Navigate to **Settings** → **Apps** → **Permissions** → **Background autostart**.
 2. Enable the toggle for both **Tasker** and **AutoNotification**.
-3. Tap on each app name to ensure both "Basic" and "Background" autostart options are permitted.
+3. Tap on each app name to ensure "Background autostart" is fully permitted.
 
 ### 1.2. Battery Optimization
 
@@ -36,7 +36,7 @@ The Profile serves as the event trigger.
 1. **Create Profile:** Open Tasker → **Profiles** → **+** → **Event** → **Plugin** → **AutoNotification** → **Intercept**.
 2. **Configuration:**
    - **Action Type:** Set to `Created` to trigger only on new incoming notifications.
-   - **Apps:** Filter to your desired apps (e.g., WhatsApp Business: `com.whatsapp.w4b`).
+   - **Apps:** Filter to your desired apps (e.g., Zen, Revolut).
    - **Event Behaviour:** Enabled (True).
 3. **Variable Names:** The plugin automatically populates local variables like `%antitle`, `%antext`, `%anpackage`, and `%ankey`.
 
@@ -44,25 +44,57 @@ See [08-tasker-configuration.jpg](08-tasker-configuration.jpg) for a visual refe
 
 ---
 
-## 3. Tasker Task: HTTP POST with Retry Flow
+## 3. Data Sanitization (Variable Search Replace)
+
+These actions **must be placed at the beginning of the Task** to prevent JSON syntax errors caused by special characters in notification content.
+
+### 3.1. Remove Newlines from Key
+
+- **Action:** Variable Search Replace
+- **Variable:** `%ankey`
+- **Search:** `\n`
+- **Multi-Line:** Enabled
+- **Replace Matches:** Enabled
+- **Replace With:** _(leave empty)_
+
+### 3.2. Escape Quotes in Title
+
+- **Action:** Variable Search Replace
+- **Variable:** `%antitle`
+- **Search:** `"`
+- **Replace Matches:** Enabled
+- **Replace With:** `\"`
+
+### 3.3. Escape Quotes in Text
+
+- **Action:** Variable Search Replace
+- **Variable:** `%antext`
+- **Search:** `"`
+- **Replace Matches:** Enabled
+- **Replace With:** `\"`
+
+---
+
+## 4. Tasker Task: HTTP POST with Retry Flow
 
 This task handles data transmission to the backend with error handling and local logging.
 
 ![Tasker Configuration](08-tasker-configuration.jpg)
 
-### 3.1. Flow Logic (Action by Action)
+### 4.1. Flow Logic (Action by Action)
 
 1. **Write File:** Append the initial event data to `Documents/tasker_full_log.txt`.
-2. **Variable Set:** Initialize `%attempts` to `0`.
-3. **Anchor (retry_loop):** A label for the Goto loop.
-4. **HTTP Request:** POST request with the JSON payload.
-5. **Write File:** Append the server response (code and content) to the log file.
-6. **Wait:** 5 Minutes (Condition: If `%http_response_code` is NOT 200).
-7. **Variable Add:** Increment `%attempts` by 1 (Condition: If code is NOT 200).
-8. **Goto:** Jump to `retry_loop` (Condition: If code is NOT 200 AND `%attempts` < 100).
-9. **Notify:** Create a system notification "Błąd wysyłki" if all retries fail.
+2. **Variable Search Replace (x3):** Sanitization actions from Step 3.
+3. **Variable Set:** Initialize `%attempts` to `0`.
+4. **Anchor (retry_loop):** A label for the Goto loop.
+5. **HTTP Request:** POST request with the JSON payload.
+6. **Write File:** Append the server response (code and content) to the log file.
+7. **Wait:** 5 Minutes (Condition: If `%http_response_code` != 200).
+8. **Variable Add:** Increment `%attempts` by 1 (Condition: If code != 200).
+9. **Goto:** Jump to `retry_loop` (Condition: If code != 200 AND `%attempts` < 100).
+10. **Notify:** Create a system notification "Notification error" if all retries fail.
 
-### 3.2. HTTP Request Configuration
+### 4.2. HTTP Request Configuration
 
 - **Method:** `POST`
 - **URL:** `https://YOUR_SERVICE_URL/mobile-notifications/webhooks`
@@ -70,15 +102,15 @@ This task handles data transmission to the backend with error handling and local
   - `Content-Type: application/json`
   - `X-Mobile-Notifications-Signature: YOUR_SIGNATURE`
 
-### 3.3. JSON Payload (Body)
+### 4.3. JSON Payload (Body)
 
-```text
+```json
 {
   "source": "tasker",
   "device": "redmi-note-13-pro",
   "timestamp": %TIMES,
   "notification_id": "%ankey",
-  "post_time": %anposttime,
+  "post_time": "%anposttime",
   "app": "%anpackage",
   "title": "%antitle",
   "text": "%antext"
@@ -93,18 +125,18 @@ This task handles data transmission to the backend with error handling and local
 | `%ankey`      | Unique notification key (e.g., `0\|com.whatsapp.w4b\|101...`) |
 | `%anposttime` | Millisecond timestamp when the notification was posted        |
 | `%anpackage`  | App package name (e.g., `com.whatsapp.w4b`)                   |
-| `%antitle`    | Notification title                                            |
-| `%antext`     | Notification text content                                     |
+| `%antitle`    | Notification title (sanitized)                                |
+| `%antext`     | Notification text content (sanitized)                         |
 
 ---
 
-## 4. Debugging & System Behavior
+## 5. Debugging & System Behavior
 
-### 4.1. "No active profiles" Status
+### 5.1. "No active profiles" Status
 
 The notification "No active profiles (1 of 1 enabled)" is **normal**. Event triggers are instantaneous and do not stay "active" in the UI like State-based profiles.
 
-### 4.2. Analyzing Log Errors
+### 5.2. Analyzing Log Errors
 
 | Response Code | Meaning                                             |
 | ------------- | --------------------------------------------------- |
@@ -113,12 +145,13 @@ The notification "No active profiles (1 of 1 enabled)" is **normal**. Event trig
 | `400`         | Bad request - verify JSON payload structure         |
 | `5xx`         | Server error - retry will handle this automatically |
 
-### 4.3. Variable Issues
+### 5.3. Variable Issues
 
 - **Empty Variables:** Ensure variables are written in lowercase (e.g., `%antitle`). Uppercase variables like `%ANTITLE` are treated as global and may remain empty.
 - **Raw `%http_response_content`:** If this appears in logs, the server returned an empty body (typical for 401 errors).
+- **JSON Parse Errors:** If you see "Body is not valid JSON" errors, ensure the sanitization actions are configured correctly.
 
-### 4.4. Persistence
+### 5.4. Persistence
 
 To ensure the service remains alive on HyperOS:
 
@@ -128,7 +161,7 @@ To ensure the service remains alive on HyperOS:
 
 ---
 
-## 5. Getting Your Signature
+## 6. Getting Your Signature
 
 1. Log in to IntexuraOS web app.
 2. Navigate to **Mobile Notifications** in the sidebar.
@@ -139,7 +172,7 @@ To ensure the service remains alive on HyperOS:
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Issue                            | Solution                                                          |
 | -------------------------------- | ----------------------------------------------------------------- |
@@ -147,11 +180,12 @@ To ensure the service remains alive on HyperOS:
 | 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated      |
 | Tasker killed in background      | Enable autostart and disable battery optimization                 |
 | Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`)    |
+| JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines     |
 | WhatsApp not triggering          | Ensure correct package name: `com.whatsapp` or `com.whatsapp.w4b` |
 
 ---
 
-## 7. Reference
+## 8. Reference
 
 - [Tasker Configuration Screenshot](08-tasker-configuration.jpg)
 - [WhatsApp Business Cloud API Setup](./07-whatsapp-business-cloud-api.md)
