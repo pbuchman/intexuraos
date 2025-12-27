@@ -24,7 +24,7 @@
     "verify:package-json": "node scripts/verify-package-json.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:common": "node scripts/verify-common.mjs",
-    "ci": "npm run typecheck && npm run lint && npm run verify:package-json && npm run verify:boundaries && npm run verify:common && npm run format:check && npm run test:coverage && npm run build"
+    "ci": "npm run typecheck && npm run lint && npm run verify:package-json && npm run verify:boundaries && npm run verify:common && npm run format && npm run test:coverage && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

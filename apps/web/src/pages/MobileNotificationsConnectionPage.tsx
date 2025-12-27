@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
 import { connectMobileNotifications, getMobileNotificationsStatus, ApiError } from '@/services';
@@ -19,11 +19,15 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
   const [newSignature, setNewSignature] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Use ref to avoid dependency issues with getAccessToken
+  const getAccessTokenRef = useRef(getAccessToken);
+  getAccessTokenRef.current = getAccessToken;
+
   const fetchStatus = useCallback(async (): Promise<void> => {
     try {
       setIsLoading(true);
       setError(null);
-      const token = await getAccessToken();
+      const token = await getAccessTokenRef.current();
 
       // Fetch status from dedicated endpoint
       const status = await getMobileNotificationsStatus(token);
@@ -41,8 +45,9 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
     } finally {
       setIsLoading(false);
     }
-  }, [getAccessToken]);
+  }, []);
 
+  // Fetch status on mount
   useEffect(() => {
     void fetchStatus();
   }, [fetchStatus]);
@@ -55,16 +60,18 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
 
     try {
       setIsGenerating(true);
-      const token = await getAccessToken();
+      const token = await getAccessTokenRef.current();
       const response = await connectMobileNotifications(token);
 
       setNewSignature(response.signature);
-      setIsConfigured(true);
       setSuccessMessage(
         isConfigured
           ? 'New signature generated! Update your Tasker configuration with the new signature.'
           : 'Signature generated! Configure Tasker with this signature to start receiving notifications.'
       );
+
+      // Refresh status from server to update Connection Status card
+      await fetchStatus();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to generate signature');
     } finally {
