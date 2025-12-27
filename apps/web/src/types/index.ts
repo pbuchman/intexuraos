@@ -91,6 +91,14 @@ export type WhatsAppMediaType = 'text' | 'image' | 'audio';
 export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 /**
+ * Transcription error details
+ */
+export interface TranscriptionError {
+  code: string;
+  message: string;
+}
+
+/**
  * WhatsApp message from whatsapp-service
  */
 export interface WhatsAppMessage {
@@ -104,6 +112,7 @@ export interface WhatsAppMessage {
   caption: string | null;
   transcriptionStatus?: TranscriptionStatus;
   transcription?: string;
+  transcriptionError?: TranscriptionError;
 }
 
 /**
