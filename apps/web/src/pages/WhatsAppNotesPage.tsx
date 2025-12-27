@@ -348,8 +348,7 @@ function MessageItem({
                   {message.transcriptionError !== undefined && (
                     <div className="mt-1 text-xs text-red-500">
                       <p>
-                        <span className="font-medium">Code:</span>{' '}
-                        {message.transcriptionError.code}
+                        <span className="font-medium">Code:</span> {message.transcriptionError.code}
                       </p>
                       <p>
                         <span className="font-medium">Details:</span>{' '}
