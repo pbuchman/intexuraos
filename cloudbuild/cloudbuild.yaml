@@ -5,7 +5,6 @@
 # Optimizations applied:
 # - Docker BuildKit with layer caching (--cache-from)
 # - Parallel builds for all services (waitFor: ['detect-affected'])
-# - Combined build-push-deploy in single step per service
 # - Single detection pass (affected.json written once)
 # - CLOUD_LOGGING_ONLY for cost savings
 #
@@ -32,224 +31,266 @@ steps:
       - 'BRANCH_NAME=$BRANCH_NAME'
 
   # ===== PARALLEL SERVICE PIPELINES =====
-  # All steps wait only for detect-affected, enabling parallel execution
-  # Each step: build → push → deploy in single container
+  # All build steps wait only for detect-affected, enabling parallel execution
+  # Build+Push use gcr.io/cloud-builders/docker, Deploy uses cloud-sdk
 
   # ===== auth-service =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'auth-service'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-auth-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="auth-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building auth-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/auth-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
+            -f apps/auth-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "auth-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-auth-service'
+    waitFor: ['build-push-auth-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-auth-service.sh
+        else
+          echo "auth-service not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== promptvault-service =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'promptvault-service'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-promptvault-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="promptvault-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building promptvault-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+            -f apps/promptvault-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "promptvault-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-promptvault-service'
+    waitFor: ['build-push-promptvault-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-promptvault-service.sh
+        else
+          echo "promptvault-service not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== notion-service =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'notion-service'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notion-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="notion-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building notion-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+            -f apps/notion-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "notion-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notion-service'
+    waitFor: ['build-push-notion-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-notion-service.sh
+        else
+          echo "notion-service not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== whatsapp-service =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'whatsapp-service'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-whatsapp-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="whatsapp-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building whatsapp-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+            -f apps/whatsapp-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "whatsapp-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-whatsapp-service'
+    waitFor: ['build-push-whatsapp-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-whatsapp-service.sh
+        else
+          echo "whatsapp-service not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== api-docs-hub =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'api-docs-hub'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-api-docs-hub'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="api-docs-hub"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building api-docs-hub ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+            -f apps/api-docs-hub/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "api-docs-hub not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-api-docs-hub'
+    waitFor: ['build-push-api-docs-hub']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-api-docs-hub.sh
+        else
+          echo "api-docs-hub not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== mobile-notifications-service =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'mobile-notifications-service'
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-mobile-notifications-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        SERVICE="mobile-notifications-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $$SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building mobile-notifications-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
-            -f apps/$$SERVICE/Dockerfile .
-
-          echo "=== Pushing $$SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
-
-          echo "=== Deploying $$SERVICE ==="
-          bash cloudbuild/scripts/deploy-$$SERVICE.sh
+            -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+            -f apps/mobile-notifications-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
         else
-          echo "$$SERVICE not affected, skipping."
+          echo "mobile-notifications-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-mobile-notifications-service'
+    waitFor: ['build-push-mobile-notifications-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-mobile-notifications-service.sh
+        else
+          echo "mobile-notifications-service not affected, skipping deploy."
+        fi
+    env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -282,12 +323,11 @@ steps:
         fi
     env:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
 
-  # ===== static assets sync (parallel with everything) =====
+  # ===== static assets sync =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'static-assets'
     waitFor: ['npm-ci']
@@ -295,9 +335,6 @@ steps:
     args: ['-c', 'bash cloudbuild/scripts/deploy-static-assets.sh']
     env:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-
-# No substitutions block here - all substitutions come from the Terraform-managed
-# Cloud Build trigger. This ensures single source of truth.
 
 options:
   logging: CLOUD_LOGGING_ONLY
