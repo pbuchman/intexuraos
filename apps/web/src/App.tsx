@@ -8,6 +8,8 @@ import {
   NotionConnectionPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
+  MobileNotificationsConnectionPage,
+  MobileNotificationsListPage,
 } from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -86,6 +88,22 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <WhatsAppNotesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mobile-notifications"
+        element={
+          <ProtectedRoute>
+            <MobileNotificationsConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mobile-notifications/list"
+        element={
+          <ProtectedRoute>
+            <MobileNotificationsListPage />
           </ProtectedRoute>
         }
       />

@@ -125,4 +125,36 @@ export interface AppConfig {
   promptVaultServiceUrl: string;
   whatsappServiceUrl: string;
   notionServiceUrl: string;
+  mobileNotificationsServiceUrl: string;
+}
+
+/**
+ * Mobile notification from mobile-notifications-service
+ */
+export interface MobileNotification {
+  id: string;
+  source: string;
+  device: string;
+  app: string;
+  title: string;
+  text: string;
+  timestamp: number;
+  postTime: string;
+  receivedAt: string;
+}
+
+/**
+ * Mobile notifications list response
+ */
+export interface MobileNotificationsResponse {
+  notifications: MobileNotification[];
+  nextCursor?: string;
+}
+
+/**
+ * Mobile notifications connect response
+ */
+export interface MobileNotificationsConnectResponse {
+  connectionId: string;
+  signature: string;
 }

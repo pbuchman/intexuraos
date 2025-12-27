@@ -96,14 +96,25 @@ Routes kept minimal - business logic in usecases.
 - [x] Created all issue files (0-0 through 4-1)
 - [x] Added 3-1-create-connection-page.md (new requirement)
 - [x] Updated 2-3-update-documentation.md with Xiaomi setup guide
+- [x] 0-0: Setup service scaffold (backend complete)
+- [x] 1-0 through 1-6: Domain layer (models, repositories, usecases)
+- [x] 2-0: Routes (connect, webhook, list, delete)
+- [x] 2-1: Added to API Hub
+- [x] 2-2: Added Terraform
+- [x] 2-4: Added CloudBuild deploy script
+- [x] Backend tests (29 tests passing)
+- [x] 3-1: Create Mobile Notifications Connection Page (web UI)
+- [x] 3-0: Create Mobile Notifications List Page (web UI)
+- [x] 2-3: Update Documentation (README, Xiaomi setup guide)
+- [x] 4-0: Coverage verification (CI passes)
 
 ### Now:
 
-- **AWAITING USER CONFIRMATION** to proceed with implementation
+- 4-1: Final cleanup and archive
 
 ### Next:
 
-- 0-0: Setup service scaffold
+- Archive continuity folder
 
 ---
 
