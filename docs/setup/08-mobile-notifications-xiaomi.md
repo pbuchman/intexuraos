@@ -2,7 +2,7 @@
 
 **Device:** Redmi Note 13 Pro 5G  
 **OS:** HyperOS (Android 14)  
-**Goal:** Intercept notifications from specific apps (e.g., Zen, Revolut), sanitize data, and send via HTTP POST with a robust retry flow.
+**Goal:** Intercept notifications from specific apps (e.g., Zen, Revolut, WhatsApp), sanitize data, and send via HTTP POST with unique IDs to prevent deduplication errors.
 
 ---
 
@@ -22,11 +22,6 @@ Xiaomi's HyperOS aggressively kills background processes. The following manual o
 2. Locate **Tasker** and **AutoNotification**.
 3. Set **Battery saver** to "No restrictions" for both apps.
 
-### 1.3. Notification Access
-
-1. Navigate to **Settings** → **Privacy** → **Special permissions** → **Notification access**.
-2. Set **AutoNotification** to "Allowed". This is required to read the notification content (title, text, package).
-
 ---
 
 ## 2. AutoNotification Intercept Configuration
@@ -36,7 +31,7 @@ The Profile serves as the event trigger.
 1. **Create Profile:** Open Tasker → **Profiles** → **+** → **Event** → **Plugin** → **AutoNotification** → **Intercept**.
 2. **Configuration:**
    - **Action Type:** Set to `Created` to trigger only on new incoming notifications.
-   - **Apps:** Filter to your desired apps (e.g., Zen, Revolut).
+   - **Apps:** Filter to your desired apps (e.g., Zen, Revolut, WhatsApp).
    - **Event Behaviour:** Enabled (True).
 3. **Variable Names:** The plugin automatically populates local variables like `%antitle`, `%antext`, `%anpackage`, and `%ankey`.
 
@@ -75,7 +70,7 @@ These actions **must be placed at the beginning of the Task** to prevent JSON sy
 
 ---
 
-## 4. Tasker Task: HTTP POST with Retry Flow
+## 4. Tasker Task: Unique ID & Retry Flow
 
 This task handles data transmission to the backend with error handling and local logging.
 
@@ -92,7 +87,6 @@ This task handles data transmission to the backend with error handling and local
 7. **Wait:** 5 Minutes (Condition: If `%http_response_code` != 200).
 8. **Variable Add:** Increment `%attempts` by 1 (Condition: If code != 200).
 9. **Goto:** Jump to `retry_loop` (Condition: If code != 200 AND `%attempts` < 100).
-10. **Notify:** Create a system notification "Notification error" if all retries fail.
 
 ### 4.2. HTTP Request Configuration
 
@@ -104,18 +98,22 @@ This task handles data transmission to the backend with error handling and local
 
 ### 4.3. JSON Payload (Body)
 
+To prevent WhatsApp updates from being treated as duplicates, the `notification_id` combines the system key with the exact post timestamp:
+
 ```json
 {
   "source": "tasker",
   "device": "redmi-note-13-pro",
   "timestamp": %TIMES,
-  "notification_id": "%ankey",
+  "notification_id": "%ankey_%anposttime",
   "post_time": "%anposttime",
   "app": "%anpackage",
   "title": "%antitle",
   "text": "%antext"
 }
 ```
+
+**Note:** `%anposttime` ensures that even if `%ankey` is the same, every update/new message generates a unique ID.
 
 **Variables:**
 
@@ -174,14 +172,14 @@ To ensure the service remains alive on HyperOS:
 
 ## 7. Troubleshooting
 
-| Issue                            | Solution                                                          |
-| -------------------------------- | ----------------------------------------------------------------- |
-| Notifications not being captured | Check AutoNotification has Notification Access permission         |
-| 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated      |
-| Tasker killed in background      | Enable autostart and disable battery optimization                 |
-| Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`)    |
-| JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines     |
-| WhatsApp not triggering          | Ensure correct package name: `com.whatsapp` or `com.whatsapp.w4b` |
+| Issue                            | Solution                                                       |
+| -------------------------------- | -------------------------------------------------------------- |
+| Notifications not being captured | Check AutoNotification has Notification Access permission      |
+| 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated   |
+| Tasker killed in background      | Enable autostart and disable battery optimization              |
+| Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`) |
+| JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines  |
+| WhatsApp duplicates rejected     | Use `%ankey_%anposttime` as notification_id for uniqueness     |
 
 ---
 

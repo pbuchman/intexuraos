@@ -75,6 +75,39 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                             message: { type: 'string' },
                           },
                         },
+                        linkPreview: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Link preview state for messages with URLs',
+                          properties: {
+                            status: {
+                              type: 'string',
+                              enum: ['pending', 'completed', 'failed'],
+                            },
+                            previews: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  url: { type: 'string' },
+                                  title: { type: 'string' },
+                                  description: { type: 'string' },
+                                  image: { type: 'string' },
+                                  favicon: { type: 'string' },
+                                  siteName: { type: 'string' },
+                                },
+                                required: ['url'],
+                              },
+                            },
+                            error: {
+                              type: 'object',
+                              properties: {
+                                code: { type: 'string' },
+                                message: { type: 'string' },
+                              },
+                            },
+                          },
+                        },
                       },
                     },
                   },
@@ -133,7 +166,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Transform to API response format
       const messages = messagesResult.value.map((msg) => {
-        const base = {
+        const base: Record<string, unknown> = {
           id: msg.id,
           text: msg.text,
           fromNumber: msg.fromNumber,
@@ -146,12 +179,14 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Add transcription fields for audio messages
         if (msg.transcription !== undefined) {
-          return {
-            ...base,
-            transcriptionStatus: msg.transcription.status,
-            transcription: msg.transcription.text,
-            transcriptionError: msg.transcription.error,
-          };
+          base['transcriptionStatus'] = msg.transcription.status;
+          base['transcription'] = msg.transcription.text;
+          base['transcriptionError'] = msg.transcription.error;
+        }
+
+        // Add link preview for text messages with URLs
+        if (msg.linkPreview !== undefined) {
+          base['linkPreview'] = msg.linkPreview;
         }
 
         return base;
