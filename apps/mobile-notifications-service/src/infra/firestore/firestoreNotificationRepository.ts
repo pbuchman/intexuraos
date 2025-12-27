@@ -128,13 +128,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       let query = db
         .collection(COLLECTION_NAME)
         .where('userId', '==', userId)
-        .orderBy('receivedAt', 'desc')
-        .orderBy('__name__', 'desc');
+        .orderBy('receivedAt', 'desc');
 
-      // Apply cursor if provided
+      // Apply cursor if provided - uses receivedAt for pagination
       const cursorData = decodeCursor(options.cursor);
       if (cursorData !== undefined) {
-        query = query.startAfter(cursorData.receivedAt, cursorData.id);
+        query = query.startAfter(cursorData.receivedAt);
       }
 
       // Fetch one extra to determine if there are more results

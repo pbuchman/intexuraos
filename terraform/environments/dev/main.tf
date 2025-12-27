@@ -514,11 +514,11 @@ module "api_docs_hub" {
 
   # Plain env vars for OpenAPI URLs (not secrets)
   env_vars = {
-    AUTH_SERVICE_OPENAPI_URL                  = "${module.auth_service.service_url}/openapi.json"
-    PROMPTVAULT_SERVICE_OPENAPI_URL           = "${module.promptvault_service.service_url}/openapi.json"
-    NOTION_SERVICE_OPENAPI_URL                = "${module.notion_service.service_url}/openapi.json"
-    WHATSAPP_SERVICE_OPENAPI_URL              = "${module.whatsapp_service.service_url}/openapi.json"
-    MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL  = "${module.mobile_notifications_service.service_url}/openapi.json"
+    AUTH_SERVICE_OPENAPI_URL                 = "${module.auth_service.service_url}/openapi.json"
+    PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
+    NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
+    WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
+    MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
   }
 
   depends_on = [
