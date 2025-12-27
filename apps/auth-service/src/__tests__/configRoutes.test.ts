@@ -1,5 +1,5 @@
 /**
- * Tests for GET /v1/auth/config
+ * Tests for GET /auth/config
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -10,7 +10,7 @@ const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
 
-describe('GET /v1/auth/config', () => {
+describe('GET /auth/config', () => {
   let app: FastifyInstance;
 
   beforeAll(() => {
@@ -38,7 +38,7 @@ describe('GET /v1/auth/config', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/v1/auth/config',
+      url: '/auth/config',
     });
 
     expect(response.statusCode).toBe(503);
@@ -59,7 +59,7 @@ describe('GET /v1/auth/config', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/v1/auth/config',
+      url: '/auth/config',
     });
 
     expect(response.statusCode).toBe(200);
@@ -88,7 +88,7 @@ describe('GET /v1/auth/config', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/v1/auth/config',
+      url: '/auth/config',
     });
 
     expect(response.statusCode).toBe(200);

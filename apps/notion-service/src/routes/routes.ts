@@ -1,13 +1,13 @@
 /**
- * Notion Service V1 Routes
+ * Notion Service Routes
  *
  * Route URL → File mapping:
  * ─────────────────────────────────────────────────────────────────────────────
- * POST   /v1/integrations/notion/connect              → ./integrationRoutes.ts
- * GET    /v1/integrations/notion/status               → ./integrationRoutes.ts
- * DELETE /v1/integrations/notion/disconnect           → ./integrationRoutes.ts
- * POST   /v1/webhooks/notion                          → ./webhookRoutes.ts
+ * POST   /notion/connect              → ./integrationRoutes.ts
+ * GET    /notion/status               → ./integrationRoutes.ts
+ * DELETE /notion/disconnect           → ./integrationRoutes.ts
+ * POST   /notion-webhooks             → ./webhookRoutes.ts
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-export { v1Routes } from './index.js';
+export { notionRoutes } from './index.js';

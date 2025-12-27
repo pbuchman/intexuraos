@@ -1,16 +1,16 @@
 /**
  * Tests for webhook routes:
- * - POST /v1/webhooks/notion
+ * - POST /notion-webhooks
  */
 import { describe, it, expect, setupTestContext } from './testUtils.js';
 
-describe('POST /v1/webhooks/notion', () => {
+describe('POST /notion-webhooks', () => {
   const ctx = setupTestContext();
 
   it('accepts any JSON and returns ok (no auth required)', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
-      url: '/v1/webhooks/notion',
+      url: '/notion-webhooks',
       payload: {
         type: 'page_updated',
         data: { pageId: 'some-page' },

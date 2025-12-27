@@ -1,29 +1,24 @@
 /**
  * Prompt CRUD Routes
  *
- * GET   /v1/tools/notion/promptvault/main-page          - Get main page with preview
- * GET   /v1/tools/notion/promptvault/prompts            - List all prompts
- * POST  /v1/tools/notion/promptvault/prompts            - Create a new prompt
- * GET   /v1/tools/notion/promptvault/prompts/:promptId  - Get a single prompt
- * PATCH /v1/tools/notion/promptvault/prompts/:promptId  - Update a prompt
+ * GET   /prompt-vault/main-page            - Get main page with preview
+ * GET   /prompt-vault/prompts              - List all prompts
+ * POST  /prompt-vault/prompts              - Create a new prompt
+ * GET   /prompt-vault/prompts/:prompt_id   - Get a single prompt
+ * PATCH /prompt-vault/prompts/:prompt_id   - Update a prompt
  */
 
 import type { FastifyPluginCallback } from 'fastify';
 import { requireAuth, handleValidationError } from '@intexuraos/common';
-import {
-  createPrompt,
-  listPrompts,
-  getPrompt,
-  updatePrompt,
-} from '../../domain/promptvault/index.js';
+import { createPrompt, listPrompts, getPrompt, updatePrompt } from '../domain/promptvault/index.js';
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
-import { getServices } from '../../services.js';
+import { getServices } from '../services.js';
 import { mapDomainErrorCode } from './shared.js';
 
 export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // GET /v1/tools/notion/promptvault/main-page
+  // GET /prompt-vault/main-page
   fastify.get(
-    '/v1/tools/notion/promptvault/main-page',
+    '/prompt-vault/main-page',
     {
       schema: {
         operationId: 'getPromptVaultMainPage',
@@ -91,7 +86,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!isConnected) {
         return await reply.fail(
           'MISCONFIGURED',
-          'Notion integration is not configured. Call POST /v1/integrations/notion/connect first.'
+          'Notion integration is not configured. Call POST /notion/connect first.'
         );
       }
 
@@ -133,9 +128,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/tools/notion/promptvault/prompts - List all prompts
+  // GET /prompt-vault/prompts - List all prompts
   fastify.get(
-    '/v1/tools/notion/promptvault/prompts',
+    '/prompt-vault/prompts',
     {
       schema: {
         operationId: 'listPrompts',
@@ -212,9 +207,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // POST /v1/tools/notion/promptvault/prompts - Create a new prompt
+  // POST /prompt-vault/prompts - Create a new prompt
   fastify.post(
-    '/v1/tools/notion/promptvault/prompts',
+    '/prompt-vault/prompts',
     {
       schema: {
         operationId: 'createPrompt',
@@ -312,9 +307,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/tools/notion/promptvault/prompts/:promptId - Get a single prompt
-  fastify.get<{ Params: { promptId: string } }>(
-    '/v1/tools/notion/promptvault/prompts/:promptId',
+  // GET /prompt-vault/prompts/:prompt_id - Get a single prompt
+  fastify.get<{ Params: { prompt_id: string } }>(
+    '/prompt-vault/prompts/:prompt_id',
     {
       schema: {
         operationId: 'getPrompt',
@@ -324,9 +319,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
-          required: ['promptId'],
+          required: ['prompt_id'],
           properties: {
-            promptId: { type: 'string', description: 'Prompt ID' },
+            prompt_id: { type: 'string', description: 'Prompt ID' },
           },
         },
         response: {
@@ -387,7 +382,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const { promptId } = request.params;
+      const { prompt_id: promptId } = request.params;
       const { promptRepository } = getServices();
 
       const result = await getPrompt(promptRepository, {
@@ -412,9 +407,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // PATCH /v1/tools/notion/promptvault/prompts/:promptId - Update a prompt
-  fastify.patch<{ Params: { promptId: string } }>(
-    '/v1/tools/notion/promptvault/prompts/:promptId',
+  // PATCH /prompt-vault/prompts/:prompt_id - Update a prompt
+  fastify.patch<{ Params: { prompt_id: string } }>(
+    '/prompt-vault/prompts/:prompt_id',
     {
       schema: {
         operationId: 'updatePrompt',
@@ -424,9 +419,9 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
-          required: ['promptId'],
+          required: ['prompt_id'],
           properties: {
-            promptId: { type: 'string', description: 'Prompt ID' },
+            prompt_id: { type: 'string', description: 'Prompt ID' },
           },
         },
         body: { $ref: 'UpdatePromptRequest#' },
@@ -498,7 +493,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const { promptId } = request.params;
+      const { prompt_id: promptId } = request.params;
 
       const parseResult = updatePromptRequestSchema.safeParse(request.body);
       if (!parseResult.success) {

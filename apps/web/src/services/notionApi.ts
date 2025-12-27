@@ -3,11 +3,7 @@ import { apiRequest } from './apiClient.js';
 import type { NotionStatus, NotionConnectResponse } from '@/types';
 
 export async function getNotionStatus(accessToken: string): Promise<NotionStatus> {
-  return await apiRequest<NotionStatus>(
-    config.notionServiceUrl,
-    '/v1/integrations/notion/status',
-    accessToken
-  );
+  return await apiRequest<NotionStatus>(config.notionServiceUrl, '/notion/status', accessToken);
 }
 
 export interface NotionConnectRequest {
@@ -21,7 +17,7 @@ export async function connectNotion(
 ): Promise<NotionConnectResponse> {
   return await apiRequest<NotionConnectResponse>(
     config.notionServiceUrl,
-    '/v1/integrations/notion/connect',
+    '/notion/connect',
     accessToken,
     {
       method: 'POST',
@@ -33,7 +29,7 @@ export async function connectNotion(
 export async function disconnectNotion(accessToken: string): Promise<void> {
   await apiRequest<{ disconnected: boolean }>(
     config.notionServiceUrl,
-    '/v1/integrations/notion/disconnect',
+    '/notion/disconnect',
     accessToken,
     { method: 'DELETE' }
   );

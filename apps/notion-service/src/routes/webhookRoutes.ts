@@ -1,7 +1,7 @@
 /**
  * Webhook Routes
  *
- * POST /v1/webhooks/notion - Receive Notion webhooks (no auth required)
+ * POST /notion-webhooks - Receive Notion webhooks (no auth required)
  */
 
 import type { FastifyPluginCallback } from 'fastify';
@@ -9,9 +9,9 @@ import { handleValidationError } from '@intexuraos/common';
 import { webhookRequestSchema } from './schemas.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /v1/webhooks/notion (no auth required)
+  // POST /notion-webhooks (no auth required)
   fastify.post(
-    '/v1/webhooks/notion',
+    '/notion-webhooks',
     {
       schema: {
         operationId: 'receiveNotionWebhook',

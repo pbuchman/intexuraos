@@ -61,7 +61,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -94,7 +94,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -155,7 +155,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -188,7 +188,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -221,7 +221,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -259,7 +259,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -290,7 +290,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -337,7 +337,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -396,7 +396,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -429,7 +429,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -471,7 +471,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -512,7 +512,7 @@ describe('Webhook async processing', () => {
 
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -552,7 +552,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -602,7 +602,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -644,7 +644,7 @@ describe('Webhook async processing', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,
@@ -685,7 +685,7 @@ describe('Webhook async processing', () => {
 
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/webhooks/whatsapp',
+        url: '/whatsapp/webhooks',
         headers: {
           'content-type': 'application/json',
           'x-hub-signature-256': signature,

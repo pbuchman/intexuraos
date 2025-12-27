@@ -65,7 +65,7 @@ This task handles data transmission to the backend with error handling and local
 ### 3.2. HTTP Request Configuration
 
 - **Method:** `POST`
-- **URL:** `https://YOUR_SERVICE_URL/v1/webhooks/mobile-notifications`
+- **URL:** `https://YOUR_SERVICE_URL/mobile-notifications/webhooks`
 - **Headers:**
   - `Content-Type: application/json`
   - `X-Mobile-Notifications-Signature: YOUR_SIGNATURE`

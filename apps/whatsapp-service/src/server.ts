@@ -10,7 +10,7 @@ import {
   getFirestore,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
-import { createV1Routes } from './routes/v1/routes.js';
+import { createWhatsappRoutes } from './routes/routes.js';
 import { validateConfigEnv, type Config } from './config.js';
 import { initServices } from './services.js';
 
@@ -248,8 +248,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   // Register auth plugin (JWT validation)
   await app.register(fastifyAuthPlugin);
 
-  // Register v1 routes
-  await app.register(createV1Routes(config));
+  // Register whatsapp routes
+  await app.register(createWhatsappRoutes(config));
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
   app.get(

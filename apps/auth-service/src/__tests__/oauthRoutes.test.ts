@@ -1,5 +1,5 @@
 /**
- * Tests for POST /v1/auth/oauth/token and GET /v1/auth/oauth/authorize
+ * Tests for POST /auth/oauth/token and GET /auth/oauth/authorize
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -33,14 +33,14 @@ describe('OAuth2 Routes', () => {
     await app.close();
   });
 
-  describe('POST /v1/auth/oauth/token', () => {
+  describe('POST /auth/oauth/token', () => {
     describe('when config is missing', () => {
       it('returns 400 server_error', async () => {
         app = await buildServer();
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'test-client',
@@ -68,7 +68,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'test-client',
@@ -88,7 +88,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'test-client',
@@ -108,7 +108,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'refresh_token',
             client_id: 'test-client',
@@ -135,7 +135,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'test-client',
@@ -169,7 +169,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           headers: {
             'content-type': 'application/x-www-form-urlencoded',
           },
@@ -193,7 +193,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'refresh_token',
             client_id: 'test-client',
@@ -220,7 +220,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'bad-client',
@@ -245,7 +245,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/oauth/token',
+          url: '/auth/oauth/token',
           payload: {
             grant_type: 'authorization_code',
             client_id: 'test-client',
@@ -262,14 +262,14 @@ describe('OAuth2 Routes', () => {
     });
   });
 
-  describe('GET /v1/auth/oauth/authorize', () => {
+  describe('GET /auth/oauth/authorize', () => {
     describe('when config is missing', () => {
       it('returns 400 server_error', async () => {
         app = await buildServer();
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/oauth/authorize?redirect_uri=https://example.com/callback',
+          url: '/auth/oauth/authorize?redirect_uri=https://example.com/callback',
         });
 
         expect(response.statusCode).toBe(400);
@@ -290,7 +290,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/oauth/authorize',
+          url: '/auth/oauth/authorize',
         });
 
         expect(response.statusCode).toBe(400);
@@ -304,7 +304,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/oauth/authorize?redirect_uri=https://chat.openai.com/callback&scope=openid&state=abc123',
+          url: '/auth/oauth/authorize?redirect_uri=https://chat.openai.com/callback&scope=openid&state=abc123',
         });
 
         expect(response.statusCode).toBe(302);
@@ -321,7 +321,7 @@ describe('OAuth2 Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/oauth/authorize?redirect_uri=https://example.com/callback',
+          url: '/auth/oauth/authorize?redirect_uri=https://example.com/callback',
         });
 
         expect(response.statusCode).toBe(302);

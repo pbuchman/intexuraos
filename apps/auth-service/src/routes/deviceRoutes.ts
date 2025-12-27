@@ -1,14 +1,14 @@
 /**
  * Device Authorization Flow Routes
  *
- * POST /v1/auth/device/start - Start device authorization flow
- * POST /v1/auth/device/poll  - Poll for token after user authorization
+ * POST /auth/device/start - Start device authorization flow
+ * POST /auth/device/poll  - Poll for token after user authorization
  */
 
 import type { FastifyPluginCallback } from 'fastify';
 import { isErr, handleValidationError } from '@intexuraos/common';
-import type { AuthTokens, AuthTokenRepository } from '../../domain/identity/index.js';
-import { getServices } from '../../services.js';
+import type { AuthTokens, AuthTokenRepository } from '../domain/identity/index.js';
+import { getServices } from '../services.js';
 import {
   deviceStartRequestSchema,
   devicePollRequestSchema,
@@ -20,9 +20,9 @@ import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
 import { loadAuth0Config } from './shared.js';
 
 export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /v1/auth/device/start
+  // POST /auth/device/start
   fastify.post(
-    '/v1/auth/device/start',
+    '/auth/device/start',
     {
       schema: {
         operationId: 'startDeviceAuth',
@@ -135,9 +135,9 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // POST /v1/auth/device/poll
+  // POST /auth/device/poll
   fastify.post(
-    '/v1/auth/device/poll',
+    '/auth/device/poll',
     {
       schema: {
         operationId: 'pollDeviceAuth',

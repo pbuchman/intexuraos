@@ -1,20 +1,20 @@
 /**
  * Frontend Authentication Routes
  *
- * GET /v1/auth/login  - Redirect to Auth0 login (browser-based OAuth flow)
- * GET /v1/auth/logout - Clear session and redirect to Auth0 logout
- * GET /v1/auth/me     - Get current authenticated user info
+ * GET /auth/login  - Redirect to Auth0 login (browser-based OAuth flow)
+ * GET /auth/logout - Clear session and redirect to Auth0 logout
+ * GET /auth/me     - Get current authenticated user info
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common';
-import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
+import { FirestoreAuthTokenRepository } from '../infra/firestore/index.js';
 import { loadAuth0Config } from './shared.js';
 
 export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  // GET /v1/auth/login
+  // GET /auth/login
   fastify.get(
-    '/v1/auth/login',
+    '/auth/login',
     {
       schema: {
         operationId: 'frontendLogin',
@@ -101,9 +101,9 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/auth/logout
+  // GET /auth/logout
   fastify.get(
-    '/v1/auth/logout',
+    '/auth/logout',
     {
       schema: {
         operationId: 'frontendLogout',
@@ -189,9 +189,9 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  // GET /v1/auth/me
+  // GET /auth/me
   fastify.get(
-    '/v1/auth/me',
+    '/auth/me',
     {
       schema: {
         operationId: 'getCurrentUser',

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * POST /v1/integrations/notion/connect
+ * POST /notion/connect
  */
 export const connectRequestSchema = z.object({
   notionToken: z.string().min(1, 'notionToken is required'),

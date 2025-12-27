@@ -10,7 +10,7 @@ import {
   getFirestore,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
-import { v1Routes } from './routes/v1/index.js';
+import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
 const SERVICE_NAME = 'mobile-notifications-service';
@@ -224,8 +224,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Register auth plugin (JWT validation)
   await app.register(fastifyAuthPlugin);
 
-  // Register v1 routes
-  await app.register(v1Routes);
+  // Register mobile notifications routes
+  await app.register(mobileNotificationsRoutes);
 
   // Health endpoint
   app.get(
