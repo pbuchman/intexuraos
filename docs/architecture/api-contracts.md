@@ -337,7 +337,7 @@ Success responses must include verifiable identifiers when relevant.
 
 ### Business Endpoints
 
-Business endpoints (e.g., `/v1/*`) use the unified response envelope:
+Business endpoints (e.g., `/*`) use the unified response envelope:
 
 - Success: `{ "success": true, "data": {...}, "diagnostics": {...} }`
 - Error: `{ "success": false, "error": {...}, "diagnostics": {...} }`
@@ -409,7 +409,7 @@ The auth-service provides Device Authorization Flow helpers for CLI/device authe
 
 If any required variable is missing, endpoints return `503 MISCONFIGURED`.
 
-### POST /v1/auth/device/start
+### POST /auth/device/start
 
 Start Device Authorization Flow. Returns device code and user code.
 
@@ -444,7 +444,7 @@ Start Device Authorization Flow. Returns device code and user code.
 }
 ```
 
-### POST /v1/auth/device/poll
+### POST /auth/device/poll
 
 Poll for token after user authorization.
 
@@ -486,7 +486,7 @@ Poll for token after user authorization.
 }
 ```
 
-### GET /v1/auth/config
+### GET /auth/config
 
 Get non-secret auth configuration for troubleshooting.
 
@@ -520,7 +520,7 @@ Get non-secret auth configuration for troubleshooting.
 
 ## whatsapp-service Media Endpoints
 
-### GET /v1/whatsapp/messages/:messageId/media
+### GET /whatsapp/messages/:message_id/media
 
 Get a signed URL for the original media file (image or audio).
 
@@ -550,7 +550,7 @@ Get a signed URL for the original media file (image or audio).
 | Not owner of message | `NOT_FOUND`    | 404         |
 | Message has no media | `NOT_FOUND`    | 404         |
 
-### GET /v1/whatsapp/messages/:messageId/thumbnail
+### GET /whatsapp/messages/:message_id/thumbnail
 
 Get a signed URL for the thumbnail image (256px max edge).
 
@@ -581,7 +581,7 @@ Get a signed URL for the thumbnail image (256px max edge).
 
 srt-service handles speech-to-text transcription via Speechmatics Batch API.
 
-### POST /v1/transcribe
+### POST /transcribe
 
 Create a transcription job for an audio file.
 
@@ -627,7 +627,7 @@ Create a transcription job for an audio file.
 
 If a job already exists for the same `messageId`/`mediaId`, returns the existing job.
 
-### GET /v1/transcribe/:jobId
+### GET /transcribe/:jobId
 
 Get transcription job status.
 

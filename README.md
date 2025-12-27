@@ -236,10 +236,10 @@ IntexuraOS supports two OAuth2 flows:
 
 Authorization Code flow for custom GPTs:
 
-1. User activates GPT action → ChatGPT redirects to `/v1/auth/oauth/authorize`
+1. User activates GPT action → ChatGPT redirects to `/auth/oauth/authorize`
 2. IntexuraOS redirects to Auth0 Universal Login
 3. User authenticates → Auth0 returns authorization code
-4. ChatGPT exchanges code for tokens via `/v1/auth/oauth/token`
+4. ChatGPT exchanges code for tokens via `/auth/oauth/token`
 5. Access token included in all subsequent API calls
 
 ### 2. Device Authorization Flow (Testing/CLI)
@@ -248,14 +248,14 @@ For Swagger UI and CLI tools:
 
 ```bash
 # 1. Start device flow
-curl -X POST https://your-service/v1/auth/device/start \
+curl -X POST https://your-service/auth/device/start \
   -H "Content-Type: application/json" \
   -d '{"scope": "openid profile email offline_access"}'
 
 # 2. User visits verification_uri and enters user_code
 
 # 3. Poll for token
-curl -X POST https://your-service/v1/auth/device/poll \
+curl -X POST https://your-service/auth/device/poll \
   -H "Content-Type: application/json" \
   -d '{"device_code": "XXXX-XXXX"}'
 ```
@@ -280,12 +280,13 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 
 ### Services
 
-| Service                      | Purpose                                 | Base Path                    |
-| ---------------------------- | --------------------------------------- | ---------------------------- |
-| auth-service                 | OAuth2 flows, JWT validation            | `/v1/auth/*`                 |
-| promptvault-service          | Prompt templates, Notion integration    | `/v1/*`                      |
-| whatsapp-service             | WhatsApp webhook, transcription         | `/v1/whatsapp/*`             |
-| mobile-notifications-service | Android notification capture via Tasker | `/v1/mobile-notifications/*` |
+| Service                      | Purpose                                 | Base Path                 |
+| ---------------------------- | --------------------------------------- | ------------------------- |
+| auth-service                 | OAuth2 flows, JWT validation            | `/auth/*`                 |
+| promptvault-service          | Prompt templates, Notion integration    | `/prompt-vault/*`         |
+| whatsapp-service             | WhatsApp webhook, transcription         | `/whatsapp/*`             |
+| mobile-notifications-service | Android notification capture via Tasker | `/mobile-notifications/*` |
+| notion-service               | Notion integration management           | `/notion/*`               |
 
 ### Security
 
@@ -415,9 +416,9 @@ See [Notion Inbox Schema](docs/notion-inbox.md) for Notion property mappings.
 | ------------------------ | ------------- | ----------------------- |
 | `/health`                | No            | System endpoint         |
 | `/docs`, `/openapi.json` | No            | Documentation           |
-| `/v1/auth/device/*`      | No            | Pre-authentication flow |
-| `/v1/auth/oauth/*`       | No            | OAuth callbacks         |
-| `/v1/*` (other)          | Yes           | Bearer JWT required     |
+| `/auth/device/*`         | No            | Pre-authentication flow |
+| `/auth/oauth/*`          | No            | OAuth callbacks         |
+| `/*` (other)             | Yes           | Bearer JWT required     |
 
 ### Secrets Management
 
@@ -619,9 +620,9 @@ Cloud Run provides built-in metrics:
 
 ### API Versioning
 
-- **Scheme:** URL path prefix (`/v1/`, `/v2/`)
-- **Breaking changes:** New major version
-- **Deprecation:** 6-month notice before removal
+- **Scheme:** No URL path versioning; backwards-compatible changes only
+- **Breaking changes:** Coordinated deployment with consumer updates
+- **Deprecation:** Advance notice before removal
 
 ### Changelog
 

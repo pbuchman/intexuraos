@@ -107,10 +107,10 @@ describe('promptvault-service OpenAPI contract', () => {
     expect(paths?.['/health']).toBeDefined();
 
     // Integration and webhook endpoints moved to notion-service
-    expect(paths?.['/v1/integrations/notion/connect']).toBeUndefined();
-    expect(paths?.['/v1/integrations/notion/status']).toBeUndefined();
-    expect(paths?.['/v1/integrations/notion/disconnect']).toBeUndefined();
-    expect(paths?.['/v1/webhooks/notion']).toBeUndefined();
+    expect(paths?.['/notion/connect']).toBeUndefined();
+    expect(paths?.['/notion/status']).toBeUndefined();
+    expect(paths?.['/notion/disconnect']).toBeUndefined();
+    expect(paths?.['/notion-webhooks']).toBeUndefined();
   });
 
   it('protected endpoints require bearerAuth security', () => {

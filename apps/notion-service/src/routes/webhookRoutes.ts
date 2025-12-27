@@ -61,7 +61,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await handleValidationError(parseResult.error, reply);
       }
 
-      // Accept any JSON, no side effects for v1
+      // Accept any JSON, no side effects for now
       return await reply.ok({
         received: true,
       });
