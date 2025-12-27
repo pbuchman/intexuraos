@@ -28,5 +28,6 @@ export {
   getMessage,
   findById,
   updateTranscription,
+  updateLinkPreview,
   deleteMessage,
 } from './messageRepository.js';

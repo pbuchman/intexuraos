@@ -1,5 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Layout, Card, Button, ImageModal, ImageThumbnail, AudioPlayer } from '@/components';
+import {
+  Layout,
+  Card,
+  Button,
+  ImageModal,
+  ImageThumbnail,
+  AudioPlayer,
+  LinkPreviewList,
+} from '@/components';
 import { useAuth } from '@/context';
 import {
   getWhatsAppMessages,
@@ -583,6 +591,9 @@ function MessageItem({
                 </p>
               </div>
             )}
+
+          {/* Link previews */}
+          <LinkPreviewList linkPreview={message.linkPreview} />
 
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
             <span>{formattedDate}</span>

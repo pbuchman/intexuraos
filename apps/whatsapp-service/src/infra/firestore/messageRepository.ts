@@ -8,6 +8,7 @@ import type {
   WhatsAppMessage,
   WhatsAppMessageMetadata,
   TranscriptionState,
+  LinkPreviewState,
 } from '../../domain/inbox/index.js';
 
 // Re-export for convenience
@@ -158,6 +159,45 @@ export async function updateTranscription(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to update transcription: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+/**
+ * Update message link preview state.
+ */
+export async function updateLinkPreview(
+  userId: string,
+  messageId: string,
+  linkPreview: LinkPreviewState
+): Promise<Result<void, InboxError>> {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
+
+    if (!doc.exists) {
+      return err({
+        code: 'NOT_FOUND',
+        message: 'Message not found',
+      });
+    }
+
+    const message = doc.data() as WhatsAppMessage;
+    if (message.userId !== userId) {
+      return err({
+        code: 'NOT_FOUND',
+        message: 'Message not found',
+      });
+    }
+
+    await db.collection(COLLECTION_NAME).doc(messageId).update({
+      linkPreview,
+    });
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to update link preview: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }
