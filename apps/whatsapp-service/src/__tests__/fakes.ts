@@ -32,6 +32,11 @@ import type {
   TranscriptionJobPollResult,
   TranscriptionTextResult,
   TranscriptionPortError,
+  WhatsAppCloudApiPort,
+  MediaUrlInfo,
+  SendMessageResult,
+  ThumbnailGeneratorPort,
+  ThumbnailResult,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -95,6 +100,14 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 
   clear(): void {
     this.events.clear();
+  }
+
+  /**
+   * Set an event with a specific ID for testing.
+   * Allows tests to pre-populate events that usecases will reference by ID.
+   */
+  setEvent(event: WhatsAppWebhookEvent): void {
+    this.events.set(event.id, event);
   }
 }
 
@@ -167,8 +180,18 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
  */
 export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository {
   private messages = new Map<string, WhatsAppMessage>();
+  private shouldFailSave = false;
+
+  setFailSave(fail: boolean): void {
+    this.shouldFailSave = fail;
+  }
 
   saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
+    if (this.shouldFailSave) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated message save failure' })
+      );
+    }
     const id = randomUUID();
     const fullMessage: WhatsAppMessage = { id, ...message };
     this.messages.set(id, fullMessage);
@@ -228,6 +251,16 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 export class FakeMediaStorage implements MediaStoragePort {
   private files = new Map<string, { buffer: Buffer; contentType: string }>();
   private signedUrls = new Map<string, string>();
+  private shouldFailUpload = false;
+  private shouldFailThumbnailUpload = false;
+
+  setFailUpload(fail: boolean): void {
+    this.shouldFailUpload = fail;
+  }
+
+  setFailThumbnailUpload(fail: boolean): void {
+    this.shouldFailThumbnailUpload = fail;
+  }
 
   upload(
     userId: string,
@@ -237,6 +270,9 @@ export class FakeMediaStorage implements MediaStoragePort {
     buffer: Buffer,
     contentType: string
   ): Promise<Result<UploadResult, InboxError>> {
+    if (this.shouldFailUpload) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated upload failure' }));
+    }
     const gcsPath = `whatsapp/${userId}/${messageId}/${mediaId}.${extension}`;
     this.files.set(gcsPath, { buffer, contentType });
     return Promise.resolve(ok({ gcsPath }));
@@ -250,6 +286,11 @@ export class FakeMediaStorage implements MediaStoragePort {
     buffer: Buffer,
     contentType: string
   ): Promise<Result<UploadResult, InboxError>> {
+    if (this.shouldFailThumbnailUpload) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail upload failure' })
+      );
+    }
     const gcsPath = `whatsapp/${userId}/${messageId}/${mediaId}_thumb.${extension}`;
     this.files.set(gcsPath, { buffer, contentType });
     return Promise.resolve(ok({ gcsPath }));
@@ -472,5 +513,160 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     this.jobs.clear();
     this.jobCounter = 0;
     this.shouldFail = false;
+  }
+}
+
+/**
+ * Fake WhatsApp Cloud API port for testing.
+ */
+export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
+  private mediaUrls = new Map<string, MediaUrlInfo>();
+  private mediaContent = new Map<string, Buffer>();
+  private sentMessages: {
+    phoneNumberId: string;
+    recipientPhone: string;
+    message: string;
+    replyToMessageId?: string;
+    messageId: string;
+  }[] = [];
+  private shouldFailGetMediaUrl = false;
+  private shouldFailDownload = false;
+  private shouldFailSendMessage = false;
+  private messageIdCounter = 0;
+
+  setMediaUrl(mediaId: string, info: MediaUrlInfo): void {
+    this.mediaUrls.set(mediaId, info);
+  }
+
+  setMediaContent(url: string, content: Buffer): void {
+    this.mediaContent.set(url, content);
+  }
+
+  setFailGetMediaUrl(fail: boolean): void {
+    this.shouldFailGetMediaUrl = fail;
+  }
+
+  setFailDownload(fail: boolean): void {
+    this.shouldFailDownload = fail;
+  }
+
+  setFailSendMessage(fail: boolean): void {
+    this.shouldFailSendMessage = fail;
+  }
+
+  getSentMessages(): typeof this.sentMessages {
+    return this.sentMessages;
+  }
+
+  getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>> {
+    if (this.shouldFailGetMediaUrl) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMediaUrl failure' })
+      );
+    }
+
+    const info = this.mediaUrls.get(mediaId);
+    if (info === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: `Media ${mediaId} not found` }));
+    }
+
+    return Promise.resolve(ok(info));
+  }
+
+  downloadMedia(url: string): Promise<Result<Buffer, InboxError>> {
+    if (this.shouldFailDownload) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated download failure' })
+      );
+    }
+
+    const content = this.mediaContent.get(url);
+    if (content === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: `Media at ${url} not found` }));
+    }
+
+    return Promise.resolve(ok(content));
+  }
+
+  sendMessage(
+    phoneNumberId: string,
+    recipientPhone: string,
+    message: string,
+    replyToMessageId?: string
+  ): Promise<Result<SendMessageResult, InboxError>> {
+    if (this.shouldFailSendMessage) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated sendMessage failure' })
+      );
+    }
+
+    this.messageIdCounter++;
+    const messageId = `wamid.test${String(this.messageIdCounter)}`;
+
+    const sent: (typeof this.sentMessages)[0] = {
+      phoneNumberId,
+      recipientPhone,
+      message,
+      messageId,
+    };
+    if (replyToMessageId !== undefined) {
+      sent.replyToMessageId = replyToMessageId;
+    }
+    this.sentMessages.push(sent);
+
+    return Promise.resolve(ok({ messageId }));
+  }
+
+  clear(): void {
+    this.mediaUrls.clear();
+    this.mediaContent.clear();
+    this.sentMessages = [];
+    this.shouldFailGetMediaUrl = false;
+    this.shouldFailDownload = false;
+    this.shouldFailSendMessage = false;
+    this.messageIdCounter = 0;
+  }
+}
+
+/**
+ * Fake thumbnail generator port for testing.
+ */
+export class FakeThumbnailGeneratorPort implements ThumbnailGeneratorPort {
+  private shouldFail = false;
+  private customResult: ThumbnailResult | null = null;
+
+  setFail(fail: boolean): void {
+    this.shouldFail = fail;
+  }
+
+  setCustomResult(result: ThumbnailResult): void {
+    this.customResult = result;
+  }
+
+  generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, InboxError>> {
+    if (this.shouldFail) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail generation failure' })
+      );
+    }
+
+    if (this.customResult !== null) {
+      return Promise.resolve(ok(this.customResult));
+    }
+
+    // Return a fake thumbnail
+    return Promise.resolve(
+      ok({
+        buffer: Buffer.from('fake-thumbnail-' + String(imageBuffer.length)),
+        mimeType: 'image/jpeg',
+        width: 256,
+        height: 256,
+      })
+    );
+  }
+
+  clear(): void {
+    this.shouldFail = false;
+    this.customResult = null;
   }
 }

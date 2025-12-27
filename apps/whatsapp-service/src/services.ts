@@ -9,8 +9,9 @@ import {
 } from './adapters.js';
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher } from './infra/pubsub/index.js';
-import { WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
+import { WhatsAppCloudApiSender, WhatsAppCloudApiAdapter } from './infra/whatsapp/index.js';
 import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
+import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -19,6 +20,8 @@ import type {
   EventPublisherPort,
   WhatsAppMessageSender,
   SpeechTranscriptionPort,
+  WhatsAppCloudApiPort,
+  ThumbnailGeneratorPort,
 } from './domain/inbox/index.js';
 
 /**
@@ -45,6 +48,8 @@ export interface ServiceContainer {
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
   transcriptionService: SpeechTranscriptionPort;
+  whatsappCloudApi: WhatsAppCloudApiPort;
+  thumbnailGenerator: ThumbnailGeneratorPort;
 }
 
 let container: ServiceContainer | null = null;
@@ -79,6 +84,10 @@ export function getServices(): ServiceContainer {
     transcriptionService: new SpeechmaticsTranscriptionAdapter(
       serviceConfig?.speechmaticsApiKey ?? 'test-api-key'
     ),
+    whatsappCloudApi: new WhatsAppCloudApiAdapter(
+      serviceConfig?.whatsappAccessToken ?? 'test-token'
+    ),
+    thumbnailGenerator: new ThumbnailGeneratorAdapter(),
   };
   return container;
 }

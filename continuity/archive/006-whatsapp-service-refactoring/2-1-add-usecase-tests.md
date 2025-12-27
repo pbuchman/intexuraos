@@ -1,13 +1,17 @@
 # 2-1: Add Tests for New Usecases
 
 ## Tier
+
 2 (Dependent on Tier 1)
 
 ## Context
+
 New usecases need unit tests to maintain 90% coverage.
 
 ## Problem Statement
+
 Extracted usecases have no dedicated tests yet:
+
 - ProcessImageMessageUseCase
 - ProcessAudioMessageUseCase
 - TranscribeAudioUseCase
@@ -16,17 +20,21 @@ Extracted usecases have no dedicated tests yet:
 Coverage thresholds: lines=90%, branches=90%, functions=90%, statements=90%
 
 ## Scope
+
 Create test files:
+
 - `__tests__/usecases/processImageMessage.test.ts`
 - `__tests__/usecases/processAudioMessage.test.ts`
 - `__tests__/usecases/transcribeAudio.test.ts`
 - `__tests__/usecases/processIncomingMessage.test.ts`
 
 ## Non-Scope
+
 - Route integration tests (existing tests should still work)
 - Modifying fakes.ts (unless needed for new ports)
 
 ## Required Approach
+
 1. Create fake implementations for new ports (if needed)
 2. Test happy paths
 3. Test error cases
@@ -36,6 +44,7 @@ Create test files:
 ## Test Categories per Usecase
 
 ### ProcessImageMessageUseCase
+
 - Happy path: full image processing
 - Error: media URL fetch fails
 - Error: download fails
@@ -44,6 +53,7 @@ Create test files:
 - Error: message save fails
 
 ### ProcessAudioMessageUseCase
+
 - Happy path: full audio processing
 - Error: media URL fetch fails
 - Error: download fails
@@ -51,6 +61,7 @@ Create test files:
 - Error: message save fails
 
 ### TranscribeAudioUseCase
+
 - Happy path: job completes
 - Error: signed URL fails
 - Error: job submission fails
@@ -59,6 +70,7 @@ Create test files:
 - Error: transcript fetch fails
 
 ### ProcessIncomingMessageUseCase
+
 - Text message: happy path
 - Image message: delegates correctly
 - Audio message: delegates correctly
@@ -68,24 +80,27 @@ Create test files:
 - User disconnected
 
 ## Step Checklist
-- [ ] Add fakes for new ports (if needed)
-- [ ] Create test file structure
-- [ ] Implement ProcessImageMessageUseCase tests
-- [ ] Implement ProcessAudioMessageUseCase tests
-- [ ] Implement TranscribeAudioUseCase tests
-- [ ] Implement ProcessIncomingMessageUseCase tests
-- [ ] Run coverage check
+
+- [x] Add fakes for new ports (if needed) - not needed, using mocks
+- [x] Create test file structure
+- [x] Implement ProcessImageMessageUseCase tests
+- [x] Implement ProcessAudioMessageUseCase tests
+- [x] Implement TranscribeAudioUseCase tests
+- [ ] Implement ProcessIncomingMessageUseCase tests - SKIPPED (see 1-4)
+- [ ] Run coverage check - CI verification blocked, terminal unresponsive
 
 ## Definition of Done
+
 - All usecases have tests
 - 90% coverage maintained
 - `npm run test:coverage` passes
 
 ## Verification Commands
+
 ```bash
 npm run test:coverage
 ```
 
 ## Rollback Plan
-Delete test files if needed
 
+Delete test files if needed

@@ -3,6 +3,7 @@
 ## Overview
 
 Deep refactoring of whatsapp-service to enforce architecture pattern:
+
 - Routes handle input validation and routing ONLY
 - Business logic extracted to domain usecases
 - Maintain 90% coverage thresholds
@@ -55,4 +56,3 @@ Format: `[tier]-[sequence]-[title].md`
 - [ ] All new code has tests
 - [ ] `npm run ci` passes with 90% coverage thresholds
 - [ ] No breaking API changes
-

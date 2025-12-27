@@ -50,6 +50,14 @@ export type {
 
 export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
 
+export type {
+  WhatsAppCloudApiPort,
+  MediaUrlInfo,
+  SendMessageResult,
+} from './ports/whatsappCloudApi.js';
+
+export type { ThumbnailGeneratorPort, ThumbnailResult } from './ports/thumbnailGenerator.js';
+
 export type { EventPublisherPort } from './ports/eventPublisher.js';
 
 export type { WhatsAppMessageSender } from './ports/messageSender.js';
@@ -79,3 +87,30 @@ export {
   type WebhookProcessingConfig,
   type WebhookProcessingResult,
 } from './usecases/processWhatsAppWebhook.js';
+
+export {
+  ProcessImageMessageUseCase,
+  type ProcessImageMessageInput,
+  type ProcessImageMessageResult,
+  type ProcessImageMessageDeps,
+  type ProcessImageMessageLogger,
+  type ImageMediaInfo,
+} from './usecases/processImageMessage.js';
+
+export {
+  ProcessAudioMessageUseCase,
+  type ProcessAudioMessageInput,
+  type ProcessAudioMessageResult,
+  type ProcessAudioMessageDeps,
+  type ProcessAudioMessageLogger,
+  type AudioMediaInfo,
+} from './usecases/processAudioMessage.js';
+
+export {
+  TranscribeAudioUseCase,
+  type TranscribeAudioInput,
+  type TranscribeAudioDeps,
+  type TranscribeAudioLogger,
+  type TranscriptionPollingConfig,
+  DEFAULT_TRANSCRIPTION_POLL_CONFIG,
+} from './usecases/transcribeAudio.js';

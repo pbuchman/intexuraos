@@ -1,13 +1,17 @@
 # 1-1: Create ProcessImageMessageUseCase
 
 ## Tier
+
 1 (Independent Deliverable)
 
 ## Context
+
 Image message processing logic (~200 lines) is embedded in webhookRoutes.ts.
 
 ## Problem Statement
+
 `processImageMessage()` function in webhookRoutes.ts handles:
+
 1. Get media URL from WhatsApp
 2. Download image
 3. Generate thumbnail
@@ -20,22 +24,27 @@ Image message processing logic (~200 lines) is embedded in webhookRoutes.ts.
 This violates: "Routes should handle input validation and routing ONLY"
 
 ## Scope
+
 Extract to `domain/inbox/usecases/processImageMessage.ts`:
+
 - Pure business logic
 - Depends only on ports (no infra imports)
 - Testable with fake ports
 
 ## Non-Scope
+
 - Modifying routes (Tier 2)
 - Writing tests (Tier 2)
 
 ## Required Approach
+
 1. Create `ProcessImageMessageUseCase` class
 2. Constructor accepts all required ports
 3. Single `execute()` method with typed input/output
 4. Export from domain/inbox/index.ts
 
 ## Input Model
+
 ```typescript
 interface ProcessImageMessageInput {
   eventId: string;
@@ -56,6 +65,7 @@ interface ProcessImageMessageInput {
 ```
 
 ## Step Checklist
+
 - [ ] Create usecase file
 - [ ] Define input/output types
 - [ ] Implement execute() method
@@ -63,16 +73,18 @@ interface ProcessImageMessageInput {
 - [ ] Run typecheck
 
 ## Definition of Done
+
 - Usecase class created
 - All logic extracted (no business logic remains for image processing in routes)
 - `npm run typecheck` passes
 
 ## Verification Commands
+
 ```bash
 npm run typecheck
 npm run lint
 ```
 
 ## Rollback Plan
-Delete usecase file, revert index.ts
 
+Delete usecase file, revert index.ts

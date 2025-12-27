@@ -5,7 +5,6 @@
  *
  * These tests wait for the async processing to complete and verify the state changes.
  */
-import { vi } from 'vitest';
 import {
   describe,
   it,
@@ -42,28 +41,6 @@ const SAMPLE_IMAGE_BUFFER = Buffer.from([
   0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda,
   0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xfb, 0xd5, 0xff, 0xd9,
 ]);
-
-// Mock the whatsappClient module to capture sendWhatsAppMessage calls
-vi.mock('../whatsappClient.js', () => ({
-  sendWhatsAppMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'mock-message-id' }),
-  getMediaUrl: vi.fn().mockResolvedValue({
-    success: true,
-    data: {
-      url: 'https://example.com/media/test-media-id-12345',
-      mime_type: 'image/jpeg',
-      sha256: 'abc123def456',
-      file_size: 12345,
-    },
-  }),
-  downloadMedia: vi.fn().mockImplementation(() =>
-    Promise.resolve({
-      success: true,
-      buffer: SAMPLE_IMAGE_BUFFER,
-    })
-  ),
-}));
-
-import { sendWhatsAppMessage, getMediaUrl, downloadMedia } from '../whatsappClient.js';
 
 describe('Webhook async processing', () => {
   const ctx = setupTestContext();
@@ -262,16 +239,14 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('PROCESSED');
 
-      // Verify sendWhatsAppMessage was called
-      expect(sendWhatsAppMessage).toHaveBeenCalled();
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
-      // Mock sendWhatsAppMessage to fail
-      vi.mocked(sendWhatsAppMessage).mockResolvedValueOnce({
-        success: false,
-        error: 'Failed to send message',
-      });
+      // Configure the fake to fail sendMessage
+      ctx.whatsappCloudApi.setFailSendMessage(true);
 
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -345,6 +320,17 @@ describe('Webhook async processing', () => {
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
       const payload = createImageWebhookPayload({ caption: 'Test image caption' });
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -393,6 +379,17 @@ describe('Webhook async processing', () => {
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
       const payload = createImageWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -418,15 +415,13 @@ describe('Webhook async processing', () => {
     });
 
     it('handles getMediaUrl failure gracefully', async () => {
-      vi.mocked(getMediaUrl).mockResolvedValueOnce({
-        success: false,
-        error: 'Media URL not available',
-      });
-
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure the fake to fail getMediaUrl
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
 
       const payload = createImageWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -457,15 +452,18 @@ describe('Webhook async processing', () => {
     });
 
     it('handles downloadMedia failure gracefully', async () => {
-      vi.mocked(downloadMedia).mockResolvedValueOnce({
-        success: false,
-        error: 'Download failed',
-      });
-
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up media URL but configure download to fail
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setFailDownload(true);
 
       const payload = createImageWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -497,6 +495,17 @@ describe('Webhook async processing', () => {
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
       const payload = createImageWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -513,8 +522,9 @@ describe('Webhook async processing', () => {
 
       await waitForAsyncProcessing(200);
 
-      // Verify sendWhatsAppMessage was called
-      expect(sendWhatsAppMessage).toHaveBeenCalled();
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
     });
   });
 
@@ -524,6 +534,17 @@ describe('Webhook async processing', () => {
       const userId = 'test-user-id';
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
 
       const payload = createAudioWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -567,15 +588,13 @@ describe('Webhook async processing', () => {
     });
 
     it('handles getMediaUrl failure gracefully for audio', async () => {
-      vi.mocked(getMediaUrl).mockResolvedValueOnce({
-        success: false,
-        error: 'Media URL not available',
-      });
-
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure the fake to fail getMediaUrl
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
 
       const payload = createAudioWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -606,15 +625,18 @@ describe('Webhook async processing', () => {
     });
 
     it('handles downloadMedia failure gracefully for audio', async () => {
-      vi.mocked(downloadMedia).mockResolvedValueOnce({
-        success: false,
-        error: 'Download failed',
-      });
-
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up media URL but configure download to fail
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setFailDownload(true);
 
       const payload = createAudioWebhookPayload();
       const payloadString = JSON.stringify(payload);
@@ -646,6 +668,17 @@ describe('Webhook async processing', () => {
 
       await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
 
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
+
       const payload = createAudioWebhookPayload();
       const payloadString = JSON.stringify(payload);
       const signature = createSignature(payloadString, testConfig.appSecret);
@@ -662,8 +695,9 @@ describe('Webhook async processing', () => {
 
       await waitForAsyncProcessing(200);
 
-      // Verify sendWhatsAppMessage was called
-      expect(sendWhatsAppMessage).toHaveBeenCalled();
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
     });
   });
 });

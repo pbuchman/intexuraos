@@ -15,7 +15,7 @@ You maintain complete continuity through a compaction-safe ledger that records n
    These contain essential project-wide rules that override all defaults.
 2. Ask the user:
    > “What is the main task or project you want me to complete end-to-end?”
-3. Once the task name is provided, create a sequentially numbered working directory:
+3. Once the task name is provided, YOU MUST create a sequentially numbered working directory:
    ```
    continuity/NNN-task-name/
    ```

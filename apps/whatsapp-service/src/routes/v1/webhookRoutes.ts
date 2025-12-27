@@ -3,16 +3,21 @@
  *
  * GET  /v1/webhooks/whatsapp - Webhook verification endpoint
  * POST /v1/webhooks/whatsapp - Webhook event receiver
+ *
+ * This file handles HTTP transport concerns (validation, signature, response).
+ * Business logic is delegated to domain usecases.
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
-import { generateThumbnail } from '../../infra/media/index.js';
 import type { Config } from '../../config.js';
-import type { TranscriptionState } from '../../domain/inbox/index.js';
-import { sendWhatsAppMessage, getMediaUrl, downloadMedia } from '../../whatsappClient.js';
+import {
+  ProcessImageMessageUseCase,
+  ProcessAudioMessageUseCase,
+  TranscribeAudioUseCase,
+} from '../../domain/inbox/index.js';
 import {
   extractDisplayPhoneNumber,
   extractMessageId,
@@ -26,8 +31,6 @@ import {
   extractImageMedia,
   extractAudioMedia,
   handleValidationError,
-  type ImageMediaInfo,
-  type AudioMediaInfo,
 } from './shared.js';
 
 /**
@@ -195,12 +198,11 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         }
 
         // Extract identifiers from payload
-        // See: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
         const wabaId = extractWabaId(request.body);
         const phoneNumberId = extractPhoneNumberId(request.body);
         const displayPhoneNumber = extractDisplayPhoneNumber(request.body);
 
-        // Validate WABA ID (entry[].id) matches configured allowed IDs
+        // Validate WABA ID
         if (wabaId === null || !config.allowedWabaIds.includes(wabaId)) {
           request.log.warn(
             {
@@ -218,7 +220,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           );
         }
 
-        // Validate phone number ID (metadata.phone_number_id) matches configured allowed IDs
+        // Validate phone number ID
         if (phoneNumberId === null || !config.allowedPhoneNumberIds.includes(phoneNumberId)) {
           request.log.warn(
             {
@@ -266,16 +268,17 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
 /**
  * Process webhook asynchronously after returning 200 to Meta.
- * Validates user mapping and saves message to Firestore.
+ * Validates user mapping and routes to appropriate usecase.
  */
 async function processWebhookAsync(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   config: Config
 ): Promise<void> {
-  try {
-    const { webhookEventRepository, userMappingRepository, messageRepository } = getServices();
+  const services = getServices();
+  const { webhookEventRepository, userMappingRepository } = services;
 
+  try {
     // Find user by phone number
     const fromNumber = extractSenderPhoneNumber(request.body);
     if (fromNumber === null) {
@@ -289,7 +292,7 @@ async function processWebhookAsync(
       return;
     }
 
-    // Extract message text (only support text messages)
+    // Extract message details
     const messageText = extractMessageText(request.body);
     const messageType = extractMessageType(request.body);
     const imageMedia = extractImageMedia(request.body);
@@ -393,19 +396,19 @@ async function processWebhookAsync(
       return;
     }
 
-    // Extract message details
+    // Extract common message details
     const waMessageId = extractMessageId(request.body) ?? `unknown-${savedEvent.id}`;
     const toNumber = extractDisplayPhoneNumber(request.body) ?? '';
     const timestamp = extractMessageTimestamp(request.body) ?? '';
     const senderName = extractSenderName(request.body);
     const phoneNumberId = extractPhoneNumberId(request.body);
 
-    // Handle image message processing
+    // Route to appropriate handler
     if (messageType === 'image' && imageMedia !== null) {
-      await processImageMessage(
+      await handleImageMessage(
         request,
         savedEvent,
-        config,
+        services,
         userId,
         waMessageId,
         fromNumber,
@@ -418,12 +421,12 @@ async function processWebhookAsync(
       return;
     }
 
-    // Handle audio message processing
     if (messageType === 'audio' && audioMedia !== null) {
-      await processAudioMessage(
+      await handleAudioMessage(
         request,
         savedEvent,
         config,
+        services,
         userId,
         waMessageId,
         fromNumber,
@@ -436,56 +439,19 @@ async function processWebhookAsync(
       return;
     }
 
-    // Build text message object
-    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+    // Handle text message
+    await handleTextMessage(
+      request,
+      savedEvent,
       userId,
       waMessageId,
       fromNumber,
       toNumber,
-      text: messageText ?? '',
-      mediaType: 'text',
       timestamp,
-      receivedAt: new Date().toISOString(),
-      webhookEventId: savedEvent.id,
-    };
-
-    // Add metadata only if we have any values
-    if (senderName !== null || phoneNumberId !== null) {
-      const metadata: { senderName?: string; phoneNumberId?: string } = {};
-      if (senderName !== null) {
-        metadata.senderName = senderName;
-      }
-      if (phoneNumberId !== null) {
-        metadata.phoneNumberId = phoneNumberId;
-      }
-      messageToSave.metadata = metadata;
-    }
-
-    // Save message to Firestore
-    const saveResult = await messageRepository.saveMessage(messageToSave);
-
-    if (!saveResult.ok) {
-      request.log.error(
-        { error: saveResult.error, eventId: savedEvent.id },
-        'Failed to save message'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to save message: ${saveResult.error.message}`,
-      });
-      return;
-    }
-
-    const savedMessage = saveResult.value;
-
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
-
-    request.log.info(
-      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-      'Message saved successfully'
+      senderName,
+      phoneNumberId,
+      messageText ?? ''
     );
-
-    // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'text');
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },
@@ -495,29 +461,12 @@ async function processWebhookAsync(
 }
 
 /**
- * Get file extension from MIME type.
+ * Handle image message using ProcessImageMessageUseCase.
  */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeToExt: Record<string, string> = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'audio/ogg': 'ogg',
-    'audio/mpeg': 'mp3',
-    'audio/mp4': 'm4a',
-    'audio/aac': 'aac',
-  };
-  return mimeToExt[mimeType] ?? 'bin';
-}
-
-/**
- * Process image message: download, generate thumbnail, upload to GCS, save to Firestore.
- */
-async function processImageMessage(
+async function handleImageMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
-  config: Config,
+  services: ReturnType<typeof getServices>,
   userId: string,
   waMessageId: string,
   fromNumber: string,
@@ -525,202 +474,44 @@ async function processImageMessage(
   timestamp: string,
   senderName: string | null,
   phoneNumberId: string | null,
-  imageMedia: ImageMediaInfo
+  imageMedia: { id: string; mimeType: string; sha256?: string; caption?: string }
 ): Promise<void> {
-  const { webhookEventRepository, messageRepository, mediaStorage } = getServices();
+  const usecase = new ProcessImageMessageUseCase({
+    webhookEventRepository: services.webhookEventRepository,
+    messageRepository: services.messageRepository,
+    mediaStorage: services.mediaStorage,
+    whatsappCloudApi: services.whatsappCloudApi,
+    thumbnailGenerator: services.thumbnailGenerator,
+  });
 
-  try {
-    // Step 1: Get media URL from WhatsApp
-    request.log.info(
-      { eventId: savedEvent.id, mediaId: imageMedia.id },
-      'Fetching image URL from WhatsApp'
-    );
-
-    const mediaUrlResult = await getMediaUrl(imageMedia.id, config.accessToken);
-    if (!mediaUrlResult.success || mediaUrlResult.data === undefined) {
-      request.log.error(
-        { error: mediaUrlResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
-        'Failed to get media URL'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to get media URL: ${mediaUrlResult.error ?? 'unknown error'}`,
-      });
-      return;
-    }
-
-    // Step 2: Download the image
-    request.log.info(
-      { eventId: savedEvent.id, mediaId: imageMedia.id },
-      'Downloading image from WhatsApp'
-    );
-
-    const downloadResult = await downloadMedia(mediaUrlResult.data.url, config.accessToken);
-    if (!downloadResult.success || downloadResult.buffer === undefined) {
-      request.log.error(
-        { error: downloadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
-        'Failed to download media'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to download media: ${downloadResult.error ?? 'unknown error'}`,
-      });
-      return;
-    }
-
-    const imageBuffer = downloadResult.buffer;
-    const extension = getExtensionFromMimeType(imageMedia.mimeType);
-
-    // Step 3: Generate thumbnail
-    request.log.info({ eventId: savedEvent.id, mediaId: imageMedia.id }, 'Generating thumbnail');
-
-    const thumbnailResult = await generateThumbnail(imageBuffer);
-    if (!thumbnailResult.ok) {
-      request.log.error(
-        { error: thumbnailResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
-        'Failed to generate thumbnail'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to generate thumbnail: ${thumbnailResult.error.message}`,
-      });
-      return;
-    }
-
-    // Step 4: Upload original image to GCS
-    request.log.info({ eventId: savedEvent.id, mediaId: imageMedia.id }, 'Uploading image to GCS');
-
-    const uploadResult = await mediaStorage.upload(
-      userId,
-      waMessageId,
-      imageMedia.id,
-      extension,
-      imageBuffer,
-      imageMedia.mimeType
-    );
-
-    if (!uploadResult.ok) {
-      request.log.error(
-        { error: uploadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
-        'Failed to upload image to GCS'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to upload image: ${uploadResult.error.message}`,
-      });
-      return;
-    }
-
-    // Step 5: Upload thumbnail to GCS
-    request.log.info(
-      { eventId: savedEvent.id, mediaId: imageMedia.id },
-      'Uploading thumbnail to GCS'
-    );
-
-    const thumbnailUploadResult = await mediaStorage.uploadThumbnail(
-      userId,
-      waMessageId,
-      imageMedia.id,
-      'jpg', // Thumbnails are always JPEG
-      thumbnailResult.value.buffer,
-      thumbnailResult.value.mimeType
-    );
-
-    if (!thumbnailUploadResult.ok) {
-      request.log.error(
-        { error: thumbnailUploadResult.error, eventId: savedEvent.id, mediaId: imageMedia.id },
-        'Failed to upload thumbnail to GCS'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to upload thumbnail: ${thumbnailUploadResult.error.message}`,
-      });
-      return;
-    }
-
-    // Step 6: Save message to Firestore
-    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+  const result = await usecase.execute(
+    {
+      eventId: savedEvent.id,
       userId,
       waMessageId,
       fromNumber,
       toNumber,
-      text: imageMedia.caption ?? '',
-      mediaType: 'image',
-      media: {
-        id: imageMedia.id,
-        mimeType: imageMedia.mimeType,
-        fileSize: imageBuffer.length,
-      },
-      gcsPath: uploadResult.value.gcsPath,
-      thumbnailGcsPath: thumbnailUploadResult.value.gcsPath,
       timestamp,
-      receivedAt: new Date().toISOString(),
-      webhookEventId: savedEvent.id,
-    };
+      senderName,
+      phoneNumberId,
+      imageMedia,
+    },
+    request.log
+  );
 
-    // Add optional media sha256
-    if (imageMedia.sha256 !== undefined && messageToSave.media !== undefined) {
-      messageToSave.media.sha256 = imageMedia.sha256;
-    }
-
-    // Add caption if present
-    if (imageMedia.caption !== undefined) {
-      messageToSave.caption = imageMedia.caption;
-    }
-
-    // Add metadata only if we have any values
-    if (senderName !== null || phoneNumberId !== null) {
-      const metadata: { senderName?: string; phoneNumberId?: string } = {};
-      if (senderName !== null) {
-        metadata.senderName = senderName;
-      }
-      if (phoneNumberId !== null) {
-        metadata.phoneNumberId = phoneNumberId;
-      }
-      messageToSave.metadata = metadata;
-    }
-
-    const saveResult = await messageRepository.saveMessage(messageToSave);
-
-    if (!saveResult.ok) {
-      request.log.error(
-        { error: saveResult.error, eventId: savedEvent.id },
-        'Failed to save image message'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to save message: ${saveResult.error.message}`,
-      });
-      return;
-    }
-
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
-
-    request.log.info(
-      {
-        eventId: savedEvent.id,
-        userId,
-        messageId: saveResult.value.id,
-        gcsPath: uploadResult.value.gcsPath,
-        thumbnailGcsPath: thumbnailUploadResult.value.gcsPath,
-      },
-      'Image message saved successfully'
-    );
-
-    // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'image');
-  } catch (error) {
-    request.log.error(
-      { error, eventId: savedEvent.id },
-      'Unexpected error during image message processing'
-    );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-      failureDetails: 'Unexpected error during image processing',
-    });
+  if (result.ok) {
+    await sendConfirmationMessage(request, savedEvent, fromNumber, 'image');
   }
 }
 
 /**
- * Process audio message: download, upload to GCS, save to Firestore, publish event.
+ * Handle audio message using ProcessAudioMessageUseCase and TranscribeAudioUseCase.
  */
-async function processAudioMessage(
+async function handleAudioMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   config: Config,
+  services: ReturnType<typeof getServices>,
   userId: string,
   waMessageId: string,
   fromNumber: string,
@@ -728,535 +519,126 @@ async function processAudioMessage(
   timestamp: string,
   senderName: string | null,
   phoneNumberId: string | null,
-  audioMedia: AudioMediaInfo
+  audioMedia: { id: string; mimeType: string; sha256?: string }
 ): Promise<void> {
-  const { webhookEventRepository, messageRepository, mediaStorage } = getServices();
+  const usecase = new ProcessAudioMessageUseCase({
+    webhookEventRepository: services.webhookEventRepository,
+    messageRepository: services.messageRepository,
+    mediaStorage: services.mediaStorage,
+    whatsappCloudApi: services.whatsappCloudApi,
+  });
 
-  try {
-    // Step 1: Get media URL from WhatsApp
-    request.log.info(
-      { eventId: savedEvent.id, mediaId: audioMedia.id },
-      'Fetching audio URL from WhatsApp'
-    );
-
-    const mediaUrlResult = await getMediaUrl(audioMedia.id, config.accessToken);
-    if (!mediaUrlResult.success || mediaUrlResult.data === undefined) {
-      request.log.error(
-        { error: mediaUrlResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
-        'Failed to get audio URL'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to get audio URL: ${mediaUrlResult.error ?? 'unknown error'}`,
-      });
-      return;
-    }
-
-    // Step 2: Download the audio
-    request.log.info(
-      { eventId: savedEvent.id, mediaId: audioMedia.id },
-      'Downloading audio from WhatsApp'
-    );
-
-    const downloadResult = await downloadMedia(mediaUrlResult.data.url, config.accessToken);
-    if (!downloadResult.success || downloadResult.buffer === undefined) {
-      request.log.error(
-        { error: downloadResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
-        'Failed to download audio'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to download audio: ${downloadResult.error ?? 'unknown error'}`,
-      });
-      return;
-    }
-
-    const audioBuffer = downloadResult.buffer;
-    const extension = getExtensionFromMimeType(audioMedia.mimeType);
-
-    // Step 3: Upload audio to GCS
-    request.log.info({ eventId: savedEvent.id, mediaId: audioMedia.id }, 'Uploading audio to GCS');
-
-    const uploadResult = await mediaStorage.upload(
-      userId,
-      waMessageId,
-      audioMedia.id,
-      extension,
-      audioBuffer,
-      audioMedia.mimeType
-    );
-
-    if (!uploadResult.ok) {
-      request.log.error(
-        { error: uploadResult.error, eventId: savedEvent.id, mediaId: audioMedia.id },
-        'Failed to upload audio to GCS'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to upload audio: ${uploadResult.error.message}`,
-      });
-      return;
-    }
-
-    // Step 4: Save message to Firestore
-    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+  const result = await usecase.execute(
+    {
+      eventId: savedEvent.id,
       userId,
       waMessageId,
       fromNumber,
       toNumber,
-      text: '',
-      mediaType: 'audio',
-      media: {
-        id: audioMedia.id,
-        mimeType: audioMedia.mimeType,
-        fileSize: audioBuffer.length,
-      },
-      gcsPath: uploadResult.value.gcsPath,
       timestamp,
-      receivedAt: new Date().toISOString(),
-      webhookEventId: savedEvent.id,
-    };
+      senderName,
+      phoneNumberId,
+      audioMedia,
+    },
+    request.log
+  );
 
-    // Add optional media sha256
-    if (audioMedia.sha256 !== undefined && messageToSave.media !== undefined) {
-      messageToSave.media.sha256 = audioMedia.sha256;
-    }
+  if (result.ok) {
+    // Start transcription in background (fire-and-forget)
+    const transcribeUsecase = new TranscribeAudioUseCase({
+      messageRepository: services.messageRepository,
+      mediaStorage: services.mediaStorage,
+      transcriptionService: services.transcriptionService,
+      whatsappCloudApi: services.whatsappCloudApi,
+    });
 
-    // Add metadata only if we have any values
-    if (senderName !== null || phoneNumberId !== null) {
-      const metadata: { senderName?: string; phoneNumberId?: string } = {};
-      if (senderName !== null) {
-        metadata.senderName = senderName;
-      }
-      if (phoneNumberId !== null) {
-        metadata.phoneNumberId = phoneNumberId;
-      }
-      messageToSave.metadata = metadata;
-    }
-
-    const saveResult = await messageRepository.saveMessage(messageToSave);
-
-    if (!saveResult.ok) {
-      request.log.error(
-        { error: saveResult.error, eventId: savedEvent.id },
-        'Failed to save audio message'
+    // Get first phone number ID for sending transcription results
+    const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
+    if (transcriptionPhoneNumberId !== undefined) {
+      void transcribeUsecase.execute(
+        {
+          messageId: result.value.messageId,
+          userId,
+          gcsPath: result.value.gcsPath,
+          mimeType: result.value.mimeType,
+          userPhoneNumber: fromNumber,
+          originalWaMessageId: waMessageId,
+          phoneNumberId: transcriptionPhoneNumberId,
+        },
+        request.log
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to save message: ${saveResult.error.message}`,
-      });
-      return;
     }
 
-    const savedMessage = saveResult.value;
+    await sendConfirmationMessage(request, savedEvent, fromNumber, 'audio');
+  }
+}
 
-    // Step 5: Start in-process async transcription (fire-and-forget)
-    // This runs in the background after webhook returns 200
-    void transcribeAudioAsync(
-      request.log,
-      savedMessage.id,
-      userId,
-      uploadResult.value.gcsPath,
-      audioMedia.mimeType,
-      fromNumber,
-      savedMessage.waMessageId,
-      config
-    );
+/**
+ * Handle text message (direct save without usecase - simple enough).
+ */
+async function handleTextMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  messageText: string
+): Promise<void> {
+  const { webhookEventRepository, messageRepository } = getServices();
 
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+  // Build text message object
+  const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+    userId,
+    waMessageId,
+    fromNumber,
+    toNumber,
+    text: messageText,
+    mediaType: 'text',
+    timestamp,
+    receivedAt: new Date().toISOString(),
+    webhookEventId: savedEvent.id,
+  };
 
-    request.log.info(
-      {
-        eventId: savedEvent.id,
-        userId,
-        messageId: saveResult.value.id,
-        gcsPath: uploadResult.value.gcsPath,
-      },
-      'Audio message saved successfully'
-    );
+  // Add metadata only if we have any values
+  if (senderName !== null || phoneNumberId !== null) {
+    const metadata: { senderName?: string; phoneNumberId?: string } = {};
+    if (senderName !== null) {
+      metadata.senderName = senderName;
+    }
+    if (phoneNumberId !== null) {
+      metadata.phoneNumberId = phoneNumberId;
+    }
+    messageToSave.metadata = metadata;
+  }
 
-    // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config, 'audio');
-  } catch (error) {
+  // Save message to Firestore
+  const saveResult = await messageRepository.saveMessage(messageToSave);
+
+  if (!saveResult.ok) {
     request.log.error(
-      { error, eventId: savedEvent.id },
-      'Unexpected error during audio message processing'
+      { error: saveResult.error, eventId: savedEvent.id },
+      'Failed to save message'
     );
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-      failureDetails: 'Unexpected error during audio processing',
+      failureDetails: `Failed to save message: ${saveResult.error.message}`,
     });
-  }
-}
-
-/**
- * Logger interface for transcription async function.
- */
-interface TranscriptionLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
-
-/**
- * Polling configuration for transcription jobs.
- */
-const TRANSCRIPTION_POLL_CONFIG = {
-  initialDelayMs: 2000,
-  maxDelayMs: 30000,
-  backoffMultiplier: 1.5,
-  maxAttempts: 60, // ~5 minutes max with backoff
-};
-
-/**
- * In-process async transcription handler.
- *
- * IMPORTANT: Cloud Run Considerations
- * This function runs in the background after the webhook returns 200.
- * Risks:
- * - Container may be killed before transcription completes
- * - Long audio files (>5 min) are at higher risk
- * - Consider setting min_scale=1 for whatsapp-service for reliability
- *
- * Future improvement: Use Cloud Tasks for guaranteed delivery.
- */
-async function transcribeAudioAsync(
-  logger: TranscriptionLogger,
-  messageId: string,
-  userId: string,
-  gcsPath: string,
-  mimeType: string,
-  userPhoneNumber: string,
-  originalWaMessageId: string,
-  config: Config
-): Promise<void> {
-  const { transcriptionService, messageRepository, mediaStorage } = getServices();
-  const startedAt = new Date().toISOString();
-
-  logger.info(
-    { event: 'transcription_start', messageId, userId, gcsPath },
-    'Starting in-process audio transcription'
-  );
-
-  // Initialize transcription state as pending
-  const initialState: TranscriptionState = {
-    status: 'pending',
-    startedAt,
-  };
-  await messageRepository.updateTranscription(userId, messageId, initialState);
-
-  try {
-    // Step 1: Get signed URL for audio file
-    logger.info(
-      { event: 'transcription_get_signed_url', messageId },
-      'Getting signed URL for audio file'
-    );
-
-    const signedUrlResult = await mediaStorage.getSignedUrl(gcsPath, 3600); // 1 hour expiry
-    if (!signedUrlResult.ok) {
-      const errorState: TranscriptionState = {
-        status: 'failed',
-        startedAt,
-        completedAt: new Date().toISOString(),
-        error: {
-          code: 'SIGNED_URL_ERROR',
-          message: signedUrlResult.error.message,
-        },
-      };
-      await messageRepository.updateTranscription(userId, messageId, errorState);
-      await sendTranscriptionFailureMessage(
-        userPhoneNumber,
-        originalWaMessageId,
-        'Failed to access audio file',
-        config
-      );
-      logger.error(
-        { event: 'transcription_signed_url_error', messageId, error: signedUrlResult.error },
-        'Failed to get signed URL'
-      );
-      return;
-    }
-
-    // Step 2: Submit job to Speechmatics
-    logger.info(
-      { event: 'transcription_submit', messageId },
-      'Submitting transcription job to Speechmatics'
-    );
-
-    const submitResult = await transcriptionService.submitJob({
-      audioUrl: signedUrlResult.value,
-      mimeType,
-    });
-
-    if (!submitResult.ok) {
-      const errorState: TranscriptionState = {
-        status: 'failed',
-        startedAt,
-        completedAt: new Date().toISOString(),
-        error: {
-          code: submitResult.error.code,
-          message: submitResult.error.message,
-        },
-      };
-      if (submitResult.error.apiCall !== undefined) {
-        errorState.lastApiCall = submitResult.error.apiCall;
-      }
-      await messageRepository.updateTranscription(userId, messageId, errorState);
-      await sendTranscriptionFailureMessage(
-        userPhoneNumber,
-        originalWaMessageId,
-        `Transcription submission failed: ${submitResult.error.message}`,
-        config
-      );
-      logger.error(
-        { event: 'transcription_submit_error', messageId, error: submitResult.error },
-        'Failed to submit transcription job'
-      );
-      return;
-    }
-
-    const jobId = submitResult.value.jobId;
-
-    // Update state to processing
-    const processingState: TranscriptionState = {
-      status: 'processing',
-      jobId,
-      startedAt,
-      lastApiCall: submitResult.value.apiCall,
-    };
-    await messageRepository.updateTranscription(userId, messageId, processingState);
-
-    logger.info(
-      { event: 'transcription_submitted', messageId, jobId },
-      'Transcription job submitted, starting poll'
-    );
-
-    // Step 3: Poll until completion
-    let delayMs = TRANSCRIPTION_POLL_CONFIG.initialDelayMs;
-    let attempts = 0;
-    let lastPollApiCall = submitResult.value.apiCall;
-
-    while (attempts < TRANSCRIPTION_POLL_CONFIG.maxAttempts) {
-      attempts++;
-      await sleep(delayMs);
-
-      logger.info(
-        { event: 'transcription_poll', messageId, jobId, attempt: attempts, delayMs },
-        'Polling transcription job status'
-      );
-
-      const pollResult = await transcriptionService.pollJob(jobId);
-
-      if (!pollResult.ok) {
-        logger.error(
-          { event: 'transcription_poll_error', messageId, jobId, error: pollResult.error },
-          'Failed to poll transcription status'
-        );
-        // Continue polling on transient errors
-        delayMs = Math.min(
-          delayMs * TRANSCRIPTION_POLL_CONFIG.backoffMultiplier,
-          TRANSCRIPTION_POLL_CONFIG.maxDelayMs
-        );
-        continue;
-      }
-
-      lastPollApiCall = pollResult.value.apiCall;
-
-      if (pollResult.value.status === 'done') {
-        logger.info(
-          { event: 'transcription_done', messageId, jobId },
-          'Transcription job completed'
-        );
-        break;
-      }
-
-      if (pollResult.value.status === 'rejected') {
-        const errorState: TranscriptionState = {
-          status: 'failed',
-          jobId,
-          startedAt,
-          completedAt: new Date().toISOString(),
-          error: pollResult.value.error ?? { code: 'JOB_REJECTED', message: 'Job was rejected' },
-          lastApiCall: pollResult.value.apiCall,
-        };
-        await messageRepository.updateTranscription(userId, messageId, errorState);
-        await sendTranscriptionFailureMessage(
-          userPhoneNumber,
-          originalWaMessageId,
-          `Transcription failed: ${pollResult.value.error?.message ?? 'Job was rejected'}`,
-          config
-        );
-        logger.error(
-          { event: 'transcription_rejected', messageId, jobId, error: pollResult.value.error },
-          'Transcription job was rejected'
-        );
-        return;
-      }
-
-      // Exponential backoff
-      delayMs = Math.min(
-        delayMs * TRANSCRIPTION_POLL_CONFIG.backoffMultiplier,
-        TRANSCRIPTION_POLL_CONFIG.maxDelayMs
-      );
-    }
-
-    if (attempts >= TRANSCRIPTION_POLL_CONFIG.maxAttempts) {
-      const errorState: TranscriptionState = {
-        status: 'failed',
-        jobId,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        error: { code: 'POLL_TIMEOUT', message: 'Transcription polling timed out' },
-        lastApiCall: lastPollApiCall,
-      };
-      await messageRepository.updateTranscription(userId, messageId, errorState);
-      await sendTranscriptionFailureMessage(
-        userPhoneNumber,
-        originalWaMessageId,
-        'Transcription timed out',
-        config
-      );
-      logger.error(
-        { event: 'transcription_timeout', messageId, jobId, attempts },
-        'Transcription polling timed out'
-      );
-      return;
-    }
-
-    // Step 4: Fetch transcript
-    logger.info(
-      { event: 'transcription_fetch', messageId, jobId },
-      'Fetching transcription result'
-    );
-
-    const transcriptResult = await transcriptionService.getTranscript(jobId);
-
-    if (!transcriptResult.ok) {
-      const errorState: TranscriptionState = {
-        status: 'failed',
-        jobId,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        error: {
-          code: transcriptResult.error.code,
-          message: transcriptResult.error.message,
-        },
-      };
-      if (transcriptResult.error.apiCall !== undefined) {
-        errorState.lastApiCall = transcriptResult.error.apiCall;
-      }
-      await messageRepository.updateTranscription(userId, messageId, errorState);
-      await sendTranscriptionFailureMessage(
-        userPhoneNumber,
-        originalWaMessageId,
-        `Failed to fetch transcript: ${transcriptResult.error.message}`,
-        config
-      );
-      logger.error(
-        { event: 'transcription_fetch_error', messageId, jobId, error: transcriptResult.error },
-        'Failed to fetch transcription result'
-      );
-      return;
-    }
-
-    const transcript = transcriptResult.value.text;
-
-    // Step 5: Update message with completed transcription
-    const completedState: TranscriptionState = {
-      status: 'completed',
-      jobId,
-      text: transcript,
-      startedAt,
-      completedAt: new Date().toISOString(),
-      lastApiCall: transcriptResult.value.apiCall,
-    };
-    await messageRepository.updateTranscription(userId, messageId, completedState);
-
-    logger.info(
-      {
-        event: 'transcription_completed',
-        messageId,
-        jobId,
-        transcriptLength: transcript.length,
-      },
-      'Transcription completed successfully'
-    );
-
-    // Step 6: Send transcript to user via WhatsApp (quoting original message)
-    await sendTranscriptionSuccessMessage(userPhoneNumber, originalWaMessageId, transcript, config);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorState: TranscriptionState = {
-      status: 'failed',
-      startedAt,
-      completedAt: new Date().toISOString(),
-      error: { code: 'UNEXPECTED_ERROR', message: errorMessage },
-    };
-    await messageRepository.updateTranscription(userId, messageId, errorState);
-    await sendTranscriptionFailureMessage(
-      userPhoneNumber,
-      originalWaMessageId,
-      `Unexpected error: ${errorMessage}`,
-      config
-    );
-    logger.error(
-      { event: 'transcription_unexpected_error', messageId, error: errorMessage },
-      'Unexpected error during transcription'
-    );
-  }
-}
-
-/**
- * Sleep for specified milliseconds.
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Send transcription success message to user.
- */
-async function sendTranscriptionSuccessMessage(
-  phoneNumber: string,
-  originalMessageId: string,
-  transcript: string,
-  config: Config
-): Promise<void> {
-  // Get the first phone number ID from config
-  const phoneNumberId = config.allowedPhoneNumberIds[0];
-  if (phoneNumberId === undefined) {
     return;
   }
 
-  const message = `🎙️ *Transcription:*\n\n${transcript}`;
+  const savedMessage = saveResult.value;
 
-  await sendWhatsAppMessage(
-    phoneNumberId,
-    phoneNumber,
-    message,
-    config.accessToken,
-    originalMessageId
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+  request.log.info(
+    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+    'Message saved successfully'
   );
-}
 
-/**
- * Send transcription failure message to user.
- */
-async function sendTranscriptionFailureMessage(
-  phoneNumber: string,
-  originalMessageId: string,
-  errorDetails: string,
-  config: Config
-): Promise<void> {
-  // Get the first phone number ID from config
-  const phoneNumberId = config.allowedPhoneNumberIds[0];
-  if (phoneNumberId === undefined) {
-    return;
-  }
-
-  const message = `❌ *Transcription failed:*\n\n${errorDetails}`;
-
-  await sendWhatsAppMessage(
-    phoneNumberId,
-    phoneNumber,
-    message,
-    config.accessToken,
-    originalMessageId
-  );
+  await sendConfirmationMessage(request, savedEvent, fromNumber, 'text');
 }
 
 /**
@@ -1285,25 +667,25 @@ async function sendConfirmationMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   fromNumber: string,
-  config: Config,
   messageType: ConfirmationMessageType
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
   if (phoneNumberId !== null) {
+    const { whatsappCloudApi } = getServices();
     const confirmationText = getConfirmationMessageText(messageType);
-    const sendResult = await sendWhatsAppMessage(
+
+    const sendResult = await whatsappCloudApi.sendMessage(
       phoneNumberId,
       fromNumber,
       confirmationText,
-      config.accessToken,
       originalMessageId ?? undefined
     );
 
-    if (sendResult.success) {
+    if (sendResult.ok) {
       request.log.info(
-        { eventId: savedEvent.id, messageId: sendResult.messageId, recipient: fromNumber },
+        { eventId: savedEvent.id, messageId: sendResult.value.messageId, recipient: fromNumber },
         'Sent confirmation message'
       );
     } else {
