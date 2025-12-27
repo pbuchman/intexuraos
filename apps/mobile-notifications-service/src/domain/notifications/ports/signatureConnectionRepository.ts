@@ -38,4 +38,15 @@ export interface SignatureConnectionRepository {
    * Delete a connection by ID.
    */
   delete(id: string): Promise<Result<void, RepositoryError>>;
+
+  /**
+   * Delete all connections for a user.
+   * Used when regenerating signature to ensure only one active signature per user.
+   */
+  deleteByUserId(userId: string): Promise<Result<number, RepositoryError>>;
+
+  /**
+   * Check if user has any signature connections.
+   */
+  existsByUserId(userId: string): Promise<Result<boolean, RepositoryError>>;
 }

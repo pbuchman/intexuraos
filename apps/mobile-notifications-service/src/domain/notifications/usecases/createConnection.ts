@@ -48,11 +48,18 @@ function hashSignature(signature: string): string {
 
 /**
  * Create a new signature connection for a user.
+ * Deletes any existing signatures for the user first to ensure only one active signature.
  */
 export async function createConnection(
   input: CreateConnectionInput,
   repo: SignatureConnectionRepository
 ): Promise<Result<CreateConnectionOutput, CreateConnectionError | RepositoryError>> {
+  // Delete any existing signatures for this user (ensure single signature per user)
+  const deleteResult = await repo.deleteByUserId(input.userId);
+  if (!deleteResult.ok) {
+    return err(deleteResult.error);
+  }
+
   // Generate crypto-secure random signature
   const signature = generateSignature();
 

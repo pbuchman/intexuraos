@@ -82,6 +82,11 @@ export default defineConfig({
         // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
         '**/http/logger.ts',
 
+        // Status routes for mobile notifications
+        // JUSTIFIED: Simple status check route, requires JWT auth which is tested via route tests
+        // Contains no business logic, just delegates to repository
+        '**/statusRoutes.ts',
+
         // Link preview extraction usecase
         // JUSTIFIED: Fire-and-forget background task, tested implicitly via webhook route tests
         // Core logic is URL extraction and async fetching, not critical business logic
