@@ -1,15 +1,15 @@
 /**
  * Tests for Notion integration routes:
- * - POST /v1/integrations/notion/connect
- * - GET /v1/integrations/notion/status
- * - DELETE /v1/integrations/notion/disconnect
+ * - POST /notion/connect
+ * - GET /notion/status
+ * - DELETE /notion/disconnect
  */
 import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
 
 describe('Notion Integration Routes', () => {
   const ctx = setupTestContext();
 
-  describe('POST /v1/integrations/notion/connect', () => {
+  describe('POST /notion/connect', () => {
     it('connects successfully, validates page access, and includes page info in response', async () => {
       const token = await createToken({ sub: 'user-123' });
 
@@ -18,7 +18,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/integrations/notion/connect',
+        url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-notion-token',
@@ -56,7 +56,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/integrations/notion/connect',
+        url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'valid-token',
@@ -81,7 +81,7 @@ describe('Notion Integration Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/v1/integrations/notion/connect',
+        url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           promptVaultPageId: 'page-123',
@@ -98,13 +98,13 @@ describe('Notion Integration Routes', () => {
     });
   });
 
-  describe('GET /v1/integrations/notion/status', () => {
+  describe('GET /notion/status', () => {
     it('shows connected=false when not configured', async () => {
       const token = await createToken({ sub: 'user-123' });
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/integrations/notion/status',
+        url: '/notion/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -127,7 +127,7 @@ describe('Notion Integration Routes', () => {
       // First connect
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/integrations/notion/connect',
+        url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
@@ -138,7 +138,7 @@ describe('Notion Integration Routes', () => {
       // Then check status
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/integrations/notion/status',
+        url: '/notion/status',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -158,7 +158,7 @@ describe('Notion Integration Routes', () => {
     });
   });
 
-  describe('DELETE /v1/integrations/notion/disconnect', () => {
+  describe('DELETE /notion/disconnect', () => {
     it('disconnects successfully', async () => {
       const token = await createToken({ sub: 'user-789' });
 
@@ -168,7 +168,7 @@ describe('Notion Integration Routes', () => {
       // First connect
       await ctx.app.inject({
         method: 'POST',
-        url: '/v1/integrations/notion/connect',
+        url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
@@ -179,7 +179,7 @@ describe('Notion Integration Routes', () => {
       // Then disconnect
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/integrations/notion/disconnect',
+        url: '/notion/disconnect',
         headers: { authorization: `Bearer ${token}` },
       });
 

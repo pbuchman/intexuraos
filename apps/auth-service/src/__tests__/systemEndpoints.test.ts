@@ -84,9 +84,9 @@ describe('System Endpoints', () => {
     };
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('auth-service');
-    expect(spec.paths['/v1/auth/device/start']).toBeDefined();
-    expect(spec.paths['/v1/auth/device/poll']).toBeDefined();
-    expect(spec.paths['/v1/auth/config']).toBeDefined();
-    expect(spec.paths['/v1/auth/oauth/token']).toBeDefined();
+    expect(spec.paths['/auth/device/start']).toBeDefined();
+    expect(spec.paths['/auth/device/poll']).toBeDefined();
+    expect(spec.paths['/auth/config']).toBeDefined();
+    expect(spec.paths['/auth/oauth/token']).toBeDefined();
   });
 });

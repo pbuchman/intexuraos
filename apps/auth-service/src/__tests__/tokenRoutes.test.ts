@@ -1,5 +1,5 @@
 /**
- * Tests for POST /v1/auth/refresh
+ * Tests for POST /auth/refresh
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -37,7 +37,7 @@ describe('Token Refresh Routes', () => {
     resetServices();
   });
 
-  describe('POST /v1/auth/refresh', () => {
+  describe('POST /auth/refresh', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
@@ -46,7 +46,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -66,7 +66,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -86,7 +86,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -114,7 +114,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -145,7 +145,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: {},
         });
 
@@ -163,7 +163,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: '' },
         });
 
@@ -194,7 +194,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -214,7 +214,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-without-token' },
         });
 
@@ -259,7 +259,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -287,7 +287,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -307,7 +307,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -355,7 +355,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -393,7 +393,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -419,7 +419,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 
@@ -446,7 +446,7 @@ describe('Token Refresh Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/refresh',
+          url: '/auth/refresh',
           payload: { userId: 'user-123' },
         });
 

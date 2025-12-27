@@ -27,8 +27,8 @@ applyTo: 'apps/**'
 
 - Apps contain domain logic in `src/domain/**` and app-specific adapters in `src/infra/**`
 - Apps depend on `@intexuraos/common` only (no cross-app imports)
-- Structure: `src/domain/` (business logic) → `src/infra/` (adapters) → `src/routes/v1/` (transport)
-- Routes live under `src/routes/<version>/` (e.g., `src/routes/v1/`)
+- Structure: `src/domain/` (business logic) → `src/infra/` (adapters) → `src/routes/` (transport)
+- Routes live under `src/routes/`
 - Auth uses colocated `src/domain/identity` (in auth-service)
 - External services via colocated `src/infra/*` adapters (Firestore, Notion, Auth0)
 - Secrets: `INTEXURAOS_*` prefix, via env vars or Secret Manager

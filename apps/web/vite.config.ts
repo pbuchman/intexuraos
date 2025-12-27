@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
 
@@ -46,6 +47,98 @@ export default defineConfig(({ mode }) => {
             .replaceAll('__BUILD_DATE__', buildMeta.date);
         },
       },
+      VitePWA({
+        registerType: 'prompt',
+        includeAssets: ['favicon.png', 'logo.png'],
+        manifest: {
+          name: 'IntexuraOS',
+          short_name: 'IntexuraOS',
+          description: 'Personal operating system for life management',
+          theme_color: '#2563eb',
+          background_color: '#f8fafc',
+          display: 'standalone',
+          orientation: 'portrait-primary',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          // Cache strategies for SPA
+          runtimeCaching: [
+            {
+              // HTML - network first for fresh content
+              urlPattern: /^https:\/\/.*\.html$/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'html-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24, // 1 day
+                },
+              },
+            },
+            {
+              // JS/CSS - cache first with versioning (hash in filename)
+              urlPattern: /\.(?:js|css)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'static-resources',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+              },
+            },
+            {
+              // Images - cache first
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'image-cache',
+                expiration: {
+                  maxEntries: 50,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+              },
+            },
+            {
+              // Fonts - cache first
+              urlPattern: /\.(?:woff|woff2|ttf|eot)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'font-cache',
+                expiration: {
+                  maxEntries: 20,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                },
+              },
+            },
+          ],
+          // Don't cache API requests
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/],
+        },
+        devOptions: {
+          enabled: false, // Disable in dev mode to avoid caching issues
+        },
+      }),
     ],
     // Expose INTEXURAOS_ prefixed env vars to the client
     envPrefix: 'INTEXURAOS_',

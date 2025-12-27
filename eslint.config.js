@@ -24,14 +24,14 @@ export default tseslint.config(
       boundaries,
     },
     settings: {
+      'boundaries/include': ['apps/*/src/**', 'packages/*/src/**'],
       'boundaries/elements': [
-        { type: 'common', pattern: ['packages/common/src/**'] },
-        { type: 'apps', pattern: ['apps/*/src/**'] },
+        { type: 'common', pattern: ['packages/common/src/**'], mode: 'folder' },
+        { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
-      'boundaries/ignore': ['**/*.test.ts', '**/*.spec.ts'],
+      'boundaries/ignore': ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**'],
     },
     rules: {
-      'boundaries/no-unknown': ['error'],
       'boundaries/element-types': [
         'error',
         {

@@ -144,4 +144,46 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
       });
     }
   }
+
+  async deleteByUserId(userId: string): Promise<Result<number, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const snapshot = await db.collection(COLLECTION_NAME).where('userId', '==', userId).get();
+
+      if (snapshot.empty) {
+        return ok(0);
+      }
+
+      const batch = db.batch();
+      snapshot.docs.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+
+      await batch.commit();
+      return ok(snapshot.docs.length);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: getErrorMessage(error, 'Failed to delete signature connections for user'),
+      });
+    }
+  }
+
+  async existsByUserId(userId: string): Promise<Result<boolean, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('userId', '==', userId)
+        .limit(1)
+        .get();
+
+      return ok(!snapshot.empty);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: getErrorMessage(error, 'Failed to check if user has signature connections'),
+      });
+    }
+  }
 }

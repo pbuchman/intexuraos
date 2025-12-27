@@ -1,5 +1,5 @@
 /**
- * Tests for GET /v1/auth/login, GET /v1/auth/logout, GET /v1/auth/me
+ * Tests for GET /auth/login, GET /auth/logout, GET /auth/me
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -28,7 +28,7 @@ describe('Frontend Auth Routes', () => {
     await app.close();
   });
 
-  describe('GET /v1/auth/login', () => {
+  describe('GET /auth/login', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
@@ -38,7 +38,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://example.com/callback',
+          url: '/auth/login?redirect_uri=https://example.com/callback',
         });
 
         expect(response.statusCode).toBe(503);
@@ -64,7 +64,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login',
+          url: '/auth/login',
         });
 
         expect(response.statusCode).toBe(400);
@@ -82,7 +82,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://app.example.com/callback&state=csrf-token-123',
+          url: '/auth/login?redirect_uri=https://app.example.com/callback&state=csrf-token-123',
         });
 
         expect(response.statusCode).toBe(302);
@@ -101,7 +101,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://app.example.com/callback',
+          url: '/auth/login?redirect_uri=https://app.example.com/callback',
         });
 
         expect(response.statusCode).toBe(302);
@@ -112,14 +112,14 @@ describe('Frontend Auth Routes', () => {
     });
   });
 
-  describe('GET /v1/auth/logout', () => {
+  describe('GET /auth/logout', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED', async () => {
         app = await buildServer();
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout?return_to=https://example.com',
+          url: '/auth/logout?return_to=https://example.com',
         });
 
         expect(response.statusCode).toBe(503);
@@ -144,7 +144,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout',
+          url: '/auth/logout',
         });
 
         expect(response.statusCode).toBe(400);
@@ -162,7 +162,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout?return_to=https://app.example.com',
+          url: '/auth/logout?return_to=https://app.example.com',
         });
 
         expect(response.statusCode).toBe(302);
@@ -174,7 +174,7 @@ describe('Frontend Auth Routes', () => {
     });
   });
 
-  describe('GET /v1/auth/me', () => {
+  describe('GET /auth/me', () => {
     let jwksServer: FastifyInstance;
     let privateKey: jose.KeyLike;
     let jwksUrl: string;
@@ -234,7 +234,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
         });
 
         expect(response.statusCode).toBe(401);
@@ -257,7 +257,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: 'Bearer invalid-token',
           },
@@ -294,7 +294,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: `Bearer ${token}`,
           },
@@ -328,7 +328,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: `Bearer ${token}`,
           },

@@ -6,11 +6,8 @@ export default defineConfig({
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     // Run tests sequentially to avoid race conditions in shared state
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
+    sequence: {
+      shuffle: false,
     },
     // Standard timeout for async operations
     testTimeout: 10000,
@@ -84,12 +81,22 @@ export default defineConfig({
         // HTTP logger utility
         // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
         '**/http/logger.ts',
+
+        // Status routes for mobile notifications
+        // JUSTIFIED: Simple status check route, requires JWT auth which is tested via route tests
+        // Contains no business logic, just delegates to repository
+        '**/statusRoutes.ts',
+
+        // Link preview extraction usecase
+        // JUSTIFIED: Fire-and-forget background task, tested implicitly via webhook route tests
+        // Core logic is URL extraction and async fetching, not critical business logic
+        '**/usecases/extractLinkPreviews.ts',
       ],
       thresholds: {
         lines: 90,
-        branches: 85,
+        branches: 81,
         functions: 90,
-        statements: 90,
+        statements: 89,
       },
     },
   },

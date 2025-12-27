@@ -75,7 +75,7 @@ WRONG: "Would you like me to sign you in?" ← NEVER ask
 ### C2. Post-auth Notion check
 State: User just completed OAuth sign-in
 Expected:
-1. Immediately call `GET /v1/integrations/notion/status`
+1. Immediately call `GET /notion/status`
 2. If `connected: false` → start `/config notion` flow
 3. If `connected: true` → proceed with action
 
@@ -219,13 +219,13 @@ Note: Authentication state is managed by ChatGPT OAuth, not tracked in model sta
 ## Auth Service
 Base: `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app`
 - OAuth authorization and token exchange handled by ChatGPT Actions
-- `GET /v1/auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
-- `POST /v1/auth/oauth/token` — Token exchange (used by ChatGPT)
+- `GET /auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
+- `POST /auth/oauth/token` — Token exchange (used by ChatGPT)
 
 ## PromptVault Service
 Base: `https://intexuraos-promptvault-service-cj44trunra-lm.a.run.app`
-- `GET /v1/integrations/notion/status` — Check Notion connection
-- `POST /v1/tools/notion/promptvault/prompts` — Save prompt to Notion
+- `GET /notion/status` — Check Notion connection
+- `POST /prompt-vault/prompts` — Save prompt to Notion
 
 ---
 

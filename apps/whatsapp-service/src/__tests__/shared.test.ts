@@ -17,7 +17,7 @@ import {
   extractMessageType,
   extractImageMedia,
   extractAudioMedia,
-} from '../routes/v1/shared.js';
+} from '../routes/shared.js';
 
 describe('shared utilities', () => {
   describe('normalizePhoneNumber', () => {

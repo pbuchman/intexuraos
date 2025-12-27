@@ -25,8 +25,8 @@
 **Importers (apps):**
 | App | Import | File |
 |-----|--------|------|
-| auth-service | `type { AuthTokens }` | `v1/routes/deviceRoutes.ts` |
-| auth-service | `type { AuthTokens }` | `v1/routes/tokenRoutes.ts` |
+| auth-service | `type { AuthTokens }` | `routes/deviceRoutes.ts` |
+| auth-service | `type { AuthTokens }` | `routes/tokenRoutes.ts` |
 
 **Proposed Owner:** `auth-service`
 
@@ -48,7 +48,7 @@
 | App | Import | File |
 |-----|--------|------|
 | whatsapp-service | Types: `WhatsAppWebhookEventRepository`, `WhatsAppUserMappingRepository`, `InboxNotesRepository` | `services.ts` |
-| whatsapp-service | `ProcessWhatsAppWebhookUseCase` | `v1/routes/webhookRoutes.ts` |
+| whatsapp-service | `ProcessWhatsAppWebhookUseCase` | `routes/webhookRoutes.ts` |
 
 **Proposed Owner:** `whatsapp-service`
 
@@ -71,8 +71,8 @@
 | App | Import | File |
 |-----|--------|------|
 | promptvault-service | Types: `NotionConnectionRepository`, `NotionApiPort`, `PromptRepository` | `services.ts` |
-| promptvault-service | Use cases: `createPrompt`, `listPrompts`, `getPrompt`, `updatePrompt` | `v1/routes/promptRoutes.ts` |
-| promptvault-service | Type: `PromptVaultErrorCode` | `v1/routes/shared.ts` |
+| promptvault-service | Use cases: `createPrompt`, `listPrompts`, `getPrompt`, `updatePrompt` | `routes/promptRoutes.ts` |
+| promptvault-service | Type: `PromptVaultErrorCode` | `routes/shared.ts` |
 | notion-service | Types: `NotionConnectionRepository`, `NotionApiPort` | `services.ts` |
 
 **Multi-service:** YES (promptvault-service + notion-service)
@@ -97,7 +97,7 @@
 **Importers (apps):**
 | App | Import | File |
 |-----|--------|------|
-| auth-service | `Auth0ClientImpl`, `loadAuth0Config` | `v1/routes/tokenRoutes.ts` |
+| auth-service | `Auth0ClientImpl`, `loadAuth0Config` | `routes/tokenRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`
 
@@ -125,7 +125,7 @@
 | App | Import | File |
 |-----|--------|------|
 | auth-service | `getFirestore` | `server.ts` |
-| auth-service | `FirestoreAuthTokenRepository` | `v1/routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
+| auth-service | `FirestoreAuthTokenRepository` | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
 | promptvault-service | `getFirestore` | `server.ts` |
 | promptvault-service | `FirestoreNotionConnectionRepository` | `services.ts` |
 | promptvault-service | `FakeNotionConnectionRepository` | `__tests__/testUtils.ts` |
@@ -173,7 +173,7 @@
 | promptvault-service | `MockNotionApiAdapter`, `createNotionPromptRepository` | `__tests__/testUtils.ts` |
 | notion-service | `NotionApiAdapter`, `NotionLogger` | `services.ts`, `server.ts` |
 | notion-service | `MockNotionApiAdapter` | `__tests__/testUtils.ts` |
-| whatsapp-service | `NotionInboxNotesRepository` | `v1/routes/webhookRoutes.ts` |
+| whatsapp-service | `NotionInboxNotesRepository` | `routes/webhookRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-promptvault`, `@intexuraos/domain-inbox`, `@notionhq/client`
 

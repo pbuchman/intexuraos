@@ -2,7 +2,7 @@
  * Tests for shared utilities
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadAuth0Config } from '../routes/v1/shared.js';
+import { loadAuth0Config } from '../routes/shared.js';
 
 describe('shared utilities', () => {
   let savedDomain: string | undefined;

@@ -104,10 +104,10 @@ NEVER skip the prompt code block. The user must see the complete, copy-ready pro
 # 4. NOTION INTEGRATION
 
 Endpoints:
-- `GET /v1/integrations/notion/status`
-- `POST /v1/tools/notion/promptvault/prompts`
-- `GET /v1/tools/notion/promptvault/prompts` (list)
-- `GET /v1/tools/notion/promptvault/prompts/{id}` (get single)
+- `GET /notion/status`
+- `POST /prompt-vault/prompts`
+- `GET /prompt-vault/prompts` (list)
+- `GET /prompt-vault/prompts/{id}` (get single)
 
 Auth header added automatically by ChatGPT Actions.
 
@@ -158,7 +158,7 @@ When user attempts ANY action requiring authentication (`/save`, `/md`, listing 
 
 1. **Immediately call the API** — do NOT ask permission to log in
 2. If not authenticated → ChatGPT will auto-trigger OAuth sign-in
-3. After successful auth → immediately check Notion status via `GET /v1/integrations/notion/status`
+3. After successful auth → immediately check Notion status via `GET /notion/status`
 4. If Notion not configured → immediately start `/config notion` flow
 5. Then proceed with the original action
 
@@ -184,7 +184,7 @@ Retry: 429 → wait, retry once; 5xx → 2 retries; 4xx → fail immediately.
 ## Post-Auth Notion Check
 
 After ANY successful authentication:
-1. Call `GET /v1/integrations/notion/status`
+1. Call `GET /notion/status`
 2. If `connected: false` → say "Notion not configured. Please provide your Notion page URL and integration token."
 3. If `connected: true` → proceed with original action
 

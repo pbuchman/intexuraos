@@ -24,13 +24,14 @@ export function Header(): React.JSX.Element {
   const userPicture = user?.picture;
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-sm">
-      <div className="flex items-center gap-3">
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:px-6">
+      {/* Logo - with left padding on mobile to account for menu button */}
+      <div className="flex items-center gap-3 pl-12 md:pl-0">
         <img
           src="/logo.png"
           alt="IntexuraOS Logo"
           className="h-8 w-8"
-          onError={(e) => {
+          onError={(e): void => {
             e.currentTarget.style.display = 'none';
           }}
         />
@@ -42,17 +43,17 @@ export function Header(): React.JSX.Element {
 
       <div className="relative" ref={menuRef}>
         <button
-          onClick={() => {
+          onClick={(): void => {
             setIsMenuOpen(!isMenuOpen);
           }}
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+          className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 md:px-3"
         >
           {userPicture !== undefined && userPicture !== '' ? (
             <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
           ) : (
             <User className="h-5 w-5 text-slate-400" />
           )}
-          <span className="max-w-50 truncate">{userEmail}</span>
+          <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userEmail}</span>
           <ChevronDown
             className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
           />
@@ -60,8 +61,11 @@ export function Header(): React.JSX.Element {
 
         {isMenuOpen ? (
           <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+            <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
+              <span className="text-sm text-slate-600">{userEmail}</span>
+            </div>
             <button
-              onClick={() => {
+              onClick={(): void => {
                 logout();
                 setIsMenuOpen(false);
               }}

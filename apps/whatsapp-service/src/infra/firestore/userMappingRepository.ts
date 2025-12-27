@@ -3,7 +3,7 @@
  */
 import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import type { InboxError } from './webhookEventRepository.js';
-import { normalizePhoneNumber } from '../../routes/v1/shared.js';
+import { normalizePhoneNumber } from '../../routes/shared.js';
 
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];

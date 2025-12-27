@@ -12,6 +12,7 @@ import { GcpPubSubPublisher } from './infra/pubsub/index.js';
 import { WhatsAppCloudApiSender, WhatsAppCloudApiAdapter } from './infra/whatsapp/index.js';
 import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
+import { OpenGraphFetcher } from './infra/linkpreview/openGraphFetcher.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -22,6 +23,7 @@ import type {
   SpeechTranscriptionPort,
   WhatsAppCloudApiPort,
   ThumbnailGeneratorPort,
+  LinkPreviewFetcherPort,
 } from './domain/inbox/index.js';
 
 /**
@@ -50,6 +52,7 @@ export interface ServiceContainer {
   transcriptionService: SpeechTranscriptionPort;
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
+  linkPreviewFetcher: LinkPreviewFetcherPort;
 }
 
 let container: ServiceContainer | null = null;
@@ -88,6 +91,7 @@ export function getServices(): ServiceContainer {
       serviceConfig?.whatsappAccessToken ?? 'test-token'
     ),
     thumbnailGenerator: new ThumbnailGeneratorAdapter(),
+    linkPreviewFetcher: new OpenGraphFetcher(),
   };
   return container;
 }

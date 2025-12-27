@@ -1,5 +1,5 @@
 /**
- * Tests for POST /v1/auth/device/start and POST /v1/auth/device/poll
+ * Tests for POST /auth/device/start and POST /auth/device/poll
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -41,7 +41,7 @@ describe('Device Authorization Flow', () => {
     resetServices();
   });
 
-  describe('POST /v1/auth/device/start', () => {
+  describe('POST /auth/device/start', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
@@ -51,7 +51,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: {},
         });
 
@@ -89,7 +89,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: {},
         });
 
@@ -137,7 +137,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: { audience: customAudience },
         });
 
@@ -150,7 +150,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: { audience: 'not-a-valid-uri' },
         });
 
@@ -173,7 +173,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: {},
         });
 
@@ -198,7 +198,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: {},
         });
 
@@ -221,7 +221,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/start',
+          url: '/auth/device/start',
           payload: {},
         });
 
@@ -237,14 +237,14 @@ describe('Device Authorization Flow', () => {
     });
   });
 
-  describe('POST /v1/auth/device/poll', () => {
+  describe('POST /auth/device/poll', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED', async () => {
         app = await buildServer();
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-code' },
         });
 
@@ -276,7 +276,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: {},
         });
 
@@ -302,7 +302,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -326,7 +326,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -354,7 +354,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -380,7 +380,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'expired-device-code' },
         });
 
@@ -401,7 +401,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -421,7 +421,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -455,7 +455,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -488,7 +488,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -521,7 +521,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -554,7 +554,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -587,7 +587,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -614,7 +614,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -642,7 +642,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 
@@ -669,7 +669,7 @@ describe('Device Authorization Flow', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/v1/auth/device/poll',
+          url: '/auth/device/poll',
           payload: { device_code: 'test-device-code' },
         });
 

@@ -72,10 +72,10 @@ Review the plan carefully. It should create:
 
 - Artifact Registry repository
 - Firestore database
-- Secret Manager secrets (10 secrets: 5 Auth0, 5 WhatsApp)
-- Service accounts (3 accounts)
+- Secret Manager secrets
+- Service accounts (6 accounts: auth, promptvault, notion, whatsapp, api-docs-hub, mobile-notifications)
 - IAM bindings
-- Cloud Run services (2 services)
+- Cloud Run services (6 services)
 - Cloud Build trigger
 
 ## 4. Apply Configuration
@@ -199,47 +199,80 @@ Expected outputs:
 artifact_registry_url = "europe-central2-docker.pkg.dev/intexuraos-dev-yourname/intexuraos-dev"
 auth_service_url = "https://intexuraos-auth-service-xxxxx-ew.a.run.app"
 promptvault_service_url = "https://intexuraos-promptvault-service-xxxxx-ew.a.run.app"
+notion_service_url = "https://intexuraos-notion-service-xxxxx-ew.a.run.app"
+whatsapp_service_url = "https://intexuraos-whatsapp-service-xxxxx-ew.a.run.app"
+api_docs_hub_url = "https://intexuraos-api-docs-hub-xxxxx-ew.a.run.app"
+mobile_notifications_service_url = "https://intexuraos-mobile-notifications-xxxxx-ew.a.run.app"
 firestore_database = "(default)"
 service_accounts = {
   auth_service = "intexuraos-auth-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
   promptvault_service = "intexuraos-pv-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
   notion_service = "intexuraos-notion-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
+  whatsapp_service = "intexuraos-whatsapp-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
+  api_docs_hub = "intexuraos-docs-hub-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
+  mobile_notifications_service = "intexuraos-mobile-svc-dev@intexuraos-dev-yourname.iam.gserviceaccount.com"
 }
 ```
 
 ## 7. Initial Image Push (Required)
 
-Cloud Run services require an initial image. Build and push from repository root:
+Cloud Run services require an initial image. You can use the automated script or build manually.
+
+### Option A: Automated Script (Recommended)
+
+Use the script that automatically detects and builds only missing images:
+
+```bash
+# From repository root
+./scripts/push-missing-images.sh
+```
+
+The script will:
+
+1. Detect all services with Dockerfiles in `apps/`
+2. Check which images already exist in Artifact Registry
+3. Prompt for confirmation before building
+4. Build and push each missing image
+
+### Option B: Manual Build
+
+Build and push from repository root:
 
 ```bash
 # Set variables
 export REGION="europe-central2"
 export PROJECT_ID="intexuraos-dev-yourname"
+export REGISTRY="${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev"
 
 # Build and push auth-service (--platform for Cloud Run compatibility on Apple Silicon)
 docker build --platform linux/amd64 -f apps/auth-service/Dockerfile \
-  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/auth-service:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/auth-service:latest
+  -t ${REGISTRY}/auth-service:latest .
+docker push ${REGISTRY}/auth-service:latest
 
 # Build and push promptvault-service
 docker build --platform linux/amd64 -f apps/promptvault-service/Dockerfile \
-  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/promptvault-service:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/promptvault-service:latest
+  -t ${REGISTRY}/promptvault-service:latest .
+docker push ${REGISTRY}/promptvault-service:latest
 
 # Build and push notion-service
 docker build --platform linux/amd64 -f apps/notion-service/Dockerfile \
-  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/notion-service:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/notion-service:latest
+  -t ${REGISTRY}/notion-service:latest .
+docker push ${REGISTRY}/notion-service:latest
 
 # Build and push whatsapp-service
 docker build --platform linux/amd64 -f apps/whatsapp-service/Dockerfile \
-  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/whatsapp-service:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/whatsapp-service:latest
+  -t ${REGISTRY}/whatsapp-service:latest .
+docker push ${REGISTRY}/whatsapp-service:latest
 
 # Build and push api-docs-hub
 docker build --platform linux/amd64 -f apps/api-docs-hub/Dockerfile \
-  -t ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/api-docs-hub:latest .
-docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev/api-docs-hub:latest
+  -t ${REGISTRY}/api-docs-hub:latest .
+docker push ${REGISTRY}/api-docs-hub:latest
+
+# Build and push mobile-notifications-service
+docker build --platform linux/amd64 -f apps/mobile-notifications-service/Dockerfile \
+  -t ${REGISTRY}/mobile-notifications-service:latest .
+docker push ${REGISTRY}/mobile-notifications-service:latest
 ```
 
 > **Important**:

@@ -28,5 +28,8 @@
     "@intexuraos/common": "*",
     "fastify": "^5.1.0",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "nock": "^14.0.0"
   }
 }

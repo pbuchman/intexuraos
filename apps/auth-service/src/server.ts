@@ -11,7 +11,7 @@ import {
   getFirestore,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
-import { v1AuthRoutes } from './routes/v1/routes.js';
+import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'auth-service';
 const SERVICE_VERSION = '0.0.1';
@@ -305,8 +305,8 @@ export async function buildServer(): Promise<FastifyInstance> {
     routePrefix: '/docs',
   });
 
-  // Register v1 auth routes
-  await app.register(v1AuthRoutes);
+  // Register auth routes
+  await app.register(authRoutes);
 
   app.get(
     '/openapi.json',

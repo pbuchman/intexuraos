@@ -9,7 +9,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is missing', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
     });
 
     expect(response.statusCode).toBe(401);
@@ -24,7 +24,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is invalid format', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
       headers: {
         authorization: 'InvalidFormat',
       },
@@ -42,7 +42,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED for invalid JWT', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
       headers: {
         authorization: 'Bearer invalid-jwt-token',
       },
@@ -62,7 +62,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -83,7 +83,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -104,7 +104,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/tools/notion/promptvault/prompts',
+      url: '/prompt-vault/prompts',
       headers: {
         authorization: `Bearer ${token}`,
       },

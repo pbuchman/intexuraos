@@ -1,4 +1,4 @@
-# Auth0 Setup Guide (Updated 2025-12-22)
+# Auth0 Setup Guide (Updated 2025-12-27)
 
 This guide covers setting up Auth0 for IntexuraOS authentication:
 
@@ -152,15 +152,15 @@ This application enables OAuth for ChatGPT custom GPTs.
 
 In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
 
-| Field                     | Value                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| **Authentication Type**   | `OAuth`                                                                           |
-| **Client ID**             | From Auth0 → Your App → Settings → Client ID                                      |
-| **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                                  |
-| **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/v1/auth/oauth/authorize` |
-| **Token URL**             | `https://intexuraos-auth-service-cj44trunra-lm.a.run.app/v1/auth/oauth/token`     |
-| **Scope**                 | `openid profile email offline_access`                                             |
-| **Token Exchange Method** | `Default (POST request)`                                                          |
+| Field                     | Value                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| **Authentication Type**   | `OAuth`                                                                        |
+| **Client ID**             | From Auth0 → Your App → Settings → Client ID                                   |
+| **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                               |
+| **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/auth/oauth/authorize` |
+| **Token URL**             | `https://intexuraos-auth-service-cj44trunra-lm.a.run.app/auth/oauth/token`     |
+| **Scope**                 | `openid profile email offline_access`                                          |
+| **Token Exchange Method** | `Default (POST request)`                                                       |
 
 > **Important**: Both Authorization URL and Token URL must be on the same root domain as your API.
 > The auth-service `/authorize` endpoint redirects to Auth0 to satisfy ChatGPT's domain requirement.
@@ -288,7 +288,7 @@ echo -n "new-value" | \
 
 ```bash
 # Using auth-service helper
-curl -X POST http://localhost:3000/v1/auth/device/start \
+curl -X POST http://localhost:3000/auth/device/start \
   -H "Content-Type: application/json" \
   -d '{
     "audience": "urn:intexuraos:api",
@@ -325,7 +325,7 @@ Response:
 
 ```bash
 # Using auth-service helper
-curl -X POST http://localhost:3000/v1/auth/device/poll \
+curl -X POST http://localhost:3000/auth/device/poll \
   -H "Content-Type: application/json" \
   -d '{"device_code": "XXXX-XXXX-XXXX"}'
 ```
@@ -362,7 +362,7 @@ curl -X POST http://localhost:3000/v1/auth/device/poll \
 ### Step 4: Use Access Token
 
 ```bash
-curl http://localhost:3001/v1/integrations/notion/status \
+curl http://localhost:3001/notion/status \
   -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
 ```
 
@@ -371,7 +371,7 @@ curl http://localhost:3001/v1/integrations/notion/status \
 When the access token expires (after 1 hour), refresh it:
 
 ```bash
-curl -X POST http://localhost:3000/v1/auth/refresh \
+curl -X POST http://localhost:3000/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"userId": "auth0|507f1f77bcf86cd799439011"}'
 ```
@@ -406,7 +406,7 @@ curl -X POST http://localhost:3000/v1/auth/refresh \
 >
 > 1. User authenticates once via device flow
 > 2. Refresh token is stored server-side (valid for 15 days idle, 30 days absolute)
-> 3. Each day, client calls `/v1/auth/refresh` to get fresh access token
+> 3. Each day, client calls `/auth/refresh` to get fresh access token
 > 4. User doesn't need to re-authenticate unless:
 >    - 15 days of inactivity
 >    - 30 days since initial authentication
@@ -511,7 +511,7 @@ curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
 
 ### Refresh Token Invalid (invalid_grant)
 
-**Symptom:** `401 UNAUTHORIZED` from `/v1/auth/refresh` with "invalid_grant"
+**Symptom:** `401 UNAUTHORIZED` from `/auth/refresh` with "invalid_grant"
 
 **Causes:**
 
@@ -642,7 +642,7 @@ Before going to production:
 - [ ] Test full flow: auth → daily refresh → idle expiry
 - [ ] Document token revocation process for security incidents
 
-## 15. References (2025-12-22)
+## 15. References (2025-12-27)
 
 Official Auth0 documentation references:
 
@@ -658,4 +658,4 @@ ChatGPT Actions references:
 
 - [ChatGPT Actions OAuth](https://platform.openai.com/docs/actions/authentication/oauth) - Official ChatGPT OAuth documentation
 
-All references verified as current on 2025-12-22.
+All references verified as current on 2025-12-27.
