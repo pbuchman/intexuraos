@@ -23,6 +23,8 @@ export { REQUEST_ID_HEADER, getRequestId } from './http/requestId.js';
 
 export { intexuraFastifyPlugin } from './http/fastifyPlugin.js';
 
+export { handleValidationError } from './http/validation.js';
+
 // Logger utilities
 export { shouldLogRequest, registerQuietHealthCheckLogging } from './http/logger.js';
 
