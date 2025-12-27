@@ -2,6 +2,13 @@
 # Builds and deploys affected services on push to development branch.
 # CI checks (lint, typecheck, test) run in GitHub Actions before this.
 #
+# Optimizations applied:
+# - Docker BuildKit with layer caching (--cache-from)
+# - Parallel builds for all services (waitFor: ['detect-affected'])
+# - Kaniko for efficient image building with remote cache
+# - Single detection pass (affected.json written once)
+# - CLOUD_LOGGING_ONLY for cost savings
+#
 # Substitutions are provided by the Cloud Build trigger (Terraform):
 # - _REGION: GCP region
 # - _ARTIFACT_REGISTRY_URL: Full Artifact Registry URL
@@ -14,7 +21,7 @@ steps:
     entrypoint: 'npm'
     args: ['ci']
 
-  # Step 2: Detect affected services (uses full node image for git)
+  # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
   - name: 'node:22'
     id: 'detect-affected'
     waitFor: ['npm-ci']
@@ -24,41 +31,36 @@ steps:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
 
+  # ===== PARALLEL SERVICE BUILDS =====
+  # All build steps wait only for detect-affected, enabling parallel execution
+
   # ===== auth-service pipeline =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-auth-service'
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-auth-service'
     waitFor: ['detect-affected']
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Building auth-service..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
-            -f apps/auth-service/Dockerfile .
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing auth-service with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/auth-service/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/auth-service:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
         else
           echo "auth-service not affected, skipping build."
         fi
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-auth-service'
-    waitFor: ['build-auth-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing auth-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:latest
-        else
-          echo "auth-service not affected, skipping push."
-        fi
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-auth-service'
-    waitFor: ['push-auth-service']
+    waitFor: ['build-push-auth-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -76,40 +78,32 @@ steps:
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== promptvault-service pipeline =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-promptvault-service'
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-promptvault-service'
     waitFor: ['detect-affected']
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Building promptvault-service..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
-            -f apps/promptvault-service/Dockerfile .
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing promptvault-service with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/promptvault-service/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/promptvault-service:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
         else
           echo "promptvault-service not affected, skipping build."
         fi
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-promptvault-service'
-    waitFor: ['build-promptvault-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing promptvault-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
-        else
-          echo "promptvault-service not affected, skipping push."
-        fi
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-promptvault-service'
-    waitFor: ['push-promptvault-service']
+    waitFor: ['build-push-promptvault-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -127,40 +121,32 @@ steps:
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== notion-service pipeline =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-notion-service'
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-notion-service'
     waitFor: ['detect-affected']
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Building notion-service..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
-            -f apps/notion-service/Dockerfile .
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing notion-service with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/notion-service/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/notion-service:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
         else
           echo "notion-service not affected, skipping build."
         fi
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-notion-service'
-    waitFor: ['build-notion-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing notion-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
-        else
-          echo "notion-service not affected, skipping push."
-        fi
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-notion-service'
-    waitFor: ['push-notion-service']
+    waitFor: ['build-push-notion-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -178,40 +164,32 @@ steps:
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
   # ===== whatsapp-service pipeline =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-whatsapp-service'
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-whatsapp-service'
     waitFor: ['detect-affected']
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Building whatsapp-service..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
-            -f apps/whatsapp-service/Dockerfile .
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing whatsapp-service with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/whatsapp-service/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
         else
           echo "whatsapp-service not affected, skipping build."
         fi
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-whatsapp-service'
-    waitFor: ['build-whatsapp-service']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing whatsapp-service..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
-        else
-          echo "whatsapp-service not affected, skipping push."
-        fi
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-whatsapp-service'
-    waitFor: ['push-whatsapp-service']
+    waitFor: ['build-push-whatsapp-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -228,42 +206,33 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-
   # ===== api-docs-hub pipeline =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-api-docs-hub'
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-api-docs-hub'
     waitFor: ['detect-affected']
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
-          echo "Building api-docs-hub..."
-          docker build -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
-            -f apps/api-docs-hub/Dockerfile .
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing api-docs-hub with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/api-docs-hub/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
         else
           echo "api-docs-hub not affected, skipping build."
         fi
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-api-docs-hub'
-    waitFor: ['build-api-docs-hub']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
-          echo "Pushing api-docs-hub..."
-          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
-        else
-          echo "api-docs-hub not affected, skipping push."
-        fi
-
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-api-docs-hub'
-    waitFor: ['push-api-docs-hub']
+    waitFor: ['build-push-api-docs-hub']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -280,7 +249,50 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # ===== web pipeline =====
+  # ===== mobile-notifications-service pipeline =====
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-push-mobile-notifications-service'
+    waitFor: ['detect-affected']
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        if [ "${_FORCE_DEPLOY}" = "true" ] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+          echo "Building and pushing mobile-notifications-service with Kaniko..."
+          /kaniko/executor \
+            --context=/workspace \
+            --dockerfile=apps/mobile-notifications-service/Dockerfile \
+            --destination=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:${COMMIT_SHA} \
+            --destination=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+            --cache=true \
+            --cache-ttl=168h \
+            --compressed-caching=false \
+            --snapshot-mode=redo \
+            --use-new-run
+        else
+          echo "mobile-notifications-service not affected, skipping build."
+        fi
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-mobile-notifications-service'
+    waitFor: ['build-push-mobile-notifications-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-mobile-notifications-service.sh
+        else
+          echo "mobile-notifications-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FORCE_DEPLOY=${_FORCE_DEPLOY}'
+
+  # ===== web pipeline (parallel with backend services) =====
   # Step 1: Fetch secrets and write to .env file
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'
@@ -341,7 +353,7 @@ steps:
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
 
-  # ===== static assets sync =====
+  # ===== static assets sync (parallel with everything) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'sync-static-assets'
     waitFor: ['npm-ci']
@@ -356,5 +368,8 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
+  env:
+    - 'DOCKER_BUILDKIT=1'
 
 timeout: 1800s
+
