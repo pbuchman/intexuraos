@@ -276,10 +276,11 @@ module "secret_manager" {
     # Speechmatics API secrets
     "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
     # Web frontend service URLs (public, non-sensitive)
-    "INTEXURAOS_AUTH_SERVICE_URL"        = "Auth service Cloud Run URL for web frontend"
-    "INTEXURAOS_PROMPTVAULT_SERVICE_URL" = "PromptVault service Cloud Run URL for web frontend"
-    "INTEXURAOS_WHATSAPP_SERVICE_URL"    = "WhatsApp service Cloud Run URL for web frontend"
-    "INTEXURAOS_NOTION_SERVICE_URL"      = "Notion service Cloud Run URL for web frontend"
+    "INTEXURAOS_AUTH_SERVICE_URL"                    = "Auth service Cloud Run URL for web frontend"
+    "INTEXURAOS_PROMPTVAULT_SERVICE_URL"             = "PromptVault service Cloud Run URL for web frontend"
+    "INTEXURAOS_WHATSAPP_SERVICE_URL"                = "WhatsApp service Cloud Run URL for web frontend"
+    "INTEXURAOS_NOTION_SERVICE_URL"                  = "Notion service Cloud Run URL for web frontend"
+    "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL"    = "Mobile notifications service Cloud Run URL for web frontend"
   }
 
   depends_on = [google_project_service.apis]

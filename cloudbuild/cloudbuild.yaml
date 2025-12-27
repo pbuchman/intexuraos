@@ -299,6 +299,7 @@ steps:
         INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
         INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
+        INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
         EOF
           echo "Secrets written to /workspace/apps/web/.env"
         else
