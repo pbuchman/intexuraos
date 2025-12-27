@@ -46,4 +46,3 @@ These patterns were previously excluded but **must now achieve ≥90% coverage**
 ```bash
 npm run test -- --coverage
 ```
-

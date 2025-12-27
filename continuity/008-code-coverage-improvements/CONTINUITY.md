@@ -5,116 +5,116 @@
 ### 2024-12-27 — Session Start
 
 **Phase 0: Initialization**
-- ✅ Read `.github/copilot-instructions.md` (442 lines)
-- ✅ Read `vitest.config.ts` (104 lines)
-- ✅ Confirmed constraints and revoked exclusions
+- ✅ Read `.github/copilot-instructions.md`
+- ✅ Read `vitest.config.ts`
 - ✅ Created continuity directory `008-code-coverage-improvements`
-- ✅ Completed full file inventory and line counts
-- ✅ Identified existing fakes that can be reused
-
-**Baseline Coverage (before exclusion removal):**
-
-| Metric     | Value  | Target | Status |
-|------------|--------|--------|--------|
-| Lines      | 90%    | 90%    | ✅     |
-| Branches   | 81.74% | 90%    | ❌     |
-| Functions  | 97.61% | 90%    | ✅     |
-| Statements | 90.6%  | 90%    | ✅     |
-
-**Current thresholds in vitest.config.ts:**
-- lines: 90
-- branches: 81
-- functions: 90
-- statements: 89
+- ✅ Created detailed execution plan (PLAN.md)
+- ✅ Received user approval for plan execution
+- ✅ Received permission to modify protected files
 
 ---
 
-## Complete File Inventory
+## Open Questions — Resolved
 
-### Files Under Revoked Exclusions (25 files, ~3,637 lines total)
-
-#### `**/infra/**` Pattern (20 files, 2,976 lines)
-
-| # | Service | File | Lines | Test Strategy |
-|---|---------|------|-------|---------------|
-| 1 | auth-service | `infra/auth0/client.ts` | 135 | Mock fetch, test token refresh flow |
-| 2 | auth-service | `infra/firestore/authTokenRepository.ts` | 162 | Mock Firestore via @intexuraos/common |
-| 3 | auth-service | `infra/firestore/encryption.ts` | 91 | Pure unit tests (no mocks needed) |
-| 4 | mobile-notifications | `infra/firestore/firestoreNotificationRepository.ts` | 210 | Mock Firestore |
-| 5 | mobile-notifications | `infra/firestore/firestoreSignatureConnectionRepository.ts` | 189 | Mock Firestore |
-| 6 | notion-service | `infra/firestore/notionConnectionRepository.ts` | 142 | Mock Firestore |
-| 7 | notion-service | `infra/notion/notionApi.ts` | 96 | Mock Notion client |
-| 8 | promptvault-service | `infra/firestore/notionConnectionRepository.ts` | 142 | Mock Firestore (duplicate of notion-service) |
-| 9 | promptvault-service | `infra/notion/promptApi.ts` | 471 | Mock Notion client + mock Firestore |
-| 10 | whatsapp-service | `infra/firestore/messageRepository.ts` | 257 | Mock Firestore |
-| 11 | whatsapp-service | `infra/firestore/userMappingRepository.ts` | 169 | Mock Firestore |
-| 12 | whatsapp-service | `infra/firestore/webhookEventRepository.ts` | 112 | Mock Firestore |
-| 13 | whatsapp-service | `infra/gcs/mediaStorageAdapter.ts` | 149 | Mock @google-cloud/storage |
-| 14 | whatsapp-service | `infra/linkpreview/openGraphFetcher.ts` | 240 | Mock fetch |
-| 15 | whatsapp-service | `infra/media/thumbnailAdapter.ts` | 36 | Mock ThumbnailGenerator |
-| 16 | whatsapp-service | `infra/media/thumbnailGenerator.ts` | 72 | Real sharp tests with sample images |
-| 17 | whatsapp-service | `infra/pubsub/publisher.ts` | 57 | Mock @google-cloud/pubsub |
-| 18 | whatsapp-service | `infra/speechmatics/adapter.ts` | 288 | Mock fetch for Speechmatics API |
-| 19 | whatsapp-service | `infra/whatsapp/cloudApiAdapter.ts` | 78 | Mock whatsappClient functions |
-| 20 | whatsapp-service | `infra/whatsapp/sender.ts` | 80 | Mock whatsappClient functions |
-
-#### Other Revoked Exclusions (5 files, 661 lines)
-
-| # | Pattern | File | Lines | Test Strategy |
-|---|---------|------|-------|---------------|
-| 21 | `**/notion.ts` | `packages/common/src/notion.ts` | 175 | Mock @notionhq/client, test error mapping |
-| 22 | `**/whatsappClient.ts` | `apps/whatsapp-service/src/whatsappClient.ts` | 210 | Mock fetch for Graph API |
-| 23 | `**/workers/**` | `apps/whatsapp-service/src/workers/cleanupWorker.ts` | 189 | Mock @google-cloud/pubsub |
-| 24 | `**/extractLinkPreviews.ts` | `apps/whatsapp-service/src/domain/inbox/usecases/extractLinkPreviews.ts` | 186 | Use existing fakes |
-| 25 | `**/statusRoutes.ts` | `apps/mobile-notifications-service/src/routes/statusRoutes.ts` | 101 | ✅ **Already has tests** (created this session) |
+| # | Topic | Decision | Rationale |
+|---|--------|-----------|------------|
+| 1 | Firestore mocking | In-memory fake; stub `getFirestore()` | Deterministic, no emulator dependency |
+| 2 | Duplicate repos | Test as-is, refactor later | Coverage priority over architecture |
+| 3 | Priority | Quick wins first | Maximize momentum, measurable progress |
 
 ---
 
-## Existing Test Infrastructure
+## Execution Progress
 
-### Fakes Available (15 fake classes)
+### Phase 1: Prerequisites ✅
 
-| Fake Class | Service | Can Test |
-|------------|---------|----------|
-| `FakeAuth0Client` | auth-service | auth0/client.ts indirectly |
-| `FakeAuthTokenRepository` | auth-service | routes (not infra directly) |
-| `FakeEventPublisher` | whatsapp-service | pubsub/publisher.ts indirectly |
-| `FakeLinkPreviewFetcherPort` | whatsapp-service | extractLinkPreviews.ts |
-| `FakeMediaStorage` | whatsapp-service | gcs/mediaStorageAdapter.ts indirectly |
-| `FakeMessageSender` | whatsapp-service | whatsapp/sender.ts indirectly |
-| `FakeNotificationRepository` | mobile-notifications | routes (not infra directly) |
-| `FakeNotionConnectionRepository` | promptvault/notion | notionConnectionRepository.ts indirectly |
-| `FakeSignatureConnectionRepository` | mobile-notifications | routes (not infra directly) |
-| `FakeSpeechTranscriptionPort` | whatsapp-service | speechmatics/adapter.ts indirectly |
-| `FakeThumbnailGeneratorPort` | whatsapp-service | media/thumbnailAdapter.ts indirectly |
-| `FakeWhatsAppCloudApiPort` | whatsapp-service | cloudApiAdapter.ts indirectly |
-| `FakeWhatsAppMessageRepository` | whatsapp-service | routes (not infra directly) |
-| `FakeWhatsAppUserMappingRepository` | whatsapp-service | routes (not infra directly) |
-| `FakeWhatsAppWebhookEventRepository` | whatsapp-service | routes (not infra directly) |
+| Task | Status | Notes |
+|------|--------|-------|
+| 1.0 Firestore fake utility | ✅ Done | `packages/common/src/testing/firestoreFake.ts` |
 
-### Test Utilities Available
+### Phase 2: Pure Unit Tests ✅
 
-| Service | File | Capabilities |
-|---------|------|--------------|
-| promptvault-service | `__tests__/testUtils.ts` | JWKS server, createToken() |
-| whatsapp-service | `__tests__/testUtils.ts` | JWKS server, createToken(), setupTestContext() |
-| notion-service | `__tests__/testUtils.ts` | JWKS server, createToken() |
-| mobile-notifications | `__tests__/testUtils.ts` | ✅ **Created this session** |
+| Task | Status | Tests | Notes |
+|------|--------|-------|-------|
+| 2.1 encryption.ts | ✅ Done | 19 | AES-256-GCM |
+| 2.2 extractLinkPreviews.ts | ✅ Done | 8 | URL extraction |
+| 2.3 thumbnailGenerator.ts | ✅ Done | 7 | Sharp image processing |
+
+### Phase 3: External API Mocks (Partial)
+
+| Task | Status | Tests | Notes |
+|------|--------|-------|-------|
+| 3.1 whatsappClient.ts | ✅ Done | 13 | nock mocking Graph API |
+| 3.2 openGraphFetcher.ts | ✅ Done | 12 | nock mocking HTML responses |
+| 3.3 auth0/client.ts | ✅ Done | 11 | nock mocking Auth0 API |
+| 3.4 speechmatics/adapter.ts | ⏳ Blocked | 0 | vi.mock ESM hoisting issue |
+
+### Phase 4: Firestore/GCS/Pub/Sub Tests (Partial)
+
+| Task | Status | Tests | Notes |
+|------|--------|-------|-------|
+| 4.1 authTokenRepository.ts | ✅ Done | 13 | FakeFirestore |
+| 4.2 notionConnectionRepository.ts | ✅ Done | 12 | notion-service |
+| 4.3 webhookEventRepository.ts | ✅ Done | 9 | whatsapp-service |
+| 4.4 userMappingRepository.ts | ✅ Done | 14 | whatsapp-service |
+| 4.5 messageRepository.ts | ✅ Done | 18 | whatsapp-service |
+| 4.6 mediaStorageAdapter.ts | ⏳ Blocked | 0 | vi.mock ESM hoisting issue |
+| 4.7 pubsubPublisher.ts | ✅ Done | 2 | Pub/Sub mocking |
+
+### Phase 5: Notion SDK Tests ✅
+
+| Task | Status | Tests | Notes |
+|------|--------|-------|-------|
+| 5.1 notionApi.ts | ✅ Done | 5 | createNotionClient mock |
+
+---
+
+## Test Summary
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Total tests | 492 | 635 | **+143** |
+| Test files | 44 | 57 | +13 |
+
+**CI Status: ✅ PASSING**
+
+---
+
+## Files Created This Session
+
+1. `packages/common/src/testing/firestoreFake.ts` — Fake Firestore implementation
+2. `packages/common/src/testing/index.ts` — Re-export for testing utilities
+3. `apps/auth-service/src/__tests__/encryption.test.ts` — 19 tests
+4. `apps/whatsapp-service/src/__tests__/usecases/extractLinkPreviews.test.ts` — 8 tests
+5. `apps/whatsapp-service/src/__tests__/infra/thumbnailGenerator.test.ts` — 7 tests
+6. `apps/whatsapp-service/src/__tests__/infra/whatsappClient.test.ts` — 13 tests
+7. `apps/whatsapp-service/src/__tests__/infra/openGraphFetcher.test.ts` — 12 tests
+8. `apps/auth-service/src/__tests__/infra/auth0Client.test.ts` — 11 tests
+9. `apps/auth-service/src/__tests__/infra/authTokenRepository.test.ts` — 13 tests
+10. `apps/notion-service/src/__tests__/infra/notionConnectionRepository.test.ts` — 12 tests
+11. `apps/whatsapp-service/src/__tests__/infra/webhookEventRepository.test.ts` — 9 tests
+12. `apps/whatsapp-service/src/__tests__/infra/userMappingRepository.test.ts` — 14 tests
+13. `apps/whatsapp-service/src/__tests__/infra/messageRepository.test.ts` — 18 tests
+14. `apps/whatsapp-service/src/__tests__/infra/pubsubPublisher.test.ts` — 2 tests
+15. `apps/notion-service/src/__tests__/infra/notionApi.test.ts` — 5 tests
+
+**Modified:**
+- `packages/common/src/index.ts` — Added export for testing utilities
+- `packages/common/src/testing/firestoreFake.ts` — Fixed lint/type issues
+
+---
+
+## Blocked Items (vi.mock ESM hoisting)
+
+1. **speechmatics/adapter.ts** — `@speechmatics/batch-client` SDK
+2. **mediaStorageAdapter.ts** — `@google-cloud/storage` SDK
+
+**Common pattern:** vitest `vi.mock()` hoisting doesn't work reliably with ESM class constructors from external packages.
 
 ---
 
 ## State
 
-- **Done**: Phase 0 (initialization), File inventory, Analysis
-- **Now**: Awaiting plan approval
-- **Next**: Execute approved plan
-
----
-
-## Open Questions for User
-
-1. **Firestore mocking strategy**: Mock `getFirestore()` from `@intexuraos/common` vs. create fake Firestore? The former tests the actual implementation, the latter is simpler.
-
-2. **Scope clarification**: Files 8 (`promptvault-service/infra/firestore/notionConnectionRepository.ts`) is a **duplicate** of file 6 (`notion-service/infra/firestore/notionConnectionRepository.ts`). Should this be refactored to a shared module first, or tested as-is?
-
-3. **Priority ordering**: Should I optimize for quick wins first, or tackle hardest files first?
+- **Done**: Phase 1, Phase 2, Phase 3 (3/4), Phase 4 (6/7), Phase 5 ✅
+- **Blocked**: speechmatics, mediaStorageAdapter (vi.mock ESM)
+- **Complete for this session**
