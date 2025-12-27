@@ -11,8 +11,9 @@ export function Layout({ children }: LayoutProps): React.JSX.Element {
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Sidebar />
-      <main className="ml-64 pt-16 transition-all duration-300">
-        <div className="p-6">{children}</div>
+      {/* Main content - no left margin on mobile, margin on desktop */}
+      <main className="pt-16 transition-all duration-300 md:ml-64">
+        <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>
   );

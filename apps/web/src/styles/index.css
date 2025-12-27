@@ -8,6 +8,13 @@
   --color-accent-hover: theme('colors.amber.500');
 }
 
+/* Prevent horizontal scrolling on mobile */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 /* Base styles */
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
