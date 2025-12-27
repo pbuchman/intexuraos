@@ -48,9 +48,11 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
 
   // Check if app is installed as PWA
   useEffect((): void => {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true);
+    const standaloneMediaQuery = window.matchMedia('(display-mode: standalone)').matches;
+    const navigatorStandalone =
+      'standalone' in navigator &&
+      (navigator as { standalone?: boolean }).standalone === true;
+    const isStandalone = standaloneMediaQuery || navigatorStandalone;
     setIsInstalled(isStandalone);
 
     // Show iOS install prompt if not installed and not dismissed
@@ -89,7 +91,8 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
       // Import the virtual module from vite-plugin-pwa
       import('virtual:pwa-register')
         .then(({ registerSW }) => {
-          const updateSW = registerSW({
+          // Store updateSW for later use
+          (window as { __updateSW?: () => Promise<void> }).__updateSW = registerSW({
             onNeedRefresh(): void {
               setUpdateAvailable(true);
             },
@@ -102,8 +105,6 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
               }
             },
           });
-          // Store updateSW for later use
-          (window as { __updateSW?: () => Promise<void> }).__updateSW = updateSW;
         })
         .catch((): void => {
           // PWA registration failed, likely in dev mode
@@ -129,9 +130,9 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
   }, [deferredPrompt]);
 
   const applyUpdate = useCallback((): void => {
-    const updateSW = (window as { __updateSW?: () => Promise<void> }).__updateSW;
-    if (updateSW !== undefined) {
-      void updateSW();
+    const windowUpdateSW = (window as { __updateSW?: () => Promise<void> }).__updateSW;
+    if (windowUpdateSW !== undefined) {
+      void windowUpdateSW();
     } else if (registration !== null && registration.waiting !== null) {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
       window.location.reload();
