@@ -40,7 +40,7 @@ The Profile serves as the event trigger.
    - **Event Behaviour:** Enabled (True).
 3. **Variable Names:** The plugin automatically populates local variables like `%antitle`, `%antext`, `%anpackage`, and `%ankey`.
 
-See [08-tasker-configuration.jpg](08-08-tasker-configuration.jpg) for a visual reference of the configuration screen.
+See [08-tasker-configuration.jpg](08-tasker-configuration.jpg) for a visual reference of the configuration screen.
 
 ---
 
@@ -48,7 +48,7 @@ See [08-tasker-configuration.jpg](08-08-tasker-configuration.jpg) for a visual r
 
 This task handles data transmission to the backend with error handling and local logging.
 
-![Tasker Configuration](08-08-tasker-configuration.jpg)
+![Tasker Configuration](08-tasker-configuration.jpg)
 
 ### 3.1. Flow Logic (Action by Action)
 
@@ -153,5 +153,5 @@ To ensure the service remains alive on HyperOS:
 
 ## 7. Reference
 
-- [Tasker Configuration Screenshot](08-08-tasker-configuration.jpg)
+- [Tasker Configuration Screenshot](08-tasker-configuration.jpg)
 - [WhatsApp Business Cloud API Setup](./07-whatsapp-business-cloud-api.md)
