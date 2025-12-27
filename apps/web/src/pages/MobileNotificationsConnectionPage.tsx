@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
-import { connectMobileNotifications, getMobileNotifications, ApiError } from '@/services';
+import { connectMobileNotifications, getMobileNotificationsStatus, ApiError } from '@/services';
 import { Copy, Check, RefreshCw, Smartphone, Bell, ExternalLink } from 'lucide-react';
 
 export function MobileNotificationsConnectionPage(): React.JSX.Element {
@@ -12,7 +12,7 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Connection state
-  const [hasConnection, setHasConnection] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(false);
   const [lastNotificationAt, setLastNotificationAt] = useState<string | null>(null);
 
   // Signature display (only shown once after generation)
@@ -25,27 +25,18 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
       setError(null);
       const token = await getAccessToken();
 
-      // Fetch notifications to check status
-      const response = await getMobileNotifications(token, { limit: 1 });
+      // Fetch status from dedicated endpoint
+      const status = await getMobileNotificationsStatus(token);
 
-      // If we have any notifications, we have an active connection
-      if (response.notifications.length > 0) {
-        setHasConnection(true);
-        const firstNotification = response.notifications[0];
-        if (firstNotification !== undefined) {
-          setLastNotificationAt(firstNotification.receivedAt);
-        }
-      } else {
-        // No notifications yet - might have connection but no data
-        setHasConnection(false);
-        setLastNotificationAt(null);
-      }
+      setIsConfigured(status.configured);
+      setLastNotificationAt(status.lastNotificationAt);
     } catch (e) {
       if (e instanceof ApiError && e.message.includes('UNAUTHORIZED')) {
         setError('Please log in to access mobile notifications');
       } else {
         // Don't show error for empty results
-        setHasConnection(false);
+        setIsConfigured(false);
+        setLastNotificationAt(null);
       }
     } finally {
       setIsLoading(false);
@@ -68,9 +59,9 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
       const response = await connectMobileNotifications(token);
 
       setNewSignature(response.signature);
-      setHasConnection(true);
+      setIsConfigured(true);
       setSuccessMessage(
-        hasConnection
+        isConfigured
           ? 'New signature generated! Update your Tasker configuration with the new signature.'
           : 'Signature generated! Configure Tasker with this signature to start receiving notifications.'
       );
@@ -208,11 +199,11 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
                 isLoading={isGenerating}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                {hasConnection ? 'Regenerate Signature' : 'Generate Signature'}
+                {isConfigured ? 'Regenerate Signature' : 'Generate Signature'}
               </Button>
             </div>
 
-            {hasConnection && newSignature === null ? (
+            {isConfigured && newSignature === null ? (
               <p className="text-sm text-slate-500">
                 <strong>Note:</strong> Regenerating will invalidate your current signature. You will
                 need to update your Tasker configuration with the new signature.
@@ -222,19 +213,12 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
         </Card>
 
         {/* Status Card */}
-        <Card
-          title="Connection Status"
-          variant={hasConnection && lastNotificationAt !== null ? 'success' : 'default'}
-        >
+        <Card title="Connection Status" variant={isConfigured ? 'success' : 'default'}>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-slate-600">Status</dt>
-              <dd
-                className={`font-medium ${
-                  hasConnection && lastNotificationAt !== null ? 'text-green-700' : 'text-slate-500'
-                }`}
-              >
-                {hasConnection && lastNotificationAt !== null ? 'Active' : 'Not configured'}
+              <dd className={`font-medium ${isConfigured ? 'text-green-700' : 'text-slate-500'}`}>
+                {isConfigured ? 'Configured' : 'Not configured'}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -300,7 +284,7 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
                 <p>
                   Follow our{' '}
                   <a
-                    href="https://github.com/pbuchman/intexuraos/blob/main/docs/setup/mobile-notifications-xiaomi.md"
+                    href="https://github.com/pbuchman/intexuraos/blob/main/docs/setup/08-mobile-notifications-xiaomi.md"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-blue-600 hover:underline"

@@ -57,3 +57,24 @@ export async function deleteMobileNotification(
     { method: 'DELETE' }
   );
 }
+
+/**
+ * Status response from mobile notifications service.
+ */
+export interface MobileNotificationsStatusResponse {
+  configured: boolean;
+  lastNotificationAt: string | null;
+}
+
+/**
+ * Get mobile notifications status (whether signature is configured).
+ */
+export async function getMobileNotificationsStatus(
+  accessToken: string
+): Promise<MobileNotificationsStatusResponse> {
+  return await apiRequest<MobileNotificationsStatusResponse>(
+    config.mobileNotificationsServiceUrl,
+    '/mobile-notifications/status',
+    accessToken
+  );
+}

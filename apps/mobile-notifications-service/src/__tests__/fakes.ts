@@ -89,6 +89,36 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
     return Promise.resolve(ok(undefined));
   }
 
+  deleteByUserId(userId: string): Promise<Result<number, RepositoryError>> {
+    if (this.shouldFailFind) {
+      this.shouldFailFind = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
+    }
+
+    let count = 0;
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.userId === userId) {
+        this.connections.delete(id);
+        count++;
+      }
+    }
+    return Promise.resolve(ok(count));
+  }
+
+  existsByUserId(userId: string): Promise<Result<boolean, RepositoryError>> {
+    if (this.shouldFailFind) {
+      this.shouldFailFind = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
+    }
+
+    for (const conn of this.connections.values()) {
+      if (conn.userId === userId) {
+        return Promise.resolve(ok(true));
+      }
+    }
+    return Promise.resolve(ok(false));
+  }
+
   clear(): void {
     this.connections.clear();
     this.idCounter = 1;
