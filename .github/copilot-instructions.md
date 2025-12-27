@@ -66,7 +66,7 @@ docs/           → All documentation
 
 When creating a new service (e.g., splitting an existing service):
 
-1. **Create files** - Copy structure from existing service (include `src/domain/`, `src/infra/`, `src/v1/`)
+1. **Create files** - Copy structure from existing service (include `src/domain/`, `src/infra/`, `src/routes/`)
 2. **Run Prettier** - `npx prettier --write .` (BEFORE running CI)
 3. **Update Terraform** - Add to `locals.services`, create module, update IAM, add outputs
 4. **Update api-docs-hub** - Add OpenAPI URL env var to config.ts

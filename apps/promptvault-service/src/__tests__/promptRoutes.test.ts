@@ -17,7 +17,7 @@ import {
 
 /**
  * Helper to set up a Notion connection directly through the repository.
- * This replaces the need to call /v1/integrations/notion/connect which was moved to notion-service.
+ * This replaces the need to call /notion/connect which is in notion-service.
  */
 async function setupConnection(
   ctx: TestContext,
