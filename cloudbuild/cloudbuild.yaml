@@ -44,24 +44,24 @@ steps:
       - '-c'
       - |
         SERVICE="auth-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -80,24 +80,24 @@ steps:
       - '-c'
       - |
         SERVICE="promptvault-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -116,24 +116,24 @@ steps:
       - '-c'
       - |
         SERVICE="notion-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -152,24 +152,24 @@ steps:
       - '-c'
       - |
         SERVICE="whatsapp-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -188,24 +188,24 @@ steps:
       - '-c'
       - |
         SERVICE="api-docs-hub"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -224,24 +224,24 @@ steps:
       - '-c'
       - |
         SERVICE="mobile-notifications-service"
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$SERVICE\"" /workspace/affected.json 2>/dev/null; then
-          echo "=== Building $SERVICE ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q "\"$$SERVICE\"" /workspace/affected.json 2>/dev/null; then
+          echo "=== Building $$SERVICE ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest \
-            -f apps/$SERVICE/Dockerfile .
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest \
+            -f apps/$$SERVICE/Dockerfile .
 
-          echo "=== Pushing $SERVICE ==="
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/$SERVICE:latest
+          echo "=== Pushing $$SERVICE ==="
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:$$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/$$SERVICE:latest
 
-          echo "=== Deploying $SERVICE ==="
-          bash cloudbuild/scripts/deploy-$SERVICE.sh
+          echo "=== Deploying $$SERVICE ==="
+          bash cloudbuild/scripts/deploy-$$SERVICE.sh
         else
-          echo "$SERVICE not affected, skipping."
+          echo "$$SERVICE not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
