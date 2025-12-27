@@ -3,6 +3,9 @@
  *
  * GET  /v1/webhooks/whatsapp - Webhook verification endpoint
  * POST /v1/webhooks/whatsapp - Webhook event receiver
+ *
+ * This file handles HTTP transport concerns (validation, signature, response).
+ * Business logic is delegated to domain usecases.
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -10,7 +13,11 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../../signature.js';
 import { getServices } from '../../services.js';
 import type { Config } from '../../config.js';
-import { sendWhatsAppMessage } from '../../whatsappClient.js';
+import {
+  ProcessImageMessageUseCase,
+  ProcessAudioMessageUseCase,
+  TranscribeAudioUseCase,
+} from '../../domain/inbox/index.js';
 import {
   extractDisplayPhoneNumber,
   extractMessageId,
@@ -21,6 +28,8 @@ import {
   extractMessageTimestamp,
   extractSenderName,
   extractMessageType,
+  extractImageMedia,
+  extractAudioMedia,
   handleValidationError,
 } from './shared.js';
 
@@ -189,12 +198,11 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         }
 
         // Extract identifiers from payload
-        // See: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
         const wabaId = extractWabaId(request.body);
         const phoneNumberId = extractPhoneNumberId(request.body);
         const displayPhoneNumber = extractDisplayPhoneNumber(request.body);
 
-        // Validate WABA ID (entry[].id) matches configured allowed IDs
+        // Validate WABA ID
         if (wabaId === null || !config.allowedWabaIds.includes(wabaId)) {
           request.log.warn(
             {
@@ -212,7 +220,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           );
         }
 
-        // Validate phone number ID (metadata.phone_number_id) matches configured allowed IDs
+        // Validate phone number ID
         if (phoneNumberId === null || !config.allowedPhoneNumberIds.includes(phoneNumberId)) {
           request.log.warn(
             {
@@ -260,16 +268,17 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
 /**
  * Process webhook asynchronously after returning 200 to Meta.
- * Validates user mapping and saves message to Firestore.
+ * Validates user mapping and routes to appropriate usecase.
  */
 async function processWebhookAsync(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   config: Config
 ): Promise<void> {
-  try {
-    const { webhookEventRepository, userMappingRepository, messageRepository } = getServices();
+  const services = getServices();
+  const { webhookEventRepository, userMappingRepository } = services;
 
+  try {
     // Find user by phone number
     const fromNumber = extractSenderPhoneNumber(request.body);
     if (fromNumber === null) {
@@ -283,17 +292,58 @@ async function processWebhookAsync(
       return;
     }
 
-    // Extract message text (only support text messages)
+    // Extract message details
     const messageText = extractMessageText(request.body);
     const messageType = extractMessageType(request.body);
+    const imageMedia = extractImageMedia(request.body);
+    const audioMedia = extractAudioMedia(request.body);
 
-    if (messageType !== 'text' || messageText === null) {
-      request.log.info({ eventId: savedEvent.id, messageType }, 'Ignoring non-text message');
+    // Validate message type
+    const supportedTypes = ['text', 'image', 'audio'];
+    if (messageType === null || !supportedTypes.includes(messageType)) {
+      request.log.info(
+        { eventId: savedEvent.id, messageType },
+        'Ignoring unsupported message type'
+      );
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, and audio messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
+        },
+      });
+      return;
+    }
+
+    // Validate message content
+    if (messageType === 'text' && messageText === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring text message without body');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'EMPTY_TEXT_MESSAGE',
+          message: 'Text message has no body',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'image' && imageMedia === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring image message without media info');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'NO_IMAGE_MEDIA',
+          message: 'Image message has no media info',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'audio' && audioMedia === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring audio message without media info');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+        ignoredReason: {
+          code: 'NO_AUDIO_MEDIA',
+          message: 'Audio message has no media info',
         },
       });
       return;
@@ -346,67 +396,267 @@ async function processWebhookAsync(
       return;
     }
 
-    // Extract message details
+    // Extract common message details
     const waMessageId = extractMessageId(request.body) ?? `unknown-${savedEvent.id}`;
     const toNumber = extractDisplayPhoneNumber(request.body) ?? '';
     const timestamp = extractMessageTimestamp(request.body) ?? '';
     const senderName = extractSenderName(request.body);
     const phoneNumberId = extractPhoneNumberId(request.body);
 
-    // Build message object
-    const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+    // Route to appropriate handler
+    if (messageType === 'image' && imageMedia !== null) {
+      await handleImageMessage(
+        request,
+        savedEvent,
+        services,
+        userId,
+        waMessageId,
+        fromNumber,
+        toNumber,
+        timestamp,
+        senderName,
+        phoneNumberId,
+        imageMedia
+      );
+      return;
+    }
+
+    if (messageType === 'audio' && audioMedia !== null) {
+      await handleAudioMessage(
+        request,
+        savedEvent,
+        config,
+        services,
+        userId,
+        waMessageId,
+        fromNumber,
+        toNumber,
+        timestamp,
+        senderName,
+        phoneNumberId,
+        audioMedia
+      );
+      return;
+    }
+
+    // Handle text message
+    await handleTextMessage(
+      request,
+      savedEvent,
       userId,
       waMessageId,
       fromNumber,
       toNumber,
-      text: messageText,
       timestamp,
-      receivedAt: new Date().toISOString(),
-      webhookEventId: savedEvent.id,
-    };
-
-    // Add metadata only if we have any values
-    if (senderName !== null || phoneNumberId !== null) {
-      const metadata: { senderName?: string; phoneNumberId?: string } = {};
-      if (senderName !== null) {
-        metadata.senderName = senderName;
-      }
-      if (phoneNumberId !== null) {
-        metadata.phoneNumberId = phoneNumberId;
-      }
-      messageToSave.metadata = metadata;
-    }
-
-    // Save message to Firestore
-    const saveResult = await messageRepository.saveMessage(messageToSave);
-
-    if (!saveResult.ok) {
-      request.log.error(
-        { error: saveResult.error, eventId: savedEvent.id },
-        'Failed to save message'
-      );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
-        failureDetails: `Failed to save message: ${saveResult.error.message}`,
-      });
-      return;
-    }
-
-    const savedMessage = saveResult.value;
-
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
-
-    request.log.info(
-      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-      'Message saved successfully'
+      senderName,
+      phoneNumberId,
+      messageText ?? ''
     );
-
-    // Send confirmation message
-    await sendConfirmationMessage(request, savedEvent, fromNumber, config);
   } catch (error) {
     request.log.error(
       { error, eventId: savedEvent.id },
       'Unexpected error during webhook processing'
     );
+  }
+}
+
+/**
+ * Handle image message using ProcessImageMessageUseCase.
+ */
+async function handleImageMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  services: ReturnType<typeof getServices>,
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  imageMedia: { id: string; mimeType: string; sha256?: string; caption?: string }
+): Promise<void> {
+  const usecase = new ProcessImageMessageUseCase({
+    webhookEventRepository: services.webhookEventRepository,
+    messageRepository: services.messageRepository,
+    mediaStorage: services.mediaStorage,
+    whatsappCloudApi: services.whatsappCloudApi,
+    thumbnailGenerator: services.thumbnailGenerator,
+  });
+
+  const result = await usecase.execute(
+    {
+      eventId: savedEvent.id,
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      timestamp,
+      senderName,
+      phoneNumberId,
+      imageMedia,
+    },
+    request.log
+  );
+
+  if (result.ok) {
+    await sendConfirmationMessage(request, savedEvent, fromNumber, 'image');
+  }
+}
+
+/**
+ * Handle audio message using ProcessAudioMessageUseCase and TranscribeAudioUseCase.
+ */
+async function handleAudioMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  config: Config,
+  services: ReturnType<typeof getServices>,
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  audioMedia: { id: string; mimeType: string; sha256?: string }
+): Promise<void> {
+  const usecase = new ProcessAudioMessageUseCase({
+    webhookEventRepository: services.webhookEventRepository,
+    messageRepository: services.messageRepository,
+    mediaStorage: services.mediaStorage,
+    whatsappCloudApi: services.whatsappCloudApi,
+  });
+
+  const result = await usecase.execute(
+    {
+      eventId: savedEvent.id,
+      userId,
+      waMessageId,
+      fromNumber,
+      toNumber,
+      timestamp,
+      senderName,
+      phoneNumberId,
+      audioMedia,
+    },
+    request.log
+  );
+
+  if (result.ok) {
+    // Start transcription in background (fire-and-forget)
+    const transcribeUsecase = new TranscribeAudioUseCase({
+      messageRepository: services.messageRepository,
+      mediaStorage: services.mediaStorage,
+      transcriptionService: services.transcriptionService,
+      whatsappCloudApi: services.whatsappCloudApi,
+    });
+
+    // Get first phone number ID for sending transcription results
+    const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
+    if (transcriptionPhoneNumberId !== undefined) {
+      void transcribeUsecase.execute(
+        {
+          messageId: result.value.messageId,
+          userId,
+          gcsPath: result.value.gcsPath,
+          mimeType: result.value.mimeType,
+          userPhoneNumber: fromNumber,
+          originalWaMessageId: waMessageId,
+          phoneNumberId: transcriptionPhoneNumberId,
+        },
+        request.log
+      );
+    }
+
+    await sendConfirmationMessage(request, savedEvent, fromNumber, 'audio');
+  }
+}
+
+/**
+ * Handle text message (direct save without usecase - simple enough).
+ */
+async function handleTextMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  userId: string,
+  waMessageId: string,
+  fromNumber: string,
+  toNumber: string,
+  timestamp: string,
+  senderName: string | null,
+  phoneNumberId: string | null,
+  messageText: string
+): Promise<void> {
+  const { webhookEventRepository, messageRepository } = getServices();
+
+  // Build text message object
+  const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
+    userId,
+    waMessageId,
+    fromNumber,
+    toNumber,
+    text: messageText,
+    mediaType: 'text',
+    timestamp,
+    receivedAt: new Date().toISOString(),
+    webhookEventId: savedEvent.id,
+  };
+
+  // Add metadata only if we have any values
+  if (senderName !== null || phoneNumberId !== null) {
+    const metadata: { senderName?: string; phoneNumberId?: string } = {};
+    if (senderName !== null) {
+      metadata.senderName = senderName;
+    }
+    if (phoneNumberId !== null) {
+      metadata.phoneNumberId = phoneNumberId;
+    }
+    messageToSave.metadata = metadata;
+  }
+
+  // Save message to Firestore
+  const saveResult = await messageRepository.saveMessage(messageToSave);
+
+  if (!saveResult.ok) {
+    request.log.error(
+      { error: saveResult.error, eventId: savedEvent.id },
+      'Failed to save message'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+      failureDetails: `Failed to save message: ${saveResult.error.message}`,
+    });
+    return;
+  }
+
+  const savedMessage = saveResult.value;
+
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+
+  request.log.info(
+    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+    'Message saved successfully'
+  );
+
+  await sendConfirmationMessage(request, savedEvent, fromNumber, 'text');
+}
+
+/**
+ * Message types for confirmation messages.
+ */
+type ConfirmationMessageType = 'text' | 'image' | 'audio';
+
+/**
+ * Get confirmation message text based on message type.
+ */
+function getConfirmationMessageText(messageType: ConfirmationMessageType): string {
+  switch (messageType) {
+    case 'audio':
+      return '✅ Voice message saved. Transcription in progress...';
+    case 'image':
+      return '✅ Image saved.';
+    case 'text':
+      return '✅ Message saved.';
   }
 }
 
@@ -417,23 +667,25 @@ async function sendConfirmationMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   fromNumber: string,
-  config: Config
+  messageType: ConfirmationMessageType
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
   if (phoneNumberId !== null) {
-    const sendResult = await sendWhatsAppMessage(
+    const { whatsappCloudApi } = getServices();
+    const confirmationText = getConfirmationMessageText(messageType);
+
+    const sendResult = await whatsappCloudApi.sendMessage(
       phoneNumberId,
       fromNumber,
-      'Message added to the processing queue',
-      config.accessToken,
+      confirmationText,
       originalMessageId ?? undefined
     );
 
-    if (sendResult.success) {
+    if (sendResult.ok) {
       request.log.info(
-        { eventId: savedEvent.id, messageId: sendResult.messageId, recipient: fromNumber },
+        { eventId: savedEvent.id, messageId: sendResult.value.messageId, recipient: fromNumber },
         'Sent confirmation message'
       );
     } else {

@@ -4,7 +4,11 @@
 import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
 import { randomUUID } from 'node:crypto';
 import type { InboxError } from './webhookEventRepository.js';
-import type { WhatsAppMessage, WhatsAppMessageMetadata } from '../../domain/inbox/index.js';
+import type {
+  WhatsAppMessage,
+  WhatsAppMessageMetadata,
+  TranscriptionState,
+} from '../../domain/inbox/index.js';
 
 // Re-export for convenience
 export type { WhatsAppMessage, WhatsAppMessageMetadata };
@@ -89,6 +93,71 @@ export async function deleteMessage(messageId: string): Promise<Result<void, Inb
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `Failed to delete message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+/**
+ * Find a message by user ID and message ID.
+ * Verifies the message belongs to the specified user.
+ */
+export async function findById(
+  userId: string,
+  messageId: string
+): Promise<Result<WhatsAppMessage | null, InboxError>> {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
+    if (!doc.exists) return ok(null);
+
+    const message = doc.data() as WhatsAppMessage;
+    // Verify user ownership
+    if (message.userId !== userId) return ok(null);
+
+    return ok(message);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to find message: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+/**
+ * Update message transcription state.
+ */
+export async function updateTranscription(
+  userId: string,
+  messageId: string,
+  transcription: TranscriptionState
+): Promise<Result<void, InboxError>> {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
+
+    if (!doc.exists) {
+      return err({
+        code: 'NOT_FOUND',
+        message: 'Message not found',
+      });
+    }
+
+    const message = doc.data() as WhatsAppMessage;
+    if (message.userId !== userId) {
+      return err({
+        code: 'NOT_FOUND',
+        message: 'Message not found',
+      });
+    }
+
+    await db.collection(COLLECTION_NAME).doc(messageId).update({
+      transcription,
+    });
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to update transcription: ${getErrorMessage(error, 'Unknown Firestore error')}`,
     });
   }
 }

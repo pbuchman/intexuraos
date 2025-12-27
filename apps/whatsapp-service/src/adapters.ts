@@ -13,6 +13,7 @@ import type {
   WhatsAppUserMappingPublic,
   WhatsAppMessage,
   InboxError,
+  TranscriptionState,
 } from './domain/inbox/index.js';
 import {
   saveWebhookEvent,
@@ -26,6 +27,8 @@ import {
   saveMessage,
   getMessagesByUser,
   getMessage,
+  findById,
+  updateTranscription,
   deleteMessage,
 } from './infra/firestore/index.js';
 
@@ -103,6 +106,21 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
 
   async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
     return await getMessage(messageId);
+  }
+
+  async findById(
+    userId: string,
+    messageId: string
+  ): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    return await findById(userId, messageId);
+  }
+
+  async updateTranscription(
+    userId: string,
+    messageId: string,
+    transcription: TranscriptionState
+  ): Promise<Result<void, InboxError>> {
+    return await updateTranscription(userId, messageId, transcription);
   }
 
   async deleteMessage(messageId: string): Promise<Result<void, InboxError>> {

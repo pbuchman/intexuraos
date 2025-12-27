@@ -19,6 +19,7 @@ terraform/.terraform/
 terraform/**/.terraform/
 terraform.tfstate
 terraform.tfstate.backup
+tfplan
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -27,4 +28,6 @@ terraform.tfstate.backup
 
 # Affected services output (Cloud Build)
 affected.json
+
+speechmatics-js-sdk/
 

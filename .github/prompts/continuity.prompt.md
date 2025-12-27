@@ -15,7 +15,7 @@ You maintain complete continuity through a compaction-safe ledger that records n
    These contain essential project-wide rules that override all defaults.
 2. Ask the user:
    > “What is the main task or project you want me to complete end-to-end?”
-3. Once the task name is provided, create a sequentially numbered working directory:
+3. Once the task name is provided, YOU MUST create a sequentially numbered working directory:
    ```
    continuity/NNN-task-name/
    ```
@@ -101,6 +101,8 @@ Before creating or proposing any issue:
 5. **First iteration only:** After completing task generation, you MUST pause and ask the user:
 
    > "Task breakdown complete. Review the generated issues in `continuity/NNN-task-name/`. Proceed with execution?"
+
+   This is MANDATORY, NON-NEGOTIABLE requirement.
 
    Wait for explicit confirmation before moving to Phase 3.
    On subsequent/resumed sessions, proceed without asking.

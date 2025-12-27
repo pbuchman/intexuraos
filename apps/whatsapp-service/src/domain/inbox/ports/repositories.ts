@@ -4,7 +4,10 @@
  */
 import type { Result } from '@intexuraos/common';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
-import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
+import type { WhatsAppMessage, TranscriptionState } from '../models/WhatsAppMessage.js';
+
+// Re-export InboxError for use in other ports
+export type { InboxError };
 
 /**
  * Processing status for webhook events.
@@ -130,6 +133,20 @@ export interface WhatsAppMessageRepository {
    * Get a single message by ID.
    */
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+
+  /**
+   * Find a message by user ID and message ID.
+   */
+  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+
+  /**
+   * Update message transcription state.
+   */
+  updateTranscription(
+    userId: string,
+    messageId: string,
+    transcription: TranscriptionState
+  ): Promise<Result<void, InboxError>>;
 
   /**
    * Delete a message.

@@ -54,3 +54,39 @@ export async function deleteWhatsAppMessage(accessToken: string, messageId: stri
     { method: 'DELETE' }
   );
 }
+
+/**
+ * Media URL response from whatsapp-service
+ */
+export interface MediaUrlResponse {
+  url: string;
+  expiresAt: string;
+}
+
+/**
+ * Get signed URL for message media (original file)
+ */
+export async function getMessageMediaUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  return await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/v1/whatsapp/messages/${messageId}/media`,
+    accessToken
+  );
+}
+
+/**
+ * Get signed URL for message thumbnail (images only)
+ */
+export async function getMessageThumbnailUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  return await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/v1/whatsapp/messages/${messageId}/thumbnail`,
+    accessToken
+  );
+}

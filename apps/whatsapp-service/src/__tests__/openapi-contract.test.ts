@@ -29,6 +29,11 @@ describe('whatsapp-service OpenAPI contract', () => {
     accessToken: 'test-access-token',
     allowedWabaIds: ['102290129340398'],
     allowedPhoneNumberIds: ['123456789012345'],
+    mediaBucket: 'test-media-bucket',
+    mediaCleanupTopic: 'test-media-cleanup',
+    mediaCleanupSubscription: 'test-media-cleanup-sub',
+    speechmaticsApiKey: 'test-speechmatics-api-key',
+    gcpProjectId: 'test-project',
     port: 8080,
     host: '0.0.0.0',
   };

@@ -515,3 +515,185 @@ Get non-secret auth configuration for troubleshooting.
 | Invalid/expired JWT | `UNAUTHORIZED`  | 401         |
 | Missing `sub` claim | `UNAUTHORIZED`  | 401         |
 | Auth not configured | `MISCONFIGURED` | 503         |
+
+---
+
+## whatsapp-service Media Endpoints
+
+### GET /v1/whatsapp/messages/:messageId/media
+
+Get a signed URL for the original media file (image or audio).
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://storage.googleapis.com/...",
+    "expiresAt": "2025-12-26T12:30:00.000Z"
+  }
+}
+```
+
+| Field       | Type     | Description                          |
+| ----------- | -------- | ------------------------------------ |
+| `url`       | `string` | Signed URL for media access (15 min) |
+| `expiresAt` | `string` | URL expiration timestamp             |
+
+#### Error Responses
+
+| Condition            | Error Code     | HTTP Status |
+| -------------------- | -------------- | ----------- |
+| Not authenticated    | `UNAUTHORIZED` | 401         |
+| Message not found    | `NOT_FOUND`    | 404         |
+| Not owner of message | `NOT_FOUND`    | 404         |
+| Message has no media | `NOT_FOUND`    | 404         |
+
+### GET /v1/whatsapp/messages/:messageId/thumbnail
+
+Get a signed URL for the thumbnail image (256px max edge).
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://storage.googleapis.com/...",
+    "expiresAt": "2025-12-26T12:30:00.000Z"
+  }
+}
+```
+
+#### Error Responses
+
+| Condition                | Error Code     | HTTP Status |
+| ------------------------ | -------------- | ----------- |
+| Not authenticated        | `UNAUTHORIZED` | 401         |
+| Message not found        | `NOT_FOUND`    | 404         |
+| Not owner of message     | `NOT_FOUND`    | 404         |
+| Message has no thumbnail | `NOT_FOUND`    | 404         |
+
+---
+
+## srt-service Endpoints
+
+srt-service handles speech-to-text transcription via Speechmatics Batch API.
+
+### POST /v1/transcribe
+
+Create a transcription job for an audio file.
+
+**Request:**
+
+```json
+{
+  "messageId": "wamid.xxx",
+  "mediaId": "12345678",
+  "userId": "auth0|abc123",
+  "gcsPath": "whatsapp/auth0|abc123/wamid.xxx/12345678.ogg",
+  "mimeType": "audio/ogg"
+}
+```
+
+| Field       | Type     | Required | Description            |
+| ----------- | -------- | -------- | ---------------------- |
+| `messageId` | `string` | Yes      | WhatsApp message ID    |
+| `mediaId`   | `string` | Yes      | WhatsApp media ID      |
+| `userId`    | `string` | Yes      | IntexuraOS user ID     |
+| `gcsPath`   | `string` | Yes      | GCS path to audio file |
+| `mimeType`  | `string` | Yes      | Audio MIME type        |
+
+**Success Response (201 Created):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "messageId": "wamid.xxx",
+    "mediaId": "12345678",
+    "userId": "auth0|abc123",
+    "status": "pending",
+    "pollAttempts": 0,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Idempotent Response (200):**
+
+If a job already exists for the same `messageId`/`mediaId`, returns the existing job.
+
+### GET /v1/transcribe/:jobId
+
+Get transcription job status.
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "messageId": "wamid.xxx",
+    "mediaId": "12345678",
+    "userId": "auth0|abc123",
+    "status": "completed",
+    "transcript": "Transkrypcja tekstu z audio...",
+    "pollAttempts": 3,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:35:00.000Z",
+    "completedAt": "2024-01-15T10:35:00.000Z"
+  }
+}
+```
+
+**Job Status Values:**
+
+| Status       | Description                                  |
+| ------------ | -------------------------------------------- |
+| `pending`    | Job created, not yet submitted               |
+| `processing` | Submitted to Speechmatics, polling           |
+| `completed`  | Transcription complete, transcript available |
+| `failed`     | Transcription failed, error available        |
+
+---
+
+## Pub/Sub Event Schemas
+
+### whatsapp.audio.stored
+
+Published by whatsapp-service when audio is stored in GCS.
+
+```json
+{
+  "type": "whatsapp.audio.stored",
+  "userId": "auth0|abc123",
+  "messageId": "wamid.xxx",
+  "mediaId": "12345678",
+  "gcsPath": "whatsapp/auth0|abc123/wamid.xxx/12345678.ogg",
+  "mimeType": "audio/ogg",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+Consumed by srt-service to create transcription jobs.
+
+### whatsapp.media.cleanup
+
+Published by whatsapp-service when a message is deleted.
+
+```json
+{
+  "type": "whatsapp.media.cleanup",
+  "userId": "auth0|abc123",
+  "messageId": "wamid.xxx",
+  "mediaIds": ["12345678", "87654321"],
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+Consumed by whatsapp-service cleanup worker to delete media from GCS.

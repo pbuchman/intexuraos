@@ -36,6 +36,7 @@ resource "google_service_account" "api_docs_hub" {
   description  = "Service account for api-docs-hub Cloud Run deployment"
 }
 
+
 # Auth service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "auth_service_secrets" {
   for_each = var.secret_ids
@@ -72,6 +73,7 @@ resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
   member    = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
+
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
   project = var.project_id
@@ -100,6 +102,7 @@ resource "google_project_iam_member" "auth_service_firestore" {
   member  = "serviceAccount:${google_service_account.auth_service.email}"
 }
 
+
 # Both services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "auth_service_logging" {
   project = var.project_id
@@ -125,6 +128,13 @@ resource "google_project_iam_member" "whatsapp_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
+}
+
+# WhatsApp service: Service Account Token Creator (for signing GCS URLs)
+resource "google_service_account_iam_member" "whatsapp_service_token_creator" {
+  service_account_id = google_service_account.whatsapp_service.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.whatsapp_service.email}"
 }
 
 # API Docs Hub: Cloud Logging

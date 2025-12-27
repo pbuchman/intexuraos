@@ -18,6 +18,8 @@ import {
   extractMessageTimestamp,
   extractSenderName,
   extractMessageType,
+  extractImageMedia,
+  extractAudioMedia,
 } from '../routes/v1/shared.js';
 
 describe('shared utilities', () => {
@@ -610,6 +612,214 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { messages: [{ type: 123 }] } }] }],
       };
       expect(extractMessageType(payload)).toBeNull();
+    });
+  });
+
+  describe('extractImageMedia', () => {
+    it('extracts image media info', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'image',
+                      image: {
+                        id: 'media-123',
+                        mime_type: 'image/jpeg',
+                        sha256: 'abc123',
+                        caption: 'Test caption',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractImageMedia(payload);
+      expect(result).toEqual({
+        id: 'media-123',
+        mimeType: 'image/jpeg',
+        sha256: 'abc123',
+        caption: 'Test caption',
+      });
+    });
+
+    it('returns image media without optional fields', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'image',
+                      image: {
+                        id: 'media-123',
+                        mime_type: 'image/png',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractImageMedia(payload);
+      expect(result).toEqual({
+        id: 'media-123',
+        mimeType: 'image/png',
+      });
+    });
+
+    it('returns null when image is not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'text' }] } }] }],
+      };
+      expect(extractImageMedia(payload)).toBeNull();
+    });
+
+    it('returns null when image id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'image', image: { mime_type: 'image/jpeg' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractImageMedia(payload)).toBeNull();
+    });
+
+    it('returns null when mime_type is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'image', image: { id: 'media-123' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractImageMedia(payload)).toBeNull();
+    });
+  });
+
+  describe('extractAudioMedia', () => {
+    it('extracts audio media info', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'audio',
+                      audio: {
+                        id: 'audio-123',
+                        mime_type: 'audio/ogg',
+                        sha256: 'def456',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractAudioMedia(payload);
+      expect(result).toEqual({
+        id: 'audio-123',
+        mimeType: 'audio/ogg',
+        sha256: 'def456',
+      });
+    });
+
+    it('returns audio media without optional sha256', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'audio',
+                      audio: {
+                        id: 'audio-123',
+                        mime_type: 'audio/mpeg',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractAudioMedia(payload);
+      expect(result).toEqual({
+        id: 'audio-123',
+        mimeType: 'audio/mpeg',
+      });
+    });
+
+    it('returns null when audio is not present', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'text' }] } }] }],
+      };
+      expect(extractAudioMedia(payload)).toBeNull();
+    });
+
+    it('returns null when audio id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'audio', audio: { mime_type: 'audio/ogg' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractAudioMedia(payload)).toBeNull();
+    });
+
+    it('returns null when mime_type is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'audio', audio: { id: 'audio-123' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractAudioMedia(payload)).toBeNull();
     });
   });
 });

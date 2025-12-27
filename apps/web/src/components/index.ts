@@ -2,4 +2,7 @@ export { Header } from './Header.js';
 export { Sidebar } from './Sidebar.js';
 export { Layout } from './Layout.js';
 export { StatusWidget } from './StatusWidget.js';
+export { ImageModal } from './ImageModal.js';
+export { ImageThumbnail } from './ImageThumbnail.js';
+export { AudioPlayer } from './AudioPlayer.js';
 export * from './ui/index.js';

@@ -81,6 +81,16 @@ export interface WhatsAppConnectResponse {
 }
 
 /**
+ * WhatsApp message media type
+ */
+export type WhatsAppMediaType = 'text' | 'image' | 'audio';
+
+/**
+ * Transcription status for audio messages.
+ */
+export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
  * WhatsApp message from whatsapp-service
  */
 export interface WhatsAppMessage {
@@ -89,6 +99,11 @@ export interface WhatsAppMessage {
   fromNumber: string;
   timestamp: string;
   receivedAt: string;
+  mediaType: WhatsAppMediaType;
+  hasMedia: boolean;
+  caption: string | null;
+  transcriptionStatus?: TranscriptionStatus;
+  transcription?: string;
 }
 
 /**

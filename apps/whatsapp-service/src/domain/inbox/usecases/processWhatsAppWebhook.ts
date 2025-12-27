@@ -48,6 +48,17 @@ export interface WhatsAppWebhookPayload {
           text?: {
             body: string;
           };
+          image?: {
+            id: string;
+            mime_type: string;
+            sha256: string;
+            caption?: string;
+          };
+          audio?: {
+            id: string;
+            mime_type: string;
+            sha256: string;
+          };
         }[];
         statuses?: {
           id: string;

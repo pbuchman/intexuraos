@@ -1,6 +1,8 @@
 /**
  * Tests for WhatsApp message routes:
  * - GET /v1/whatsapp/messages
+ * - GET /v1/whatsapp/messages/:messageId/media
+ * - GET /v1/whatsapp/messages/:messageId/thumbnail
  * - DELETE /v1/whatsapp/messages/:messageId
  */
 import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
@@ -60,6 +62,7 @@ describe('WhatsApp Message Routes', () => {
         fromNumber: '+15551234567',
         toNumber: '+15559876543',
         text: 'Test message content',
+        mediaType: 'text',
         timestamp: '1234567890',
         receivedAt: new Date().toISOString(),
         webhookEventId: 'event-123',
@@ -98,6 +101,7 @@ describe('WhatsApp Message Routes', () => {
         fromNumber: '+15551234567',
         toNumber: '+15559876543',
         text: 'Older message',
+        mediaType: 'text',
         timestamp: '1234567890',
         receivedAt: '2025-01-01T10:00:00Z',
         webhookEventId: 'event-old',
@@ -109,6 +113,7 @@ describe('WhatsApp Message Routes', () => {
         fromNumber: '+15551234567',
         toNumber: '+15559876543',
         text: 'Newer message',
+        mediaType: 'text',
         timestamp: '1234567891',
         receivedAt: '2025-01-01T11:00:00Z',
         webhookEventId: 'event-new',
@@ -130,6 +135,264 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.messages.length).toBe(2);
       expect(body.data.messages[0]?.text).toBe('Newer message');
       expect(body.data.messages[1]?.text).toBe('Older message');
+    });
+  });
+
+  describe('GET /v1/whatsapp/messages/:messageId/media', () => {
+    it('returns 401 when not authenticated', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/v1/whatsapp/messages/some-id/media',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 404 when message does not exist', async () => {
+      const token = await createToken({ sub: 'user-media-test' });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/v1/whatsapp/messages/non-existent-id/media',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when message belongs to another user', async () => {
+      const userId1 = 'user-media-owner';
+      const userId2 = 'user-media-not-owner';
+      const token = await createToken({ sub: userId2 });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId: userId1,
+        waMessageId: 'wamid.media-test',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user1/msg/media.jpg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-media',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when message has no media', async () => {
+      const userId = 'user-no-media';
+      const token = await createToken({ sub: userId });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.text-only',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: 'Text message without media',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-text',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Message has no media');
+    });
+
+    it('returns signed URL for media when message has gcsPath', async () => {
+      const userId = 'user-with-media';
+      const token = await createToken({ sub: userId });
+      const gcsPath = 'whatsapp/user-with-media/msg123/media-id.jpg';
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.with-media',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-with-media',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { url: string; expiresAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.url).toContain('storage.example.com/signed/');
+      expect(body.data.url).toContain(gcsPath);
+      expect(body.data.expiresAt).toBeDefined();
+      // Verify expiresAt is a valid ISO date roughly 15 minutes in the future
+      const expiresAt = new Date(body.data.expiresAt);
+      const now = new Date();
+      const diffMs = expiresAt.getTime() - now.getTime();
+      expect(diffMs).toBeGreaterThan(14 * 60 * 1000); // > 14 minutes
+      expect(diffMs).toBeLessThan(16 * 60 * 1000); // < 16 minutes
+    });
+  });
+
+  describe('GET /v1/whatsapp/messages/:messageId/thumbnail', () => {
+    it('returns 401 when not authenticated', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/v1/whatsapp/messages/some-id/thumbnail',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 404 when message does not exist', async () => {
+      const token = await createToken({ sub: 'user-thumb-test' });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/v1/whatsapp/messages/non-existent-id/thumbnail',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when message belongs to another user', async () => {
+      const userId1 = 'user-thumb-owner';
+      const userId2 = 'user-thumb-not-owner';
+      const token = await createToken({ sub: userId2 });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId: userId1,
+        waMessageId: 'wamid.thumb-test',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user1/msg/media.jpg',
+        thumbnailGcsPath: 'whatsapp/user1/msg/media_thumb.jpg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-thumb',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when message has no thumbnail', async () => {
+      const userId = 'user-no-thumb';
+      const token = await createToken({ sub: userId });
+
+      // Audio messages have media but no thumbnail
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.audio-no-thumb',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'audio',
+        gcsPath: 'whatsapp/user/msg/audio.ogg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-audio',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Message has no thumbnail');
+    });
+
+    it('returns signed URL for thumbnail when message has thumbnailGcsPath', async () => {
+      const userId = 'user-with-thumb';
+      const token = await createToken({ sub: userId });
+      const thumbnailGcsPath = 'whatsapp/user-with-thumb/msg456/media-id_thumb.jpg';
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.with-thumb',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user-with-thumb/msg456/media-id.jpg',
+        thumbnailGcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-with-thumb',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { url: string; expiresAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.url).toContain('storage.example.com/signed/');
+      expect(body.data.url).toContain(thumbnailGcsPath);
+      expect(body.data.expiresAt).toBeDefined();
     });
   });
 
@@ -179,6 +442,7 @@ describe('WhatsApp Message Routes', () => {
         fromNumber: '+15551234567',
         toNumber: '+15559876543',
         text: 'Private message',
+        mediaType: 'text',
         timestamp: '1234567890',
         receivedAt: new Date().toISOString(),
         webhookEventId: 'event-private',
@@ -211,6 +475,7 @@ describe('WhatsApp Message Routes', () => {
         fromNumber: '+15551234567',
         toNumber: '+15559876543',
         text: 'Message to delete',
+        mediaType: 'text',
         timestamp: '1234567890',
         receivedAt: new Date().toISOString(),
         webhookEventId: 'event-delete',
@@ -238,6 +503,95 @@ describe('WhatsApp Message Routes', () => {
       const getResult = await ctx.messageRepository.getMessage(messageId);
       expect(getResult.ok).toBe(true);
       expect(getResult.ok ? getResult.value : 'error').toBeNull();
+
+      // No cleanup event for text-only messages
+      const cleanupEvents = ctx.eventPublisher.getMediaCleanupEvents();
+      expect(cleanupEvents).toEqual([]);
+    });
+
+    it('publishes cleanup event when deleting message with media', async () => {
+      const userId = 'user-delete-media';
+      const token = await createToken({ sub: userId });
+      const gcsPath = 'whatsapp/user-delete-media/msg/image.jpg';
+      const thumbnailGcsPath = 'whatsapp/user-delete-media/msg/image_thumb.jpg';
+
+      // Create image message with media paths
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.media-delete',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath,
+        thumbnailGcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-media-delete',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Delete the message
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/v1/whatsapp/messages/${messageId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { deleted: boolean };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.deleted).toBe(true);
+
+      // Verify cleanup event was published
+      const cleanupEvents = ctx.eventPublisher.getMediaCleanupEvents();
+      expect(cleanupEvents.length).toBe(1);
+      expect(cleanupEvents[0]?.type).toBe('whatsapp.media.cleanup');
+      expect(cleanupEvents[0]?.userId).toBe(userId);
+      expect(cleanupEvents[0]?.messageId).toBe(messageId);
+      expect(cleanupEvents[0]?.gcsPaths).toEqual([gcsPath, thumbnailGcsPath]);
+    });
+
+    it('publishes cleanup event with only gcsPath when no thumbnail exists', async () => {
+      const userId = 'user-delete-audio';
+      const token = await createToken({ sub: userId });
+      const gcsPath = 'whatsapp/user-delete-audio/msg/audio.ogg';
+
+      // Create audio message (no thumbnail)
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.audio-delete',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'audio',
+        gcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-audio-delete',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Delete the message
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/v1/whatsapp/messages/${messageId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Verify cleanup event with only one path
+      const cleanupEvents = ctx.eventPublisher.getMediaCleanupEvents();
+      expect(cleanupEvents.length).toBe(1);
+      expect(cleanupEvents[0]?.gcsPaths).toEqual([gcsPath]);
     });
   });
 });

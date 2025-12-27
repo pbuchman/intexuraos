@@ -96,35 +96,35 @@ locals {
       app_path  = "apps/auth-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     promptvault_service = {
       name      = "intexuraos-promptvault-service"
       app_path  = "apps/promptvault-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     notion_service = {
       name      = "intexuraos-notion-service"
       app_path  = "apps/notion-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     whatsapp_service = {
       name      = "intexuraos-whatsapp-service"
       app_path  = "apps/whatsapp-service"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
     api_docs_hub = {
       name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
       port      = 8080
       min_scale = 0
-      max_scale = 2
+      max_scale = 1
     }
   }
 
@@ -205,6 +205,25 @@ module "web_app" {
 }
 
 # -----------------------------------------------------------------------------
+# WhatsApp Media Bucket (private, no public access)
+# -----------------------------------------------------------------------------
+
+module "whatsapp_media_bucket" {
+  source = "../../modules/whatsapp-media-bucket"
+
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  whatsapp_service_account = module.iam.service_accounts["whatsapp_service"]
+  labels                   = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Firestore
 # -----------------------------------------------------------------------------
 
@@ -247,6 +266,8 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
     "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
+    # Speechmatics API secrets
+    "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
     # Web frontend service URLs (public, non-sensitive)
     "INTEXURAOS_AUTH_SERVICE_URL"        = "Auth service Cloud Run URL for web frontend"
     "INTEXURAOS_PROMPTVAULT_SERVICE_URL" = "PromptVault service Cloud Run URL for web frontend"
@@ -275,6 +296,33 @@ module "iam" {
     module.secret_manager,
   ]
 }
+
+# -----------------------------------------------------------------------------
+# Pub/Sub Topics
+# -----------------------------------------------------------------------------
+
+
+# Topic for media cleanup events (whatsapp message deletion)
+module "pubsub_media_cleanup" {
+  source = "../../modules/pubsub"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels     = local.common_labels
+
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+  subscriber_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
 
 # -----------------------------------------------------------------------------
 # Cloud Run Services
@@ -393,12 +441,22 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
+    INTEXURAOS_SPEECHMATICS_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_API_KEY"]
+  }
+
+  env_vars = {
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.whatsapp_media_bucket,
+    module.pubsub_media_cleanup,
   ]
 }
 
@@ -497,6 +555,7 @@ output "api_docs_hub_url" {
   value       = module.api_docs_hub.service_url
 }
 
+
 output "firestore_database" {
   description = "Firestore database name"
   value       = module.firestore.database_name
@@ -540,5 +599,16 @@ output "web_app_dns_a_record_hint" {
 output "web_app_cert_name" {
   description = "Managed SSL certificate name for web app"
   value       = module.web_app.web_app_cert_name
+}
+
+output "whatsapp_media_bucket_name" {
+  description = "WhatsApp media bucket name (private, signed URL access only)"
+  value       = module.whatsapp_media_bucket.bucket_name
+}
+
+
+output "pubsub_media_cleanup_topic" {
+  description = "Pub/Sub topic for media cleanup events"
+  value       = module.pubsub_media_cleanup.topic_name
 }
 

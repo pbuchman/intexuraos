@@ -51,6 +51,34 @@ const configSchema = z.object({
     .transform((val) => val.split(',').map((id) => id.trim())),
 
   /**
+   * GCS bucket name for WhatsApp media files.
+   */
+  mediaBucket: z.string().min(1, 'INTEXURAOS_WHATSAPP_MEDIA_BUCKET is required'),
+
+  /**
+   * Pub/Sub topic for media cleanup events.
+   */
+  mediaCleanupTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC is required'),
+
+  /**
+   * Pub/Sub subscription for media cleanup events.
+   * The cleanup worker subscribes to this to process cleanup events.
+   */
+  mediaCleanupSubscription: z
+    .string()
+    .min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION is required'),
+
+  /**
+   * Speechmatics API key for audio transcription.
+   */
+  speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
+
+  /**
+   * GCP project ID.
+   */
+  gcpProjectId: z.string().min(1, 'INTEXURAOS_GCP_PROJECT_ID is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -74,6 +102,11 @@ export function loadConfig(): Config {
     accessToken: process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'],
     allowedWabaIds: process.env['INTEXURAOS_WHATSAPP_WABA_ID'],
     allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
+    mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
+    mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
+    mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
+    speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
+    gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });
@@ -90,6 +123,11 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
     'INTEXURAOS_WHATSAPP_WABA_ID',
     'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
+    'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
+    'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
+    'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
+    'INTEXURAOS_SPEECHMATICS_API_KEY',
+    'INTEXURAOS_GCP_PROJECT_ID',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

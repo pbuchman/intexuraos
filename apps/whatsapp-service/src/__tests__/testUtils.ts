@@ -12,6 +12,12 @@ import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,
   FakeWhatsAppMessageRepository,
+  FakeMediaStorage,
+  FakeEventPublisher,
+  FakeMessageSender,
+  FakeSpeechTranscriptionPort,
+  FakeWhatsAppCloudApiPort,
+  FakeThumbnailGeneratorPort,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -88,6 +94,11 @@ export const testConfig: Config = {
   accessToken: 'test-access-token',
   allowedWabaIds: ['102290129340398', '419561257915477'],
   allowedPhoneNumberIds: ['123456789012345', '987654321098765'],
+  mediaBucket: 'test-media-bucket',
+  mediaCleanupTopic: 'test-media-cleanup',
+  mediaCleanupSubscription: 'test-media-cleanup-sub',
+  speechmaticsApiKey: 'test-speechmatics-api-key',
+  gcpProjectId: 'test-project',
   port: 8080,
   host: '0.0.0.0',
 };
@@ -146,11 +157,130 @@ export function createWebhookPayload(): object {
   };
 }
 
+/**
+ * Create a WhatsApp image message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createImageWebhookPayload(options?: {
+  caption?: string;
+  mediaId?: string;
+}): object {
+  const mediaId = options?.mediaId ?? 'test-media-id-12345';
+  const imageMessage: {
+    from: string;
+    id: string;
+    timestamp: string;
+    type: string;
+    image: {
+      id: string;
+      mime_type: string;
+      sha256: string;
+      caption?: string;
+    };
+  } = {
+    from: '15551234567',
+    id: 'wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+    timestamp: '1234567890',
+    type: 'image',
+    image: {
+      id: mediaId,
+      mime_type: 'image/jpeg',
+      sha256: 'abc123def456',
+    },
+  };
+
+  if (options?.caption !== undefined) {
+    imageMessage.image.caption = options.caption;
+  }
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [imageMessage],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Create a WhatsApp audio message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createAudioWebhookPayload(options?: { mediaId?: string }): object {
+  const mediaId = options?.mediaId ?? 'test-audio-id-12345';
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: 'wamid.audio.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+                  timestamp: '1234567890',
+                  type: 'audio',
+                  audio: {
+                    id: mediaId,
+                    mime_type: 'audio/ogg',
+                    sha256: 'xyz789abc',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;
   userMappingRepository: FakeWhatsAppUserMappingRepository;
   messageRepository: FakeWhatsAppMessageRepository;
+  mediaStorage: FakeMediaStorage;
+  eventPublisher: FakeEventPublisher;
+  whatsappCloudApi: FakeWhatsAppCloudApiPort;
 }
 
 /**
@@ -162,6 +292,9 @@ export function setupTestContext(): TestContext {
     webhookEventRepository: null as unknown as FakeWhatsAppWebhookEventRepository,
     userMappingRepository: null as unknown as FakeWhatsAppUserMappingRepository,
     messageRepository: null as unknown as FakeWhatsAppMessageRepository,
+    mediaStorage: null as unknown as FakeMediaStorage,
+    eventPublisher: null as unknown as FakeEventPublisher,
+    whatsappCloudApi: null as unknown as FakeWhatsAppCloudApiPort,
   };
 
   beforeAll(async () => {
@@ -176,11 +309,20 @@ export function setupTestContext(): TestContext {
     context.webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
     context.userMappingRepository = new FakeWhatsAppUserMappingRepository();
     context.messageRepository = new FakeWhatsAppMessageRepository();
+    context.mediaStorage = new FakeMediaStorage();
+    context.eventPublisher = new FakeEventPublisher();
+    context.whatsappCloudApi = new FakeWhatsAppCloudApiPort();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
       userMappingRepository: context.userMappingRepository,
       messageRepository: context.messageRepository,
+      mediaStorage: context.mediaStorage,
+      eventPublisher: context.eventPublisher,
+      messageSender: new FakeMessageSender(),
+      transcriptionService: new FakeSpeechTranscriptionPort(),
+      whatsappCloudApi: context.whatsappCloudApi,
+      thumbnailGenerator: new FakeThumbnailGeneratorPort(),
     });
 
     clearJwksCache();

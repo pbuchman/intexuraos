@@ -26,5 +26,7 @@ export {
   saveMessage,
   getMessagesByUser,
   getMessage,
+  findById,
+  updateTranscription,
   deleteMessage,
 } from './messageRepository.js';

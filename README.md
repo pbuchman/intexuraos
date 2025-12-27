@@ -1,6 +1,6 @@
-<p align="center">
+<div style="text-align: center">
   <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
-</p>
+</div>
 
 Derived from the Latin _intexere_ (to weave together) and _textura_ (structure), **IntexuraOS** is the integration fabric that interlaces external signals into your central model of truth.
 **Notion models the world. IntexuraOS executes.**
@@ -22,6 +22,7 @@ IntexuraOS is the execution layer for a personal operating system where **Notion
 
 **Key use cases:**
 
+- 🎙️ WhatsApp voice notes → automatic transcription with reply
 - 🤖 ChatGPT custom GPT actions that read/write to your Notion databases
 - 📱 WhatsApp → Notion inbox for capturing notes, tasks, and ideas on the go
 - 🔐 Secure OAuth2 authentication with Device Authorization Flow for CLI/testing
@@ -42,11 +43,112 @@ IntexuraOS is the execution layer for a personal operating system where **Notion
 
 ---
 
+## WhatsApp Voice Notes → Transcription
+
+One of IntexuraOS's core features is automatic transcription of WhatsApp voice notes. Send a voice message to your WhatsApp bot, and receive the transcribed text as a reply within seconds.
+
+### How It Works
+
+```
+┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│   WhatsApp   │      │ whatsapp-service │      │   Speechmatics  │
+│  (User App)  │      │   (Webhook +     │      │   (Batch API)   │
+│              │      │  Transcription)  │      │                 │
+└──────┬───────┘      └────────┬─────────┘      └────────┬────────┘
+       │                       │                         │
+       │ 1. Voice message      │                         │
+       │──────────────────────>│                         │
+       │                       │                         │
+       │                       │ 2. Download audio       │
+       │                       │    from Meta API        │
+       │                       │                         │
+       │                       │ 3. Store in GCS         │
+       │                       │    (whatsapp-media      │
+       │                       │     bucket)             │
+       │                       │                         │
+       │ 4. Confirmation       │                         │
+       │<──────────────────────│                         │
+       │    "Processing..."    │                         │
+       │                       │                         │
+       │                       │ 5. Submit job           │
+       │                       │    (async background)   │
+       │                       │────────────────────────>│
+       │                       │                         │
+       │                       │ 6. Poll until done      │
+       │                       │────────────────────────>│
+       │                       │                         │
+       │                       │ 7. Fetch transcript     │
+       │                       │<────────────────────────│
+       │                       │                         │
+       │ 8. Reply with         │                         │
+       │    transcribed text   │                         │
+       │<──────────────────────│                         │
+       │                       │                         │
+```
+
+### Architecture
+
+Transcription is handled **inline** by whatsapp-service using a fire-and-forget async function. This approach:
+
+- Minimizes infrastructure complexity (no separate service)
+- Reduces cold start latency (transcription starts immediately)
+- Simplifies deployment and monitoring
+
+**Trade-off:** Container termination may interrupt long transcriptions. For reliability, set `min_scale=1` on whatsapp-service in production.
+
+See [docs/architecture/transcription.md](docs/architecture/transcription.md) for detailed architecture documentation.
+
+### Configuration
+
+Environment variables required for transcription:
+
+| Variable                           | Service          | Description                   |
+| ---------------------------------- | ---------------- | ----------------------------- |
+| `INTEXURAOS_SPEECHMATICS_API_KEY`  | whatsapp-service | Speechmatics API key (secret) |
+| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET` | whatsapp-service | GCS bucket for media storage  |
+
+### Transcription States
+
+```
+pending ──────> processing ──────> completed
+    │               │                  │
+    │               │                  └── transcription stored, user notified
+    │               │
+    │               └──> failed (Speechmatics error)
+    │
+    └──> failed (signed URL / network error)
+```
+
+| `INTEXURAOS_TRANSCRIPTION_COMPLETED_SUBSCRIPTION` | whatsapp-service | Subscription for completion events |
+
+### Monitoring
+
+Key log messages to watch in whatsapp-service:
+
+```
+# Webhook handling
+"Audio message saved successfully" { messageId, gcsPath }
+
+# Transcription flow
+"transcription_start" { messageId, userId, gcsPath }
+"transcription_submit" { messageId }
+"transcription_poll" { messageId, jobId, attempt }
+"transcription_done" { messageId, jobId }
+"transcription_completed" { messageId, transcriptLength }
+
+# Error conditions
+"transcription_submit_error" { messageId, error }
+"transcription_rejected" { messageId, error }
+"transcription_timeout" { messageId, attempts }
+```
+
+---
+
 ## ChatGPT Custom Model
 
 The project includes a ChatGPT custom model (GPT) for prompt review and management:
 
-📂 **[chatgpt-prompts-model/](chatgpt-prompts-model/)** — Notion Prompt Vault
+📂 **[chatgpt-prompts-model/](chatgpt-prompts-model/README.md)** — Notion Prompt Vault
 
 - Review prompts using 10-dimension weighted scoring
 - Iterative improvement loop until score ≥ 8.0
@@ -85,7 +187,15 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 │  │  │auth-service │  │promptvault-svc │  │  whatsapp-svc   │ │  │
 │  │  │ src/domain/ │  │  src/domain/   │  │   src/domain/   │ │  │
 │  │  │ src/infra/  │  │  src/infra/    │  │   src/infra/    │ │  │
-│  │  └─────────────┘  └────────────────┘  └─────────────────┘ │  │
+│  │  └─────────────┘  └────────────────┘  └────────┬────────┘ │  │
+│  │                                                │          │  │
+│  │                                   ┌────────────┴────────┐ │  │
+│  │                                   │                     │ │  │
+│  │                                   ▼                     ▼ │  │
+│  │                           ┌──────────────┐     ┌────────┐ │  │
+│  │                           │     GCS      │     │  Spch  │ │  │
+│  │                           │ Media Bucket │     │ matics │ │  │
+│  │                           └──────────────┘     └────────┘ │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                               │                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
@@ -99,12 +209,12 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 
 Each app owns its domain logic and infrastructure adapters:
 
-| App                 | Domain (`src/domain/`)   | Infra (`src/infra/`) |
-| ------------------- | ------------------------ | -------------------- |
-| auth-service        | identity (tokens, users) | auth0, firestore     |
-| promptvault-service | promptvault (prompts)    | notion, firestore    |
-| whatsapp-service    | inbox (messages, notes)  | notion, firestore    |
-| notion-service      | (orchestration only)     | notion, firestore    |
+| App                 | Domain (`src/domain/`)   | Infra (`src/infra/`)                 |
+| ------------------- | ------------------------ | ------------------------------------ |
+| auth-service        | identity (tokens, users) | auth0, firestore                     |
+| promptvault-service | promptvault (prompts)    | notion, firestore                    |
+| whatsapp-service    | inbox (messages, notes)  | notion, firestore, gcs, speechmatics |
+| notion-service      | (orchestration only)     | notion, firestore                    |
 
 **Import rules** (enforced by `npm run verify:boundaries`):
 
@@ -172,7 +282,7 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 | ------------------- | ------------------------------------ | ---------------- |
 | auth-service        | OAuth2 flows, JWT validation         | `/v1/auth/*`     |
 | promptvault-service | Prompt templates, Notion integration | `/v1/*`          |
-| whatsapp-service    | WhatsApp webhook receiver            | `/v1/whatsapp/*` |
+| whatsapp-service    | WhatsApp webhook, transcription      | `/v1/whatsapp/*` |
 
 ### Security
 
@@ -189,7 +299,7 @@ List endpoints return:
 {
   "success": true,
   "data": {
-    "items": [...],
+    "items": [],
     "hasMore": true,
     "nextCursor": "cursor_abc123"
   }

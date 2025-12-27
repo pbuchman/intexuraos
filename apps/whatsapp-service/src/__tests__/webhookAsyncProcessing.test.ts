@@ -5,7 +5,6 @@
  *
  * These tests wait for the async processing to complete and verify the state changes.
  */
-import { vi } from 'vitest';
 import {
   describe,
   it,
@@ -14,14 +13,34 @@ import {
   testConfig,
   createSignature,
   createWebhookPayload,
+  createImageWebhookPayload,
+  createAudioWebhookPayload,
 } from './testUtils.js';
 
-// Mock the whatsappClient module to capture sendWhatsAppMessage calls
-vi.mock('../whatsappClient.js', () => ({
-  sendWhatsAppMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'mock-message-id' }),
-}));
-
-import { sendWhatsAppMessage } from '../whatsappClient.js';
+// Sample JPEG image buffer (1x1 pixel)
+const SAMPLE_IMAGE_BUFFER = Buffer.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+  0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+  0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+  0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20,
+  0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27,
+  0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+  0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
+  0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
+  0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03,
+  0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d, 0x01, 0x02, 0x03, 0x00,
+  0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32,
+  0x81, 0x91, 0xa1, 0x08, 0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72,
+  0x82, 0x09, 0x0a, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35,
+  0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55,
+  0x56, 0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75,
+  0x76, 0x77, 0x78, 0x79, 0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94,
+  0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2,
+  0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9,
+  0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6,
+  0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda,
+  0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xfb, 0xd5, 0xff, 0xd9,
+]);
 
 describe('Webhook async processing', () => {
   const ctx = setupTestContext();
@@ -220,16 +239,14 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('PROCESSED');
 
-      // Verify sendWhatsAppMessage was called
-      expect(sendWhatsAppMessage).toHaveBeenCalled();
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
-      // Mock sendWhatsAppMessage to fail
-      vi.mocked(sendWhatsAppMessage).mockResolvedValueOnce({
-        success: false,
-        error: 'Failed to send message',
-      });
+      // Configure the fake to fail sendMessage
+      ctx.whatsappCloudApi.setFailSendMessage(true);
 
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -293,6 +310,394 @@ describe('Webhook async processing', () => {
       // No events should be persisted since save failed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(0);
+    });
+  });
+
+  describe('image message processing', () => {
+    it('processes image message and stores with GCS paths', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
+      const payload = createImageWebhookPayload({ caption: 'Test image caption' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be processed
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('PROCESSED');
+
+      // Message should be stored with media info
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+
+      const savedMessage = messages[0];
+      expect(savedMessage?.mediaType).toBe('image');
+      expect(savedMessage?.media?.id).toBe('test-media-id-12345');
+      expect(savedMessage?.media?.mimeType).toBe('image/jpeg');
+      expect(savedMessage?.caption).toBe('Test image caption');
+      expect(savedMessage?.gcsPath).toContain('whatsapp/');
+      expect(savedMessage?.gcsPath).toContain('/test-media-id-12345.jpg');
+      expect(savedMessage?.thumbnailGcsPath).toContain('_thumb.jpg');
+
+      // Files should be stored in GCS
+      const files = ctx.mediaStorage.getAllFiles();
+      expect(files.size).toBe(2); // Original + thumbnail
+    });
+
+    it('handles image message without caption', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
+      const payload = createImageWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+      expect(messages[0]?.text).toBe('');
+      expect(messages[0]?.caption).toBeUndefined();
+    });
+
+    it('handles getMediaUrl failure gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure the fake to fail getMediaUrl
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
+
+      const payload = createImageWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+
+      // No message should be stored
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(0);
+    });
+
+    it('handles downloadMedia failure gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up media URL but configure download to fail
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setFailDownload(true);
+
+      const payload = createImageWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+    });
+
+    it('sends confirmation message after successful image processing', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with media URLs
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+
+      const payload = createImageWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      await waitForAsyncProcessing(200);
+
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('audio message processing', () => {
+    it('processes audio message, stores to GCS, and publishes event', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be processed
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('PROCESSED');
+
+      // Message should be stored with audio media info
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+
+      const savedMessage = messages[0];
+      expect(savedMessage?.mediaType).toBe('audio');
+      expect(savedMessage?.media?.id).toBe('test-audio-id-12345');
+      expect(savedMessage?.media?.mimeType).toBe('audio/ogg');
+      expect(savedMessage?.gcsPath).toContain('whatsapp/');
+      expect(savedMessage?.gcsPath).toContain('/test-audio-id-12345.ogg');
+      expect(savedMessage?.thumbnailGcsPath).toBeUndefined();
+
+      // Audio file should be stored in GCS
+      const files = ctx.mediaStorage.getAllFiles();
+      expect(files.size).toBe(1);
+    });
+
+    it('handles getMediaUrl failure gracefully for audio', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure the fake to fail getMediaUrl
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+
+      // No message should be stored
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(0);
+    });
+
+    it('handles downloadMedia failure gracefully for audio', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up media URL but configure download to fail
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setFailDownload(true);
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+    });
+
+    it('sends confirmation message after successful audio processing', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Set up the fake whatsappCloudApi with audio media
+      ctx.whatsappCloudApi.setMediaUrl('test-audio-id-12345', {
+        url: 'https://example.com/media/test-audio-id-12345',
+        mimeType: 'audio/ogg',
+        fileSize: 5000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-audio-id-12345',
+        Buffer.from('fake-audio-content')
+      );
+
+      const payload = createAudioWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/whatsapp',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      await waitForAsyncProcessing(200);
+
+      // Verify confirmation message was sent via whatsappCloudApi
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
     });
   });
 });
