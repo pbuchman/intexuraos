@@ -57,6 +57,24 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                           nullable: true,
                           description: 'Media caption (for image/audio)',
                         },
+                        transcriptionStatus: {
+                          type: 'string',
+                          enum: ['pending', 'processing', 'completed', 'failed'],
+                          description: 'Transcription status for audio messages',
+                        },
+                        transcription: {
+                          type: 'string',
+                          description: 'Transcription text for completed audio messages',
+                        },
+                        transcriptionError: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Error details if transcription failed',
+                          properties: {
+                            code: { type: 'string' },
+                            message: { type: 'string' },
+                          },
+                        },
                       },
                     },
                   },
@@ -114,16 +132,30 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Transform to API response format
-      const messages = messagesResult.value.map((msg) => ({
-        id: msg.id,
-        text: msg.text,
-        fromNumber: msg.fromNumber,
-        timestamp: msg.timestamp,
-        receivedAt: msg.receivedAt,
-        mediaType: msg.mediaType,
-        hasMedia: msg.gcsPath !== undefined,
-        caption: msg.caption ?? null,
-      }));
+      const messages = messagesResult.value.map((msg) => {
+        const base = {
+          id: msg.id,
+          text: msg.text,
+          fromNumber: msg.fromNumber,
+          timestamp: msg.timestamp,
+          receivedAt: msg.receivedAt,
+          mediaType: msg.mediaType,
+          hasMedia: msg.gcsPath !== undefined,
+          caption: msg.caption ?? null,
+        };
+
+        // Add transcription fields for audio messages
+        if (msg.transcription !== undefined) {
+          return {
+            ...base,
+            transcriptionStatus: msg.transcription.status,
+            transcription: msg.transcription.text,
+            transcriptionError: msg.transcription.error,
+          };
+        }
+
+        return base;
+      });
 
       return await reply.ok({
         messages,
