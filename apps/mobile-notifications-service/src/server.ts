@@ -169,6 +169,24 @@ export async function buildServer(): Promise<FastifyInstance> {
     disableRequestLogging: true,
   });
 
+  // Capture raw body for debugging JSON parse errors
+  // Only capture for webhook endpoint where we see these errors
+  app.addHook('preParsing', async (request, _reply, payload) => {
+    if (request.url === '/mobile-notifications/webhooks') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of payload) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+      }
+      const rawBody = Buffer.concat(chunks);
+      // Store raw body on request for error handler to access
+      (request as { rawBody?: string }).rawBody = rawBody.toString('utf8');
+      // Return a new readable stream with the same data
+      const { Readable } = await import('stream');
+      return Readable.from(rawBody);
+    }
+    return payload;
+  });
+
   // Global error handler - logs all errors including schema validation
   app.setErrorHandler((error, request, reply) => {
     // Extract error properties safely
@@ -183,6 +201,8 @@ export async function buildServer(): Promise<FastifyInstance> {
     const errorCode = statusCode >= 500 ? 'INTERNAL_ERROR' : 'INVALID_REQUEST';
 
     // Log the error with full details
+    // Include rawBody if captured (for JSON parse errors)
+    const rawBody = (request as { rawBody?: string }).rawBody;
     request.log.error(
       {
         err: error,
@@ -192,6 +212,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         statusCode,
         validation: fastifyError.validation,
         validationContext: fastifyError.validationContext,
+        ...(rawBody !== undefined ? { rawBody } : {}),
       },
       `Request error: ${fastifyError.message}`
     );
