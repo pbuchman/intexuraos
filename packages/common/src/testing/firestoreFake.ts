@@ -29,7 +29,9 @@ class FakeDocumentSnapshot {
   constructor(
     private readonly _id: string,
     private readonly _data: DocumentData | undefined,
-    private readonly _exists: boolean
+    private readonly _exists: boolean,
+    private readonly _collectionName: string,
+    private readonly _store: DocumentStore
   ) {}
 
   get id(): string {
@@ -42,6 +44,10 @@ class FakeDocumentSnapshot {
 
   data(): DocumentData | undefined {
     return this._data;
+  }
+
+  get ref(): FakeDocumentReference {
+    return new FakeDocumentReference(this._collectionName, this._id, this._store);
   }
 }
 
@@ -105,7 +111,8 @@ class FakeQuery {
   get(): Promise<FakeQuerySnapshot> {
     const collection = this.store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
-      ([id, data]: [string, DocumentData | undefined]) => new FakeDocumentSnapshot(id, data, true)
+      ([id, data]: [string, DocumentData | undefined]) =>
+        new FakeDocumentSnapshot(id, data, true, this.collectionName, this.store)
     );
 
     // Apply filters
@@ -203,7 +210,15 @@ class FakeDocumentReference {
   get(): Promise<FakeDocumentSnapshot> {
     const collection = this.store.get(this.collectionName);
     const data = collection?.get(this.docId);
-    return Promise.resolve(new FakeDocumentSnapshot(this.docId, data, data !== undefined));
+    return Promise.resolve(
+      new FakeDocumentSnapshot(
+        this.docId,
+        data,
+        data !== undefined,
+        this.collectionName,
+        this.store
+      )
+    );
   }
 
   set(data: DocumentData): Promise<WriteResult> {
@@ -237,9 +252,11 @@ class FakeDocumentReference {
  * Fake CollectionReference implementation.
  */
 class FakeCollectionReference extends FakeQuery {
-  private docCounter = 0;
-
-  constructor(collectionName: string, store: DocumentStore) {
+  constructor(
+    collectionName: string,
+    store: DocumentStore,
+    private readonly docCounterRef: { value: number }
+  ) {
     super(collectionName, store);
     this.collectionNameInternal = collectionName;
     this.storeInternal = store;
@@ -249,7 +266,7 @@ class FakeCollectionReference extends FakeQuery {
   private storeInternal: DocumentStore;
 
   doc(docId?: string): FakeDocumentReference {
-    const id = docId ?? `auto-${String(++this.docCounter)}`;
+    const id = docId ?? `auto-${String(++this.docCounterRef.value)}`;
     return new FakeDocumentReference(this.collectionNameInternal, id, this.storeInternal);
   }
 }
@@ -268,12 +285,13 @@ export interface FakeFirestoreConfig {
 class FakeFirestoreImpl {
   private readonly store: DocumentStore = new Map();
   private config: FakeFirestoreConfig = {};
+  private readonly docCounter = { value: 0 };
 
   collection(name: string): FakeCollectionReference {
     if (this.config.errorToThrow !== undefined) {
       throw this.config.errorToThrow;
     }
-    return new FakeCollectionReference(name, this.store);
+    return new FakeCollectionReference(name, this.store, this.docCounter);
   }
 
   /**
@@ -318,6 +336,48 @@ class FakeFirestoreImpl {
   listCollections(): Promise<CollectionReference[]> {
     if (this.config.errorToThrow !== undefined) {
       throw this.config.errorToThrow;
+    }
+    return Promise.resolve([]);
+  }
+
+  /**
+   * Create a batch for atomic writes.
+   */
+  batch(): FakeBatch {
+    return new FakeBatch();
+  }
+}
+
+/**
+ * Fake WriteBatch implementation.
+ */
+class FakeBatch {
+  private operations: (() => void)[] = [];
+
+  delete(docRef: FakeDocumentReference): this {
+    this.operations.push((): void => {
+      void docRef.delete();
+    });
+    return this;
+  }
+
+  set(docRef: FakeDocumentReference, data: DocumentData): this {
+    this.operations.push((): void => {
+      void docRef.set(data);
+    });
+    return this;
+  }
+
+  update(docRef: FakeDocumentReference, data: Partial<DocumentData>): this {
+    this.operations.push((): void => {
+      void docRef.update(data);
+    });
+    return this;
+  }
+
+  commit(): Promise<WriteResult[]> {
+    for (const op of this.operations) {
+      op();
     }
     return Promise.resolve([]);
   }

@@ -36,19 +36,10 @@ export default defineConfig({
         '**/domain/**/ports/**',
         '**/domain/**/events/**',
 
-        // Colocated infra adapters - external service wrappers
-        // JUSTIFIED: Thin SDK wrappers tested via integration tests through routes
-        // Contains Firestore, Notion, Auth0 adapters that delegate to external SDKs
-        '**/infra/**',
-
         // Web app - React frontend
         // JUSTIFIED: Requires E2E testing strategy, out of scope for unit coverage
         'apps/web/**',
 
-        // Common SDK client wrappers
-        // JUSTIFIED: notion.ts tested in packages/common/src/__tests__/notion.test.ts
-        // The logging fetch wrapper is complex but tested via integration
-        '**/notion.ts',
         // JUSTIFIED: Pure singleton getter with no business logic
         '**/firestore.ts',
 
@@ -56,17 +47,8 @@ export default defineConfig({
         // JUSTIFIED: No business logic, just static config and file serving
         'apps/api-docs-hub/**',
 
-        // WhatsApp external API integration
-        // JUSTIFIED: sendWhatsAppMessage() wraps external Graph API, tested via integration
-        '**/whatsappClient.ts',
         // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
-
-        // Workers - Pub/Sub subscription handlers
-        // JUSTIFIED: Thin wrappers around Pub/Sub SDK, tested via integration
-        // CleanupWorker subscribes to media cleanup events and calls mediaStorage.delete()
-        // Core delete logic is tested via route tests that verify cleanup events are published
-        '**/workers/**',
 
         // Server initialization files
         // JUSTIFIED: Contains Fastify app setup, plugin registration, and lifecycle hooks
@@ -81,22 +63,12 @@ export default defineConfig({
         // HTTP logger utility
         // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
         '**/http/logger.ts',
-
-        // Status routes for mobile notifications
-        // JUSTIFIED: Simple status check route, requires JWT auth which is tested via route tests
-        // Contains no business logic, just delegates to repository
-        '**/statusRoutes.ts',
-
-        // Link preview extraction usecase
-        // JUSTIFIED: Fire-and-forget background task, tested implicitly via webhook route tests
-        // Core logic is URL extraction and async fetching, not critical business logic
-        '**/usecases/extractLinkPreviews.ts',
       ],
       thresholds: {
         lines: 90,
-        branches: 81,
+        branches: 90,
         functions: 90,
-        statements: 89,
+        statements: 90,
       },
     },
   },
