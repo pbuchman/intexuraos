@@ -11,7 +11,7 @@ import {
   findUserByPhoneNumber,
   disconnectUserMapping,
   isUserConnected,
-} from '../../infra/firestore/userMappingRepository.js';
+} from '../../infra/firestore/index.js';
 
 describe('userMappingRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;

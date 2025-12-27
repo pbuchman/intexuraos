@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/common';
 import type { Firestore } from '@google-cloud/firestore';
-import { FirestoreAuthTokenRepository } from '../../infra/firestore/authTokenRepository.js';
+import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import type { AuthTokens } from '../../domain/identity/index.js';
 
 /**

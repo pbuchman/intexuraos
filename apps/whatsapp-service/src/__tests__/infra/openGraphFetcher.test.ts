@@ -117,7 +117,7 @@ describe('OpenGraphFetcher', () => {
     });
 
     it('falls back to /favicon.ico when no link tag', async () => {
-      const html = `<html><head><title>Test</title></head></html>`;
+      const html = `<html lang="en"><head><title>Test</title></head></html>`;
 
       nock('https://example.com').get('/page').reply(200, html);
 
@@ -224,7 +224,7 @@ describe('OpenGraphFetcher', () => {
         .get('/')
         .reply(function () {
           capturedHeaders = this.req.headers as unknown as Record<string, string>;
-          return [200, '<html></html>'];
+          return [200, '<html lang="en"></html>'];
         });
 
       const customFetcher = new OpenGraphFetcher({

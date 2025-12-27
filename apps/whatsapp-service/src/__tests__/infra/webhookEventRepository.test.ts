@@ -9,7 +9,7 @@ import {
   saveWebhookEvent,
   updateWebhookEventStatus,
   getWebhookEvent,
-} from '../../infra/firestore/webhookEventRepository.js';
+} from '../../infra/firestore/index.js';
 
 describe('webhookEventRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;

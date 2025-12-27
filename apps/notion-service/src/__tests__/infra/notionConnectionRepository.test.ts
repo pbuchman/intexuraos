@@ -11,7 +11,7 @@ import {
   getNotionToken,
   isNotionConnected,
   disconnectNotion,
-} from '../../infra/firestore/notionConnectionRepository.js';
+} from '../../infra/firestore/index.js';
 
 describe('notionConnectionRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;

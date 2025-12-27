@@ -22,7 +22,7 @@ vi.mock('@intexuraos/common', async (importOriginal) => {
   };
 });
 
-import { validateNotionToken, getPageWithPreview } from '../../infra/notion/notionApi.js';
+import { validateNotionToken, getPageWithPreview } from '../../infra/notion/index.js';
 
 describe('notionApi', () => {
   beforeEach(() => {

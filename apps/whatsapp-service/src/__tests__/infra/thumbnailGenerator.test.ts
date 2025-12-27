@@ -3,7 +3,7 @@
  * Uses real sharp library with sample image buffers.
  */
 import { describe, it, expect } from 'vitest';
-import { generateThumbnail } from '../../infra/media/thumbnailGenerator.js';
+import { generateThumbnail } from '../../infra/media/index.js';
 import sharp from 'sharp';
 async function createTestImage(
   width: number,

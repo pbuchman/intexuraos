@@ -5,6 +5,7 @@
 ### 2024-12-27 — Session Start
 
 **Phase 0: Initialization**
+
 - ✅ Read `.github/copilot-instructions.md`
 - ✅ Read `vitest.config.ts`
 - ✅ Created continuity directory `008-code-coverage-improvements`
@@ -16,11 +17,11 @@
 
 ## Open Questions — Resolved
 
-| # | Topic | Decision | Rationale |
-|---|--------|-----------|------------|
-| 1 | Firestore mocking | In-memory fake; stub `getFirestore()` | Deterministic, no emulator dependency |
-| 2 | Duplicate repos | Test as-is, refactor later | Coverage priority over architecture |
-| 3 | Priority | Quick wins first | Maximize momentum, measurable progress |
+| #   | Topic             | Decision                              | Rationale                              |
+| --- | ----------------- | ------------------------------------- | -------------------------------------- |
+| 1   | Firestore mocking | In-memory fake; stub `getFirestore()` | Deterministic, no emulator dependency  |
+| 2   | Duplicate repos   | Test as-is, refactor later            | Coverage priority over architecture    |
+| 3   | Priority          | Quick wins first                      | Maximize momentum, measurable progress |
 
 ---
 
@@ -28,53 +29,53 @@
 
 ### Phase 1: Prerequisites ✅
 
-| Task | Status | Notes |
-|------|--------|-------|
+| Task                       | Status  | Notes                                          |
+| -------------------------- | ------- | ---------------------------------------------- |
 | 1.0 Firestore fake utility | ✅ Done | `packages/common/src/testing/firestoreFake.ts` |
 
 ### Phase 2: Pure Unit Tests ✅
 
-| Task | Status | Tests | Notes |
-|------|--------|-------|-------|
-| 2.1 encryption.ts | ✅ Done | 19 | AES-256-GCM |
-| 2.2 extractLinkPreviews.ts | ✅ Done | 8 | URL extraction |
-| 2.3 thumbnailGenerator.ts | ✅ Done | 7 | Sharp image processing |
+| Task                       | Status  | Tests | Notes                  |
+| -------------------------- | ------- | ----- | ---------------------- |
+| 2.1 encryption.ts          | ✅ Done | 19    | AES-256-GCM            |
+| 2.2 extractLinkPreviews.ts | ✅ Done | 8     | URL extraction         |
+| 2.3 thumbnailGenerator.ts  | ✅ Done | 7     | Sharp image processing |
 
 ### Phase 3: External API Mocks (Partial)
 
-| Task | Status | Tests | Notes |
-|------|--------|-------|-------|
-| 3.1 whatsappClient.ts | ✅ Done | 13 | nock mocking Graph API |
-| 3.2 openGraphFetcher.ts | ✅ Done | 12 | nock mocking HTML responses |
-| 3.3 auth0/client.ts | ✅ Done | 11 | nock mocking Auth0 API |
-| 3.4 speechmatics/adapter.ts | ⏳ Blocked | 0 | vi.mock ESM hoisting issue |
+| Task                        | Status     | Tests | Notes                       |
+| --------------------------- | ---------- | ----- | --------------------------- |
+| 3.1 whatsappClient.ts       | ✅ Done    | 13    | nock mocking Graph API      |
+| 3.2 openGraphFetcher.ts     | ✅ Done    | 12    | nock mocking HTML responses |
+| 3.3 auth0/client.ts         | ✅ Done    | 11    | nock mocking Auth0 API      |
+| 3.4 speechmatics/adapter.ts | ⏳ Blocked | 0     | vi.mock ESM hoisting issue  |
 
 ### Phase 4: Firestore/GCS/Pub/Sub Tests (Partial)
 
-| Task | Status | Tests | Notes |
-|------|--------|-------|-------|
-| 4.1 authTokenRepository.ts | ✅ Done | 13 | FakeFirestore |
-| 4.2 notionConnectionRepository.ts | ✅ Done | 12 | notion-service |
-| 4.3 webhookEventRepository.ts | ✅ Done | 9 | whatsapp-service |
-| 4.4 userMappingRepository.ts | ✅ Done | 14 | whatsapp-service |
-| 4.5 messageRepository.ts | ✅ Done | 18 | whatsapp-service |
-| 4.6 mediaStorageAdapter.ts | ⏳ Blocked | 0 | vi.mock ESM hoisting issue |
-| 4.7 pubsubPublisher.ts | ✅ Done | 2 | Pub/Sub mocking |
+| Task                              | Status     | Tests | Notes                      |
+| --------------------------------- | ---------- | ----- | -------------------------- |
+| 4.1 authTokenRepository.ts        | ✅ Done    | 13    | FakeFirestore              |
+| 4.2 notionConnectionRepository.ts | ✅ Done    | 12    | notion-service             |
+| 4.3 webhookEventRepository.ts     | ✅ Done    | 9     | whatsapp-service           |
+| 4.4 userMappingRepository.ts      | ✅ Done    | 14    | whatsapp-service           |
+| 4.5 messageRepository.ts          | ✅ Done    | 18    | whatsapp-service           |
+| 4.6 mediaStorageAdapter.ts        | ⏳ Blocked | 0     | vi.mock ESM hoisting issue |
+| 4.7 pubsubPublisher.ts            | ✅ Done    | 2     | Pub/Sub mocking            |
 
 ### Phase 5: Notion SDK Tests ✅
 
-| Task | Status | Tests | Notes |
-|------|--------|-------|-------|
-| 5.1 notionApi.ts | ✅ Done | 5 | createNotionClient mock |
+| Task             | Status  | Tests | Notes                   |
+| ---------------- | ------- | ----- | ----------------------- |
+| 5.1 notionApi.ts | ✅ Done | 5     | createNotionClient mock |
 
 ---
 
 ## Test Summary
 
-| Metric | Before | After | Delta |
-|--------|--------|-------|-------|
-| Total tests | 492 | 635 | **+143** |
-| Test files | 44 | 57 | +13 |
+| Metric      | Before | After | Delta    |
+| ----------- | ------ | ----- | -------- |
+| Total tests | 492    | 635   | **+143** |
+| Test files  | 44     | 57    | +13      |
 
 **CI Status: ✅ PASSING**
 
@@ -99,6 +100,7 @@
 15. `apps/notion-service/src/__tests__/infra/notionApi.test.ts` — 5 tests
 
 **Modified:**
+
 - `packages/common/src/index.ts` — Added export for testing utilities
 - `packages/common/src/testing/firestoreFake.ts` — Fixed lint/type issues
 

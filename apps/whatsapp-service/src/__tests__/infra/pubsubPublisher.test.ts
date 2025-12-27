@@ -24,7 +24,7 @@ vi.mock('@google-cloud/pubsub', () => {
   };
 });
 
-import { GcpPubSubPublisher } from '../../infra/pubsub/publisher.js';
+import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
 
 describe('GcpPubSubPublisher', () => {
   let publisher: GcpPubSubPublisher;
@@ -48,7 +48,7 @@ describe('GcpPubSubPublisher', () => {
 
       expect(result.ok).toBe(true);
       expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer),
+        data: expect.any(Buffer) as Buffer,
       });
     });
 

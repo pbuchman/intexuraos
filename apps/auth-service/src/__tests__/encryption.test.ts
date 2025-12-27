@@ -3,11 +3,7 @@
  * Tests AES-256-GCM encryption/decryption for auth tokens.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import {
-  encryptToken,
-  decryptToken,
-  generateEncryptionKey,
-} from '../infra/firestore/encryption.js';
+import { encryptToken, decryptToken, generateEncryptionKey } from '../infra/firestore/index.js';
 
 describe('encryption', () => {
   const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
@@ -156,9 +152,8 @@ describe('encryption', () => {
 
   describe('environment variable key', () => {
     it('uses env key when set', () => {
-      // Generate a proper key
-      const envKey = generateEncryptionKey();
-      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = envKey;
+      // Generate and set a proper key
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = generateEncryptionKey();
 
       const token = 'test-token';
       const encrypted = encryptToken(token);
