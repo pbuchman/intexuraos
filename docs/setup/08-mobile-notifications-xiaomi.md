@@ -105,26 +105,24 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
   "source": "tasker",
   "device": "redmi-note-13-pro",
   "timestamp": %TIMES,
-  "notification_id": "%ankey_%anposttime",
-  "post_time": "%anposttime",
+  "notification_id": "%ankey_%TIMES",
   "app": "%anpackage",
   "title": "%antitle",
   "text": "%antext"
 }
 ```
 
-**Note:** `%anposttime` ensures that even if `%ankey` is the same, every update/new message generates a unique ID.
+**Note:** `%TIMES` ensures that even if `%ankey` is the same, every update/new message generates a unique ID.
 
 **Variables:**
 
-| Variable      | Description                                                   |
-| ------------- | ------------------------------------------------------------- |
-| `%TIMES`      | Current Unix timestamp (seconds)                              |
-| `%ankey`      | Unique notification key (e.g., `0\|com.whatsapp.w4b\|101...`) |
-| `%anposttime` | Millisecond timestamp when the notification was posted        |
-| `%anpackage`  | App package name (e.g., `com.whatsapp.w4b`)                   |
-| `%antitle`    | Notification title (sanitized)                                |
-| `%antext`     | Notification text content (sanitized)                         |
+| Variable     | Description                                                   |
+| ------------ | ------------------------------------------------------------- |
+| `%TIMES`     | Current Unix timestamp (seconds)                              |
+| `%ankey`     | Unique notification key (e.g., `0\|com.whatsapp.w4b\|101...`) |
+| `%anpackage` | App package name (e.g., `com.whatsapp.w4b`)                   |
+| `%antitle`   | Notification title (sanitized)                                |
+| `%antext`    | Notification text content (sanitized)                         |
 
 ---
 
@@ -179,7 +177,6 @@ To ensure the service remains alive on HyperOS:
 | Tasker killed in background      | Enable autostart and disable battery optimization              |
 | Variables empty in payload       | Use lowercase variable names (e.g., `%antitle` not `%ANTITLE`) |
 | JSON parse errors (400)          | Ensure sanitization actions escape quotes and remove newlines  |
-| WhatsApp duplicates rejected     | Use `%ankey_%anposttime` as notification_id for uniqueness     |
 
 ---
 

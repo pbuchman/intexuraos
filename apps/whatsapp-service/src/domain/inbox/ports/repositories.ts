@@ -128,7 +128,13 @@ export interface WhatsAppMessageRepository {
   /**
    * Get messages for a user, ordered by receivedAt descending.
    */
-  getMessagesByUser(userId: string, limit?: number): Promise<Result<WhatsAppMessage[], InboxError>>;
+  /**
+   * Get messages for a user with pagination.
+   */
+  getMessagesByUser(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>>;
 
   /**
    * Get a single message by ID.

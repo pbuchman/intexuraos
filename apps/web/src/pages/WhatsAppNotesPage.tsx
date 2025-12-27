@@ -656,7 +656,9 @@ export function WhatsAppNotesPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [fromNumber, setFromNumber] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
@@ -681,6 +683,7 @@ export function WhatsAppNotesPage(): React.JSX.Element {
 
         setMessages(response.messages);
         setFromNumber(response.fromNumber);
+        setNextCursor(response.nextCursor);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Failed to fetch messages');
       } finally {
@@ -690,6 +693,23 @@ export function WhatsAppNotesPage(): React.JSX.Element {
     },
     [getAccessToken]
   );
+
+  const loadMore = async (): Promise<void> => {
+    if (nextCursor === undefined || isLoadingMore) return;
+
+    try {
+      setIsLoadingMore(true);
+      const token = await getAccessToken();
+      const response = await getWhatsAppMessages(token, { cursor: nextCursor });
+
+      setMessages((prev) => [...prev, ...response.messages]);
+      setNextCursor(response.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to load more messages');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     void fetchMessages();
@@ -800,6 +820,21 @@ export function WhatsAppNotesPage(): React.JSX.Element {
           ))
         )}
       </div>
+
+      {/* Load more button */}
+      {nextCursor !== undefined ? (
+        <div className="mt-6 flex justify-center">
+          <Button
+            variant="secondary"
+            onClick={(): void => {
+              void loadMore();
+            }}
+            isLoading={isLoadingMore}
+          >
+            Load More
+          </Button>
+        </div>
+      ) : null}
 
       {messages.length > 0 ? (
         <p className="mt-6 text-center text-sm text-slate-500">
