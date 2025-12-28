@@ -148,6 +148,7 @@ export class FakeNotificationRepository implements NotificationRepository {
   private shouldFailSave = false;
   private shouldFailFind = false;
   private shouldFailDelete = false;
+  private customFindError: RepositoryError | null = null;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -159,6 +160,10 @@ export class FakeNotificationRepository implements NotificationRepository {
 
   setFailNextDelete(fail: boolean): void {
     this.shouldFailDelete = fail;
+  }
+
+  setCustomFindError(error: unknown): void {
+    this.customFindError = error as RepositoryError;
   }
 
   save(input: CreateNotificationInput): Promise<Result<Notification, RepositoryError>> {
@@ -187,6 +192,12 @@ export class FakeNotificationRepository implements NotificationRepository {
   }
 
   findById(id: string): Promise<Result<Notification | null, RepositoryError>> {
+    if (this.customFindError !== null) {
+      const error = this.customFindError;
+      this.customFindError = null;
+      return Promise.resolve(err(error));
+    }
+
     if (this.shouldFailFind) {
       this.shouldFailFind = false;
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
