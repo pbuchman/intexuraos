@@ -189,7 +189,7 @@ jobs:
             }
 
             // Create individual issues for high-priority gaps (if not already exists)
-            const highPriorityFiles = filesWithGaps.filter(f => f.branches < 90).slice(0, 5);
+            const highPriorityFiles = filesWithGaps.filter(f => f.branches < 95).slice(0, 5);
 
             for (const file of highPriorityFiles) {
               const shortPath = file.path.split('/').slice(-2).join('/');
