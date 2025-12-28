@@ -3,34 +3,15 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common';
+import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
 const SERVICE_VERSION = '0.0.1';
 
-type HealthStatus = 'ok' | 'degraded' | 'down';
-
-interface HealthCheck {
-  name: string;
-  status: HealthStatus;
-  latencyMs: number;
-  details: Record<string, unknown> | null;
-}
-
-interface HealthResponse {
-  status: HealthStatus;
-  serviceName: string;
-  version: string;
-  timestamp: string;
-  checks: HealthCheck[];
-}
-
-function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
-  if (checks.some((c) => c.status === 'down')) return 'down';
-  if (checks.some((c) => c.status === 'degraded')) return 'degraded';
-  return 'ok';
-}
-
+/**
+ * Check service configuration (config.openApiSources must be non-empty).
+ */
 function checkConfig(config: Config): HealthCheck {
   const start = Date.now();
   return {
@@ -94,15 +75,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   app.get('/health', async (_req, reply) => {
     const started = Date.now();
     const checks: HealthCheck[] = [checkConfig(config)];
-    const status = computeOverallStatus(checks);
 
-    const response: HealthResponse = {
-      status,
-      serviceName: SERVICE_NAME,
-      version: SERVICE_VERSION,
-      timestamp: new Date().toISOString(),
-      checks: checks.map((c) => c),
-    };
+    const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
 
     void reply.header('x-health-duration-ms', String(Date.now() - started));
     return await reply.type('application/json').send(response);
