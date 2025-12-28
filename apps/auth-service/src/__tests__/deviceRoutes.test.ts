@@ -189,6 +189,31 @@ describe('Device Authorization Flow', () => {
         expect(body.diagnostics.downstreamStatus).toBe(400);
       });
 
+      it('handles Auth0 error response without error_description', async () => {
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
+          error: 'invalid_scope',
+        });
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/device/start',
+          payload: {},
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+          diagnostics: { downstreamStatus: number };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+        expect(body.error.message).toBe('invalid_scope');
+        expect(body.diagnostics.downstreamStatus).toBe(400);
+      });
+
       it('handles non-Auth0 error response for device/start', async () => {
         nock(`https://${AUTH0_DOMAIN}`)
           .post('/oauth/device/code')
@@ -392,6 +417,29 @@ describe('Device Authorization Flow', () => {
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('DOWNSTREAM_ERROR');
         expect(body.error.message).toContain('expired');
+      });
+
+      it('handles Auth0 error without error_description for device/poll', async () => {
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+          error: 'access_denied',
+        });
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+        expect(body.error.message).toBe('access_denied');
       });
 
       it('handles non-Auth0 error response', async () => {
