@@ -8,7 +8,7 @@
 import { ok, err, isErr, type Result } from '@intexuraos/common';
 import type { AuthTokenRepository } from '../ports/AuthTokenRepository.js';
 import type { Auth0Client } from '../ports/Auth0Client.js';
-import type { AuthTokens } from '../models/AuthToken.js';
+import type { AuthTokens, RefreshResult } from '../models/AuthToken.js';
 
 /**
  * Input for the refresh access token use-case.
@@ -109,19 +109,8 @@ export async function refreshAccessToken(
   }
 
   // Type narrowing: after isErr check, we know it's ok
-  const newTokens = (
-    refreshResult as {
-      ok: true;
-      value: {
-        accessToken: string;
-        tokenType: string;
-        expiresIn: number;
-        scope?: string;
-        idToken?: string;
-        refreshToken?: string;
-      };
-    }
-  ).value;
+  // Use RefreshResult type from domain models for type safety
+  const newTokens = (refreshResult as { ok: true; value: RefreshResult }).value;
 
   // Store updated tokens (including new refresh token if rotation enabled)
   const tokensToStore: AuthTokens = {
