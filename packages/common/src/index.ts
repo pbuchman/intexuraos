@@ -56,6 +56,7 @@ export {
   type BlockObjectResponse,
   validateNotionToken,
   getPageWithPreview,
+  extractPageTitle,
 } from './notion.js';
 
 // Notion connection repository

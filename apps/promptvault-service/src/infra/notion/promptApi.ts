@@ -8,6 +8,7 @@ import {
   type Result,
   createNotionClient,
   mapNotionError,
+  extractPageTitle,
   type NotionLogger,
   type NotionError,
 } from '@intexuraos/common';
@@ -381,28 +382,4 @@ export async function updatePrompt(
   } catch (error) {
     return err(mapError(mapNotionError(error)));
   }
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Extract title from Notion page properties.
- */
-function extractPageTitle(properties: Record<string, unknown>): string {
-  const titleProp =
-    properties['title'] ?? properties['Title'] ?? properties['Name'] ?? properties['name'];
-
-  if (
-    titleProp !== null &&
-    typeof titleProp === 'object' &&
-    'title' in titleProp &&
-    Array.isArray((titleProp as { title: unknown[] }).title)
-  ) {
-    const titleArray = (titleProp as { title: { plain_text?: string }[] }).title;
-    return titleArray.map((t) => t.plain_text ?? '').join('');
-  }
-
-  return 'Untitled';
 }
