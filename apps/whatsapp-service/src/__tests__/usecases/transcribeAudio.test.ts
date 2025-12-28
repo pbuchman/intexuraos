@@ -231,6 +231,28 @@ describe('TranscribeAudioUseCase', () => {
       expect(lastMessage?.message).toContain('failed');
     });
 
+    it('handles job submission failure without apiCall in error', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      // Configure to fail without apiCall in the error response
+      transcriptionService.setFailMode(true, 'Network error', true);
+
+      await usecase.execute(createTestInput(), logger);
+
+      // Verify transcription state is failed
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('failed');
+        // lastApiCall should not be set since error didn't include apiCall
+        expect(message.value.transcription?.lastApiCall).toBeUndefined();
+      }
+
+      // Verify failure message was sent to user
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+    });
+
     it('handles job rejection', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
@@ -262,6 +284,43 @@ describe('TranscribeAudioUseCase', () => {
       // Verify failure message was sent to user
       const sentMessages = whatsappCloudApi.getSentMessages();
       expect(sentMessages.length).toBeGreaterThan(0);
+    });
+
+    it('handles job rejection without error details', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+
+      // Execute in a way that lets us reject the job without error
+      const executePromise = usecase.execute(input, logger);
+
+      // Give time for job to be submitted
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Find the job ID and reject it without an error message
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobRejectedWithoutError(jobId);
+      }
+
+      await executePromise;
+
+      // Verify transcription state is failed with default error
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('failed');
+        // When no error provided, use default 'JOB_REJECTED' message
+        expect(message.value.transcription?.error?.code).toBe('JOB_REJECTED');
+        expect(message.value.transcription?.error?.message).toBe('Job was rejected');
+      }
+
+      // Verify failure message was sent to user with default message
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+      const lastMessage = sentMessages[sentMessages.length - 1];
+      expect(lastMessage?.message).toContain('Job was rejected');
     });
 
     it('handles polling timeout', async () => {
@@ -414,6 +473,45 @@ describe('TranscribeAudioUseCase', () => {
       expect(sentMessages.length).toBeGreaterThan(0);
     });
 
+    it('handles unexpected error that is not an Error instance', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      // Create a custom media storage that throws a non-Error value
+      const throwingMediaStorage: MediaStoragePort = {
+        upload: mediaStorage.upload.bind(mediaStorage),
+        uploadThumbnail: mediaStorage.uploadThumbnail.bind(mediaStorage),
+        delete: mediaStorage.delete.bind(mediaStorage),
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        getSignedUrl: vi.fn().mockRejectedValue('String error thrown'),
+      };
+
+      const throwingDeps: TranscribeAudioDeps = {
+        messageRepository,
+        mediaStorage: throwingMediaStorage,
+        transcriptionService,
+        whatsappCloudApi,
+      };
+
+      const throwingUsecase = new TranscribeAudioUseCase(throwingDeps, fastPollingConfig);
+
+      await throwingUsecase.execute(createTestInput(), logger);
+
+      // Verify transcription state is failed with 'Unknown error' message
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('failed');
+        expect(message.value.transcription?.error?.code).toBe('UNEXPECTED_ERROR');
+        expect(message.value.transcription?.error?.message).toBe('Unknown error');
+      }
+
+      // Verify failure message was sent to user with 'Unknown error'
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+      const lastMessage = sentMessages[sentMessages.length - 1];
+      expect(lastMessage?.message).toContain('Unknown error');
+    });
+
     it('handles transcript fetch failure after job completion', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
@@ -444,6 +542,43 @@ describe('TranscribeAudioUseCase', () => {
       expect(message.ok).toBe(true);
       if (message.ok && message.value !== null) {
         expect(message.value.transcription?.status).toBe('failed');
+      }
+    });
+
+    it('handles transcript fetch failure without apiCall in error', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      // Configure getTranscript to return error without apiCall
+      transcriptionService.setGetTranscriptWithoutApiCall(true);
+
+      const input = createTestInput();
+
+      // Execute in a way that lets us set the job as done but fail transcript fetch
+      const executePromise = usecase.execute(input, logger);
+
+      // Give time for job to be submitted
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Find the job ID and set it as done (but don't set transcript)
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        // Mark as done but don't set transcript - getTranscript will fail
+        const job = jobs.get(jobId);
+        if (job !== undefined) {
+          job.status = 'done';
+        }
+      }
+
+      await executePromise;
+
+      // Verify transcription state is failed
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('failed');
+        // lastApiCall should not be set since error didn't include apiCall
+        expect(message.value.transcription?.lastApiCall).toBeUndefined();
       }
     });
   });

@@ -539,6 +539,8 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   private jobCounter = 0;
   private shouldFail = false;
   private failMessage = 'Fake transcription error';
+  private failWithoutApiCall = false;
+  private getTranscriptWithoutApiCall = false;
   private pollFailuresRemaining = 0;
   private pollFailError: TranscriptionPortError = {
     code: 'SERVICE_UNAVAILABLE',
@@ -547,12 +549,16 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
 
   /**
    * Configure the fake to fail subsequent calls.
+   * @param fail - Whether to fail
+   * @param message - Optional error message
+   * @param withoutApiCall - If true, error will not include apiCall field
    */
-  setFailMode(fail: boolean, message?: string): void {
+  setFailMode(fail: boolean, message?: string, withoutApiCall?: boolean): void {
     this.shouldFail = fail;
     if (message !== undefined) {
       this.failMessage = message;
     }
+    this.failWithoutApiCall = withoutApiCall === true;
   }
 
   /**
@@ -578,6 +584,18 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   }
 
   /**
+   * Set job as rejected without an error message (for testing error-less rejection).
+   */
+  setJobRejectedWithoutError(jobId: string): void {
+    const job = this.jobs.get(jobId);
+    if (job !== undefined) {
+      job.status = 'rejected';
+      // Intentionally not setting job.error to test the branch
+      // where pollResult.value.error is undefined
+    }
+  }
+
+  /**
    * Configure the fake to fail the next N pollJob calls with a transient error.
    * After the specified count, polls will succeed normally.
    *
@@ -591,22 +609,30 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     }
   }
 
+  /**
+   * Configure getTranscript to return errors without apiCall field.
+   */
+  setGetTranscriptWithoutApiCall(withoutApiCall: boolean): void {
+    this.getTranscriptWithoutApiCall = withoutApiCall;
+  }
+
   submitJob(
     input: TranscriptionJobInput
   ): Promise<Result<TranscriptionJobSubmitResult, TranscriptionPortError>> {
     if (this.shouldFail) {
-      return Promise.resolve(
-        err({
-          code: 'FAKE_ERROR',
-          message: this.failMessage,
-          apiCall: {
-            timestamp: new Date().toISOString(),
-            operation: 'submit',
-            success: false,
-            response: { error: this.failMessage },
-          },
-        })
-      );
+      const error: TranscriptionPortError = {
+        code: 'FAKE_ERROR',
+        message: this.failMessage,
+      };
+      if (!this.failWithoutApiCall) {
+        error.apiCall = {
+          timestamp: new Date().toISOString(),
+          operation: 'submit',
+          success: false,
+          response: { error: this.failMessage },
+        };
+      }
+      return Promise.resolve(err(error));
     }
 
     this.jobCounter++;
@@ -668,17 +694,18 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   getTranscript(jobId: string): Promise<Result<TranscriptionTextResult, TranscriptionPortError>> {
     const job = this.jobs.get(jobId);
     if (job?.transcript === undefined) {
-      return Promise.resolve(
-        err({
-          code: 'NOT_FOUND',
-          message: `Transcript for job ${jobId} not found`,
-          apiCall: {
-            timestamp: new Date().toISOString(),
-            operation: 'fetch_result',
-            success: false,
-          },
-        })
-      );
+      const error: TranscriptionPortError = {
+        code: 'NOT_FOUND',
+        message: `Transcript for job ${jobId} not found`,
+      };
+      if (!this.getTranscriptWithoutApiCall) {
+        error.apiCall = {
+          timestamp: new Date().toISOString(),
+          operation: 'fetch_result',
+          success: false,
+        };
+      }
+      return Promise.resolve(err(error));
     }
 
     return Promise.resolve(
@@ -705,6 +732,8 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     this.jobs.clear();
     this.jobCounter = 0;
     this.shouldFail = false;
+    this.failWithoutApiCall = false;
+    this.getTranscriptWithoutApiCall = false;
     this.pollFailuresRemaining = 0;
     this.pollFailError = {
       code: 'SERVICE_UNAVAILABLE',
