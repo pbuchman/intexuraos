@@ -84,6 +84,162 @@ describe('Prompt Routes', () => {
       expect(body.diagnostics.requestId).toBeDefined();
       expect(body.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
     });
+
+    it('fails with MISCONFIGURED when token not found', async () => {
+      const token = await createToken({ sub: 'user-no-token' });
+
+      // Set up connection with null token to simulate token not found scenario
+      ctx.connectionRepository.setConnection('user-no-token', null, 'vault-page-id', true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toBe('Notion token not found.');
+    });
+
+    it('fails with DOWNSTREAM_ERROR when getToken fails', async () => {
+      const token = await createToken({ sub: 'user-token-error' });
+
+      // Set up connection
+      await setupConnection(ctx, 'user-token-error');
+
+      // Inject error for getToken
+      ctx.connectionRepository.setGetTokenError({
+        code: 'INTERNAL_ERROR',
+        message: 'Database error',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Database error');
+    });
+
+    it('fails with DOWNSTREAM_ERROR when getConnection fails', async () => {
+      const token = await createToken({ sub: 'user-conn-error' });
+
+      // Set up connection
+      await setupConnection(ctx, 'user-conn-error');
+
+      // Inject error for getConnection
+      ctx.connectionRepository.setGetConnectionError({
+        code: 'INTERNAL_ERROR',
+        message: 'Connection lookup failed',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Connection lookup failed');
+    });
+
+    it('fails with DOWNSTREAM_ERROR when Notion API fails', async () => {
+      const token = await createToken({ sub: 'user-notion-error' });
+
+      // Set up connection
+      await setupConnection(ctx, 'user-notion-error');
+
+      // Inject error for getPageWithPreview
+      ctx.notionApi.setGetPageWithPreviewError({
+        code: 'API_ERROR',
+        message: 'Notion API rate limited',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Notion API rate limited');
+    });
+
+    it('fails with DOWNSTREAM_ERROR when isConnected fails', async () => {
+      const token = await createToken({ sub: 'user-is-connected-error' });
+
+      // Inject error for isConnected
+      ctx.connectionRepository.setIsConnectedError({
+        code: 'INTERNAL_ERROR',
+        message: 'Database unavailable',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Database unavailable');
+    });
+
+    it('fails with MISCONFIGURED when config not found', async () => {
+      const token = await createToken({ sub: 'user-config-not-found' });
+
+      // Set up connection
+      await setupConnection(ctx, 'user-config-not-found');
+
+      // Force getConnection to return null (simulates data inconsistency)
+      ctx.connectionRepository.setForceGetConnectionNull(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toBe('Notion configuration not found.');
+    });
   });
 
   describe('GET /prompt-vault/prompts (listPrompts)', () => {
@@ -124,6 +280,42 @@ describe('Prompt Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.prompts).toHaveLength(0);
+    });
+
+    it('returns list of prompts when they exist', async () => {
+      const token = await createToken({ sub: 'user-list-with-prompts' });
+
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-list-with-prompts', 'vault-page');
+
+      // Set up some child prompt pages
+      ctx.notionApi.setPage('prompt-1', 'First Prompt', 'Content of first prompt');
+      ctx.notionApi.setPage('prompt-2', 'Second Prompt', 'Content of second prompt');
+      ctx.notionApi.addChildPage('vault-page', 'prompt-1');
+      ctx.notionApi.addChildPage('vault-page', 'prompt-2');
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          prompts: {
+            id: string;
+            title: string;
+            prompt: string;
+            url: string;
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompts).toHaveLength(2);
+      expect(body.data.prompts[0]?.title).toBe('First Prompt');
+      expect(body.data.prompts[1]?.title).toBe('Second Prompt');
     });
   });
 
@@ -242,6 +434,29 @@ describe('Prompt Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+
+    it('rejects requests with extra properties (strict mode)', async () => {
+      const token = await createToken({ sub: 'user-extra-props' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Valid Title',
+          prompt: 'Valid prompt',
+          extraField: 'should not be allowed',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
   });
 
   describe('GET /prompt-vault/prompts/:prompt_id (getPrompt)', () => {
@@ -282,6 +497,40 @@ describe('Prompt Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns prompt successfully when it exists', async () => {
+      const token = await createToken({ sub: 'user-get-success' });
+
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-get-success', 'page-id');
+
+      // Set up an existing prompt page
+      ctx.notionApi.setPage('existing-prompt-id', 'My Prompt', 'This is the prompt content');
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/prompts/existing-prompt-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          prompt: {
+            id: string;
+            title: string;
+            prompt: string;
+            url: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt.id).toBe('existing-prompt-id');
+      expect(body.data.prompt.title).toBe('My Prompt');
+      expect(body.data.prompt.prompt).toBe('This is the prompt content');
+      expect(body.data.prompt.url).toBe('https://notion.so/existing-prompt-id');
     });
   });
 
@@ -348,6 +597,44 @@ describe('Prompt Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('updates prompt successfully when it exists', async () => {
+      const token = await createToken({ sub: 'user-update-success' });
+
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-update-success', 'page-id');
+
+      // Set up an existing prompt page
+      ctx.notionApi.setPage('update-prompt-id', 'Original Title', 'Original content');
+
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/update-prompt-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Updated Title',
+          prompt: 'Updated content',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          prompt: {
+            id: string;
+            title: string;
+            prompt: string;
+            url: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt.id).toBe('update-prompt-id');
+      expect(body.data.prompt.title).toBe('Updated Title');
+      expect(body.data.prompt.prompt).toBe('Updated content');
+      expect(body.data.prompt.url).toBe('https://notion.so/update-prompt-id');
     });
   });
 });
