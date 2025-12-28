@@ -84,6 +84,13 @@ describe('encryption', () => {
       expect(() => decryptToken('two:parts')).toThrow('Invalid encrypted data format');
     });
 
+    it('throws on malformed input - empty parts', () => {
+      // Empty parts fail during decryption due to invalid IV/authTag
+      expect(() => decryptToken('::validpart')).toThrow();
+      expect(() => decryptToken('valid::part')).toThrow();
+      expect(() => decryptToken('valid:part:')).toThrow();
+    });
+
     it('throws on malformed input - too many parts', () => {
       expect(() => decryptToken('a:b:c:d')).toThrow('Invalid encrypted data format');
     });

@@ -96,6 +96,18 @@ describe('Auth0ClientImpl', () => {
       }
     });
 
+    it('returns INTERNAL_ERROR for error response with empty JSON body', async () => {
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {});
+
+      const result = await client.refreshAccessToken(REFRESH_TOKEN);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Auth0 token refresh failed');
+      }
+    });
+
     it('returns INTERNAL_ERROR on network failure', async () => {
       nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').replyWithError('Connection refused');
 

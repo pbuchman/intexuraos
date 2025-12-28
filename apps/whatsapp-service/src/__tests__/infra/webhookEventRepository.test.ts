@@ -182,5 +182,37 @@ describe('webhookEventRepository', () => {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
       }
     });
+
+    it('returns error when Firestore fails on get', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await getWebhookEvent('some-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when Firestore fails on update', async () => {
+      const saved = await saveWebhookEvent({
+        payload: {},
+        signatureValid: true,
+        receivedAt: new Date().toISOString(),
+        phoneNumberId: null,
+        status: 'PENDING',
+      });
+
+      if (!saved.ok) throw new Error('Setup failed');
+
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await updateWebhookEventStatus(saved.value.id, 'PROCESSED', {});
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
   });
 });

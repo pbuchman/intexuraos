@@ -7,8 +7,8 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
-import { FirestoreAuthTokenRepository } from '../infra/firestore/index.js';
+import { requireAuth, tryAuth } from '@intexuraos/common';
+import { getServices } from '../services.js';
 import { loadAuth0Config } from './shared.js';
 
 export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -167,11 +167,11 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // If user is authenticated, clear their stored refresh token
       // Best-effort: we don't require auth for logout (user might have expired token)
-      const user = request.user;
-      if (user !== undefined) {
+      const user = await tryAuth(request);
+      if (user !== null) {
         try {
-          const tokenRepo = new FirestoreAuthTokenRepository();
-          await tokenRepo.deleteTokens(user.userId);
+          const { authTokenRepository } = getServices();
+          await authTokenRepository.deleteTokens(user.userId);
         } catch {
           // Best-effort cleanup, failure is acceptable
         }
@@ -256,8 +256,8 @@ export const frontendRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Check if user has stored refresh token
       let hasRefreshToken = false;
       try {
-        const tokenRepo = new FirestoreAuthTokenRepository();
-        const result = await tokenRepo.hasRefreshToken(user.userId);
+        const { authTokenRepository } = getServices();
+        const result = await authTokenRepository.hasRefreshToken(user.userId);
         if (result.ok) {
           hasRefreshToken = result.value;
         }

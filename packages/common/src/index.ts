@@ -31,7 +31,12 @@ export { shouldLogRequest, registerQuietHealthCheckLogging } from './http/logger
 // Auth utilities
 export { type JwtConfig, type VerifiedJwt, verifyJwt, clearJwksCache } from './auth/jwt.js';
 
-export { type AuthUser, requireAuth, fastifyAuthPlugin } from './auth/fastifyAuthPlugin.js';
+export {
+  type AuthUser,
+  requireAuth,
+  tryAuth,
+  fastifyAuthPlugin,
+} from './auth/fastifyAuthPlugin.js';
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';

@@ -21,6 +21,9 @@ export class FakeAuthTokenRepository implements AuthTokenRepository {
   private tokens = new Map<string, AuthTokens>();
   private shouldFailGetRefreshToken = false;
   private shouldFailSaveTokens = false;
+  private shouldThrowOnDeleteTokens = false;
+  private shouldThrowOnHasRefreshToken = false;
+  private shouldFailHasRefreshToken = false;
 
   /**
    * Configure the fake to fail the next getRefreshToken call.
@@ -34,6 +37,27 @@ export class FakeAuthTokenRepository implements AuthTokenRepository {
    */
   setFailNextSaveTokens(fail: boolean): void {
     this.shouldFailSaveTokens = fail;
+  }
+
+  /**
+   * Configure the fake to throw an exception on deleteTokens (for best-effort error testing).
+   */
+  setThrowOnDeleteTokens(shouldThrow: boolean): void {
+    this.shouldThrowOnDeleteTokens = shouldThrow;
+  }
+
+  /**
+   * Configure the fake to throw an exception on hasRefreshToken (for best-effort error testing).
+   */
+  setThrowOnHasRefreshToken(shouldThrow: boolean): void {
+    this.shouldThrowOnHasRefreshToken = shouldThrow;
+  }
+
+  /**
+   * Configure the fake to return an error result on hasRefreshToken.
+   */
+  setFailHasRefreshToken(fail: boolean): void {
+    this.shouldFailHasRefreshToken = fail;
   }
 
   /**
@@ -88,11 +112,23 @@ export class FakeAuthTokenRepository implements AuthTokenRepository {
   }
 
   hasRefreshToken(userId: string): Promise<Result<boolean, AuthError>> {
+    if (this.shouldThrowOnHasRefreshToken) {
+      this.shouldThrowOnHasRefreshToken = false;
+      throw new Error('Simulated Firestore error on hasRefreshToken');
+    }
+    if (this.shouldFailHasRefreshToken) {
+      this.shouldFailHasRefreshToken = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated error' }));
+    }
     const tokens = this.tokens.get(userId);
     return Promise.resolve(ok(tokens !== undefined));
   }
 
   deleteTokens(userId: string): Promise<Result<void, AuthError>> {
+    if (this.shouldThrowOnDeleteTokens) {
+      this.shouldThrowOnDeleteTokens = false;
+      throw new Error('Simulated Firestore error on delete');
+    }
     this.tokens.delete(userId);
     return Promise.resolve(ok(undefined));
   }

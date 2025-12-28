@@ -61,6 +61,17 @@ describe('createConnection', () => {
       expect(result.error.code).toBe('INTERNAL_ERROR');
     }
   });
+
+  it('returns error when deleting existing connections fails', async () => {
+    signatureRepo.setFailNextDelete(true);
+
+    const result = await createConnection({ userId: 'user-123' }, signatureRepo);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INTERNAL_ERROR');
+    }
+  });
 });
 
 describe('processNotification', () => {
@@ -216,6 +227,74 @@ describe('processNotification', () => {
       expect(result.error.code).toBe('INTERNAL_ERROR');
     }
   });
+
+  it('returns error on duplicate check failure', async () => {
+    // Create a connection
+    const signature = 'test-signature-token';
+    await signatureRepo.save({
+      userId: 'user-123',
+      signatureHash: hashSignature(signature),
+    });
+
+    notificationRepo.setFailNextFind(true);
+
+    const result = await processNotification(
+      {
+        signature,
+        payload: {
+          source: 'tasker',
+          device: 'test-phone',
+          timestamp: Date.now(),
+          notification_id: 'notif-123',
+          post_time: '2024-01-01T00:00:00Z',
+          app: 'com.example.app',
+          title: 'Test Title',
+          text: 'Test Text',
+        },
+      },
+      signatureRepo,
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INTERNAL_ERROR');
+    }
+  });
+
+  it('returns error on save failure', async () => {
+    // Create a connection
+    const signature = 'test-signature-token';
+    await signatureRepo.save({
+      userId: 'user-123',
+      signatureHash: hashSignature(signature),
+    });
+
+    notificationRepo.setFailNextSave(true);
+
+    const result = await processNotification(
+      {
+        signature,
+        payload: {
+          source: 'tasker',
+          device: 'test-phone',
+          timestamp: Date.now(),
+          notification_id: 'notif-123',
+          post_time: '2024-01-01T00:00:00Z',
+          app: 'com.example.app',
+          title: 'Test Title',
+          text: 'Test Text',
+        },
+      },
+      signatureRepo,
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INTERNAL_ERROR');
+    }
+  });
 });
 
 describe('listNotifications', () => {
@@ -283,6 +362,47 @@ describe('listNotifications', () => {
     if (result.ok) {
       expect(result.value.notifications).toHaveLength(2);
       expect(result.value.nextCursor).toBeDefined();
+    }
+  });
+
+  it('uses cursor for pagination', async () => {
+    // Add 3 notifications
+    for (let i = 1; i <= 3; i++) {
+      notificationRepo.addNotification({
+        id: `notif-${String(i)}`,
+        userId: 'user-123',
+        source: 'tasker',
+        device: 'test-phone',
+        app: 'com.example.app',
+        title: `Title ${String(i)}`,
+        text: `Text ${String(i)}`,
+        timestamp: Date.now() + i,
+        postTime: '2024-01-01T00:00:00Z',
+        receivedAt: new Date(Date.now() + i).toISOString(),
+        notificationId: `ext-${String(i)}`,
+      });
+    }
+
+    // Get first page
+    const firstPage = await listNotifications({ userId: 'user-123', limit: 2 }, notificationRepo);
+    expect(firstPage.ok).toBe(true);
+    if (!firstPage.ok) return;
+    expect(firstPage.value.nextCursor).toBeDefined();
+
+    // Get second page using cursor - explicitly check cursor is defined
+    const cursor = firstPage.value.nextCursor;
+    expect(cursor).toBeDefined();
+    if (cursor === undefined) return;
+
+    const secondPage = await listNotifications(
+      { userId: 'user-123', limit: 2, cursor },
+      notificationRepo
+    );
+
+    expect(secondPage.ok).toBe(true);
+    if (secondPage.ok) {
+      // Second page should have remaining notification(s)
+      expect(secondPage.value.notifications.length).toBeGreaterThan(0);
     }
   });
 
@@ -369,6 +489,34 @@ describe('deleteNotification', () => {
 
   it('returns error on find failure', async () => {
     notificationRepo.setFailNextFind(true);
+
+    const result = await deleteNotification(
+      { notificationId: 'notif-123', userId: 'user-123' },
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INTERNAL_ERROR');
+    }
+  });
+
+  it('returns error on delete operation failure', async () => {
+    notificationRepo.addNotification({
+      id: 'notif-123',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'test-phone',
+      app: 'com.example.app',
+      title: 'Title',
+      text: 'Text',
+      timestamp: Date.now(),
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date().toISOString(),
+      notificationId: 'ext-1',
+    });
+
+    notificationRepo.setFailNextDelete(true);
 
     const result = await deleteNotification(
       { notificationId: 'notif-123', userId: 'user-123' },
