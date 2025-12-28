@@ -120,6 +120,52 @@ describe('ProcessAudioMessageUseCase', () => {
       const messages = messageRepository.getAll();
       expect(messages[0]?.metadata).toBeUndefined();
     });
+    it('handles audio with only senderName (no phoneNumberId)', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      const input = createTestInput({ senderName: 'Test User', phoneNumberId: null });
+      const result = await usecase.execute(input, logger);
+      expect(result.ok).toBe(true);
+      const messages = messageRepository.getAll();
+      expect(messages[0]?.metadata).toBeDefined();
+      expect(messages[0]?.metadata?.senderName).toBe('Test User');
+      expect(messages[0]?.metadata?.phoneNumberId).toBeUndefined();
+    });
+    it('handles audio with only phoneNumberId (no senderName)', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      const input = createTestInput({ senderName: null, phoneNumberId: '123456789012345' });
+      const result = await usecase.execute(input, logger);
+      expect(result.ok).toBe(true);
+      const messages = messageRepository.getAll();
+      expect(messages[0]?.metadata).toBeDefined();
+      expect(messages[0]?.metadata?.phoneNumberId).toBe('123456789012345');
+      expect(messages[0]?.metadata?.senderName).toBeUndefined();
+    });
+    it('handles unsupported audio format with fallback extension', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      // Set up media for unsupported MIME type
+      whatsappCloudApi.setMediaUrl('audio-media-id-123', {
+        url: 'https://example.com/media/audio.webm',
+        mimeType: 'audio/webm',
+        fileSize: 5000,
+      });
+      whatsappCloudApi.setMediaContent(
+        'https://example.com/media/audio.webm',
+        Buffer.from('fake-webm-content')
+      );
+      const input = createTestInput({
+        audioMedia: { id: 'audio-media-id-123', mimeType: 'audio/webm', sha256: 'abc123' },
+      });
+      const result = await usecase.execute(input, logger);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // The GCS path should use 'bin' as fallback extension for unsupported format
+        expect(result.value.gcsPath).toContain('.bin');
+        expect(result.value.mimeType).toBe('audio/webm');
+      }
+      const messages = messageRepository.getAll();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.media?.mimeType).toBe('audio/webm');
+    });
   });
   describe('error handling', () => {
     it('returns error when getMediaUrl fails', async () => {
