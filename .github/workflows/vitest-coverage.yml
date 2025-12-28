@@ -43,15 +43,21 @@ jobs:
         run: npm ci
 
       - name: Run base branch coverage
+        id: base-coverage
         working-directory: base-branch
-        run: npm run test:coverage
+        # continue-on-error allows trend comparison even if base has test failures
+        # This is expected when PR adds new tests or fixes broken tests
         continue-on-error: true
+        run: npm run test:coverage
 
       - name: Copy base coverage for comparison
         run: |
           mkdir -p coverage-base
           if [ -f base-branch/coverage/coverage-summary.json ]; then
             cp base-branch/coverage/coverage-summary.json coverage-base/coverage-summary.json
+            echo "Base coverage available for trend comparison"
+          else
+            echo "No base coverage found - trend comparison will be skipped"
           fi
 
       - name: Report Coverage
