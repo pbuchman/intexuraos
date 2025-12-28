@@ -72,6 +72,7 @@ jobs:
         if: always()
         uses: davelosert/vitest-coverage-report-action@v2
         with:
+          threshold-icons: "{75: '🔴', 85: '🟠', 90: '🟢'}"
           github-token: ${{ secrets.PAT_TOKEN }}
           file-coverage-mode: all
           json-summary-compare-path: coverage-base/coverage-summary.json
