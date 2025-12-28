@@ -26,7 +26,9 @@ export default tseslint.config(
     settings: {
       'boundaries/include': ['apps/*/src/**', 'packages/*/src/**'],
       'boundaries/elements': [
+        { type: 'http-contracts', pattern: ['packages/http-contracts/src/**'], mode: 'folder' },
         { type: 'common', pattern: ['packages/common/src/**'], mode: 'folder' },
+        { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
       'boundaries/ignore': ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**'],
@@ -37,10 +39,14 @@ export default tseslint.config(
         {
           default: 'disallow',
           rules: [
+            // http-contracts is a leaf package (no dependencies)
+            { from: 'http-contracts', allow: ['http-contracts'] },
             // common can only import from common
             { from: 'common', allow: ['common'] },
-            // apps can import from common (apps own their domain and infra)
-            { from: 'apps', allow: ['common', 'apps'] },
+            // http-server can import from common
+            { from: 'http-server', allow: ['http-server', 'common'] },
+            // apps can import from all packages
+            { from: 'apps', allow: ['common', 'http-contracts', 'http-server', 'apps'] },
           ],
         },
       ],

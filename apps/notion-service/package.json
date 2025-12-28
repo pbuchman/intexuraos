@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@intexuraos/common": "*",
+    "@intexuraos/http-contracts": "*",
+    "@intexuraos/http-server": "*",
     "@fastify/cors": "^10.0.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",

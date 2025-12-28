@@ -25,15 +25,19 @@ apps/           → Fastify services with colocated domain & infra
     infra/      → App-specific adapters (firestore, notion, auth0)
     routes/     → HTTP routes (transport layer)
 packages/
-  common/       → Shared utilities only (no domain logic)
+  common/         → Shared utilities only (no domain logic)
+  http-contracts/ → OpenAPI schemas, Fastify JSON schemas
+  http-server/    → Health checks, validation error handler
 terraform/      → Infrastructure as code
 docs/           → All documentation
 ```
 
 **Import rules** (enforced by `npm run verify:boundaries`):
 
+- `packages/http-contracts` → imports nothing (leaf package)
 - `packages/common` → imports nothing (leaf package)
-- `apps/*` → imports only from `@intexuraos/common`
+- `packages/http-server` → imports from `common` only
+- `apps/*` → imports from `common`, `http-contracts`, `http-server`
 - apps cannot import from other apps
 
 **App structure pattern:**
@@ -42,6 +46,27 @@ docs/           → All documentation
 - `src/infra/**` — adapters for external services (Firestore, Notion, Auth0)
 - `src/routes/**` — HTTP transport layer
 - `src/services.ts` — dependency injection / service container
+
+**Shared HTTP utilities (packages/http-server):**
+
+```ts-example
+// In server.ts
+import { registerCoreSchemas } from '@intexuraos/http-contracts';
+import {
+  checkSecrets,
+  checkFirestore,
+  buildHealthResponse,
+  createValidationErrorHandler,
+} from '@intexuraos/http-server';
+
+// Setup
+app.setErrorHandler(createValidationErrorHandler());
+registerCoreSchemas(app);
+
+// Health endpoint
+const checks = [checkSecrets(['AUTH_JWKS_URL']), await checkFirestore()];
+return buildHealthResponse(SERVICE_NAME, VERSION, checks);
+```
 
 ---
 

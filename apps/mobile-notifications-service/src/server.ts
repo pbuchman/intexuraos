@@ -6,33 +6,20 @@ import fastifyCors from '@fastify/cors';
 import {
   intexuraFastifyPlugin,
   fastifyAuthPlugin,
-  getErrorMessage,
-  getFirestore,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
+import { registerCoreSchemas } from '@intexuraos/http-contracts';
+import { checkFirestore, buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
 const SERVICE_NAME = 'mobile-notifications-service';
 const SERVICE_VERSION = '0.0.1';
 
-type HealthStatus = 'ok' | 'degraded' | 'down';
-
-interface HealthCheck {
-  name: string;
-  status: HealthStatus;
-  latencyMs: number;
-  details: Record<string, unknown> | null;
-}
-
-interface HealthResponse {
-  status: HealthStatus;
-  serviceName: string;
-  version: string;
-  timestamp: string;
-  checks: HealthCheck[];
-}
-
+/**
+ * Check required secrets using service-specific validation.
+ * Uses validateConfigEnv() which has service-specific validation logic.
+ */
 function checkSecrets(): HealthCheck {
   const start = Date.now();
   const missing = validateConfigEnv();
@@ -43,51 +30,6 @@ function checkSecrets(): HealthCheck {
     latencyMs: Date.now() - start,
     details: missing.length > 0 ? { missing } : null,
   };
-}
-
-async function checkFirestore(): Promise<HealthCheck> {
-  const start = Date.now();
-
-  // Skip actual Firestore check in test environment
-  if (process.env['NODE_ENV'] === 'test' || process.env['VITEST'] !== undefined) {
-    return {
-      name: 'firestore',
-      status: 'ok',
-      latencyMs: Date.now() - start,
-      details: { note: 'Skipped in test environment' },
-    };
-  }
-
-  try {
-    const db = getFirestore();
-    // Simple connectivity check with timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('Firestore health check timed out'));
-      }, 3000);
-    });
-
-    await Promise.race([db.listCollections(), timeoutPromise]);
-    return {
-      name: 'firestore',
-      status: 'ok',
-      latencyMs: Date.now() - start,
-      details: null,
-    };
-  } catch (error) {
-    return {
-      name: 'firestore',
-      status: 'down',
-      latencyMs: Date.now() - start,
-      details: { error: getErrorMessage(error) },
-    };
-  }
-}
-
-function computeOverallStatus(checks: HealthCheck[]): HealthStatus {
-  if (checks.some((c) => c.status === 'down')) return 'down';
-  if (checks.some((c) => c.status === 'degraded')) return 'degraded';
-  return 'ok';
 }
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
@@ -242,41 +184,8 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(intexuraFastifyPlugin);
 
-  // Register shared schemas for $ref usage in routes
-  app.addSchema({
-    $id: 'Diagnostics',
-    type: 'object',
-    properties: {
-      requestId: { type: 'string' },
-      durationMs: { type: 'number' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'ErrorCode',
-    type: 'string',
-    enum: [
-      'INVALID_REQUEST',
-      'UNAUTHORIZED',
-      'FORBIDDEN',
-      'NOT_FOUND',
-      'CONFLICT',
-      'DOWNSTREAM_ERROR',
-      'INTERNAL_ERROR',
-      'MISCONFIGURED',
-    ],
-  });
-
-  app.addSchema({
-    $id: 'ErrorBody',
-    type: 'object',
-    required: ['code', 'message'],
-    properties: {
-      code: { type: 'string' },
-      message: { type: 'string' },
-      details: { type: 'object' },
-    },
-  });
+  // Register core schemas for $ref usage in routes (Diagnostics, ErrorCode, ErrorBody)
+  registerCoreSchemas(app);
 
   // CORS for cross-origin API access (web app + api-docs-hub)
   await app.register(fastifyCors, {
@@ -336,15 +245,8 @@ export async function buildServer(): Promise<FastifyInstance> {
       const started = Date.now();
       const firestoreCheck = await checkFirestore();
       const checks: HealthCheck[] = [checkSecrets(), firestoreCheck];
-      const status = computeOverallStatus(checks);
 
-      const response: HealthResponse = {
-        status,
-        serviceName: SERVICE_NAME,
-        version: SERVICE_VERSION,
-        timestamp: new Date().toISOString(),
-        checks: checks.map((c) => c),
-      };
+      const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
 
       void reply.header('x-health-duration-ms', String(Date.now() - started));
       return await reply.type('application/json').send(response);

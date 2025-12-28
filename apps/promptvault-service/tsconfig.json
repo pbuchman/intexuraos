@@ -8,5 +8,9 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../../packages/common" }]
+  "references": [
+    { "path": "../../packages/common" },
+    { "path": "../../packages/http-contracts" },
+    { "path": "../../packages/http-server" }
+  ]
 }
