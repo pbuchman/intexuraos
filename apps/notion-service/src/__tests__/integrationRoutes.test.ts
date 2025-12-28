@@ -97,6 +97,49 @@ describe('Notion Integration Routes', () => {
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
+    it('returns 400 INVALID_REQUEST when promptVaultPageId is missing', async () => {
+      const token = await createToken({ sub: 'user-123' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'secret-notion-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns 400 INVALID_REQUEST when promptVaultPageId is empty string', async () => {
+      const token = await createToken({ sub: 'user-empty-page-id' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'secret-notion-token',
+          promptVaultPageId: '',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
     it('returns 401 UNAUTHORIZED when Notion token is invalid', async () => {
       const token = await createToken({ sub: 'user-unauthorized' });
 
