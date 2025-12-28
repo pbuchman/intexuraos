@@ -165,7 +165,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: true,
+    logger:
+      process.env['NODE_ENV'] === 'test'
+        ? false
+        : {
+            level: process.env['LOG_LEVEL'] ?? 'info',
+          },
     disableRequestLogging: true,
   });
 

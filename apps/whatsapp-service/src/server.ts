@@ -169,7 +169,12 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   const app = Fastify({
-    logger: true,
+    logger:
+      process.env['NODE_ENV'] === 'test'
+        ? false
+        : {
+            level: process.env['LOG_LEVEL'] ?? 'info',
+          },
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
   });
 
