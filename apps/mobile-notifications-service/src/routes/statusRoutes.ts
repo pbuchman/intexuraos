@@ -80,7 +80,13 @@ export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           { limit: 1 }
         );
-        if (notificationsResult.ok && notificationsResult.value.notifications.length > 0) {
+        if (!notificationsResult.ok) {
+          return await reply.fail(
+            notificationsResult.error.code,
+            notificationsResult.error.message
+          );
+        }
+        if (notificationsResult.value.notifications.length > 0) {
           const firstNotification = notificationsResult.value.notifications[0];
           if (firstNotification !== undefined) {
             lastNotificationAt = firstNotification.receivedAt;
