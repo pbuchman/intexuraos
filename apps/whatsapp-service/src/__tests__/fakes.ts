@@ -127,21 +127,21 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   private enforcePhoneUniqueness = false;
 
   /**
-   * Configure the fake to fail getMapping calls.
+   * Configure the fake to fail getMapping calls with an INTERNAL_ERROR to simulate downstream failures.
    */
   setFailGetMapping(fail: boolean): void {
     this.shouldFailGetMapping = fail;
   }
 
   /**
-   * Configure the fake to fail disconnectMapping with an INTERNAL_ERROR (not NOT_FOUND).
+   * Configure the fake to fail disconnectMapping calls with an INTERNAL_ERROR to simulate downstream failures.
    */
   setFailDisconnect(fail: boolean): void {
     this.shouldFailDisconnect = fail;
   }
 
   /**
-   * Configure the fake to fail saveMapping with an INTERNAL_ERROR (downstream error).
+   * Configure the fake to fail saveMapping calls with an INTERNAL_ERROR to simulate downstream failures.
    */
   setFailSaveMapping(fail: boolean): void {
     this.shouldFailSaveMapping = fail;
