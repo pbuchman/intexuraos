@@ -75,6 +75,17 @@ describe('promptApi', () => {
     mockGetNotionConnection.mockReset();
   });
 
+  // Type for pages.create call arguments
+  interface CreatePageCallArgs {
+    children: { type: string }[];
+  }
+
+  // Helper to extract code blocks from pages.create mock call
+  function getCodeBlocksFromCreateCall(): { type: string }[] {
+    const callArgs = mockPagesCreate.mock.calls[0] as [CreatePageCallArgs];
+    return callArgs[0].children.filter((c) => c.type === 'code');
+  }
+
   // Helper to set up a valid user context
   function setupValidUserContext(): void {
     mockIsNotionConnected.mockResolvedValue(ok(true));
@@ -223,9 +234,7 @@ describe('promptApi', () => {
       expect(result.ok).toBe(true);
       // The create call should have multiple code blocks
       expect(mockPagesCreate).toHaveBeenCalledTimes(1);
-      const callArgs = mockPagesCreate.mock.calls[0] as [{ children: { type: string }[] }];
-      // Count code blocks in children
-      const codeBlocks = callArgs[0].children.filter((c) => c.type === 'code');
+      const codeBlocks = getCodeBlocksFromCreateCall();
       expect(codeBlocks.length).toBeGreaterThan(1);
     });
 
@@ -730,8 +739,7 @@ describe('promptApi', () => {
       await createPrompt('user-1', 'Title', shortContent);
 
       expect(mockPagesCreate).toHaveBeenCalledTimes(1);
-      const callArgs = mockPagesCreate.mock.calls[0] as [{ children: { type: string }[] }];
-      const codeBlocks = callArgs[0].children.filter((c) => c.type === 'code');
+      const codeBlocks = getCodeBlocksFromCreateCall();
       expect(codeBlocks).toHaveLength(1);
     });
 
@@ -816,8 +824,7 @@ describe('promptApi', () => {
       await createPrompt('user-1', 'Title', content);
 
       expect(mockPagesCreate).toHaveBeenCalledTimes(1);
-      const callArgs = mockPagesCreate.mock.calls[0] as [{ children: { type: string }[] }];
-      const codeBlocks = callArgs[0].children.filter((c) => c.type === 'code');
+      const codeBlocks = getCodeBlocksFromCreateCall();
       expect(codeBlocks.length).toBeGreaterThan(1);
     });
   });
