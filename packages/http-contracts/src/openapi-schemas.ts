@@ -25,8 +25,17 @@ export const ERROR_CODES = [
  */
 export const ErrorCodeSchema = {
   type: 'string',
-  enum: ERROR_CODES,
-} as const;
+  enum: [
+    'INVALID_REQUEST',
+    'UNAUTHORIZED',
+    'FORBIDDEN',
+    'NOT_FOUND',
+    'CONFLICT',
+    'DOWNSTREAM_ERROR',
+    'INTERNAL_ERROR',
+    'MISCONFIGURED',
+  ],
+};
 
 /**
  * OpenAPI schema for Diagnostics object.
@@ -40,7 +49,7 @@ export const DiagnosticsSchema = {
     downstreamRequestId: { type: 'string' },
     endpointCalled: { type: 'string' },
   },
-} as const;
+};
 
 /**
  * OpenAPI schema for ErrorBody object.
@@ -53,7 +62,7 @@ export const ErrorBodySchema = {
     message: { type: 'string' },
     details: { type: 'object', additionalProperties: true },
   },
-} as const;
+};
 
 /**
  * OpenAPI schema for successful API response envelope.
@@ -66,7 +75,7 @@ export const ApiOkSchema = {
     diagnostics: { $ref: '#/components/schemas/Diagnostics' },
   },
   required: ['success', 'data'],
-} as const;
+};
 
 /**
  * OpenAPI schema for error API response envelope.
@@ -79,7 +88,7 @@ export const ApiErrorSchema = {
     diagnostics: { $ref: '#/components/schemas/Diagnostics' },
   },
   required: ['success', 'error'],
-} as const;
+};
 
 /**
  * OpenAPI schema for HealthCheck object.
@@ -93,7 +102,7 @@ export const HealthCheckSchema = {
     latencyMs: { type: 'number' },
     details: { type: 'object', nullable: true },
   },
-} as const;
+};
 
 /**
  * OpenAPI schema for HealthResponse object.
@@ -111,7 +120,7 @@ export const HealthResponseSchema = {
       items: { $ref: '#/components/schemas/HealthCheck' },
     },
   },
-} as const;
+};
 
 /**
  * Core OpenAPI component schemas used across all IntexuraOS services.
@@ -125,7 +134,7 @@ export const coreComponentSchemas = {
   ApiError: ApiErrorSchema,
   HealthCheck: HealthCheckSchema,
   HealthResponse: HealthResponseSchema,
-} as const;
+};
 
 /**
  * Security scheme for Bearer JWT authentication.
@@ -136,4 +145,4 @@ export const bearerAuthSecurityScheme = {
   bearerFormat: 'JWT',
   description:
     'JWT token validated via JWKS. Token must include valid iss (issuer), aud (audience), and sub (user ID) claims.',
-} as const;
+};

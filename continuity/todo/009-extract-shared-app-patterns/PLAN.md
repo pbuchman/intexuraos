@@ -13,29 +13,32 @@
 ### Task 1.1: Identify Duplicated Patterns
 
 **Files to analyze**:
+
 - `apps/promptvault-service/src/server.ts` (651 lines)
 - `apps/auth-service/src/server.ts` (389 lines)
 - `apps/notion-service/src/server.ts` (551 lines)
 
 **Common patterns identified**:
 
-| Pattern | Location | Lines |
-|---------|----------|-------|
+| Pattern                                                  | Location                        | Lines          |
+| -------------------------------------------------------- | ------------------------------- | -------------- |
 | OpenAPI component schemas (ErrorCode, Diagnostics, etc.) | server.ts buildOpenApiOptions() | ~80 lines each |
-| Fastify JSON schemas ($id-based) | server.ts app.addSchema() | ~50 lines each |
-| Health check types & functions | server.ts | ~80 lines each |
-| Validation error handler | server.ts setErrorHandler() | ~30 lines each |
+| Fastify JSON schemas ($id-based)                         | server.ts app.addSchema()       | ~50 lines each |
+| Health check types & functions                           | server.ts                       | ~80 lines each |
+| Validation error handler                                 | server.ts setErrorHandler()     | ~30 lines each |
 
 **Total duplicated**: ~240 lines × 3 services = ~720 lines
 
 ### Task 1.2: Define Package Boundaries
 
 **Package 1: `@intexuraos/http-contracts`**
+
 - OpenAPI schema definitions (JSON objects for swagger config)
 - Fastify JSON schemas with $id for route validation
 - No runtime dependencies (pure data)
 
 **Package 2: `@intexuraos/http-server`**
+
 - Health check types and functions
 - Validation error handler
 - Dependencies: @intexuraos/common, fastify
@@ -47,6 +50,7 @@
 ### Task 2.1: Create Package Structure
 
 **Files to create**:
+
 ```
 packages/http-contracts/
 ├── package.json
@@ -58,6 +62,7 @@ packages/http-contracts/
 ```
 
 **package.json**:
+
 ```json
 {
   "name": "@intexuraos/http-contracts",
@@ -76,6 +81,7 @@ packages/http-contracts/
 **Target**: `packages/http-contracts/src/openapi-schemas.ts`
 
 **Exports**:
+
 - `ERROR_CODES` — Array of error code strings
 - `ErrorCodeSchema` — OpenAPI schema for ErrorCode
 - `DiagnosticsSchema` — OpenAPI schema for Diagnostics
@@ -94,6 +100,7 @@ packages/http-contracts/
 **Target**: `packages/http-contracts/src/fastify-schemas.ts`
 
 **Exports**:
+
 - `fastifyDiagnosticsSchema` — Fastify schema with $id: 'Diagnostics'
 - `fastifyErrorCodeSchema` — Fastify schema with $id: 'ErrorCode'
 - `fastifyErrorBodySchema` — Fastify schema with $id: 'ErrorBody'
@@ -106,6 +113,7 @@ packages/http-contracts/
 ### Task 3.1: Create Package Structure
 
 **Files to create**:
+
 ```
 packages/http-server/
 ├── package.json
@@ -117,6 +125,7 @@ packages/http-server/
 ```
 
 **package.json**:
+
 ```json
 {
   "name": "@intexuraos/http-server",
@@ -139,6 +148,7 @@ packages/http-server/
 **Target**: `packages/http-server/src/health.ts`
 
 **Exports**:
+
 - `HealthStatus` — Type: 'ok' | 'degraded' | 'down'
 - `HealthCheck` — Interface for individual check result
 - `HealthResponse` — Interface for full health response
@@ -155,6 +165,7 @@ packages/http-server/
 **Target**: `packages/http-server/src/validation-handler.ts`
 
 **Exports**:
+
 - `createValidationErrorHandler()` — Returns Fastify error handler function
 
 ---
@@ -164,12 +175,13 @@ packages/http-server/
 ### Task 4.1: Update Root tsconfig.json
 
 Add references to new packages:
+
 ```json
 {
   "references": [
     { "path": "packages/common" },
     { "path": "packages/http-contracts" },
-    { "path": "packages/http-server" },
+    { "path": "packages/http-server" }
     // ... existing app references
   ]
 }
@@ -180,10 +192,12 @@ Add references to new packages:
 **File**: `eslint.config.js`
 
 **Changes**:
+
 1. Add new element types for http-contracts and http-server
 2. Update import rules to allow proper dependency flow
 
 **Dependency graph**:
+
 ```
 http-contracts (leaf, no dependencies)
        ↑
@@ -209,27 +223,29 @@ npm install
 **File**: `apps/promptvault-service/src/server.ts`
 
 **Add imports**:
+
 ```typescript
-import { 
-  coreComponentSchemas, 
+import {
+  coreComponentSchemas,
   bearerAuthSecurityScheme,
-  registerCoreSchemas 
+  registerCoreSchemas,
 } from '@intexuraos/http-contracts';
-import { 
-  checkSecrets, 
-  checkFirestore, 
+import {
+  checkSecrets,
+  checkFirestore,
   checkNotionSdk,
   computeOverallStatus,
   buildHealthResponse,
   createValidationErrorHandler,
   type HealthCheck,
-  type HealthResponse
+  type HealthResponse,
 } from '@intexuraos/http-server';
 ```
 
 ### Task 5.2: Replace Inline Definitions
 
 **Changes**:
+
 1. Remove local `HealthStatus`, `HealthCheck`, `HealthResponse` type definitions
 2. Remove local `checkSecrets`, `checkFirestore`, `checkNotionSdk`, `computeOverallStatus` functions
 3. Update `buildOpenApiOptions()` to use `coreComponentSchemas` spread
@@ -239,6 +255,7 @@ import {
 ### Task 5.3: Update promptvault-service tsconfig.json
 
 Add references to new packages:
+
 ```json
 {
   "references": [
@@ -252,12 +269,13 @@ Add references to new packages:
 ### Task 5.4: Update promptvault-service package.json
 
 Add dependencies:
+
 ```json
 {
   "dependencies": {
     "@intexuraos/common": "*",
     "@intexuraos/http-contracts": "*",
-    "@intexuraos/http-server": "*",
+    "@intexuraos/http-server": "*"
     // ... existing deps
   }
 }
@@ -341,16 +359,16 @@ Move `continuity/todo/009-extract-shared-app-patterns/` to `continuity/archive/`
 
 ## Estimated Effort
 
-| Phase | Tasks | Est. Hours |
-|-------|-------|------------|
-| 1 | 2 | 0.5 |
-| 2 | 3 | 1 |
-| 3 | 3 | 1 |
-| 4 | 3 | 0.5 |
-| 5 | 4 | 1 |
-| 6 | 5 | 0.5 |
-| 7 | 3 | 0.5 |
-| **Total** | **23** | **~5** |
+| Phase     | Tasks  | Est. Hours |
+| --------- | ------ | ---------- |
+| 1         | 2      | 0.5        |
+| 2         | 3      | 1          |
+| 3         | 3      | 1          |
+| 4         | 3      | 0.5        |
+| 5         | 4      | 1          |
+| 6         | 5      | 0.5        |
+| 7         | 3      | 0.5        |
+| **Total** | **23** | **~5**     |
 
 ---
 
