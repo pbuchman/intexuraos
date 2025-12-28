@@ -269,6 +269,46 @@ describe('WhatsApp Message Routes', () => {
       expect(diffMs).toBeGreaterThan(14 * 60 * 1000); // > 14 minutes
       expect(diffMs).toBeLessThan(16 * 60 * 1000); // < 16 minutes
     });
+
+    it('returns 502 when getSignedUrl fails', async () => {
+      const userId = 'user-signed-url-fail';
+      const token = await createToken({ sub: userId });
+      const gcsPath = 'whatsapp/user-signed-url-fail/msg/media.jpg';
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.signed-url-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-signed-url-fail',
+      });
+
+      // Configure fake to fail getSignedUrl
+      ctx.mediaStorage.setFailGetSignedUrl(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.mediaStorage.setFailGetSignedUrl(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getSignedUrl failure');
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/thumbnail', () => {
@@ -393,6 +433,47 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.url).toContain('storage.example.com/signed/');
       expect(body.data.url).toContain(thumbnailGcsPath);
       expect(body.data.expiresAt).toBeDefined();
+    });
+
+    it('returns 502 when getSignedUrl fails for thumbnail', async () => {
+      const userId = 'user-thumb-signed-url-fail';
+      const token = await createToken({ sub: userId });
+      const thumbnailGcsPath = 'whatsapp/user-thumb-signed-url-fail/msg/media_thumb.jpg';
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.thumb-signed-url-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user-thumb-signed-url-fail/msg/media.jpg',
+        thumbnailGcsPath,
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-thumb-signed-url-fail',
+      });
+
+      // Configure fake to fail getSignedUrl
+      ctx.mediaStorage.setFailGetSignedUrl(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.mediaStorage.setFailGetSignedUrl(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getSignedUrl failure');
     });
   });
 
@@ -592,6 +673,88 @@ describe('WhatsApp Message Routes', () => {
       const cleanupEvents = ctx.eventPublisher.getMediaCleanupEvents();
       expect(cleanupEvents.length).toBe(1);
       expect(cleanupEvents[0]?.gcsPaths).toEqual([gcsPath]);
+    });
+
+    it('returns 502 when getMessage fails during delete', async () => {
+      const userId = 'user-delete-get-fail';
+      const token = await createToken({ sub: userId });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.delete-get-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: 'Message for delete test',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-delete-get-fail',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Configure fake to fail getMessage
+      ctx.messageRepository.setFailGetMessage(true);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/whatsapp/messages/${messageId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.messageRepository.setFailGetMessage(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getMessage failure');
+    });
+
+    it('returns 502 when deleteMessage fails', async () => {
+      const userId = 'user-delete-fail';
+      const token = await createToken({ sub: userId });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.delete-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: 'Message for delete test',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-delete-fail',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Configure fake to fail deleteMessage
+      ctx.messageRepository.setFailDeleteMessage(true);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/whatsapp/messages/${messageId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.messageRepository.setFailDeleteMessage(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated deleteMessage failure');
     });
   });
 });
