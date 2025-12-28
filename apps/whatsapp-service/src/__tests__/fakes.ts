@@ -237,7 +237,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
     if (this.shouldFailFindUserByPhoneNumber) {
       return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR', message: 'Simulated findUserByPhoneNumber failure' })
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated user lookup failure' })
       );
     }
     // Normalize phone number to match stored format (without "+")

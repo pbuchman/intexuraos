@@ -641,7 +641,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Simulated findUserByPhoneNumber failure');
+        expect(result.error.message).toContain('Simulated user lookup failure');
       }
     });
 
