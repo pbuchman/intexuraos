@@ -24,7 +24,19 @@ vi.mock('@google-cloud/pubsub', () => {
   };
 });
 
-import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
+import { GcpPubSubPublisher, getLogLevel } from '../../infra/pubsub/index.js';
+
+describe('getLogLevel', () => {
+  it('returns silent for test environment', () => {
+    expect(getLogLevel('test')).toBe('silent');
+  });
+
+  it('returns info for non-test environments', () => {
+    expect(getLogLevel('development')).toBe('info');
+    expect(getLogLevel('production')).toBe('info');
+    expect(getLogLevel(undefined)).toBe('info');
+  });
+});
 
 describe('GcpPubSubPublisher', () => {
   let publisher: GcpPubSubPublisher;
