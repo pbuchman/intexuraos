@@ -36,9 +36,7 @@ export interface HealthResponse {
  */
 export function checkSecrets(required: string[]): HealthCheck {
   const start = Date.now();
-  const missing = required.filter(
-    (k) => process.env[k] === undefined || process.env[k] === ''
-  );
+  const missing = required.filter((k) => process.env[k] === undefined || process.env[k] === '');
 
   return {
     name: 'secrets',
@@ -56,10 +54,7 @@ export async function checkFirestore(): Promise<HealthCheck> {
   const start = Date.now();
 
   // Skip actual Firestore check in test environment
-  if (
-    process.env['NODE_ENV'] === 'test' ||
-    process.env['VITEST'] !== undefined
-  ) {
+  if (process.env['NODE_ENV'] === 'test' || process.env['VITEST'] !== undefined) {
     return {
       name: 'firestore',
       status: 'ok',

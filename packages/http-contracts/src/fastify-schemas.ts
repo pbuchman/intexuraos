@@ -20,7 +20,7 @@ export const fastifyDiagnosticsSchema = {
     downstreamRequestId: { type: 'string' },
     endpointCalled: { type: 'string' },
   },
-} as const;
+};
 
 /**
  * Fastify schema for ErrorCode with $id.
@@ -38,7 +38,7 @@ export const fastifyErrorCodeSchema = {
     'INTERNAL_ERROR',
     'MISCONFIGURED',
   ],
-} as const;
+};
 
 /**
  * Fastify schema for ErrorBody with $id.
@@ -52,7 +52,7 @@ export const fastifyErrorBodySchema = {
     message: { type: 'string' },
     details: { type: 'object', additionalProperties: true },
   },
-} as const;
+};
 
 /**
  * Register all core Fastify schemas on an app instance.
@@ -62,9 +62,7 @@ export const fastifyErrorBodySchema = {
  *   const app = Fastify();
  *   registerCoreSchemas(app);
  */
-export function registerCoreSchemas(app: {
-  addSchema: (schema: { $id: string }) => void;
-}): void {
+export function registerCoreSchemas(app: { addSchema: (schema: { $id: string }) => void }): void {
   app.addSchema(fastifyDiagnosticsSchema);
   app.addSchema(fastifyErrorCodeSchema);
   app.addSchema(fastifyErrorBodySchema);

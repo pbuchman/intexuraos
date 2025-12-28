@@ -14,6 +14,7 @@ Currently, each service (auth-service, promptvault-service, notion-service, etc.
 4. **Validation error handler** — setErrorHandler for Fastify validation errors
 
 This duplication leads to:
+
 - Inconsistency risk when updating one service but not others
 - Code maintenance burden
 - Harder onboarding for new services
