@@ -9,7 +9,7 @@ import {
   getNotionToken,
   isNotionConnected,
   disconnectNotion,
-} from '../../infra/firestore/notionConnectionRepository.js';
+} from '../../infra/firestore/index.js';
 import { createFakeFirestore, setFirestore, type FakeFirestore } from '@intexuraos/common';
 
 describe('notionConnectionRepository', () => {

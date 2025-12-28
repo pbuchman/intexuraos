@@ -2,7 +2,7 @@
  * Tests for ThumbnailGeneratorAdapter.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ThumbnailGeneratorAdapter } from '../../infra/media/thumbnailAdapter.js';
+import { ThumbnailGeneratorAdapter } from '../../infra/media/index.js';
 import * as thumbnailGenerator from '../../infra/media/thumbnailGenerator.js';
 import { ok, err } from '@intexuraos/common';
 

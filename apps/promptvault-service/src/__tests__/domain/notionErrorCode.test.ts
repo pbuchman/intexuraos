@@ -2,7 +2,7 @@
  * Tests for notionErrorCode.ts - isNotionErrorCode function.
  */
 import { describe, it, expect } from 'vitest';
-import { isNotionErrorCode, NOTION_ERROR_CODES } from '../../domain/promptvault/notionErrorCode.js';
+import { isNotionErrorCode, NOTION_ERROR_CODES } from '../../domain/promptvault/index.js';
 
 describe('isNotionErrorCode', () => {
   it('returns true for valid error codes', () => {

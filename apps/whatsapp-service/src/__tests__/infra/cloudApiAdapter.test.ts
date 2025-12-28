@@ -2,7 +2,7 @@
  * Tests for WhatsAppCloudApiAdapter.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WhatsAppCloudApiAdapter } from '../../infra/whatsapp/cloudApiAdapter.js';
+import { WhatsAppCloudApiAdapter } from '../../infra/whatsapp/index.js';
 import * as whatsappClient from '../../whatsappClient.js';
 
 vi.mock('../../whatsappClient.js', () => ({

@@ -7,7 +7,8 @@ import {
   type ProcessImageMessageInput,
   type ProcessImageMessageDeps,
   type ProcessImageMessageLogger,
-} from '../../domain/inbox/usecases/processImageMessage.js';
+  type WhatsAppWebhookEvent,
+} from '../../domain/inbox/index.js';
 import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppMessageRepository,
@@ -15,7 +16,6 @@ import {
   FakeWhatsAppCloudApiPort,
   FakeThumbnailGeneratorPort,
 } from '../fakes.js';
-import type { WhatsAppWebhookEvent } from '../../domain/inbox/ports/repositories.js';
 
 function createTestLogger(): ProcessImageMessageLogger {
   return {
