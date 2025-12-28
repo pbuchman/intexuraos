@@ -12,6 +12,7 @@
 import type { LinkPreviewState, LinkPreview } from '../models/LinkPreview.js';
 import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { LinkPreviewFetcherPort } from '../ports/linkPreviewFetcher.js';
+import { getErrorMessage } from '@intexuraos/common';
 
 /**
  * Maximum number of URLs to process per message.
@@ -166,7 +167,7 @@ export class ExtractLinkPreviewsUseCase {
         `Link preview extraction completed: ${String(successfulPreviews.length)}/${String(urls.length)} successful`
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = getErrorMessage(error);
       const errorState: LinkPreviewState = {
         status: 'failed',
         startedAt,

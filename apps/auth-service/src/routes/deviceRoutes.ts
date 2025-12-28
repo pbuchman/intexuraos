@@ -6,7 +6,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr, handleValidationError } from '@intexuraos/common';
+import { isErr, handleValidationError, getErrorMessage } from '@intexuraos/common';
 import type { AuthTokens, AuthTokenRepository } from '../domain/identity/index.js';
 import { getServices } from '../services.js';
 import {
@@ -127,10 +127,13 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const data = responseBody as DeviceStartResponse;
         return await reply.ok(data);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('DOWNSTREAM_ERROR', `Auth0 request failed: ${message}`, {
-          endpointCalled: deviceCodeUrl,
-        });
+        return await reply.fail(
+          'DOWNSTREAM_ERROR',
+          `Auth0 request failed: ${getErrorMessage(error)}`,
+          {
+            endpointCalled: deviceCodeUrl,
+          }
+        );
       }
     }
   );
@@ -263,10 +266,13 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         return await reply.ok(data);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('DOWNSTREAM_ERROR', `Auth0 request failed: ${message}`, {
-          endpointCalled: tokenUrl,
-        });
+        return await reply.fail(
+          'DOWNSTREAM_ERROR',
+          `Auth0 request failed: ${getErrorMessage(error)}`,
+          {
+            endpointCalled: tokenUrl,
+          }
+        );
       }
     }
   );

@@ -12,7 +12,7 @@
  * - Consider min_scale=1 for reliability
  */
 import { BatchClient } from '@speechmatics/batch-client';
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
 import pino from 'pino';
 import type {
   SpeechTranscriptionPort,
@@ -108,7 +108,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       });
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = getErrorMessage(error);
       const apiCall = createApiCall('submit', false, { error: errorMessage });
 
       logger.error(
@@ -203,7 +203,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       return ok(result);
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = getErrorMessage(error);
       const apiCall = createApiCall('poll', false, { error: errorMessage });
 
       logger.error(
@@ -265,7 +265,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       });
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = getErrorMessage(error);
       const apiCall = createApiCall('fetch_result', false, { error: errorMessage });
 
       logger.error(
