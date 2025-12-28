@@ -96,6 +96,84 @@ describe('Notion Integration Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+
+    it('returns 401 UNAUTHORIZED when Notion token is invalid', async () => {
+      const token = await createToken({ sub: 'user-unauthorized' });
+
+      // Set up the page but mark the token as unauthorized
+      ctx.notionApi.setPage('page-unauth', 'Test Page', 'Test content');
+      ctx.notionApi.setTokenUnauthorized('invalid-notion-token');
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'invalid-notion-token',
+          promptVaultPageId: 'page-unauth',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+      expect(body.error.message).toContain('Invalid Notion token');
+    });
+
+    it('returns 502 DOWNSTREAM_ERROR when Notion API returns unexpected error', async () => {
+      const token = await createToken({ sub: 'user-downstream' });
+
+      // Set up an unexpected error from the Notion API
+      ctx.notionApi.setNextError({ code: 'RATE_LIMITED', message: 'Too many requests' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'valid-token',
+          promptVaultPageId: 'any-page',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns 502 DOWNSTREAM_ERROR when repository fails to save', async () => {
+      const token = await createToken({ sub: 'user-repo-fail' });
+
+      // Set up a valid page but make the repository fail
+      ctx.notionApi.setPage('page-save-fail', 'Test Page', 'Test content');
+      ctx.connectionRepository.setFailNextSave(true);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'valid-token',
+          promptVaultPageId: 'page-save-fail',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('GET /notion/status', () => {
@@ -156,6 +234,25 @@ describe('Notion Integration Routes', () => {
       expect(body.data.connected).toBe(true);
       expect(body.data.promptVaultPageId).toBe('page-456');
     });
+
+    it('returns 502 DOWNSTREAM_ERROR when repository fails to get connection', async () => {
+      const token = await createToken({ sub: 'user-status-fail' });
+      ctx.connectionRepository.setFailNextGet(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/notion/status',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('DELETE /notion/disconnect', () => {
@@ -190,6 +287,39 @@ describe('Notion Integration Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(false);
+    });
+
+    it('returns 502 DOWNSTREAM_ERROR when repository fails to disconnect', async () => {
+      const token = await createToken({ sub: 'user-disconnect-fail' });
+
+      // Set up a connection first
+      ctx.notionApi.setPage('page-disconnect', 'Test Page', 'Test content');
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          notionToken: 'secret-token',
+          promptVaultPageId: 'page-disconnect',
+        },
+      });
+
+      // Make the repository fail on disconnect
+      ctx.connectionRepository.setFailNextDisconnect(true);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/notion/disconnect',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

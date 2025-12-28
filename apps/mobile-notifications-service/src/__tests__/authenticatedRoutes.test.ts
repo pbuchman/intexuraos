@@ -276,6 +276,60 @@ describe('Authenticated Routes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('uses cursor parameter for pagination', async () => {
+      const userId = 'user-list-cursor';
+      const token = await createToken({ sub: userId });
+
+      // Add multiple notifications
+      for (let i = 0; i < 5; i++) {
+        ctx.notificationRepo.addNotification({
+          id: `notif-cursor-${String(i)}`,
+          userId,
+          source: 'tasker',
+          device: 'phone',
+          app: 'com.example',
+          title: `Title ${String(i)}`,
+          text: 'Body',
+          timestamp: Date.now() + i,
+          postTime: '2025-01-01T12:00:00.000Z',
+          receivedAt: new Date(Date.now() + i).toISOString(),
+          notificationId: `ext-cursor-${String(i)}`,
+        });
+      }
+
+      // First request with limit to get a cursor
+      const firstResponse = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?limit=2',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(firstResponse.statusCode).toBe(200);
+      const firstBody = JSON.parse(firstResponse.body) as {
+        success: boolean;
+        data: { notifications: unknown[]; nextCursor: string | null };
+      };
+      expect(firstBody.success).toBe(true);
+      expect(firstBody.data.notifications).toHaveLength(2);
+
+      // If there's a cursor, use it for the next request
+      if (firstBody.data.nextCursor !== null) {
+        const secondResponse = await ctx.app.inject({
+          method: 'GET',
+          url: `/mobile-notifications?limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(secondResponse.statusCode).toBe(200);
+        const secondBody = JSON.parse(secondResponse.body) as {
+          success: boolean;
+          data: { notifications: unknown[]; nextCursor: string | null };
+        };
+        expect(secondBody.success).toBe(true);
+        expect(secondBody.data.notifications).toHaveLength(2);
+      }
+    });
   });
 
   describe('DELETE /mobile-notifications/:notification_id', () => {
@@ -343,6 +397,50 @@ describe('Authenticated Routes', () => {
       });
 
       expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 500 on repository find failure', async () => {
+      const token = await createToken({ sub: 'user-delete-find-fail' });
+      ctx.notificationRepo.setFailNextFind(true);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/mobile-notifications/any-notif',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 500 on repository delete failure', async () => {
+      const userId = 'user-delete-fail';
+      const token = await createToken({ sub: userId });
+
+      // Add a notification for this user
+      ctx.notificationRepo.addNotification({
+        id: 'notif-delete-fail',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: 'Test',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-delete-fail',
+      });
+
+      // Set the fake repo to fail on delete operation
+      ctx.notificationRepo.setFailNextDelete(true);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/mobile-notifications/notif-delete-fail',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 });
