@@ -121,6 +121,24 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRepository {
   private mappings = new Map<string, WhatsAppUserMappingPublic & { userId: string }>();
   private phoneIndex = new Map<string, string>();
+  private shouldThrowOnGetMapping = false;
+  private shouldFailFindUserByPhoneNumber = false;
+
+  /**
+   * Configure the fake to throw an exception on getMapping.
+   * Used to test unexpected error handling.
+   */
+  setThrowOnGetMapping(shouldThrow: boolean): void {
+    this.shouldThrowOnGetMapping = shouldThrow;
+  }
+
+  /**
+   * Configure the fake to fail findUserByPhoneNumber.
+   * Used to test user lookup error handling.
+   */
+  setFailFindUserByPhoneNumber(shouldFail: boolean): void {
+    this.shouldFailFindUserByPhoneNumber = shouldFail;
+  }
   private shouldFailGetMapping = false;
   private shouldFailDisconnect = false;
   private shouldFailSaveMapping = false;
@@ -211,6 +229,9 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+    if (this.shouldThrowOnGetMapping) {
+      throw new Error('Simulated unexpected error in getMapping');
+    }
     if (this.shouldFailGetMapping) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated getMapping failure' })
@@ -226,6 +247,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     if (this.shouldFailFindUserByPhoneNumber) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated findUserByPhoneNumber failure' })
+      );
+    }
+    if (this.shouldFailFindUserByPhoneNumber) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated user lookup failure' })
       );
     }
     // Normalize phone number to match stored format (without "+")
@@ -260,7 +286,6 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     this.shouldFailGetMapping = false;
     this.shouldFailDisconnect = false;
     this.shouldFailSaveMapping = false;
-    this.shouldFailFindUserByPhoneNumber = false;
     this.enforcePhoneUniqueness = false;
   }
 }
@@ -271,9 +296,19 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
 export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository {
   private messages = new Map<string, WhatsAppMessage>();
   private shouldFailSave = false;
+  private shouldFailGetMessage = false;
+  private shouldFailDeleteMessage = false;
 
   setFailSave(fail: boolean): void {
     this.shouldFailSave = fail;
+  }
+
+  setFailGetMessage(fail: boolean): void {
+    this.shouldFailGetMessage = fail;
+  }
+
+  setFailDeleteMessage(fail: boolean): void {
+    this.shouldFailDeleteMessage = fail;
   }
 
   saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
@@ -301,10 +336,20 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   }
 
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    if (this.shouldFailGetMessage) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessage failure' })
+      );
+    }
     return Promise.resolve(ok(this.messages.get(messageId) ?? null));
   }
 
   deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    if (this.shouldFailDeleteMessage) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated deleteMessage failure' })
+      );
+    }
     this.messages.delete(messageId);
     return Promise.resolve(ok(undefined));
   }
@@ -349,6 +394,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   clear(): void {
     this.messages.clear();
+    this.shouldFailSave = false;
   }
 }
 
@@ -360,6 +406,7 @@ export class FakeMediaStorage implements MediaStoragePort {
   private signedUrls = new Map<string, string>();
   private shouldFailUpload = false;
   private shouldFailThumbnailUpload = false;
+  private shouldFailGetSignedUrl = false;
 
   setFailUpload(fail: boolean): void {
     this.shouldFailUpload = fail;
@@ -367,6 +414,10 @@ export class FakeMediaStorage implements MediaStoragePort {
 
   setFailThumbnailUpload(fail: boolean): void {
     this.shouldFailThumbnailUpload = fail;
+  }
+
+  setFailGetSignedUrl(fail: boolean): void {
+    this.shouldFailGetSignedUrl = fail;
   }
 
   upload(
@@ -409,6 +460,11 @@ export class FakeMediaStorage implements MediaStoragePort {
   }
 
   getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, InboxError>> {
+    if (this.shouldFailGetSignedUrl) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getSignedUrl failure' })
+      );
+    }
     const url = `https://storage.example.com/signed/${gcsPath}`;
     this.signedUrls.set(gcsPath, url);
     return Promise.resolve(ok(url));
@@ -479,6 +535,11 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   private jobCounter = 0;
   private shouldFail = false;
   private failMessage = 'Fake transcription error';
+  private pollFailuresRemaining = 0;
+  private pollFailError: TranscriptionPortError = {
+    code: 'SERVICE_UNAVAILABLE',
+    message: 'Service temporarily unavailable',
+  };
 
   /**
    * Configure the fake to fail subsequent calls.
@@ -509,6 +570,20 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     if (job !== undefined) {
       job.status = 'rejected';
       job.error = error;
+    }
+  }
+
+  /**
+   * Configure the fake to fail the next N pollJob calls with a transient error.
+   * After the specified count, polls will succeed normally.
+   *
+   * @param count - Number of poll failures to simulate before allowing success
+   * @param error - Optional custom error to return on failure (defaults to SERVICE_UNAVAILABLE)
+   */
+  setPollFailures(count: number, error?: TranscriptionPortError): void {
+    this.pollFailuresRemaining = count;
+    if (error !== undefined) {
+      this.pollFailError = error;
     }
   }
 
@@ -548,6 +623,12 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   }
 
   pollJob(jobId: string): Promise<Result<TranscriptionJobPollResult, TranscriptionPortError>> {
+    // Simulate transient failures if configured
+    if (this.pollFailuresRemaining > 0) {
+      this.pollFailuresRemaining--;
+      return Promise.resolve(err(this.pollFailError));
+    }
+
     const job = this.jobs.get(jobId);
     if (job === undefined) {
       return Promise.resolve(
@@ -620,6 +701,11 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     this.jobs.clear();
     this.jobCounter = 0;
     this.shouldFail = false;
+    this.pollFailuresRemaining = 0;
+    this.pollFailError = {
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Service temporarily unavailable',
+    };
   }
 }
 

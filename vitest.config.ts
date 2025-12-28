@@ -5,6 +5,8 @@ export default defineConfig({
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    // Setup file to mock Firebase and suppress logging
+    setupFiles: ['./vitest.setup.ts'],
     // Run tests sequentially to avoid race conditions in shared state
     sequence: {
       shuffle: false,
@@ -14,7 +16,8 @@ export default defineConfig({
     hookTimeout: 30000,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html'],
+      reportOnFailure: true,
       include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts'],
       exclude: [
         // Test files (no coverage for tests themselves)

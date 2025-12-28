@@ -1,0 +1,78 @@
+name: Vitest Coverage Report
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    environment: copilot
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Checkout base branch for comparison
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base-branch
+
+      - name: Install base branch dependencies
+        working-directory: base-branch
+        run: npm ci
+
+      - name: Build base branch
+        working-directory: base-branch
+        run: npm run build
+
+      - name: Run base branch coverage
+        id: base-coverage
+        working-directory: base-branch
+        # continue-on-error allows trend comparison even if base has test failures
+        # This is expected when PR adds new tests or fixes broken tests
+        continue-on-error: true
+        run: npm run test:coverage
+
+      - name: Copy base coverage for comparison
+        run: |
+          mkdir -p coverage-base
+          if [ -f base-branch/coverage/coverage-summary.json ]; then
+            cp base-branch/coverage/coverage-summary.json coverage-base/coverage-summary.json
+            echo "Base coverage available for trend comparison"
+          else
+            echo "No base coverage found - trend comparison will be skipped"
+          fi
+
+      - name: Report Coverage
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          threshold-icons: "{75: '🔴', 85: '🟠', 90: '🟢'}"
+          github-token: ${{ secrets.PAT_TOKEN }}
+          file-coverage-mode: all
+          json-summary-compare-path: coverage-base/coverage-summary.json
