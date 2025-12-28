@@ -58,6 +58,16 @@ export {
   getPageWithPreview,
 } from './notion.js';
 
+// Notion connection repository
+export {
+  type NotionConnectionPublic,
+  saveNotionConnection,
+  getNotionConnection,
+  getNotionToken,
+  isNotionConnected,
+  disconnectNotion,
+} from './notionConnection.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
