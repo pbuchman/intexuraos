@@ -97,9 +97,9 @@ describe('httpClient utilities', () => {
       const mockRequest = vi.fn((_options, callback: ResponseCallback | undefined) => {
         const req = new EventEmitter() as MockRequest;
         req.end = vi.fn((_body: string, _encoding: string): void => {
-          // Create a mock response with undefined statusCode
+          // Create a mock response with undefined statusCode (by not setting it)
           const res = new EventEmitter() as MockResponse;
-          res.statusCode = undefined;
+          // Don't set statusCode - leave it undefined to test the ?? 0 fallback
 
           // Call the callback with our mock response
           if (callback !== undefined) {
