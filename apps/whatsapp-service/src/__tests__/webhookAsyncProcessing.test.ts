@@ -700,4 +700,380 @@ describe('Webhook async processing', () => {
       expect(sentMessages.length).toBeGreaterThan(0);
     });
   });
+
+  describe('text message error handling', () => {
+    it('marks event as FAILED when message save fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure message repository to fail save
+      ctx.messageRepository.setFailSave(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.failureDetails).toContain('Failed to save message');
+
+      // No message should be stored
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(0);
+    });
+  });
+
+  describe('unexpected error handling', () => {
+    it('handles unexpected exceptions in processWebhookAsync gracefully', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Configure user mapping repository to throw an unexpected exception
+      ctx.userMappingRepository.setThrowOnGetMapping(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      // Should still return 200 (webhook acknowledged) even if async processing throws
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be persisted (save happens before the error)
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      // Status remains PENDING because the error occurs before status update
+      // The catch block just logs the error
+      expect(events[0]?.status).toBe('PENDING');
+    });
+  });
+
+  describe('user lookup error handling', () => {
+    it('marks event as FAILED when findUserByPhoneNumber fails', async () => {
+      // Configure user mapping repository to fail findUserByPhoneNumber
+      ctx.userMappingRepository.setFailFindUserByPhoneNumber(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be marked as FAILED
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.failureDetails).toContain('Simulated user lookup failure');
+    });
+  });
+
+  describe('audio message without media info', () => {
+    it('ignores audio message without media info', async () => {
+      // Create an audio payload with missing media info by constructing manually
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.audio.noinfo',
+                      timestamp: '1234567890',
+                      type: 'audio',
+                      // Intentionally missing 'audio' field to simulate no media info
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be IGNORED because audio message has no media info
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
+    });
+  });
+
+  describe('text message without body', () => {
+    it('ignores text message without body', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.text.nobody',
+                      timestamp: '1234567890',
+                      type: 'text',
+                      // Missing 'text' field to simulate no body
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be IGNORED because text message has no body
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
+    });
+  });
+
+  describe('image message without media info', () => {
+    it('ignores image message without media info', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.image.noinfo',
+                      timestamp: '1234567890',
+                      type: 'image',
+                      // Missing 'image' field to simulate no media info
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be IGNORED because image message has no media info
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
+    });
+  });
+
+  describe('unsupported message type', () => {
+    it('ignores unsupported message type', async () => {
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.sticker.unsupported',
+                      timestamp: '1234567890',
+                      type: 'sticker',
+                      sticker: {
+                        id: 'sticker-media-id',
+                        mime_type: 'image/webp',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Wait for async processing
+      await waitForAsyncProcessing(200);
+
+      // Event should be IGNORED because sticker is not a supported message type
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
+    });
+  });
 });
