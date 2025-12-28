@@ -3,7 +3,7 @@
  * Implements EventPublisherPort for publishing events to Pub/Sub topics.
  */
 import { PubSub } from '@google-cloud/pubsub';
-import pino from 'pino';
+import pino, { type LevelWithSilent } from 'pino';
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
 import type {
   EventPublisherPort,
@@ -11,9 +11,17 @@ import type {
   InboxError,
 } from '../../domain/inbox/index.js';
 
+/**
+ * Gets the pino log level based on the current environment.
+ * Exported for testing.
+ */
+export function getLogLevel(nodeEnv: string | undefined): LevelWithSilent {
+  return nodeEnv === 'test' ? 'silent' : 'info';
+}
+
 const logger = pino({
   name: 'pubsub-publisher',
-  level: process.env['NODE_ENV'] === 'test' ? 'silent' : 'info',
+  level: getLogLevel(process.env['NODE_ENV']),
 });
 
 /**

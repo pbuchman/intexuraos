@@ -1,4 +1,4 @@
 /**
  * Pub/Sub infrastructure exports.
  */
-export { GcpPubSubPublisher } from './publisher.js';
+export { GcpPubSubPublisher, getLogLevel } from './publisher.js';
