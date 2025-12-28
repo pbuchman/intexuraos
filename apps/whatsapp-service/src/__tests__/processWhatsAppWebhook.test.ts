@@ -26,7 +26,8 @@ class FakeInboxNotesRepository implements InboxNotesRepository {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Fake error' }));
     }
     if (this.shouldReturnWithoutId) {
-      // Return note without id to test edge case
+      // Simulates edge case where external system (e.g., Notion API) creates a note
+      // but doesn't return an ID in the response
       return Promise.resolve(ok({ ...note }));
     }
     const created = { ...note, id: `note-${String(Date.now())}` };
@@ -182,7 +183,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
         object: 'whatsapp_business_account',
         entry: [],
       };
-      // Manually manipulate the array to have length but undefined element
+      // Create sparse array to test NO_ENTRY_DATA validation path.
+      // This can occur in malformed webhook payloads where array.length > 0 but array[0] is undefined.
       const entries = payload.entry as unknown[];
       entries.length = 1;
 
@@ -196,12 +198,12 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
     });
 
     it('ignores payloads where changes array has undefined first element', async () => {
-      // Create payload with sparse array in changes to trigger NO_CHANGE_DATA
       const payload: WhatsAppWebhookPayload = {
         object: 'whatsapp_business_account',
         entry: [{ id: 'entry-1', changes: [] }],
       };
-      // Manually manipulate the changes array to have length but undefined element
+      // Create sparse array to test NO_CHANGE_DATA validation path.
+      // This can occur in malformed webhook payloads where array.length > 0 but array[0] is undefined.
       const entry = payload.entry?.[0];
       if (entry !== undefined) {
         const changes = entry.changes as unknown[];
@@ -381,7 +383,6 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
                 value: {
                   messaging_product: 'whatsapp',
                   metadata: { phone_number_id: 'allowed-phone-id' },
-                  // Array with length > 0 but undefined first element
                   messages: [],
                 },
               },
@@ -389,8 +390,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
           },
         ],
       };
-      // Manually manipulate the array to have length but undefined element
-      // TypeScript types don't allow this directly, so we cast
+      // Create sparse array to test NO_MESSAGE_DATA validation path.
+      // This can occur in malformed webhook payloads where array.length > 0 but array[0] is undefined.
       const entry = payload.entry?.[0];
       if (entry?.changes?.[0]?.value.messages !== undefined) {
         const messages = entry.changes[0].value.messages as unknown[];
@@ -552,7 +553,8 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       const phone = '+1234567890';
       await mappingRepo.saveMapping('user-1', [phone]);
 
-      // Create payload without contacts profile name
+      // Tests fallback behavior when WhatsApp webhook doesn't include contact profile
+      // information. Ensures the system gracefully uses only phone number as sender.
       const payload: WhatsAppWebhookPayload = {
         object: 'whatsapp_business_account',
         entry: [
@@ -567,7 +569,7 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
                     display_phone_number: '+10000000000',
                     phone_number_id: 'allowed-phone-id',
                   },
-                  // No contacts array - sender name should be just the phone number
+                  // No contacts array provided
                   messages: [
                     {
                       from: phone,

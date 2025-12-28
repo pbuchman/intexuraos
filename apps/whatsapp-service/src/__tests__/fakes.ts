@@ -149,7 +149,8 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   /**
-   * Configure the fake to fail findUserByPhoneNumber calls with an INTERNAL_ERROR to simulate downstream failures.
+   * Configure the fake to fail findUserByPhoneNumber calls with an INTERNAL_ERROR.
+   * Simulates downstream failures such as database connection failures or external service timeouts.
    */
   setFailFindUserByPhoneNumber(fail: boolean): void {
     this.shouldFailFindUserByPhoneNumber = fail;
