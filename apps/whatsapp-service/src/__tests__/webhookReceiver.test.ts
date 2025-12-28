@@ -339,4 +339,74 @@ describe('POST /whatsapp/webhooks (webhook event receiver)', () => {
     const events = ctx.webhookEventRepository.getAll();
     expect(events[0]?.phoneNumberId).toBe('987654321098765');
   });
+
+  it('accepts webhook with unexpected message type gracefully', async () => {
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: '102290129340398', // Valid WABA ID
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: '15551234567',
+                  phone_number_id: '123456789012345', // Valid phone number ID
+                },
+                contacts: [
+                  {
+                    wa_id: '15551234567',
+                    profile: {
+                      name: 'Test User',
+                    },
+                  },
+                ],
+                messages: [
+                  {
+                    from: '15551234567',
+                    id: 'wamid.video.unexpected',
+                    timestamp: '1234567890',
+                    type: 'video',
+                    video: {
+                      id: 'video-media-id',
+                      mime_type: 'video/mp4',
+                      sha256: 'abc123',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const payloadString = JSON.stringify(payload);
+    const signature = createSignature(payloadString, testConfig.appSecret);
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/whatsapp/webhooks',
+      headers: {
+        'content-type': 'application/json',
+        'x-hub-signature-256': signature,
+      },
+      payload: payloadString,
+    });
+
+    // Should accept the webhook (return 200) but handle gracefully
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { received: boolean };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.received).toBe(true);
+
+    // Event should be persisted
+    const events = ctx.webhookEventRepository.getAll();
+    expect(events.length).toBe(1);
+  });
 });
