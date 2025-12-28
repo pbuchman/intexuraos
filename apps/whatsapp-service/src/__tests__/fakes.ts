@@ -185,9 +185,19 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
 export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository {
   private messages = new Map<string, WhatsAppMessage>();
   private shouldFailSave = false;
+  private shouldFailGetMessage = false;
+  private shouldFailDeleteMessage = false;
 
   setFailSave(fail: boolean): void {
     this.shouldFailSave = fail;
+  }
+
+  setFailGetMessage(fail: boolean): void {
+    this.shouldFailGetMessage = fail;
+  }
+
+  setFailDeleteMessage(fail: boolean): void {
+    this.shouldFailDeleteMessage = fail;
   }
 
   saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
@@ -215,10 +225,20 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   }
 
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+    if (this.shouldFailGetMessage) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessage failure' })
+      );
+    }
     return Promise.resolve(ok(this.messages.get(messageId) ?? null));
   }
 
   deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+    if (this.shouldFailDeleteMessage) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated deleteMessage failure' })
+      );
+    }
     this.messages.delete(messageId);
     return Promise.resolve(ok(undefined));
   }
@@ -274,6 +294,7 @@ export class FakeMediaStorage implements MediaStoragePort {
   private signedUrls = new Map<string, string>();
   private shouldFailUpload = false;
   private shouldFailThumbnailUpload = false;
+  private shouldFailGetSignedUrl = false;
 
   setFailUpload(fail: boolean): void {
     this.shouldFailUpload = fail;
@@ -281,6 +302,10 @@ export class FakeMediaStorage implements MediaStoragePort {
 
   setFailThumbnailUpload(fail: boolean): void {
     this.shouldFailThumbnailUpload = fail;
+  }
+
+  setFailGetSignedUrl(fail: boolean): void {
+    this.shouldFailGetSignedUrl = fail;
   }
 
   upload(
@@ -323,6 +348,11 @@ export class FakeMediaStorage implements MediaStoragePort {
   }
 
   getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, InboxError>> {
+    if (this.shouldFailGetSignedUrl) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getSignedUrl failure' })
+      );
+    }
     const url = `https://storage.example.com/signed/${gcsPath}`;
     this.signedUrls.set(gcsPath, url);
     return Promise.resolve(ok(url));
