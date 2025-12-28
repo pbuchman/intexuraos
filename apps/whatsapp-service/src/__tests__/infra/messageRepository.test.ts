@@ -142,6 +142,84 @@ describe('messageRepository', () => {
         expect(result.value.nextCursor).toBeDefined();
       }
     });
+
+    it('supports cursor-based pagination with valid cursor', async () => {
+      // Create 5 messages with unique, decreasing receivedAt timestamps
+      for (let i = 0; i < 5; i++) {
+        await saveMessage(
+          createTestMessage({
+            text: `Message ${String(i)}`,
+            receivedAt: new Date(Date.now() - i * 1000).toISOString(),
+          })
+        );
+      }
+
+      // Get first page with limit 2
+      const firstPage = await getMessagesByUser('user-123', { limit: 2 });
+      expect(firstPage.ok).toBe(true);
+      if (!firstPage.ok) throw new Error('First page failed');
+      expect(firstPage.value.messages.length).toBe(2);
+      expect(firstPage.value.nextCursor).toBeDefined();
+
+      // Ensure cursor is defined for use in next page
+      const cursor = firstPage.value.nextCursor;
+      if (cursor === undefined) throw new Error('Expected cursor to be defined');
+
+      // Use cursor for second page
+      const secondPage = await getMessagesByUser('user-123', {
+        limit: 2,
+        cursor,
+      });
+      expect(secondPage.ok).toBe(true);
+      if (secondPage.ok) {
+        expect(secondPage.value.messages.length).toBe(2);
+      }
+    });
+
+    it('ignores invalid base64 cursor and returns all results', async () => {
+      await saveMessage(createTestMessage({ text: 'Message 1' }));
+      await saveMessage(createTestMessage({ text: 'Message 2' }));
+
+      // Invalid base64 string - should be ignored, returning results from start
+      const result = await getMessagesByUser('user-123', {
+        cursor: '!!!invalid-base64!!!',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.messages.length).toBe(2);
+      }
+    });
+
+    it('ignores cursor with missing fields and returns all results', async () => {
+      await saveMessage(createTestMessage({ text: 'Message 1' }));
+      await saveMessage(createTestMessage({ text: 'Message 2' }));
+
+      // Valid base64 but missing required fields
+      const invalidCursor = Buffer.from(JSON.stringify({ foo: 'bar' })).toString('base64');
+      const result = await getMessagesByUser('user-123', { cursor: invalidCursor });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.messages.length).toBe(2);
+      }
+    });
+
+    it('ignores cursor with non-string fields and returns all results', async () => {
+      await saveMessage(createTestMessage({ text: 'Message 1' }));
+      await saveMessage(createTestMessage({ text: 'Message 2' }));
+
+      // Valid base64 but fields are not strings
+      const invalidCursor = Buffer.from(JSON.stringify({ receivedAt: 123, id: 456 })).toString(
+        'base64'
+      );
+      const result = await getMessagesByUser('user-123', { cursor: invalidCursor });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.messages.length).toBe(2);
+      }
+    });
   });
 
   describe('deleteMessage', () => {
