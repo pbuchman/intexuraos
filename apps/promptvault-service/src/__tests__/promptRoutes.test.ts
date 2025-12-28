@@ -37,6 +37,21 @@ describe('Prompt Routes', () => {
   const ctx = setupTestContext();
 
   describe('GET /prompt-vault/main-page', () => {
+    it('fails with UNAUTHORIZED when Authorization header is missing', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/main-page',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-main' });
 
@@ -347,6 +362,25 @@ describe('Prompt Routes', () => {
   });
 
   describe('POST /prompt-vault/prompts (createPrompt)', () => {
+    it('fails with UNAUTHORIZED when Authorization header is missing', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/prompt-vault/prompts',
+        payload: {
+          title: 'Test Prompt',
+          prompt: 'Test prompt content',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-create-prompt' });
 
@@ -540,6 +574,21 @@ describe('Prompt Routes', () => {
   });
 
   describe('GET /prompt-vault/prompts/:prompt_id (getPrompt)', () => {
+    it('fails with UNAUTHORIZED when Authorization header is missing', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/prompts/some-prompt-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-get-prompt' });
 
@@ -615,6 +664,24 @@ describe('Prompt Routes', () => {
   });
 
   describe('PATCH /prompt-vault/prompts/:prompt_id (updatePrompt)', () => {
+    it('fails with UNAUTHORIZED when Authorization header is missing', async () => {
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/some-prompt-id',
+        payload: {
+          title: 'Updated Title',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('fails with MISCONFIGURED when not connected', async () => {
       const token = await createToken({ sub: 'user-update-prompt' });
 
