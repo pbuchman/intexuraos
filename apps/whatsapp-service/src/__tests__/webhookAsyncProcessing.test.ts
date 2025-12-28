@@ -1076,4 +1076,426 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('IGNORED');
     });
   });
+
+  describe('branch coverage edge cases', () => {
+    it('handles payload without rawBody property (fallback to JSON.stringify)', async () => {
+      // This test covers the rawBody ?? JSON.stringify(request.body) branch
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      // Inject without rawBody set - Fastify should still handle it
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('handles text message without sender name (only phoneNumberId in metadata)', async () => {
+      // This test covers the case where senderName is null but phoneNumberId exists
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Create payload without contacts (no senderName) but with phoneNumberId
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  // No contacts array, so senderName will be null
+                  messages: [
+                    {
+                      from: '15551234567',
+                      // No id field - will use fallback
+                      timestamp: '1234567890',
+                      type: 'text',
+                      text: { body: 'Test message' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Message should be saved with metadata containing only phoneNumberId
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+      expect(messages[0]?.text).toBe('Test message');
+      expect(messages[0]?.metadata?.phoneNumberId).toBe('123456789012345');
+      expect(messages[0]?.metadata?.senderName).toBeUndefined();
+    });
+
+    it('handles message with missing waMessageId (uses fallback)', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Create payload without message id
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      // Missing 'id' field - will trigger fallback
+                      timestamp: '1234567890',
+                      type: 'text',
+                      text: { body: 'Test' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+      // waMessageId should use fallback pattern 'unknown-{eventId}'
+      expect(messages[0]?.waMessageId).toMatch(/^unknown-/);
+    });
+
+    it('handles message with missing timestamp and toNumber (uses fallbacks)', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Create payload without timestamp
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    // Missing display_phone_number - will use fallback
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.test',
+                      // Missing 'timestamp' field - will use fallback
+                      type: 'text',
+                      text: { body: 'Test' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      const messages = ctx.messageRepository.getAll();
+      expect(messages.length).toBe(1);
+      expect(messages[0]?.timestamp).toBe(''); // Empty string fallback
+      expect(messages[0]?.toNumber).toBe(''); // Empty string fallback
+    });
+
+    it('handles null wabaId in error message (uses "null" fallback)', async () => {
+      // Create payload with null WABA ID (missing entry)
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      // Should reject with 403
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('waba_id');
+      expect(body.error.message).toContain('null');
+    });
+
+    it('handles null phoneNumberId in error message (uses "null" fallback)', async () => {
+      // Create payload with valid WABA but missing phone_number_id
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398', // Valid WABA ID
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    // Missing phone_number_id
+                    display_phone_number: '15551234567',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      // Should reject with 403
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('phone_number_id');
+      expect(body.error.message).toContain('null');
+    });
+
+    it('handles null messageType in error message (uses "unknown" fallback)', async () => {
+      // Create payload with missing message type
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.test',
+                      timestamp: '1234567890',
+                      // Missing 'type' field
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Event should be IGNORED with 'unknown' in message
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.ignoredReason?.message).toContain('unknown');
+    });
+
+    it('handles confirmation message with null originalMessageId (uses undefined fallback)', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      // Create payload without message id (originalMessageId will be null)
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15551234567',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [
+                    {
+                      wa_id: '15551234567',
+                      profile: {
+                        name: 'Test User',
+                      },
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      // Missing 'id' field - originalMessageId will be null
+                      timestamp: '1234567890',
+                      type: 'text',
+                      text: { body: 'Test' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await waitForAsyncProcessing(200);
+
+      // Confirmation message should be sent even without originalMessageId
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+    });
+  });
 });
