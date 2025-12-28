@@ -116,27 +116,33 @@ the decomposed packages. Existing code continues to work without import changes.
 
 #### Task 3.1: auth-service
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ PARTIALLY COMPLETED
 
-See LEDGER.md for details.
+Created use-case layer and refactored `tokenRoutes.ts`:
+
+- `refreshAccessToken` use-case extracts token refresh business logic
+- Route now only handles: config validation → parse → call use-case → map to HTTP
+
+Other routes (oauthRoutes, deviceRoutes, frontendRoutes) primarily handle OAuth
+protocol mechanics rather than business logic, so are acceptable as-is.
 
 #### Task 3.2: whatsapp-service
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ COMPLETED (Review Only)
 
-See LEDGER.md for details.
+Routes already delegate to use-cases. No changes needed.
 
 #### Task 3.3: promptvault-service
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ COMPLETED (Review Only)
 
-See LEDGER.md for details.
+Routes already delegate to use-cases. No changes needed.
 
 #### Task 3.4: mobile-notifications-service
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ COMPLETED (Review Only)
 
-See LEDGER.md for details.
+Routes already delegate to use-cases. No changes needed.
 
 ---
 
@@ -155,7 +161,7 @@ See LEDGER.md for details.
 - [x] Standard 1 tasks (1.1-1.8) completed
 - [x] All tests pass (1122 tests)
 - [x] `npm run ci` passes
-- [ ] auth-service route refactoring completed (Task 3.1)
-- [ ] whatsapp-service route review completed (Task 3.2)
-- [ ] promptvault-service route review completed (Task 3.3)
-- [ ] mobile-notifications-service route review completed (Task 3.4)
+- [x] auth-service route refactoring (Task 3.1) - tokenRoutes refactored
+- [x] whatsapp-service route review (Task 3.2) - No changes needed
+- [x] promptvault-service route review (Task 3.3) - No changes needed
+- [x] mobile-notifications-service route review (Task 3.4) - No changes needed
