@@ -167,6 +167,14 @@ describe('shared utilities', () => {
         expect(result.normalized).toBe('33612345678');
         expect(result.country).toBe('FR');
       });
+
+      it('accepts valid international premium rate number without country', () => {
+        // +979 is International Premium Rate service, which parses as valid but has no country
+        const result = validatePhoneNumber('+979123456789');
+        expect(result.valid).toBe(true);
+        expect(result.normalized).toBe('979123456789');
+        expect(result.country).toBeUndefined();
+      });
     });
 
     describe('edge cases', () => {
@@ -185,6 +193,14 @@ describe('shared utilities', () => {
       it('rejects invalid number', () => {
         const result = validatePhoneNumber('+1234');
         expect(result.valid).toBe(false);
+        expect(result.error).toContain('Invalid');
+      });
+
+      it('rejects non-numeric input that causes parse error', () => {
+        // Input like "+abc" causes parsePhoneNumberWithError to throw NOT_A_NUMBER
+        const result = validatePhoneNumber('+abc');
+        expect(result.valid).toBe(false);
+        expect(result.normalized).toBe(''); // Only digits remain after normalization
         expect(result.error).toContain('Invalid');
       });
     });
@@ -519,6 +535,13 @@ describe('shared utilities', () => {
       };
       expect(extractMessageTimestamp(payload)).toBeNull();
     });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractMessageTimestamp(payload)).toBeNull();
+    });
   });
 
   describe('extractSenderName', () => {
@@ -582,6 +605,13 @@ describe('shared utilities', () => {
     it('returns null for non-string type', () => {
       const payload = {
         entry: [{ changes: [{ value: { messages: [{ type: 123 }] } }] }],
+      };
+      expect(extractMessageType(payload)).toBeNull();
+    });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
       };
       expect(extractMessageType(payload)).toBeNull();
     });
@@ -690,6 +720,13 @@ describe('shared utilities', () => {
       };
       expect(extractImageMedia(payload)).toBeNull();
     });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractImageMedia(payload)).toBeNull();
+    });
   });
 
   describe('extractAudioMedia', () => {
@@ -790,6 +827,13 @@ describe('shared utilities', () => {
             ],
           },
         ],
+      };
+      expect(extractAudioMedia(payload)).toBeNull();
+    });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
       };
       expect(extractAudioMedia(payload)).toBeNull();
     });
