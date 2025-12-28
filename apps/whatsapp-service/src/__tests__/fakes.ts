@@ -121,14 +121,71 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRepository {
   private mappings = new Map<string, WhatsAppUserMappingPublic & { userId: string }>();
   private phoneIndex = new Map<string, string>();
+  private shouldFailGetMapping = false;
+  private shouldFailDisconnect = false;
+  private shouldFailSaveMapping = false;
+  private enforcePhoneUniqueness = false;
+
+  /**
+   * Configure the fake to fail getMapping calls.
+   */
+  setFailGetMapping(fail: boolean): void {
+    this.shouldFailGetMapping = fail;
+  }
+
+  /**
+   * Configure the fake to fail disconnectMapping with an INTERNAL_ERROR (not NOT_FOUND).
+   */
+  setFailDisconnect(fail: boolean): void {
+    this.shouldFailDisconnect = fail;
+  }
+
+  /**
+   * Configure the fake to fail saveMapping with an INTERNAL_ERROR (downstream error).
+   */
+  setFailSaveMapping(fail: boolean): void {
+    this.shouldFailSaveMapping = fail;
+  }
+
+  /**
+   * Configure the fake to enforce phone number uniqueness (simulates real Firestore behavior).
+   * When enabled, saveMapping will fail if a phone number is already mapped to a different user.
+   */
+  setEnforcePhoneUniqueness(enforce: boolean): void {
+    this.enforcePhoneUniqueness = enforce;
+  }
 
   saveMapping(
     userId: string,
     phoneNumbers: string[]
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+    // Simulate downstream failure
+    if (this.shouldFailSaveMapping) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated saveMapping failure' })
+      );
+    }
+
     const now = new Date().toISOString();
     // Normalize phone numbers (remove leading "+") to match real implementation
     const normalizedPhoneNumbers = phoneNumbers.map(normalizePhoneNumber);
+
+    // Check for phone number conflicts if uniqueness is enforced
+    if (this.enforcePhoneUniqueness) {
+      for (const phone of normalizedPhoneNumbers) {
+        const existingUserId = this.phoneIndex.get(phone);
+        if (existingUserId !== undefined && existingUserId !== userId) {
+          return Promise.resolve(
+            err({
+              code: 'VALIDATION_ERROR',
+              message: `Phone number ${phone} is already mapped to another user`,
+              details: { phoneNumber: phone, existingUserId },
+            })
+          );
+        }
+      }
+    }
+
     const mapping = {
       userId,
       phoneNumbers: normalizedPhoneNumbers,
@@ -145,6 +202,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+    if (this.shouldFailGetMapping) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMapping failure' })
+      );
+    }
     const mapping = this.mappings.get(userId);
     if (mapping === undefined) return Promise.resolve(ok(null));
     const { userId: _, ...publicMapping } = mapping;
@@ -158,6 +220,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+    if (this.shouldFailDisconnect) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated disconnectMapping failure' })
+      );
+    }
     const mapping = this.mappings.get(userId);
     if (mapping === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Mapping not found' }));
@@ -176,6 +243,10 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   clear(): void {
     this.mappings.clear();
     this.phoneIndex.clear();
+    this.shouldFailGetMapping = false;
+    this.shouldFailDisconnect = false;
+    this.shouldFailSaveMapping = false;
+    this.enforcePhoneUniqueness = false;
   }
 }
 

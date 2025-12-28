@@ -107,6 +107,88 @@ describe('WhatsApp Mapping Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.phoneNumbers).toEqual(['12125552222']);
     });
+
+    it('returns 400 when phone number format is invalid', async () => {
+      const token = await createToken({ sub: 'user-invalid-phone' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          phoneNumbers: ['invalid-not-a-phone'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Invalid phone number format');
+    });
+
+    it('returns 409 when phone number is already mapped to another user', async () => {
+      // Enable phone uniqueness enforcement in the fake repository
+      ctx.userMappingRepository.setEnforcePhoneUniqueness(true);
+
+      // First user claims the phone number
+      const token1 = await createToken({ sub: 'user-first' });
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/connect',
+        headers: { authorization: `Bearer ${token1}` },
+        payload: {
+          phoneNumbers: ['+12125559999'],
+        },
+      });
+
+      // Second user tries to claim the same phone number
+      const token2 = await createToken({ sub: 'user-second' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/connect',
+        headers: { authorization: `Bearer ${token2}` },
+        payload: {
+          phoneNumbers: ['+12125559999'],
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('already mapped');
+    });
+
+    it('returns 502 when saveMapping fails with downstream error', async () => {
+      const token = await createToken({ sub: 'user-save-error' });
+
+      // Configure the fake to fail saveMapping with INTERNAL_ERROR
+      ctx.userMappingRepository.setFailSaveMapping(true);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          phoneNumbers: ['+12125558888'],
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('GET /whatsapp/status', () => {
@@ -174,6 +256,27 @@ describe('WhatsApp Mapping Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.phoneNumbers).toEqual(['12125553333']);
       expect(body.data.connected).toBe(true);
+    });
+
+    it('returns 502 when getMapping fails with downstream error', async () => {
+      const token = await createToken({ sub: 'user-downstream-error' });
+
+      // Configure the fake to fail getMapping
+      ctx.userMappingRepository.setFailGetMapping(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/status',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 
@@ -279,6 +382,38 @@ describe('WhatsApp Mapping Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(false);
+    });
+
+    it('returns 502 when disconnectMapping fails with downstream error', async () => {
+      const token = await createToken({ sub: 'user-disconnect-error' });
+
+      // Create mapping first
+      await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/connect',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          phoneNumbers: ['+12125556666'],
+        },
+      });
+
+      // Configure the fake to fail disconnectMapping with INTERNAL_ERROR (not NOT_FOUND)
+      ctx.userMappingRepository.setFailDisconnect(true);
+
+      // Try to disconnect
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/whatsapp/disconnect',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });
