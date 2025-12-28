@@ -7,8 +7,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth, handleValidationError } from '@intexuraos/common';
-import { connectRequestSchema } from './schemas.js';
+import { requireAuth } from '@intexuraos/common';
 import { getServices } from '../services.js';
 
 export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -71,12 +70,11 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const parseResult = connectRequestSchema.safeParse(request.body);
-      if (!parseResult.success) {
-        return await handleValidationError(parseResult.error, reply);
-      }
-
-      const { notionToken, promptVaultPageId } = parseResult.data;
+      // Fastify JSON schema validation ensures body is valid before handler runs
+      const { notionToken, promptVaultPageId } = request.body as {
+        notionToken: string;
+        promptVaultPageId: string;
+      };
       const { connectionRepository, notionApi } = getServices();
 
       // Validate page access BEFORE saving connection
