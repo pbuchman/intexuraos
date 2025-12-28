@@ -2,6 +2,8 @@
   "files": [],
   "references": [
     { "path": "packages/common" },
+    { "path": "packages/http-contracts" },
+    { "path": "packages/http-server" },
     { "path": "apps/auth-service" },
     { "path": "apps/promptvault-service" },
     { "path": "apps/whatsapp-service" },
