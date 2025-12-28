@@ -161,7 +161,7 @@ describe('notionConnectionRepository', () => {
   });
 
   describe('error handling', () => {
-    it('returns error when Firestore fails', async () => {
+    it('returns error when saveNotionConnection fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('DB unavailable') });
 
       const result = await saveNotionConnection('user', 'page', 'token');
@@ -170,6 +170,51 @@ describe('notionConnectionRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('DB unavailable');
+      }
+    });
+
+    it('returns error when getNotionConnection fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await getNotionConnection('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when getNotionToken fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await getNotionToken('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when isNotionConnected fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await isNotionConnected('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when disconnectNotion fails', async () => {
+      await saveNotionConnection('user-123', 'page', 'token');
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await disconnectNotion('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
       }
     });
   });

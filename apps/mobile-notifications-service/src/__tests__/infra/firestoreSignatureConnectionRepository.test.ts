@@ -200,4 +200,72 @@ describe('FirestoreSignatureConnectionRepository', () => {
       }
     });
   });
+
+  describe('error handling', () => {
+    it('returns error when save fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Write error') });
+
+      const result = await repository.save(createTestInput());
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when findBySignatureHash fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await repository.findBySignatureHash('hash-abc');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when findByUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await repository.findByUserId('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when delete fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete error') });
+
+      const result = await repository.delete('some-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when deleteByUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete error') });
+
+      const result = await repository.deleteByUserId('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when existsByUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await repository.existsByUserId('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+  });
 });

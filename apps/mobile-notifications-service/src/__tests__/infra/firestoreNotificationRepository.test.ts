@@ -194,4 +194,50 @@ describe('FirestoreNotificationRepository', () => {
       expect(result.ok).toBe(true);
     });
   });
+
+  describe('error handling', () => {
+    it('returns error when findById fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await repository.findById('some-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when findByUserIdPaginated fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await repository.findByUserIdPaginated('user-123', { limit: 10 });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when existsByNotificationIdAndUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await repository.existsByNotificationIdAndUserId('notif-123', 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns error when delete fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete error') });
+
+      const result = await repository.delete('some-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+  });
 });

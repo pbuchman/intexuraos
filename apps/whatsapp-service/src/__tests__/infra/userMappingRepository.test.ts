@@ -174,10 +174,55 @@ describe('userMappingRepository', () => {
   });
 
   describe('error handling', () => {
-    it('returns error when Firestore fails', async () => {
+    it('returns error when saveUserMapping fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('DB error') });
 
       const result = await saveUserMapping('user-123', ['15551234567']);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when getUserMapping fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await getUserMapping('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when findUserByPhoneNumber fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await findUserByPhoneNumber('15551234567');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when disconnectUserMapping fails', async () => {
+      await saveUserMapping('user-123', ['15551234567']);
+      fakeFirestore.configure({ errorToThrow: new Error('Update error') });
+
+      const result = await disconnectUserMapping('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when isUserConnected fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await isUserConnected('user-123');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

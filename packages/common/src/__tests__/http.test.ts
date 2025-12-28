@@ -111,6 +111,24 @@ describe('Request ID', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
   });
+
+  it('generates UUID when array header has empty first element', () => {
+    const headers = { [REQUEST_ID_HEADER]: ['', 'second-id'] };
+    const requestId = getRequestId(headers);
+
+    expect(requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+  });
+
+  it('generates UUID when array header is empty', () => {
+    const headers = { [REQUEST_ID_HEADER]: [] as string[] };
+    const requestId = getRequestId(headers);
+
+    expect(requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+  });
 });
 
 describe('IntexuraOSError', () => {

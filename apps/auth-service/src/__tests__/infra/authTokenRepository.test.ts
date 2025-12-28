@@ -186,7 +186,7 @@ describe('FirestoreAuthTokenRepository', () => {
   });
 
   describe('error handling', () => {
-    it('returns error when Firestore fails', async () => {
+    it('returns error when saveTokens fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Connection failed') });
 
       const result = await repo.saveTokens('user-123', createTestTokens());
@@ -195,6 +195,54 @@ describe('FirestoreAuthTokenRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Connection failed');
+      }
+    });
+
+    it('returns error when getTokenMetadata fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await repo.getTokenMetadata('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Read failed');
+      }
+    });
+
+    it('returns error when getRefreshToken fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await repo.getRefreshToken('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Read failed');
+      }
+    });
+
+    it('returns error when hasRefreshToken fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await repo.hasRefreshToken('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Read failed');
+      }
+    });
+
+    it('returns error when deleteTokens fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
+
+      const result = await repo.deleteTokens('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Delete failed');
       }
     });
   });

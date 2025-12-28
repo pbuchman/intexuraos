@@ -90,6 +90,37 @@ export async function requireAuth(
 }
 
 /**
+ * Try to authenticate a request without failing if authentication fails.
+ * Returns the authenticated user if token is valid, or null if not.
+ * Does not send any error response - useful for optional auth scenarios.
+ */
+export async function tryAuth(request: FastifyRequest): Promise<AuthUser | null> {
+  const jwtConfig = request.server.jwtConfig;
+
+  if (jwtConfig === null) {
+    return null;
+  }
+
+  const token = extractBearerToken(request.headers.authorization);
+  if (token === null) {
+    return null;
+  }
+
+  try {
+    const verified = await verifyJwt(token, jwtConfig);
+    const user: AuthUser = {
+      userId: verified.sub,
+      claims: verified.claims,
+    };
+    request.user = user;
+    return user;
+  } catch {
+    // Token validation failed, but we don't fail the request
+    return null;
+  }
+}
+
+/**
  * Auth plugin that configures JWT validation from environment.
  */
 const authPlugin: FastifyPluginCallback = (

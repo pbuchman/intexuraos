@@ -25,6 +25,8 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
   private idCounter = 1;
   private shouldFailSave = false;
   private shouldFailFind = false;
+  private shouldFailExists = false;
+  private shouldFailDelete = false;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -32,6 +34,14 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
 
   setFailNextFind(fail: boolean): void {
     this.shouldFailFind = fail;
+  }
+
+  setFailNextExists(fail: boolean): void {
+    this.shouldFailExists = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
   }
 
   save(
@@ -90,8 +100,8 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
   }
 
   deleteByUserId(userId: string): Promise<Result<number, RepositoryError>> {
-    if (this.shouldFailFind) {
-      this.shouldFailFind = false;
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
     }
 
@@ -106,9 +116,9 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
   }
 
   existsByUserId(userId: string): Promise<Result<boolean, RepositoryError>> {
-    if (this.shouldFailFind) {
-      this.shouldFailFind = false;
-      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
+    if (this.shouldFailExists) {
+      this.shouldFailExists = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated exists failure' }));
     }
 
     for (const conn of this.connections.values()) {
