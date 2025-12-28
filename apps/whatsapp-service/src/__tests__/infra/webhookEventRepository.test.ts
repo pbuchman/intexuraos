@@ -126,6 +126,28 @@ describe('webhookEventRepository', () => {
       }
     });
 
+    it('updates status to PROCESSED with inboxNoteId', async () => {
+      const saved = await saveWebhookEvent({
+        payload: {},
+        signatureValid: true,
+        receivedAt: new Date().toISOString(),
+        phoneNumberId: null,
+        status: 'PENDING',
+      });
+
+      if (!saved.ok) throw new Error('Setup failed');
+
+      const result = await updateWebhookEventStatus(saved.value.id, 'PROCESSED', {
+        inboxNoteId: 'note-123',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.inboxNoteId).toBe('note-123');
+      }
+    });
+
     it('returns error for non-existent event', async () => {
       const result = await updateWebhookEventStatus('nonexistent-id', 'PROCESSED', {});
 
