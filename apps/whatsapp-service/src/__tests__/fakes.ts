@@ -286,6 +286,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailSave = false;
   private shouldFailGetMessage = false;
   private shouldFailDeleteMessage = false;
+  private nextCursorToReturn: string | undefined = undefined;
 
   setFailSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -297,6 +298,14 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setFailDeleteMessage(fail: boolean): void {
     this.shouldFailDeleteMessage = fail;
+  }
+
+  /**
+   * Configure the fake to return a nextCursor in getMessagesByUser response.
+   * Used to test pagination handling.
+   */
+  setNextCursor(cursor: string | undefined): void {
+    this.nextCursorToReturn = cursor;
   }
 
   saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
@@ -320,7 +329,11 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
       .filter((m) => m.userId === userId)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
       .slice(0, limit);
-    return Promise.resolve(ok({ messages: userMessages }));
+    const result: { messages: WhatsAppMessage[]; nextCursor?: string } = { messages: userMessages };
+    if (this.nextCursorToReturn !== undefined) {
+      result.nextCursor = this.nextCursorToReturn;
+    }
+    return Promise.resolve(ok(result));
   }
 
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
@@ -383,6 +396,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   clear(): void {
     this.messages.clear();
     this.shouldFailSave = false;
+    this.nextCursorToReturn = undefined;
   }
 }
 

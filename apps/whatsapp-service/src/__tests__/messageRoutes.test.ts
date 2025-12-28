@@ -136,6 +136,45 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.messages[0]?.text).toBe('Newer message');
       expect(body.data.messages[1]?.text).toBe('Older message');
     });
+
+    it('includes nextCursor when pagination has more results', async () => {
+      const userId = 'user-with-pagination';
+      const token = await createToken({ sub: userId });
+
+      // Add a test message
+      await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.paged',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: 'Paged message',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-paged',
+      });
+
+      // Configure fake to return a nextCursor
+      ctx.messageRepository.setNextCursor('cursor-for-next-page');
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          messages: { text: string }[];
+          nextCursor?: string;
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.messages.length).toBe(1);
+      expect(body.data.nextCursor).toBe('cursor-for-next-page');
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/media', () => {
@@ -312,6 +351,48 @@ describe('WhatsApp Message Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Simulated getSignedUrl failure');
     });
+
+    it('returns 502 when getMessage fails for media', async () => {
+      const userId = 'user-media-get-fail';
+      const token = await createToken({ sub: userId });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.media-get-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user-media-get-fail/msg/media.jpg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-media-get-fail',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Configure fake to fail getMessage
+      ctx.messageRepository.setFailGetMessage(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/whatsapp/messages/${messageId}/media`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.messageRepository.setFailGetMessage(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getMessage failure');
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/thumbnail', () => {
@@ -480,6 +561,49 @@ describe('WhatsApp Message Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
       expect(body.error.message).toBe('Simulated getSignedUrl failure');
+    });
+
+    it('returns 502 when getMessage fails for thumbnail', async () => {
+      const userId = 'user-thumb-get-fail';
+      const token = await createToken({ sub: userId });
+
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.thumb-get-fail',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'image',
+        gcsPath: 'whatsapp/user-thumb-get-fail/msg/media.jpg',
+        thumbnailGcsPath: 'whatsapp/user-thumb-get-fail/msg/media_thumb.jpg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-thumb-get-fail',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Configure fake to fail getMessage
+      ctx.messageRepository.setFailGetMessage(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/whatsapp/messages/${messageId}/thumbnail`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.messageRepository.setFailGetMessage(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getMessage failure');
     });
   });
 
