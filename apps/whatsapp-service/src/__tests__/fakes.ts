@@ -517,6 +517,11 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   private jobCounter = 0;
   private shouldFail = false;
   private failMessage = 'Fake transcription error';
+  private pollFailuresRemaining = 0;
+  private pollFailError: TranscriptionPortError = {
+    code: 'SERVICE_UNAVAILABLE',
+    message: 'Service temporarily unavailable',
+  };
 
   /**
    * Configure the fake to fail subsequent calls.
@@ -547,6 +552,20 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     if (job !== undefined) {
       job.status = 'rejected';
       job.error = error;
+    }
+  }
+
+  /**
+   * Configure the fake to fail the next N pollJob calls with a transient error.
+   * After the specified count, polls will succeed normally.
+   *
+   * @param count - Number of poll failures to simulate before allowing success
+   * @param error - Optional custom error to return on failure (defaults to SERVICE_UNAVAILABLE)
+   */
+  setPollFailures(count: number, error?: TranscriptionPortError): void {
+    this.pollFailuresRemaining = count;
+    if (error !== undefined) {
+      this.pollFailError = error;
     }
   }
 
@@ -586,6 +605,12 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   }
 
   pollJob(jobId: string): Promise<Result<TranscriptionJobPollResult, TranscriptionPortError>> {
+    // Simulate transient failures if configured
+    if (this.pollFailuresRemaining > 0) {
+      this.pollFailuresRemaining--;
+      return Promise.resolve(err(this.pollFailError));
+    }
+
     const job = this.jobs.get(jobId);
     if (job === undefined) {
       return Promise.resolve(
@@ -658,6 +683,11 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     this.jobs.clear();
     this.jobCounter = 0;
     this.shouldFail = false;
+    this.pollFailuresRemaining = 0;
+    this.pollFailError = {
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Service temporarily unavailable',
+    };
   }
 }
 

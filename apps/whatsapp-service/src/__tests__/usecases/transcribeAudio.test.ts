@@ -295,6 +295,90 @@ describe('TranscribeAudioUseCase', () => {
       expect(lastMessage?.message).toContain('timed out');
     });
 
+    it('retries on transient poll errors then succeeds', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      // Use a longer polling config to allow for retry testing
+      const retryTestConfig: TranscriptionPollingConfig = {
+        initialDelayMs: 1,
+        maxDelayMs: 5,
+        backoffMultiplier: 1.5,
+        maxAttempts: 10, // Enough attempts for retry + success
+      };
+
+      const retryUsecase = new TranscribeAudioUseCase(deps, retryTestConfig);
+
+      // Configure: first poll fails with transient error, then succeeds
+      transcriptionService.setPollFailures(1);
+
+      const input = createTestInput();
+
+      // Execute in a way that lets us set the job result
+      const executePromise = retryUsecase.execute(input, logger);
+
+      // Give time for job to be submitted and first poll to fail
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Find the job ID and set it as done (so next poll succeeds)
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(jobId, 'Transcribed after retry.');
+      }
+
+      await executePromise;
+
+      // Verify transcription was saved successfully (retry worked)
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('completed');
+        expect(message.value.transcription?.text).toBe('Transcribed after retry.');
+      }
+
+      // Verify success message was sent
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+      const lastMessage = sentMessages[sentMessages.length - 1];
+      expect(lastMessage?.message).toContain('Transcription');
+      expect(lastMessage?.message).toContain('Transcribed after retry.');
+    });
+
+    it('handles service unavailable (503) response', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      // Configure: all polls fail with 503 service unavailable
+      // Use more failures than max attempts to ensure timeout
+      transcriptionService.setPollFailures(10, {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Service temporarily unavailable (503)',
+      });
+
+      // Use short timeout config to speed up test
+      const shortTimeoutConfig: TranscriptionPollingConfig = {
+        initialDelayMs: 1,
+        maxDelayMs: 1,
+        backoffMultiplier: 1,
+        maxAttempts: 3, // Will exhaust retries
+      };
+
+      const shortTimeoutUsecase = new TranscribeAudioUseCase(deps, shortTimeoutConfig);
+
+      await shortTimeoutUsecase.execute(createTestInput(), logger);
+
+      // Verify transcription state is failed with timeout (retries exhausted)
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('failed');
+        expect(message.value.transcription?.error?.code).toBe('POLL_TIMEOUT');
+      }
+
+      // Verify failure message was sent to user
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      expect(sentMessages.length).toBeGreaterThan(0);
+    });
+
     it('handles unexpected error', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
