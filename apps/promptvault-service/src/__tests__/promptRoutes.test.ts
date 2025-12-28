@@ -485,6 +485,28 @@ describe('Prompt Routes', () => {
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
+    it('rejects prompt exceeding max length (100,000 chars)', async () => {
+      const token = await createToken({ sub: 'user-long-prompt' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Valid Title',
+          prompt: 'x'.repeat(100001),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
     it('fails with MISCONFIGURED when getToken fails during create', async () => {
       const token = await createToken({ sub: 'user-create-token-error' });
 
@@ -622,6 +644,27 @@ describe('Prompt Routes', () => {
         url: '/prompt-vault/prompts/some-id',
         headers: { authorization: `Bearer ${token}` },
         payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects title exceeding max length in update', async () => {
+      const token = await createToken({ sub: 'user-long-update-title' });
+
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/some-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'x'.repeat(201),
+        },
       });
 
       expect(response.statusCode).toBe(400);
