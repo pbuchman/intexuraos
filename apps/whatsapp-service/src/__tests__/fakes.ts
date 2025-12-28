@@ -121,28 +121,11 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRepository {
   private mappings = new Map<string, WhatsAppUserMappingPublic & { userId: string }>();
   private phoneIndex = new Map<string, string>();
-  private shouldThrowOnGetMapping = false;
-  private shouldFailFindUserByPhoneNumber = false;
-
-  /**
-   * Configure the fake to throw an exception on getMapping.
-   * Used to test unexpected error handling.
-   */
-  setThrowOnGetMapping(shouldThrow: boolean): void {
-    this.shouldThrowOnGetMapping = shouldThrow;
-  }
-
-  /**
-   * Configure the fake to fail findUserByPhoneNumber.
-   * Used to test user lookup error handling.
-   */
-  setFailFindUserByPhoneNumber(shouldFail: boolean): void {
-    this.shouldFailFindUserByPhoneNumber = shouldFail;
-  }
   private shouldFailGetMapping = false;
   private shouldFailDisconnect = false;
   private shouldFailSaveMapping = false;
   private shouldFailFindUserByPhoneNumber = false;
+  private shouldThrowOnGetMapping = false;
   private enforcePhoneUniqueness = false;
 
   /**
@@ -150,6 +133,14 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
    */
   setFailGetMapping(fail: boolean): void {
     this.shouldFailGetMapping = fail;
+  }
+
+  /**
+   * Configure the fake to throw an exception on getMapping.
+   * Used to test unexpected error handling.
+   */
+  setThrowOnGetMapping(shouldThrow: boolean): void {
+    this.shouldThrowOnGetMapping = shouldThrow;
   }
 
   /**
@@ -249,11 +240,6 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
         err({ code: 'INTERNAL_ERROR', message: 'Simulated findUserByPhoneNumber failure' })
       );
     }
-    if (this.shouldFailFindUserByPhoneNumber) {
-      return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR', message: 'Simulated user lookup failure' })
-      );
-    }
     // Normalize phone number to match stored format (without "+")
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
@@ -286,6 +272,8 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     this.shouldFailGetMapping = false;
     this.shouldFailDisconnect = false;
     this.shouldFailSaveMapping = false;
+    this.shouldFailFindUserByPhoneNumber = false;
+    this.shouldThrowOnGetMapping = false;
     this.enforcePhoneUniqueness = false;
   }
 }
