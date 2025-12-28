@@ -1,0 +1,63 @@
+name: Vitest Coverage Report
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Checkout base branch for comparison
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base-branch
+
+      - name: Install base branch dependencies
+        working-directory: base-branch
+        run: npm ci
+
+      - name: Run base branch coverage
+        working-directory: base-branch
+        run: npm run test:coverage
+        continue-on-error: true
+
+      - name: Copy base coverage for comparison
+        run: |
+          mkdir -p coverage-base
+          if [ -f base-branch/coverage/coverage-summary.json ]; then
+            cp base-branch/coverage/coverage-summary.json coverage-base/coverage-summary.json
+          fi
+
+      - name: Report Coverage
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          file-coverage-mode: all
+          json-summary-compare-path: coverage-base/coverage-summary.json
