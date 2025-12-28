@@ -62,5 +62,11 @@ describe('httpClient utilities', () => {
         postFormUrlEncoded('https://api.example.com/endpoint', 'key=value')
       ).rejects.toThrow('Connection refused');
     });
+    it('handles URL with explicit port', async () => {
+      nock('https://api.example.com:8443').post('/endpoint').reply(200, { status: 'ok' });
+      const result = await postFormUrlEncoded('https://api.example.com:8443/endpoint', 'key=value');
+      expect(result.status).toBe(200);
+      expect(result.body).toEqual({ status: 'ok' });
+    });
   });
 });
