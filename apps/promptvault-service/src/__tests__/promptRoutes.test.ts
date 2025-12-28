@@ -317,6 +317,33 @@ describe('Prompt Routes', () => {
       expect(body.data.prompts[0]?.title).toBe('First Prompt');
       expect(body.data.prompts[1]?.title).toBe('Second Prompt');
     });
+
+    it('fails with MISCONFIGURED when getToken fails', async () => {
+      const token = await createToken({ sub: 'user-list-token-error' });
+
+      // Set up connection first
+      await setupConnection(ctx, 'user-list-token-error');
+
+      // Inject error for getToken
+      ctx.connectionRepository.setGetTokenError({
+        code: 'INTERNAL_ERROR',
+        message: 'Token retrieval failed',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
   });
 
   describe('POST /prompt-vault/prompts (createPrompt)', () => {
@@ -457,6 +484,59 @@ describe('Prompt Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+
+    it('rejects prompt exceeding max length (100,000 chars)', async () => {
+      const token = await createToken({ sub: 'user-long-prompt' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Valid Title',
+          prompt: 'x'.repeat(100001),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('fails with MISCONFIGURED when getToken fails during create', async () => {
+      const token = await createToken({ sub: 'user-create-token-error' });
+
+      // Set up connection first
+      await setupConnection(ctx, 'user-create-token-error');
+
+      // Inject error for getToken
+      ctx.connectionRepository.setGetTokenError({
+        code: 'INTERNAL_ERROR',
+        message: 'Token retrieval failed',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/prompt-vault/prompts',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'Test Prompt',
+          prompt: 'Test content',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
   });
 
   describe('GET /prompt-vault/prompts/:prompt_id (getPrompt)', () => {
@@ -575,6 +655,27 @@ describe('Prompt Routes', () => {
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
+    it('rejects title exceeding max length in update', async () => {
+      const token = await createToken({ sub: 'user-long-update-title' });
+
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/some-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'x'.repeat(201),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
     it('returns NOT_FOUND for non-existent prompt', async () => {
       const token = await createToken({ sub: 'user-update-nonexistent' });
 
@@ -635,6 +736,74 @@ describe('Prompt Routes', () => {
       expect(body.data.prompt.title).toBe('Updated Title');
       expect(body.data.prompt.prompt).toBe('Updated content');
       expect(body.data.prompt.url).toBe('https://notion.so/update-prompt-id');
+    });
+
+    it('updates only title when prompt not provided', async () => {
+      const token = await createToken({ sub: 'user-update-title-only' });
+
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-update-title-only', 'page-id');
+
+      // Set up an existing prompt page
+      ctx.notionApi.setPage('update-title-id', 'Original Title', 'Original content');
+
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/update-title-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          title: 'New Title Only',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          prompt: {
+            id: string;
+            title: string;
+            prompt: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt.title).toBe('New Title Only');
+      expect(body.data.prompt.prompt).toBe('Original content');
+    });
+
+    it('updates only prompt when title not provided', async () => {
+      const token = await createToken({ sub: 'user-update-prompt-only' });
+
+      // Set up connection directly through repository
+      await setupConnection(ctx, 'user-update-prompt-only', 'page-id');
+
+      // Set up an existing prompt page
+      ctx.notionApi.setPage('update-prompt-only-id', 'Original Title', 'Original content');
+
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/prompt-vault/prompts/update-prompt-only-id',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'New content only',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          prompt: {
+            id: string;
+            title: string;
+            prompt: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt.title).toBe('Original Title');
+      expect(body.data.prompt.prompt).toBe('New content only');
     });
   });
 });
