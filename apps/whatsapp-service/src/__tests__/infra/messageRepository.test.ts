@@ -280,10 +280,24 @@ describe('messageRepository', () => {
         expect(result.error.code).toBe('NOT_FOUND');
       }
     });
+
+    it('returns NOT_FOUND if message belongs to different user', async () => {
+      const saved = await saveMessage(createTestMessage({ userId: 'user-123' }));
+      if (!saved.ok) throw new Error('Setup failed');
+
+      const result = await updateLinkPreview('different-user', saved.value.id, {
+        status: 'pending',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
   });
 
   describe('error handling', () => {
-    it('returns error when Firestore fails', async () => {
+    it('returns error when Firestore fails on saveMessage', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('DB error') });
 
       const result = await saveMessage(createTestMessage());
@@ -291,6 +305,95 @@ describe('messageRepository', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when Firestore fails on getMessage', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await getMessage('some-message-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to get message');
+      }
+    });
+
+    it('returns error when Firestore fails on getMessagesByUser', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query error') });
+
+      const result = await getMessagesByUser('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to get messages');
+      }
+    });
+
+    it('returns error when Firestore fails on deleteMessage', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete error') });
+
+      const result = await deleteMessage('some-message-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to delete message');
+      }
+    });
+
+    it('returns error when Firestore fails on findById', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await findById('user-123', 'some-message-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to find message');
+      }
+    });
+
+    it('returns error when Firestore fails on updateTranscription', async () => {
+      const saved = await saveMessage(
+        createTestMessage({
+          userId: 'user-123',
+          mediaType: 'audio',
+        })
+      );
+      if (!saved.ok) throw new Error('Setup failed');
+
+      fakeFirestore.configure({ errorToThrow: new Error('Update error') });
+
+      const result = await updateTranscription('user-123', saved.value.id, {
+        status: 'completed',
+        text: 'Test transcription',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to update transcription');
+      }
+    });
+
+    it('returns error when Firestore fails on updateLinkPreview', async () => {
+      const saved = await saveMessage(createTestMessage({ userId: 'user-123' }));
+      if (!saved.ok) throw new Error('Setup failed');
+
+      fakeFirestore.configure({ errorToThrow: new Error('Update error') });
+
+      const result = await updateLinkPreview('user-123', saved.value.id, {
+        status: 'completed',
+        previews: [{ url: 'https://example.com', title: 'Example' }],
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('Failed to update link preview');
       }
     });
   });
