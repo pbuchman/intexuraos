@@ -377,6 +377,112 @@ describe('Webhook Routes', () => {
     const notifications = fakeNotificationRepo.getAll();
     expect(notifications).toHaveLength(1);
   });
+
+  it('POST /mobile-notifications/webhooks returns 500 on signature lookup failure', async () => {
+    fakeSignatureRepo.setFailNextFind(true);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/mobile-notifications/webhooks',
+      headers: {
+        'x-mobile-notifications-signature': 'some-signature',
+      },
+      payload: {
+        source: 'tasker',
+        device: 'test-phone',
+        timestamp: Date.now(),
+        notification_id: 'notif-123',
+        post_time: '2024-01-01T00:00:00Z',
+        app: 'com.example.app',
+        title: 'Test Title',
+        text: 'Test Text',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('POST /mobile-notifications/webhooks returns 500 on duplicate check failure', async () => {
+    // Create a connection first
+    const signature = 'test-signature-token';
+    const signatureHash = hashSignature(signature);
+    await fakeSignatureRepo.save({
+      userId: TEST_USER_ID,
+      signatureHash,
+    });
+
+    fakeNotificationRepo.setFailNextFind(true);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/mobile-notifications/webhooks',
+      headers: {
+        'x-mobile-notifications-signature': signature,
+      },
+      payload: {
+        source: 'tasker',
+        device: 'test-phone',
+        timestamp: Date.now(),
+        notification_id: 'notif-123',
+        post_time: '2024-01-01T00:00:00Z',
+        app: 'com.example.app',
+        title: 'Test Title',
+        text: 'Test Text',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('POST /mobile-notifications/webhooks returns 500 on notification save failure', async () => {
+    // Create a connection first
+    const signature = 'test-signature-token';
+    const signatureHash = hashSignature(signature);
+    await fakeSignatureRepo.save({
+      userId: TEST_USER_ID,
+      signatureHash,
+    });
+
+    fakeNotificationRepo.setFailNextSave(true);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/mobile-notifications/webhooks',
+      headers: {
+        'x-mobile-notifications-signature': signature,
+      },
+      payload: {
+        source: 'tasker',
+        device: 'test-phone',
+        timestamp: Date.now(),
+        notification_id: 'notif-123',
+        post_time: '2024-01-01T00:00:00Z',
+        app: 'com.example.app',
+        title: 'Test Title',
+        text: 'Test Text',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
 });
 
 describe('Notification Routes', () => {
