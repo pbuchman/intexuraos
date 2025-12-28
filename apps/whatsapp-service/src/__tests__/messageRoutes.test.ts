@@ -1,20 +1,20 @@
 /**
  * Tests for WhatsApp message routes:
- * - GET /v1/whatsapp/messages
- * - GET /v1/whatsapp/messages/:messageId/media
- * - GET /v1/whatsapp/messages/:messageId/thumbnail
- * - DELETE /v1/whatsapp/messages/:messageId
+ * - GET /whatsapp/messages
+ * - GET /whatsapp/messages/:message_id/media
+ * - GET /whatsapp/messages/:message_id/thumbnail
+ * - DELETE /whatsapp/messages/:message_id
  */
 import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
 
 describe('WhatsApp Message Routes', () => {
   const ctx = setupTestContext();
 
-  describe('GET /v1/whatsapp/messages', () => {
+  describe('GET /whatsapp/messages', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages',
+        url: '/whatsapp/messages',
       });
 
       expect(response.statusCode).toBe(401);
@@ -31,7 +31,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages',
+        url: '/whatsapp/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -70,7 +70,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages',
+        url: '/whatsapp/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -121,7 +121,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages',
+        url: '/whatsapp/messages',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -138,11 +138,11 @@ describe('WhatsApp Message Routes', () => {
     });
   });
 
-  describe('GET /v1/whatsapp/messages/:messageId/media', () => {
+  describe('GET /whatsapp/messages/:message_id/media', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages/some-id/media',
+        url: '/whatsapp/messages/some-id/media',
       });
 
       expect(response.statusCode).toBe(401);
@@ -159,7 +159,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages/non-existent-id/media',
+        url: '/whatsapp/messages/non-existent-id/media',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -192,7 +192,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -217,7 +217,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -249,7 +249,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -271,11 +271,11 @@ describe('WhatsApp Message Routes', () => {
     });
   });
 
-  describe('GET /v1/whatsapp/messages/:messageId/thumbnail', () => {
+  describe('GET /whatsapp/messages/:message_id/thumbnail', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages/some-id/thumbnail',
+        url: '/whatsapp/messages/some-id/thumbnail',
       });
 
       expect(response.statusCode).toBe(401);
@@ -292,7 +292,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/v1/whatsapp/messages/non-existent-id/thumbnail',
+        url: '/whatsapp/messages/non-existent-id/thumbnail',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -320,7 +320,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -347,7 +347,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -380,7 +380,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -396,11 +396,11 @@ describe('WhatsApp Message Routes', () => {
     });
   });
 
-  describe('DELETE /v1/whatsapp/messages/:messageId', () => {
+  describe('DELETE /whatsapp/messages/:message_id', () => {
     it('returns 401 when not authenticated', async () => {
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/messages/some-id',
+        url: '/whatsapp/messages/some-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -417,7 +417,7 @@ describe('WhatsApp Message Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: '/v1/whatsapp/messages/non-existent-id',
+        url: '/whatsapp/messages/non-existent-id',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -451,7 +451,7 @@ describe('WhatsApp Message Routes', () => {
       // User2 tries to delete it
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/v1/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}`,
+        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -487,7 +487,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/v1/whatsapp/messages/${messageId}`,
+        url: `/whatsapp/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -536,7 +536,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/v1/whatsapp/messages/${messageId}`,
+        url: `/whatsapp/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -582,7 +582,7 @@ describe('WhatsApp Message Routes', () => {
       // Delete the message
       const response = await ctx.app.inject({
         method: 'DELETE',
-        url: `/v1/whatsapp/messages/${messageId}`,
+        url: `/whatsapp/messages/${messageId}`,
         headers: { authorization: `Bearer ${token}` },
       });
 

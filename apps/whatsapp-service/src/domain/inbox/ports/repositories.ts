@@ -5,6 +5,7 @@
 import type { Result } from '@intexuraos/common';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage, TranscriptionState } from '../models/WhatsAppMessage.js';
+import type { LinkPreviewState } from '../models/LinkPreview.js';
 
 // Re-export InboxError for use in other ports
 export type { InboxError };
@@ -127,7 +128,13 @@ export interface WhatsAppMessageRepository {
   /**
    * Get messages for a user, ordered by receivedAt descending.
    */
-  getMessagesByUser(userId: string, limit?: number): Promise<Result<WhatsAppMessage[], InboxError>>;
+  /**
+   * Get messages for a user with pagination.
+   */
+  getMessagesByUser(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>>;
 
   /**
    * Get a single message by ID.
@@ -146,6 +153,15 @@ export interface WhatsAppMessageRepository {
     userId: string,
     messageId: string,
     transcription: TranscriptionState
+  ): Promise<Result<void, InboxError>>;
+
+  /**
+   * Update message link preview state.
+   */
+  updateLinkPreview(
+    userId: string,
+    messageId: string,
+    linkPreview: LinkPreviewState
   ): Promise<Result<void, InboxError>>;
 
   /**

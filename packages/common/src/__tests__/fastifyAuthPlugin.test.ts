@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { intexuraFastifyPlugin } from '../http/fastifyPlugin.js';
-import { fastifyAuthPlugin, requireAuth, clearJwksCache } from '../index.js';
+import { fastifyAuthPlugin, requireAuth, tryAuth, clearJwksCache } from '../index.js';
 
 describe('fastifyAuthPlugin', () => {
   let jwksServer: FastifyInstance;
@@ -304,6 +304,146 @@ describe('fastifyAuthPlugin', () => {
       expect(body.success).toBe(true);
       // The userId in response proves request.user was set correctly
       expect(body.data.userId).toBe('user-xyz-789');
+    });
+  });
+
+  describe('tryAuth (optional authentication)', () => {
+    let app: FastifyInstance;
+
+    beforeEach(async () => {
+      process.env['AUTH_JWKS_URL'] = jwksUrl;
+      process.env['AUTH_ISSUER'] = issuer;
+      process.env['AUTH_AUDIENCE'] = audience;
+
+      app = Fastify({ logger: false });
+      await app.register(intexuraFastifyPlugin);
+      await app.register(fastifyAuthPlugin);
+
+      app.get('/optional-auth', async (request, reply) => {
+        const user = await tryAuth(request);
+        return await reply.ok({
+          authenticated: user !== null,
+          userId: user?.userId ?? null,
+        });
+      });
+
+      await app.ready();
+    });
+
+    it('returns null when Authorization header is missing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/optional-auth',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { authenticated: boolean; userId: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.authenticated).toBe(false);
+      expect(body.data.userId).toBeNull();
+    });
+
+    it('returns null for invalid JWT without failing the request', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/optional-auth',
+        headers: {
+          authorization: 'Bearer invalid-jwt-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { authenticated: boolean; userId: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.authenticated).toBe(false);
+      expect(body.data.userId).toBeNull();
+    });
+
+    it('returns null for expired JWT without failing the request', async () => {
+      const token = await createToken({ sub: 'user-123' }, { expiresIn: '-1s' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/optional-auth',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { authenticated: boolean; userId: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.authenticated).toBe(false);
+      expect(body.data.userId).toBeNull();
+    });
+
+    it('returns user for valid JWT', async () => {
+      const token = await createToken({ sub: 'auth0|user-optional-123' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/optional-auth',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { authenticated: boolean; userId: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.authenticated).toBe(true);
+      expect(body.data.userId).toBe('auth0|user-optional-123');
+    });
+
+    it('returns null when auth is not configured', async () => {
+      delete process.env['AUTH_JWKS_URL'];
+      delete process.env['AUTH_ISSUER'];
+      delete process.env['AUTH_AUDIENCE'];
+
+      const unconfiguredApp = Fastify({ logger: false });
+      await unconfiguredApp.register(intexuraFastifyPlugin);
+      await unconfiguredApp.register(fastifyAuthPlugin);
+
+      unconfiguredApp.get('/optional-auth', async (request, reply) => {
+        const user = await tryAuth(request);
+        return await reply.ok({
+          authenticated: user !== null,
+          userId: user?.userId ?? null,
+        });
+      });
+
+      await unconfiguredApp.ready();
+
+      const response = await unconfiguredApp.inject({
+        method: 'GET',
+        url: '/optional-auth',
+        headers: {
+          authorization: 'Bearer some-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { authenticated: boolean; userId: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.authenticated).toBe(false);
+      expect(body.data.userId).toBeNull();
+
+      await unconfiguredApp.close();
     });
   });
 });

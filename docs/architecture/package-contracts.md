@@ -13,7 +13,7 @@ apps/
     src/
       domain/       # Business logic, models, usecases
       infra/        # Adapters (Firestore, Notion, Auth0)
-      routes/v1/    # HTTP transport layer
+      routes/    # HTTP transport layer
       services.ts   # Service container / DI
 packages/
   common/           # Only shared utilities
@@ -103,7 +103,7 @@ infra/
 **Forbidden contents:**
 
 - Business logic (belongs in domain)
-- HTTP handlers (belongs in routes/v1)
+- HTTP handlers (belongs in routes)
 - Imports from other apps
 
 **Dependencies:**
@@ -111,7 +111,7 @@ infra/
 - `@intexuraos/common` ✓
 - Same-app `src/domain/` ✓
 
-### apps/\*/src/routes/v1/
+### apps/\*/src/routes/
 
 **Purpose:** HTTP transport layer.
 
@@ -135,7 +135,7 @@ infra/
 | `packages/common`       | nothing                               |
 | `apps/<app>/src/domain` | `@intexuraos/common`                  |
 | `apps/<app>/src/infra`  | `@intexuraos/common`, same-app domain |
-| `apps/<app>/src/v1`     | `@intexuraos/common`, same-app all    |
+| `apps/<app>/src/routes` | `@intexuraos/common`, same-app all    |
 
 **Forbidden:**
 

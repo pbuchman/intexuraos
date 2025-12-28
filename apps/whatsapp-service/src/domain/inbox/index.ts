@@ -34,6 +34,13 @@ export type {
   TranscriptionApiCall,
 } from './models/WhatsAppMessage.js';
 
+export type {
+  LinkPreview,
+  LinkPreviewStatus,
+  LinkPreviewError,
+  LinkPreviewState,
+} from './models/LinkPreview.js';
+
 // Ports
 export type {
   InboxNotesRepository,
@@ -71,6 +78,8 @@ export type {
   TranscriptionTextResult,
   TranscriptionPortError,
 } from './ports/transcription.js';
+
+export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 
 // Events
 export type {
@@ -114,3 +123,10 @@ export {
   type TranscriptionPollingConfig,
   DEFAULT_TRANSCRIPTION_POLL_CONFIG,
 } from './usecases/transcribeAudio.js';
+
+export {
+  ExtractLinkPreviewsUseCase,
+  type ExtractLinkPreviewsInput,
+  type ExtractLinkPreviewsDeps,
+  type ExtractLinkPreviewsLogger,
+} from './usecases/extractLinkPreviews.js';

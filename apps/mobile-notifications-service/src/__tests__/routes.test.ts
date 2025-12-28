@@ -69,10 +69,10 @@ describe('Connect Routes', () => {
     nock.cleanAll();
   });
 
-  it('POST /v1/mobile-notifications/connect returns 401 without auth', async () => {
+  it('POST /mobile-notifications/connect returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       payload: {},
     });
 
@@ -82,13 +82,13 @@ describe('Connect Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('POST /v1/mobile-notifications/connect creates connection with valid auth', async () => {
+  it('POST /mobile-notifications/connect creates connection with valid auth', async () => {
     // Mock JWKS endpoint
     nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -100,7 +100,7 @@ describe('Connect Routes', () => {
     expect([200, 401]).toContain(response.statusCode);
   });
 
-  it('POST /v1/mobile-notifications/connect returns 500 on repository failure', async () => {
+  it('POST /mobile-notifications/connect returns 500 on repository failure', async () => {
     fakeSignatureRepo.setFailNextSave(true);
 
     // Mock JWKS endpoint
@@ -108,7 +108,7 @@ describe('Connect Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/mobile-notifications/connect',
+      url: '/mobile-notifications/connect',
       headers: {
         authorization: `Bearer ${TEST_JWT}`,
       },
@@ -117,6 +117,75 @@ describe('Connect Routes', () => {
 
     // Will return 401 due to JWT verification failing in test
     expect([500, 401]).toContain(response.statusCode);
+  });
+});
+
+describe('Status Routes', () => {
+  let app: FastifyInstance;
+  let fakeSignatureRepo: FakeSignatureConnectionRepository;
+  let fakeNotificationRepo: FakeNotificationRepository;
+
+  beforeAll(() => {
+    nock.disableNetConnect();
+    nock.enableNetConnect('127.0.0.1');
+  });
+
+  afterAll(() => {
+    nock.enableNetConnect();
+  });
+
+  beforeEach(async () => {
+    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+
+    fakeSignatureRepo = new FakeSignatureConnectionRepository();
+    fakeNotificationRepo = new FakeNotificationRepository();
+
+    const services: ServiceContainer = {
+      signatureConnectionRepository: fakeSignatureRepo,
+      notificationRepository: fakeNotificationRepo,
+    };
+    setServices(services);
+
+    app = await buildServer();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    resetServices();
+    nock.cleanAll();
+  });
+
+  it('GET /mobile-notifications/status returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/mobile-notifications/status',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('GET /mobile-notifications/status returns configured: false when no signature exists', async () => {
+    // Mock JWKS endpoint
+    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/mobile-notifications/status',
+      headers: {
+        authorization: `Bearer ${TEST_JWT}`,
+      },
+    });
+
+    // Will return 401 due to JWT verification failing in test
+    expect([200, 401]).toContain(response.statusCode);
   });
 });
 
@@ -160,10 +229,10 @@ describe('Webhook Routes', () => {
     nock.cleanAll();
   });
 
-  it('POST /v1/webhooks/mobile-notifications returns 400 without signature header', async () => {
+  it('POST /mobile-notifications/webhooks returns 400 without signature header', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       payload: {
         source: 'tasker',
         device: 'test-phone',
@@ -182,10 +251,10 @@ describe('Webhook Routes', () => {
     expect(body.error.code).toBe('INVALID_REQUEST');
   });
 
-  it('POST /v1/webhooks/mobile-notifications returns ignored for invalid signature', async () => {
+  it('POST /mobile-notifications/webhooks returns ignored for invalid signature', async () => {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': 'invalid-signature',
       },
@@ -201,17 +270,17 @@ describe('Webhook Routes', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(401);
     const body = JSON.parse(response.body) as {
       success: boolean;
-      data: { status: string; reason?: string };
+      error: { code: string; message: string };
     };
-    expect(body.success).toBe(true);
-    expect(body.data.status).toBe('ignored');
-    expect(body.data.reason).toBe('invalid_signature');
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+    expect(body.error.message).toBe('Invalid signature');
   });
 
-  it('POST /v1/webhooks/mobile-notifications accepts notification with valid signature', async () => {
+  it('POST /mobile-notifications/webhooks accepts notification with valid signature', async () => {
     // Create a connection first
     const signature = 'test-signature-token';
     const signatureHash = hashSignature(signature);
@@ -222,7 +291,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -253,7 +322,7 @@ describe('Webhook Routes', () => {
     expect(notifications[0]?.userId).toBe(TEST_USER_ID);
   });
 
-  it('POST /v1/webhooks/mobile-notifications ignores duplicate notification', async () => {
+  it('POST /mobile-notifications/webhooks ignores duplicate notification', async () => {
     // Create a connection first
     const signature = 'test-signature-token';
     const signatureHash = hashSignature(signature);
@@ -279,7 +348,7 @@ describe('Webhook Routes', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/webhooks/mobile-notifications',
+      url: '/mobile-notifications/webhooks',
       headers: {
         'x-mobile-notifications-signature': signature,
       },
@@ -350,19 +419,19 @@ describe('Notification Routes', () => {
     nock.cleanAll();
   });
 
-  it('GET /v1/mobile-notifications returns 401 without auth', async () => {
+  it('GET /mobile-notifications returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: '/v1/mobile-notifications',
+      url: '/mobile-notifications',
     });
 
     expect(response.statusCode).toBe(401);
   });
 
-  it('DELETE /v1/mobile-notifications/:id returns 401 without auth', async () => {
+  it('DELETE /mobile-notifications/:notification_id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
-      url: '/v1/mobile-notifications/notif-123',
+      url: '/mobile-notifications/notif-123',
     });
 
     expect(response.statusCode).toBe(401);

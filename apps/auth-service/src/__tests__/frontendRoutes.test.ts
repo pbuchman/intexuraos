@@ -1,5 +1,5 @@
 /**
- * Tests for GET /v1/auth/login, GET /v1/auth/logout, GET /v1/auth/me
+ * Tests for GET /auth/login, GET /auth/logout, GET /auth/me
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -28,7 +28,7 @@ describe('Frontend Auth Routes', () => {
     await app.close();
   });
 
-  describe('GET /v1/auth/login', () => {
+  describe('GET /auth/login', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
@@ -38,7 +38,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://example.com/callback',
+          url: '/auth/login?redirect_uri=https://example.com/callback',
         });
 
         expect(response.statusCode).toBe(503);
@@ -64,7 +64,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login',
+          url: '/auth/login',
         });
 
         expect(response.statusCode).toBe(400);
@@ -82,7 +82,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://app.example.com/callback&state=csrf-token-123',
+          url: '/auth/login?redirect_uri=https://app.example.com/callback&state=csrf-token-123',
         });
 
         expect(response.statusCode).toBe(302);
@@ -101,7 +101,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/login?redirect_uri=https://app.example.com/callback',
+          url: '/auth/login?redirect_uri=https://app.example.com/callback',
         });
 
         expect(response.statusCode).toBe(302);
@@ -112,14 +112,14 @@ describe('Frontend Auth Routes', () => {
     });
   });
 
-  describe('GET /v1/auth/logout', () => {
+  describe('GET /auth/logout', () => {
     describe('when config is missing', () => {
       it('returns 503 MISCONFIGURED', async () => {
         app = await buildServer();
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout?return_to=https://example.com',
+          url: '/auth/logout?return_to=https://example.com',
         });
 
         expect(response.statusCode).toBe(503);
@@ -144,7 +144,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout',
+          url: '/auth/logout',
         });
 
         expect(response.statusCode).toBe(400);
@@ -162,7 +162,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/logout?return_to=https://app.example.com',
+          url: '/auth/logout?return_to=https://app.example.com',
         });
 
         expect(response.statusCode).toBe(302);
@@ -172,9 +172,94 @@ describe('Frontend Auth Routes', () => {
         expect(location).toContain('returnTo=https%3A%2F%2Fapp.example.com');
       });
     });
+
+    describe('when authenticated with token deletion error', () => {
+      let jwksServer: FastifyInstance;
+      let privateKey: jose.KeyLike;
+      let jwksUrl: string;
+      const issuer = `https://${AUTH0_DOMAIN}/`;
+
+      async function createToken(claims: Record<string, unknown>): Promise<string> {
+        const builder = new jose.SignJWT(claims)
+          .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+          .setIssuedAt()
+          .setIssuer(issuer)
+          .setAudience(AUTH_AUDIENCE)
+          .setExpirationTime('1h');
+
+        return await builder.sign(privateKey);
+      }
+
+      beforeAll(async () => {
+        const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
+        privateKey = privKey;
+
+        const publicKeyJwk = await jose.exportJWK(publicKey);
+        publicKeyJwk.kid = 'test-key-1';
+        publicKeyJwk.alg = 'RS256';
+        publicKeyJwk.use = 'sig';
+
+        jwksServer = Fastify({ logger: false });
+
+        jwksServer.get('/.well-known/jwks.json', async (_req, reply) => {
+          return await reply.send({
+            keys: [publicKeyJwk],
+          });
+        });
+
+        await jwksServer.listen({ port: 0, host: '127.0.0.1' });
+        const address = jwksServer.server.address();
+        if (address !== null && typeof address === 'object') {
+          jwksUrl = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+        }
+      });
+
+      afterAll(async () => {
+        await jwksServer.close();
+      });
+
+      it('still redirects when token deletion throws', { timeout: 20000 }, async () => {
+        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
+        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
+        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['AUTH_JWKS_URL'] = jwksUrl;
+        process.env['AUTH_ISSUER'] = issuer;
+
+        const { setServices, resetServices } = await import('../services.js');
+        const { FakeAuthTokenRepository } = await import('./fakes.js');
+
+        const fakeTokenRepo = new FakeAuthTokenRepository();
+        fakeTokenRepo.setThrowOnDeleteTokens(true);
+        setServices({
+          authTokenRepository: fakeTokenRepo,
+          auth0Client: null,
+        });
+
+        app = await buildServer();
+
+        const token = await createToken({
+          sub: 'auth0|user-123',
+        });
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/auth/logout?return_to=https://app.example.com',
+          headers: {
+            authorization: `Bearer ${token}`,
+          },
+        });
+
+        // Should still redirect despite token deletion error (best-effort cleanup)
+        expect(response.statusCode).toBe(302);
+        const location = String(response.headers.location);
+        expect(location).toContain(`https://${AUTH0_DOMAIN}/v2/logout`);
+
+        resetServices();
+      });
+    });
   });
 
-  describe('GET /v1/auth/me', () => {
+  describe('GET /auth/me', () => {
     let jwksServer: FastifyInstance;
     let privateKey: jose.KeyLike;
     let jwksUrl: string;
@@ -234,7 +319,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
         });
 
         expect(response.statusCode).toBe(401);
@@ -257,7 +342,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: 'Bearer invalid-token',
           },
@@ -294,7 +379,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: `Bearer ${token}`,
           },
@@ -328,7 +413,7 @@ describe('Frontend Auth Routes', () => {
 
         const response = await app.inject({
           method: 'GET',
-          url: '/v1/auth/me',
+          url: '/auth/me',
           headers: {
             authorization: `Bearer ${token}`,
           },
@@ -349,6 +434,51 @@ describe('Frontend Auth Routes', () => {
         expect(body.data).not.toHaveProperty('name');
         expect(body.data).not.toHaveProperty('picture');
       });
+
+      it(
+        'returns hasRefreshToken as false when repository throws',
+        { timeout: 20000 },
+        async () => {
+          const { setServices, resetServices } = await import('../services.js');
+          const { FakeAuthTokenRepository } = await import('./fakes.js');
+
+          const fakeTokenRepo = new FakeAuthTokenRepository();
+          fakeTokenRepo.setThrowOnHasRefreshToken(true);
+          setServices({
+            authTokenRepository: fakeTokenRepo,
+            auth0Client: null,
+          });
+
+          app = await buildServer();
+
+          const token = await createToken({
+            sub: 'auth0|user-789',
+          });
+
+          const response = await app.inject({
+            method: 'GET',
+            url: '/auth/me',
+            headers: {
+              authorization: `Bearer ${token}`,
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+          const body = JSON.parse(response.body) as {
+            success: boolean;
+            data: {
+              userId: string;
+              hasRefreshToken: boolean;
+            };
+          };
+          expect(body.success).toBe(true);
+          expect(body.data.userId).toBe('auth0|user-789');
+          // Should default to false when repository throws
+          expect(body.data.hasRefreshToken).toBe(false);
+
+          resetServices();
+        }
+      );
     });
   });
 });

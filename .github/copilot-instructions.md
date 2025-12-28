@@ -23,7 +23,7 @@ apps/           → Fastify services with colocated domain & infra
   <app>/src/
     domain/     → App-specific business logic, models, usecases
     infra/      → App-specific adapters (firestore, notion, auth0)
-    routes/v1/  → HTTP routes (transport layer)
+    routes/     → HTTP routes (transport layer)
 packages/
   common/       → Shared utilities only (no domain logic)
 terraform/      → Infrastructure as code
@@ -40,7 +40,7 @@ docs/           → All documentation
 
 - `src/domain/**` — business logic, models, ports, usecases (no external deps)
 - `src/infra/**` — adapters for external services (Firestore, Notion, Auth0)
-- `src/routes/v1/**` — HTTP transport layer
+- `src/routes/**` — HTTP transport layer
 - `src/services.ts` — dependency injection / service container
 
 ---
@@ -62,11 +62,28 @@ docs/           → All documentation
 
 ---
 
+## Protected Files (Require Explicit User Permission)
+
+The following configuration sections **MUST NOT be modified without explicit user permission**:
+
+| File               | Protected Section     | Reason                                  |
+| ------------------ | --------------------- | --------------------------------------- |
+| `vitest.config.ts` | `coverage.thresholds` | Coverage thresholds are project policy  |
+| `vitest.config.ts` | `coverage.exclude`    | Exclusions require justification review |
+
+**LLM agents must:**
+
+1. **Never** modify these sections autonomously
+2. **Ask for explicit permission** before proposing changes
+3. **Document justification** when requesting permission to modify
+
+---
+
 ## New Service Checklist
 
 When creating a new service (e.g., splitting an existing service):
 
-1. **Create files** - Copy structure from existing service (include `src/domain/`, `src/infra/`, `src/v1/`)
+1. **Create files** - Copy structure from existing service (include `src/domain/`, `src/infra/`, `src/routes/`)
 2. **Run Prettier** - `npx prettier --write .` (BEFORE running CI)
 3. **Update Terraform** - Add to `locals.services`, create module, update IAM, add outputs
 4. **Update api-docs-hub** - Add OpenAPI URL env var to config.ts

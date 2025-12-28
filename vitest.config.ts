@@ -6,11 +6,8 @@ export default defineConfig({
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     // Run tests sequentially to avoid race conditions in shared state
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
+    sequence: {
+      shuffle: false,
     },
     // Standard timeout for async operations
     testTimeout: 10000,
@@ -39,19 +36,10 @@ export default defineConfig({
         '**/domain/**/ports/**',
         '**/domain/**/events/**',
 
-        // Colocated infra adapters - external service wrappers
-        // JUSTIFIED: Thin SDK wrappers tested via integration tests through routes
-        // Contains Firestore, Notion, Auth0 adapters that delegate to external SDKs
-        '**/infra/**',
-
         // Web app - React frontend
         // JUSTIFIED: Requires E2E testing strategy, out of scope for unit coverage
         'apps/web/**',
 
-        // Common SDK client wrappers
-        // JUSTIFIED: notion.ts tested in packages/common/src/__tests__/notion.test.ts
-        // The logging fetch wrapper is complex but tested via integration
-        '**/notion.ts',
         // JUSTIFIED: Pure singleton getter with no business logic
         '**/firestore.ts',
 
@@ -59,17 +47,8 @@ export default defineConfig({
         // JUSTIFIED: No business logic, just static config and file serving
         'apps/api-docs-hub/**',
 
-        // WhatsApp external API integration
-        // JUSTIFIED: sendWhatsAppMessage() wraps external Graph API, tested via integration
-        '**/whatsappClient.ts',
         // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
-
-        // Workers - Pub/Sub subscription handlers
-        // JUSTIFIED: Thin wrappers around Pub/Sub SDK, tested via integration
-        // CleanupWorker subscribes to media cleanup events and calls mediaStorage.delete()
-        // Core delete logic is tested via route tests that verify cleanup events are published
-        '**/workers/**',
 
         // Server initialization files
         // JUSTIFIED: Contains Fastify app setup, plugin registration, and lifecycle hooks
@@ -84,6 +63,26 @@ export default defineConfig({
         // HTTP logger utility
         // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
         '**/http/logger.ts',
+
+        // Route barrel files (re-exports only)
+        // JUSTIFIED: Pure re-exports with no runtime behavior
+        '**/routes/routes.ts',
+
+        // BLOCKED: vi.mock ESM hoisting fails for external SDK class constructors
+        // These require refactoring to dependency injection to test
+        '**/infra/speechmatics/adapter.ts',
+        '**/infra/gcs/mediaStorageAdapter.ts',
+
+        // BLOCKED: Complex external SDK interactions requiring extensive mocking
+        // Notion client with pages/blocks API; ~470 lines
+        '**/infra/notion/promptApi.ts',
+
+        // BLOCKED: Pub/Sub subscription handler requiring subscription.on() mocking
+        '**/workers/cleanupWorker.ts',
+
+        // BLOCKED: Notion client wrapper with logging fetch
+        // Partially covered but requires complex mocking for full coverage
+        '**/notion.ts',
       ],
       thresholds: {
         lines: 90,
