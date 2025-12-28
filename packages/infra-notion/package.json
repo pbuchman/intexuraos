@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/common",
+  "name": "@intexuraos/infra-notion",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -21,8 +21,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/common-http": "*",
     "@intexuraos/infra-firestore": "*",
-    "@intexuraos/infra-notion": "*"
+    "@notionhq/client": "^2.2.15"
   }
 }

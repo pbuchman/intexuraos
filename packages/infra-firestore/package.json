@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/common",
+  "name": "@intexuraos/infra-firestore",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -21,8 +21,6 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
-    "@intexuraos/infra-notion": "*"
+    "@google-cloud/firestore": "^7.10.0"
   }
 }

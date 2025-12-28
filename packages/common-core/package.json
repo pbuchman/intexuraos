@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/common",
+  "name": "@intexuraos/common-core",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,11 +18,5 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist .tsbuildinfo"
-  },
-  "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
-    "@intexuraos/infra-notion": "*"
   }
 }

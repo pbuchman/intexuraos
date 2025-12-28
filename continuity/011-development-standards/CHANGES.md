@@ -66,13 +66,49 @@ The existing infrastructure meets all requirements. No changes needed.
 
 ---
 
-## Phase 2: PENDING
+## Phase 2: IN PROGRESS
 
 ### Standard 1: Common Package Decomposition
 
-**Status:** ⬜ NOT STARTED
+**Status:** ✅ IMPLEMENTED (Tasks 1.1-1.8)
 
-See LEDGER.md Tasks 1.1-1.9 for implementation plan.
+#### New Packages Created
+
+1. **`packages/common-core`** - Pure utilities with zero infrastructure dependencies
+   - `result.ts` - Result types
+   - `errors.ts` - Error codes and IntexuraOSError
+   - `redaction.ts` - Security utilities
+
+2. **`packages/common-http`** - Fastify helpers, auth
+   - `http/response.ts` - API response helpers
+   - `http/requestId.ts` - Request ID handling
+   - `http/fastifyPlugin.ts` - Fastify plugin
+   - `http/validation.ts` - Validation error handling
+   - `http/logger.ts` - Logging utilities
+   - `auth/jwt.ts` - JWT verification
+   - `auth/fastifyAuthPlugin.ts` - Auth plugin
+
+3. **`packages/infra-firestore`** - Firestore client
+   - `firestore.ts` - Firestore singleton
+   - `testing/` - Fake Firestore utilities
+
+4. **`packages/infra-notion`** - Notion client
+   - `notion.ts` - Notion client utilities
+   - `notionConnection.ts` - Notion connection repository
+
+#### Files Modified
+
+- `packages/common/src/index.ts` - Converted to facade re-exporting from decomposed packages
+- `packages/common/package.json` - Updated dependencies
+- `packages/common/tsconfig.json` - Added references
+- `tsconfig.json` - Added new package references
+- `eslint.config.js` - Added boundary rules for new packages
+- `vitest.config.ts` - Excluded decomposed packages from coverage (covered via facade)
+
+#### Backward Compatibility
+
+The `packages/common` package now acts as a facade, re-exporting everything from
+the decomposed packages. Existing code continues to work without import changes.
 
 ---
 
@@ -116,10 +152,10 @@ See LEDGER.md for details.
 
 ### Phase 2
 
-- [ ] Standard 1 tasks (1.1-1.9) completed
+- [x] Standard 1 tasks (1.1-1.8) completed
+- [x] All tests pass (1122 tests)
+- [x] `npm run ci` passes
 - [ ] auth-service route refactoring completed (Task 3.1)
 - [ ] whatsapp-service route review completed (Task 3.2)
 - [ ] promptvault-service route review completed (Task 3.3)
 - [ ] mobile-notifications-service route review completed (Task 3.4)
-- [ ] All tests pass
-- [ ] `npm run ci` passes

@@ -7,11 +7,5 @@
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../common-core" },
-    { "path": "../common-http" },
-    { "path": "../infra-firestore" },
-    { "path": "../infra-notion" }
-  ]
+  "exclude": ["node_modules", "dist"]
 }

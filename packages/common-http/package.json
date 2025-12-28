@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/common",
+  "name": "@intexuraos/common-http",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -21,8 +21,9 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
-    "@intexuraos/infra-notion": "*"
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.0.1",
+    "jose": "^5.9.6",
+    "zod": "^3.24.1"
   }
 }

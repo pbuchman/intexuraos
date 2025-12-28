@@ -27,6 +27,10 @@ export default tseslint.config(
       'boundaries/include': ['apps/*/src/**', 'packages/*/src/**'],
       'boundaries/elements': [
         { type: 'http-contracts', pattern: ['packages/http-contracts/src/**'], mode: 'folder' },
+        { type: 'common-core', pattern: ['packages/common-core/src/**'], mode: 'folder' },
+        { type: 'common-http', pattern: ['packages/common-http/src/**'], mode: 'folder' },
+        { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
+        { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
         { type: 'common', pattern: ['packages/common/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
@@ -41,12 +45,45 @@ export default tseslint.config(
           rules: [
             // http-contracts is a leaf package (no dependencies)
             { from: 'http-contracts', allow: ['http-contracts'] },
-            // common can only import from common
-            { from: 'common', allow: ['common'] },
-            // http-server can import from common
-            { from: 'http-server', allow: ['http-server', 'common'] },
+            // common-core is a leaf package (no dependencies)
+            { from: 'common-core', allow: ['common-core'] },
+            // common-http can import from common-core
+            { from: 'common-http', allow: ['common-http', 'common-core'] },
+            // infra-firestore can import from common-core
+            { from: 'infra-firestore', allow: ['infra-firestore', 'common-core'] },
+            // infra-notion can import from common-core and infra-firestore
+            { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
+            // common is a facade, can import from all decomposed packages
+            {
+              from: 'common',
+              allow: ['common', 'common-core', 'common-http', 'infra-firestore', 'infra-notion'],
+            },
+            // http-server can import from common and decomposed packages
+            {
+              from: 'http-server',
+              allow: [
+                'http-server',
+                'common',
+                'common-core',
+                'common-http',
+                'infra-firestore',
+                'infra-notion',
+              ],
+            },
             // apps can import from all packages
-            { from: 'apps', allow: ['common', 'http-contracts', 'http-server', 'apps'] },
+            {
+              from: 'apps',
+              allow: [
+                'common',
+                'common-core',
+                'common-http',
+                'infra-firestore',
+                'infra-notion',
+                'http-contracts',
+                'http-server',
+                'apps',
+              ],
+            },
           ],
         },
       ],

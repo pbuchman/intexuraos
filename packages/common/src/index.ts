@@ -1,50 +1,68 @@
-// Result types
-export { type Result, ok, err, isOk, isErr } from './result.js';
+/**
+ * @intexuraos/common
+ *
+ * Facade package that re-exports from decomposed packages.
+ * For backward compatibility - consumers can continue using @intexuraos/common.
+ *
+ * New code should prefer importing directly from:
+ * - @intexuraos/common-core - Result types, errors, redaction
+ * - @intexuraos/common-http - Fastify helpers, auth
+ * - @intexuraos/infra-firestore - Firestore client
+ * - @intexuraos/infra-notion - Notion client
+ */
 
-// HTTP utilities
+// Re-export everything from common-core
 export {
+  type Result,
+  ok,
+  err,
+  isOk,
+  isErr,
   type ErrorCode,
   ERROR_HTTP_STATUS,
   IntexuraOSError,
   getErrorMessage,
-} from './http/errors.js';
+  redactToken,
+  redactObject,
+  SENSITIVE_FIELDS,
+} from '@intexuraos/common-core';
 
+// Re-export everything from common-http
 export {
   type Diagnostics,
   type ApiOk,
   type ApiError,
   type ErrorBody,
   type ApiResponse,
-  ok as apiOk,
-  fail as apiFail,
-} from './http/response.js';
-
-export { REQUEST_ID_HEADER, getRequestId } from './http/requestId.js';
-
-export { intexuraFastifyPlugin } from './http/fastifyPlugin.js';
-
-export { handleValidationError } from './http/validation.js';
-
-// Logger utilities
-export { shouldLogRequest, registerQuietHealthCheckLogging } from './http/logger.js';
-
-// Auth utilities
-export { type JwtConfig, type VerifiedJwt, verifyJwt, clearJwksCache } from './auth/jwt.js';
-
-export {
+  apiOk,
+  apiFail,
+  REQUEST_ID_HEADER,
+  getRequestId,
+  intexuraFastifyPlugin,
+  handleValidationError,
+  shouldLogRequest,
+  registerQuietHealthCheckLogging,
+  type JwtConfig,
+  type VerifiedJwt,
+  verifyJwt,
+  clearJwksCache,
   type AuthUser,
   requireAuth,
   tryAuth,
   fastifyAuthPlugin,
-} from './auth/fastifyAuthPlugin.js';
+} from '@intexuraos/common-http';
 
-// Security utilities
-export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+// Re-export everything from infra-firestore
+export {
+  getFirestore,
+  resetFirestore,
+  setFirestore,
+  createFakeFirestore,
+  type FakeFirestore,
+  type FakeFirestoreConfig,
+} from '@intexuraos/infra-firestore';
 
-// Firestore client
-export { getFirestore, resetFirestore, setFirestore } from './firestore.js';
-
-// Notion client
+// Re-export everything from infra-notion
 export {
   type NotionLogger,
   type NotionErrorCode,
@@ -57,21 +75,10 @@ export {
   validateNotionToken,
   getPageWithPreview,
   extractPageTitle,
-} from './notion.js';
-
-// Notion connection repository
-export {
   type NotionConnectionPublic,
   saveNotionConnection,
   getNotionConnection,
   getNotionToken,
   isNotionConnected,
   disconnectNotion,
-} from './notionConnection.js';
-
-// Testing utilities
-export {
-  createFakeFirestore,
-  type FakeFirestore,
-  type FakeFirestoreConfig,
-} from './testing/index.js';
+} from '@intexuraos/infra-notion';
