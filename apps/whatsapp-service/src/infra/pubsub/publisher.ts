@@ -11,7 +11,10 @@ import type {
   InboxError,
 } from '../../domain/inbox/index.js';
 
-const logger = pino({ name: 'pubsub-publisher' });
+const logger = pino({
+  name: 'pubsub-publisher',
+  level: process.env['NODE_ENV'] === 'test' ? 'silent' : 'info',
+});
 
 /**
  * GCP Pub/Sub implementation of EventPublisherPort.

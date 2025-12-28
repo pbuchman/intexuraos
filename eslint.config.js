@@ -10,7 +10,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['*.config.ts', '*.config.js'],
+          allowDefaultProject: ['*.config.ts', '*.config.js', 'vitest.setup.ts'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -131,6 +131,7 @@ export default tseslint.config(
       '**/*.cjs',
       'docker/**',
       'scripts/**',
+      'vitest.setup.ts',
     ],
   }
 );
