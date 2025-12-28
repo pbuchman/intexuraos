@@ -680,6 +680,48 @@ describe('Device Authorization Flow', () => {
         };
         expect(body.success).toBe(true);
       });
+
+      it('logs warning when saveTokens fails but still returns success', async () => {
+        // Create a valid JWT-like access token with a sub claim
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64');
+        const payload = Buffer.from(JSON.stringify({ sub: 'auth0|user-456' })).toString('base64');
+        const signature = 'test-signature';
+        const accessToken = `${header}.${payload}.${signature}`;
+
+        const mockTokenResponse = {
+          access_token: accessToken,
+          refresh_token: 'test-refresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          scope: 'openid profile email offline_access',
+        };
+
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+
+        // Configure the fake repository to fail the next saveTokens call
+        fakeTokenRepo.setFailNextSaveTokens(true);
+
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/device/poll',
+          payload: { device_code: 'test-device-code' },
+        });
+
+        // Request should succeed - storeRefreshToken is best-effort
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { access_token: string; token_type: string; expires_in: number };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.access_token).toBe(accessToken);
+
+        // Verify token was NOT stored due to simulated failure
+        const storedTokens = fakeTokenRepo.getStoredTokens('auth0|user-456');
+        expect(storedTokens).toBeUndefined();
+      });
     });
   });
 });
