@@ -121,6 +121,24 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRepository {
   private mappings = new Map<string, WhatsAppUserMappingPublic & { userId: string }>();
   private phoneIndex = new Map<string, string>();
+  private shouldThrowOnGetMapping = false;
+  private shouldFailFindUserByPhoneNumber = false;
+
+  /**
+   * Configure the fake to throw an exception on getMapping.
+   * Used to test unexpected error handling.
+   */
+  setThrowOnGetMapping(shouldThrow: boolean): void {
+    this.shouldThrowOnGetMapping = shouldThrow;
+  }
+
+  /**
+   * Configure the fake to fail findUserByPhoneNumber.
+   * Used to test user lookup error handling.
+   */
+  setFailFindUserByPhoneNumber(shouldFail: boolean): void {
+    this.shouldFailFindUserByPhoneNumber = shouldFail;
+  }
 
   saveMapping(
     userId: string,
@@ -145,6 +163,9 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+    if (this.shouldThrowOnGetMapping) {
+      throw new Error('Simulated unexpected error in getMapping');
+    }
     const mapping = this.mappings.get(userId);
     if (mapping === undefined) return Promise.resolve(ok(null));
     const { userId: _, ...publicMapping } = mapping;
@@ -152,6 +173,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
+    if (this.shouldFailFindUserByPhoneNumber) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated user lookup failure' })
+      );
+    }
     // Normalize phone number to match stored format (without "+")
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
@@ -176,6 +202,8 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   clear(): void {
     this.mappings.clear();
     this.phoneIndex.clear();
+    this.shouldThrowOnGetMapping = false;
+    this.shouldFailFindUserByPhoneNumber = false;
   }
 }
 
@@ -263,6 +291,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   clear(): void {
     this.messages.clear();
+    this.shouldFailSave = false;
   }
 }
 
