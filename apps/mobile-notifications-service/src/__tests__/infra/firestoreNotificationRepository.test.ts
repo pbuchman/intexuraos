@@ -138,6 +138,81 @@ describe('FirestoreNotificationRepository', () => {
         expect(result.value.notifications.length).toBeLessThanOrEqual(2);
       }
     });
+
+    it('handles invalid base64 cursor gracefully', async () => {
+      // Save a notification first
+      await repository.save(createTestInput({ userId: 'user-123' }));
+
+      // Provide an invalid cursor (not valid base64)
+      const result = await repository.findByUserIdPaginated('user-123', {
+        limit: 10,
+        cursor: '!!!invalid-base64!!!',
+      });
+
+      // Should still work, just ignoring the invalid cursor
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('handles cursor with invalid JSON structure gracefully', async () => {
+      // Save a notification first
+      await repository.save(createTestInput({ userId: 'user-123' }));
+
+      // Provide a cursor with valid base64 but invalid JSON structure (missing id)
+      const invalidCursor = Buffer.from(
+        JSON.stringify({ receivedAt: '2023-01-01T00:00:00.000Z' })
+      ).toString('base64');
+      const result = await repository.findByUserIdPaginated('user-123', {
+        limit: 10,
+        cursor: invalidCursor,
+      });
+
+      // Should still work, ignoring the malformed cursor
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('handles cursor with non-JSON content gracefully', async () => {
+      // Save a notification first
+      await repository.save(createTestInput({ userId: 'user-123' }));
+
+      // Provide a cursor with valid base64 but not valid JSON
+      const invalidCursor = Buffer.from('not-json-at-all').toString('base64');
+      const result = await repository.findByUserIdPaginated('user-123', {
+        limit: 10,
+        cursor: invalidCursor,
+      });
+
+      // Should still work, ignoring the invalid cursor
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('uses valid cursor for pagination', async () => {
+      // Save multiple notifications
+      await repository.save(createTestInput({ userId: 'user-cursor', title: 'First' }));
+      await repository.save(createTestInput({ userId: 'user-cursor', title: 'Second' }));
+
+      // Get first page
+      const firstPage = await repository.findByUserIdPaginated('user-cursor', { limit: 1 });
+      expect(firstPage.ok).toBe(true);
+      if (!firstPage.ok) return;
+
+      // If there's a nextCursor, use it for second page
+      if (firstPage.value.nextCursor !== undefined) {
+        const secondPage = await repository.findByUserIdPaginated('user-cursor', {
+          limit: 1,
+          cursor: firstPage.value.nextCursor,
+        });
+        expect(secondPage.ok).toBe(true);
+      }
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {
