@@ -72,9 +72,9 @@ export default defineConfig({
         '**/routes/routes.ts',
 
         // Decomposed packages (covered via packages/common facade)
-        // JUSTIFIED: These packages contain duplicated code that is tested via packages/common.
-        // The decomposition provides architectural benefits while packages/common remains
-        // the facade that consumers use. Tests validate the facade's behavior.
+        // JUSTIFIED: These packages contain the original code that was extracted from
+        // packages/common. The facade package re-exports everything, so tests validate
+        // behavior through the facade. No code duplication exists.
         'packages/common-core/**',
         'packages/common-http/**',
         'packages/infra-firestore/**',
