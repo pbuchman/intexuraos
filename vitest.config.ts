@@ -77,7 +77,7 @@ export default defineConfig({
         '**/infra/gcs/mediaStorageAdapter.ts',
 
         // BLOCKED: Pub/Sub subscription handler requiring subscription.on() mocking
-        '**/workers/cleanupWorker.ts'
+        '**/workers/cleanupWorker.ts',
       ],
       thresholds: {
         lines: 90,
