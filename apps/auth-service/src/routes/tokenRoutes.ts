@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr, handleValidationError } from '@intexuraos/common';
+import { isErr, handleValidationError, getErrorMessage } from '@intexuraos/common';
 import type { AuthTokens } from '../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
@@ -163,8 +163,10 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           id_token: newTokens.idToken,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return await reply.fail('INTERNAL_ERROR', `Token refresh failed: ${message}`);
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Token refresh failed: ${getErrorMessage(error)}`
+        );
       }
     }
   );

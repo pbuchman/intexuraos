@@ -23,6 +23,7 @@ import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { SpeechTranscriptionPort } from '../ports/transcription.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
+import { getErrorMessage } from '@intexuraos/common';
 
 /**
  * Input for transcribing an audio message.
@@ -346,7 +347,7 @@ export class TranscribeAudioUseCase {
         transcript
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = getErrorMessage(error);
       const errorState: TranscriptionState = {
         status: 'failed',
         startedAt,
