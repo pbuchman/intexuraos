@@ -15,6 +15,7 @@ jobs:
   coverage:
     name: Coverage Report
     runs-on: ubuntu-latest
+    environment: copilot
 
     steps:
       - name: Checkout PR branch
