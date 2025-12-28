@@ -87,28 +87,19 @@ export default tseslint.config(
               message:
                 'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
             },
+            // Pattern-based cross-app isolation:
+            // Block all *-service apps, web app, and api-docs-hub automatically
+            // New apps following naming convention are blocked without config changes
             {
-              group: ['@intexuraos/auth-service', '@intexuraos/auth-service/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/promptvault-service', '@intexuraos/promptvault-service/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/notion-service', '@intexuraos/notion-service/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/whatsapp-service', '@intexuraos/whatsapp-service/**'],
-              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
-            },
-            {
-              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
               group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
