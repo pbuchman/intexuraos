@@ -283,6 +283,21 @@ describe('ProcessImageMessageUseCase', () => {
       expect(messages[0]?.metadata?.phoneNumberId).toBeUndefined();
     });
 
+    it('handles only phoneNumberId without senderName', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+
+      const input = createTestInput({
+        senderName: null,
+        phoneNumberId: '123456789012345',
+      });
+      const result = await usecase.execute(input, logger);
+
+      expect(result.ok).toBe(true);
+      const messages = messageRepository.getAll();
+      expect(messages[0]?.metadata?.phoneNumberId).toBe('123456789012345');
+      expect(messages[0]?.metadata?.senderName).toBeUndefined();
+    });
+
     it('handles different image mime types', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
 
