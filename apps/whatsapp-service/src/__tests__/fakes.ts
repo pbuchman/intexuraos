@@ -124,6 +124,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   private shouldFailGetMapping = false;
   private shouldFailDisconnect = false;
   private shouldFailSaveMapping = false;
+  private shouldFailFindUserByPhoneNumber = false;
   private enforcePhoneUniqueness = false;
 
   /**
@@ -145,6 +146,13 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
    */
   setFailSaveMapping(fail: boolean): void {
     this.shouldFailSaveMapping = fail;
+  }
+
+  /**
+   * Configure the fake to fail findUserByPhoneNumber calls with an INTERNAL_ERROR to simulate downstream failures.
+   */
+  setFailFindUserByPhoneNumber(fail: boolean): void {
+    this.shouldFailFindUserByPhoneNumber = fail;
   }
 
   /**
@@ -214,6 +222,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
+    if (this.shouldFailFindUserByPhoneNumber) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated findUserByPhoneNumber failure' })
+      );
+    }
     // Normalize phone number to match stored format (without "+")
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
@@ -246,6 +259,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     this.shouldFailGetMapping = false;
     this.shouldFailDisconnect = false;
     this.shouldFailSaveMapping = false;
+    this.shouldFailFindUserByPhoneNumber = false;
     this.enforcePhoneUniqueness = false;
   }
 }
