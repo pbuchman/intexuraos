@@ -29,13 +29,20 @@ export class FakeNotionConnectionRepository {
   private connections = new Map<
     string,
     {
-      token: string;
+      token: string | null;
       promptVaultPageId: string;
       connected: boolean;
       createdAt: string;
       updatedAt: string;
     }
   >();
+
+  // Error injection for testing error paths
+  private getTokenError: NotionError | null = null;
+  private getConnectionError: NotionError | null = null;
+  private isConnectedError: NotionError | null = null;
+  // Force getConnection to return null for testing config-not-found scenario
+  private forceGetConnectionNull = false;
 
   saveConnection(
     userId: string,
@@ -62,6 +69,12 @@ export class FakeNotionConnectionRepository {
   }
 
   getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>> {
+    if (this.getConnectionError !== null) {
+      return Promise.resolve(err(this.getConnectionError));
+    }
+    if (this.forceGetConnectionNull) {
+      return Promise.resolve(ok(null));
+    }
     const conn = this.connections.get(userId);
     if (conn === undefined) return Promise.resolve(ok(null));
     return Promise.resolve(
@@ -75,12 +88,18 @@ export class FakeNotionConnectionRepository {
   }
 
   getToken(userId: string): Promise<Result<string | null, NotionError>> {
+    if (this.getTokenError !== null) {
+      return Promise.resolve(err(this.getTokenError));
+    }
     const conn = this.connections.get(userId);
     if (conn?.connected !== true) return Promise.resolve(ok(null));
     return Promise.resolve(ok(conn.token));
   }
 
   isConnected(userId: string): Promise<Result<boolean, NotionError>> {
+    if (this.isConnectedError !== null) {
+      return Promise.resolve(err(this.isConnectedError));
+    }
     const conn = this.connections.get(userId);
     return Promise.resolve(ok(conn?.connected ?? false));
   }
@@ -107,7 +126,12 @@ export class FakeNotionConnectionRepository {
   }
 
   // Test helpers
-  setConnection(userId: string, token: string, promptVaultPageId: string, connected = true): void {
+  setConnection(
+    userId: string,
+    token: string | null,
+    promptVaultPageId: string,
+    connected = true
+  ): void {
     const now = new Date().toISOString();
     this.connections.set(userId, {
       token,
@@ -118,8 +142,41 @@ export class FakeNotionConnectionRepository {
     });
   }
 
+  /**
+   * Set error to return from getToken for testing error paths.
+   */
+  setGetTokenError(error: NotionError | null): void {
+    this.getTokenError = error;
+  }
+
+  /**
+   * Set error to return from getConnection for testing error paths.
+   */
+  setGetConnectionError(error: NotionError | null): void {
+    this.getConnectionError = error;
+  }
+
+  /**
+   * Set error to return from isConnected for testing error paths.
+   */
+  setIsConnectedError(error: NotionError | null): void {
+    this.isConnectedError = error;
+  }
+
+  /**
+   * Force getConnection to return null even when user is connected.
+   * This simulates a data inconsistency scenario for testing.
+   */
+  setForceGetConnectionNull(force: boolean): void {
+    this.forceGetConnectionNull = force;
+  }
+
   clear(): void {
     this.connections.clear();
+    this.getTokenError = null;
+    this.getConnectionError = null;
+    this.isConnectedError = null;
+    this.forceGetConnectionNull = false;
   }
 }
 
@@ -129,6 +186,9 @@ export class FakeNotionConnectionRepository {
 export class MockNotionApiAdapter {
   private pages = new Map<string, { title: string; content: string; url: string }>();
   private childPages = new Map<string, string[]>();
+
+  // Error injection for testing error paths
+  private getPageWithPreviewError: NotionError | null = null;
 
   validateToken(_token: string): Promise<Result<boolean, NotionError>> {
     return Promise.resolve(ok(true));
@@ -146,6 +206,9 @@ export class MockNotionApiAdapter {
       NotionError
     >
   > {
+    if (this.getPageWithPreviewError !== null) {
+      return Promise.resolve(err(this.getPageWithPreviewError));
+    }
     const page = this.pages.get(pageId);
     if (page === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
@@ -261,9 +324,17 @@ export class MockNotionApiAdapter {
     this.childPages.set(parentId, children);
   }
 
+  /**
+   * Set error to return from getPageWithPreview for testing error paths.
+   */
+  setGetPageWithPreviewError(error: NotionError | null): void {
+    this.getPageWithPreviewError = error;
+  }
+
   clear(): void {
     this.pages.clear();
     this.childPages.clear();
+    this.getPageWithPreviewError = null;
   }
 }
 
