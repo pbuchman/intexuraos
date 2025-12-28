@@ -124,5 +124,34 @@ describe('WhatsAppCloudApiSender', () => {
         expect(result.error.message).toContain('timed out');
       }
     });
+
+    it('aborts request when timeout fires', async () => {
+      // Create a fetch that hangs until aborted via signal
+      const mockFetch = vi.fn().mockImplementation((_url: string, options: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          const signal = options.signal as AbortSignal;
+          signal.addEventListener('abort', () => {
+            const abortError = new Error('Aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        });
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const resultPromise = sender.sendTextMessage('+1234567890', 'Hello!');
+
+      // Advance timer past the 30s timeout to trigger controller.abort()
+      await vi.advanceTimersByTimeAsync(30001);
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+        expect(result.error.message).toContain('timed out');
+        expect(result.error.message).toContain('30000ms');
+      }
+    });
   });
 });
