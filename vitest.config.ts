@@ -70,14 +70,6 @@ export default defineConfig({
         // Route barrel files (re-exports only)
         // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/routes/routes.ts',
-
-        // BLOCKED: vi.mock ESM hoisting fails for external SDK class constructors
-        // These require refactoring to dependency injection to test
-        '**/infra/speechmatics/adapter.ts',
-        '**/infra/gcs/mediaStorageAdapter.ts',
-
-        // BLOCKED: Pub/Sub subscription handler requiring subscription.on() mocking
-        '**/workers/cleanupWorker.ts',
       ],
       thresholds: {
         lines: 90,
