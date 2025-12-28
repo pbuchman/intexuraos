@@ -46,6 +46,18 @@ describe('userMappingRepository', () => {
         expect(result.value.phoneNumbers).toHaveLength(2);
       }
     });
+
+    it('returns error when phone is mapped to different user', async () => {
+      await saveUserMapping('user-123', ['15551234567']);
+
+      const result = await saveUserMapping('user-456', ['15551234567']);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('VALIDATION_ERROR');
+        expect(result.error.message).toContain('already mapped to another user');
+      }
+    });
   });
 
   describe('getUserMapping', () => {
