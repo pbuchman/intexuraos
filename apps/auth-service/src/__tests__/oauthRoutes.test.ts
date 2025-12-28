@@ -342,6 +342,28 @@ describe('OAuth2 Routes', () => {
         expect(body.error).toBe('server_error');
         expect(body.error_description).toContain('Network connection refused');
       });
+
+      it('returns 400 when redirect_uri fails Zod URL validation', async () => {
+        app = await buildServer();
+
+        // 'http://' passes Fastify's format:uri but fails Zod's .url() validation
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/oauth/token',
+          payload: {
+            grant_type: 'authorization_code',
+            client_id: 'test-client',
+            client_secret: 'test-secret',
+            code: 'test-code',
+            redirect_uri: 'http://',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as { error: string; error_description: string };
+        expect(body.error).toBe('invalid_request');
+        expect(body.error_description).toBe('Invalid url');
+      });
     });
   });
 
