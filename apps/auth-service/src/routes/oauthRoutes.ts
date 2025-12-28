@@ -6,6 +6,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
+import { getErrorMessage } from '@intexuraos/common';
 import { oauthTokenRequestSchema, isAuth0Error, type TokenResponse } from './schemas.js';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
 import { loadAuth0Config } from './shared.js';
@@ -178,10 +179,9 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           id_token: data.id_token,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return await reply.status(400).send({
           error: 'server_error',
-          error_description: message,
+          error_description: getErrorMessage(error),
         });
       }
     }

@@ -8,6 +8,7 @@ export {
   listPrompts,
   getPrompt,
   updatePrompt,
-  validateNotionToken,
-  getPageWithPreview,
 } from './promptApi.js';
+
+// Re-export shared Notion utilities from common
+export { validateNotionToken, getPageWithPreview } from '@intexuraos/common';

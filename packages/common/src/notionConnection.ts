@@ -1,8 +1,15 @@
 /**
  * Firestore repository for Notion connection config.
+ * Shared between promptvault-service and notion-service.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
+import { ok, err, type Result } from './result.js';
+import { getErrorMessage } from './http/errors.js';
+import { getFirestore } from './firestore.js';
+import type { NotionError } from './notion.js';
 
+/**
+ * Public-facing Notion connection data (excludes sensitive token).
+ */
 export interface NotionConnectionPublic {
   promptVaultPageId: string;
   connected: boolean;
@@ -10,11 +17,9 @@ export interface NotionConnectionPublic {
   updatedAt: string;
 }
 
-export interface NotionError {
-  code: 'NOT_FOUND' | 'UNAUTHORIZED' | 'INTERNAL_ERROR' | 'RATE_LIMITED' | 'VALIDATION_ERROR';
-  message: string;
-}
-
+/**
+ * Internal document structure stored in Firestore.
+ */
 interface NotionConnectionDoc extends NotionConnectionPublic {
   userId: string;
   notionToken: string;
@@ -22,6 +27,9 @@ interface NotionConnectionDoc extends NotionConnectionPublic {
 
 const COLLECTION_NAME = 'notion_connections';
 
+/**
+ * Save a Notion connection for a user.
+ */
 export async function saveNotionConnection(
   userId: string,
   promptVaultPageId: string,
@@ -60,6 +68,9 @@ export async function saveNotionConnection(
   }
 }
 
+/**
+ * Get a user's Notion connection (without token).
+ */
 export async function getNotionConnection(
   userId: string
 ): Promise<Result<NotionConnectionPublic | null, NotionError>> {
@@ -83,6 +94,9 @@ export async function getNotionConnection(
   }
 }
 
+/**
+ * Get a user's Notion token (if connected).
+ */
 export async function getNotionToken(userId: string): Promise<Result<string | null, NotionError>> {
   try {
     const db = getFirestore();
@@ -100,6 +114,9 @@ export async function getNotionToken(userId: string): Promise<Result<string | nu
   }
 }
 
+/**
+ * Check if a user has an active Notion connection.
+ */
 export async function isNotionConnected(userId: string): Promise<Result<boolean, NotionError>> {
   try {
     const db = getFirestore();
@@ -114,6 +131,9 @@ export async function isNotionConnected(userId: string): Promise<Result<boolean,
   }
 }
 
+/**
+ * Disconnect a user's Notion connection.
+ */
 export async function disconnectNotion(
   userId: string
 ): Promise<Result<NotionConnectionPublic, NotionError>> {
