@@ -471,5 +471,26 @@ describe('Authenticated Routes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('returns 500 with fallback status for unknown error code', async () => {
+      const token = await createToken({ sub: 'user-unknown-error' });
+
+      // Set custom error with unknown code to trigger ?? 500 fallback
+      // This tests defensive programming - the statusMap lookup fallback
+      const customError = {
+        code: 'VALIDATION_ERROR',
+        message: 'Test unknown error',
+      };
+      ctx.notificationRepo.setCustomFindError(customError);
+
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/mobile-notifications/any-notif',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // The route should use the fallback status 500 for unknown error codes
+      expect(response.statusCode).toBe(500);
+    });
   });
 });
