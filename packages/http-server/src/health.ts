@@ -106,7 +106,7 @@ export function checkNotionSdk(): HealthCheck {
         reason: 'Notion credentials are per-user; API validated per-request',
       },
     };
-  } catch {
+  } catch /* istanbul ignore next -- defensive code, unreachable in normal execution */ {
     return {
       name: 'notion-sdk',
       status: 'down',

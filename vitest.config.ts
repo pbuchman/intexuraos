@@ -70,15 +70,6 @@ export default defineConfig({
         // Route barrel files (re-exports only)
         // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/routes/routes.ts',
-
-        // Decomposed packages (covered via packages/common facade)
-        // JUSTIFIED: These packages contain the original code that was extracted from
-        // packages/common. The facade package re-exports everything, so tests validate
-        // behavior through the facade. No code duplication exists.
-        'packages/common-core/**',
-        'packages/common-http/**',
-        'packages/infra-firestore/**',
-        'packages/infra-notion/**',
       ],
       thresholds: {
         lines: 90,
