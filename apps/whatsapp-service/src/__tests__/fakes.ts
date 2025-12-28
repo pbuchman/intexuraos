@@ -396,6 +396,8 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   clear(): void {
     this.messages.clear();
     this.shouldFailSave = false;
+    this.shouldFailGetMessage = false;
+    this.shouldFailDeleteMessage = false;
     this.nextCursorToReturn = undefined;
   }
 }
