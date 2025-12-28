@@ -259,6 +259,89 @@ describe('OAuth2 Routes', () => {
         const body = JSON.parse(response.body) as { error: string };
         expect(body.error).toBe('invalid_grant');
       });
+
+      it('includes code_verifier in token request when provided (PKCE)', async () => {
+        app = await buildServer();
+
+        // Use nock's reqheaders to match the body content
+        nock(`https://${AUTH0_DOMAIN}`)
+          .post('/oauth/token', /code_verifier=test-code-verifier-value/)
+          .reply(200, {
+            access_token: 'pkce-access-token',
+            token_type: 'Bearer',
+            expires_in: 86400,
+          });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/oauth/token',
+          payload: {
+            grant_type: 'authorization_code',
+            client_id: 'test-client',
+            client_secret: 'test-secret',
+            code: 'test-code',
+            redirect_uri: 'https://example.com/callback',
+            code_verifier: 'test-code-verifier-value',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as { access_token: string };
+        expect(body.access_token).toBe('pkce-access-token');
+      });
+
+      it('returns server_error when Auth0 returns non-standard error response', async () => {
+        app = await buildServer();
+
+        // Auth0 returns an error response that doesn't match the expected Auth0Error format
+        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(500, {
+          message: 'Internal server error',
+          statusCode: 500,
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/oauth/token',
+          payload: {
+            grant_type: 'authorization_code',
+            client_id: 'test-client',
+            client_secret: 'test-secret',
+            code: 'test-code',
+            redirect_uri: 'https://example.com/callback',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as { error: string; error_description: string };
+        expect(body.error).toBe('server_error');
+        expect(body.error_description).toBe('Token exchange failed');
+      });
+
+      it('returns server_error with message when network request fails', async () => {
+        app = await buildServer();
+
+        // Simulate a network error
+        nock(`https://${AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .replyWithError('Network connection refused');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/oauth/token',
+          payload: {
+            grant_type: 'authorization_code',
+            client_id: 'test-client',
+            client_secret: 'test-secret',
+            code: 'test-code',
+            redirect_uri: 'https://example.com/callback',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as { error: string; error_description: string };
+        expect(body.error).toBe('server_error');
+        expect(body.error_description).toContain('Network connection refused');
+      });
     });
   });
 
