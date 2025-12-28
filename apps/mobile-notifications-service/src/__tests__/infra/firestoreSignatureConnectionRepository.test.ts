@@ -136,6 +136,23 @@ describe('FirestoreSignatureConnectionRepository', () => {
         expect(result.value.length).toBeGreaterThan(0);
       }
     });
+
+    it('returns connections with deviceLabel when present', async () => {
+      await repository.save(
+        createTestInput({ userId: 'user-456', signatureHash: 'hash-dev', deviceLabel: 'iPhone' })
+      );
+
+      const result = await repository.findByUserId('user-456');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.length > 0) {
+        const connection = result.value[0];
+        expect(connection).toBeDefined();
+        if (connection !== undefined) {
+          expect(connection.deviceLabel).toBe('iPhone');
+        }
+      }
+    });
   });
 
   describe('delete', () => {
