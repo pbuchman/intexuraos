@@ -1,0 +1,1059 @@
+# GitHub Issues for Testing Improvements
+#
+# Import instructions:
+# 1. Install gh CLI: brew install gh
+# 2. Authenticate: gh auth login
+# 3. Run: ./scripts/import-issues.sh
+#
+# Or manually create issues one by one:
+# gh issue create --repo pbuchman/intexuraos --title "..." --body "..." --label testing,coverage,copilot
+
+issues:
+  - title: "[Coverage] Task 1.1: Auth Service - Device Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling paths in `apps/auth-service/src/routes/deviceRoutes.ts` to improve branch coverage.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards, TypeScript patterns, and verification rules
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Follow TypeScript patterns** from copilot-instructions:
+         - `noUncheckedIndexedAccess`: use `arr[0] ?? fallback`
+         - `exactOptionalPropertyTypes`: don't assign `undefined` to optional props
+         - Explicit return types on all exports
+         - No `@ts-ignore` or `@ts-expect-error`
+      4. **Run Prettier before CI**: `npx prettier --write .`
+      5. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/auth-service/src/routes/deviceRoutes.ts`
+
+      **Uncovered Lines:** 94, 207, 317
+
+      ## Test File
+
+      `apps/auth-service/src/__tests__/deviceRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Device registration validation failures** (line 94)
+         - Test: Submit device registration with invalid/missing required fields
+         - Expected: 400 response with validation error
+
+      2. **Device update error responses** (line 207)
+         - Test: Update device that doesn't exist or with invalid data
+         - Expected: 404 or 400 response with appropriate error
+
+      3. **Device deletion edge cases** (line 317)
+         - Test: Delete device that doesn't exist
+         - Expected: 404 response
+
+      ## Implementation Pattern
+
+      ```typescript
+      // Use app.inject() for route testing
+      const response = await app.inject({
+        method: 'POST',
+        url: '/devices',
+        payload: { /* invalid data */ },
+        headers: { authorization: 'Bearer test-token' }
+      });
+
+      expect(response.statusCode).toBe(400);
+
+      // Use fake repositories via DI
+      import { setServices, resetServices } from '../services.js';
+
+      beforeEach(() => {
+        setServices({ deviceRepository: fakeDeviceRepository });
+      });
+
+      afterEach(() => {
+        resetServices();
+      });
+      ```
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes (typecheck, lint, test, coverage)
+      - [ ] No new ESLint warnings or TypeScript errors
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "deviceRoutes.ts"
+      ```
+
+      **After completing**, run same command and include **BOTH outputs** in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1 hour)
+
+  - title: "[Coverage] Task 1.2: Auth Service - OAuth Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling paths in `apps/auth-service/src/routes/oauthRoutes.ts` to improve branch coverage.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards, TypeScript patterns, and verification rules
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Follow TypeScript patterns** from copilot-instructions
+      4. **Run Prettier before CI**: `npx prettier --write .`
+      5. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/auth-service/src/routes/oauthRoutes.ts`
+
+      **Uncovered Lines:** 137, 164, 181-182
+
+      ## Test File
+
+      `apps/auth-service/src/__tests__/oauthRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **OAuth callback error handling** (line 137)
+         - Test: OAuth callback with invalid code parameter
+         - Expected: Appropriate error response
+
+      2. **Token exchange failures** (line 164)
+         - Test: Mock token endpoint to return error
+         - Expected: Error propagated correctly
+
+      3. **State validation errors** (lines 181-182)
+         - Test: OAuth callback with missing/invalid state
+         - Expected: 400 response with validation error
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "oauthRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1 hour)
+
+  - title: "[Coverage] Task 1.3: Notion Service - Notification Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling paths in `apps/notion-service/src/routes/notificationRoutes.ts` to improve branch coverage.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards, TypeScript patterns, and verification rules
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Follow TypeScript patterns** from copilot-instructions
+      4. **Run Prettier before CI**: `npx prettier --write .`
+      5. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/notion-service/src/routes/notificationRoutes.ts`
+
+      **Uncovered Lines:** 73, 104, 117, 184, 250
+
+      ## Test File
+
+      `apps/notion-service/src/__tests__/notificationRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Notification creation validation errors** (line 73)
+         - Test: Create notification with invalid payload
+         - Expected: 400 response with validation error
+
+      2. **Notification retrieval failures** (line 104)
+         - Test: Retrieve notification that doesn't exist
+         - Expected: 404 response
+
+      3. **Notification update error paths** (line 117)
+         - Test: Update notification with invalid data
+         - Expected: 400 or 404 response
+
+      4. **Authorization failures** (lines 184, 250)
+         - Test: Access notification without proper authorization
+         - Expected: 401 or 403 response
+
+      ## Acceptance Criteria
+
+      - [ ] All 4 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "notificationRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1-2 hours)
+
+  - title: "[Coverage] Task 1.4: Notion Service - Webhook Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/notion-service/src/routes/webhookRoutes.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/notion-service/src/routes/webhookRoutes.ts`
+
+      **Uncovered Lines:** 61
+
+      ## Test File
+
+      `apps/notion-service/src/__tests__/webhookRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Webhook validation error responses** (line 61)
+         - Test: Send webhook with invalid payload structure
+         - Expected: 400 response with validation error
+
+      ## Acceptance Criteria
+
+      - [ ] Test case implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "webhookRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Low (~30 minutes)
+
+  - title: "[Coverage] Task 1.5: Mobile Notifications - Route Error Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in mobile notifications service routes.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target Files
+
+      - `apps/mobile-notifications-service/src/routes/notificationRoutes.ts` (line 85)
+      - `apps/mobile-notifications-service/src/routes/statusRoutes.ts` (line 85)
+      - `apps/mobile-notifications-service/src/routes/webhookRoutes.ts` (lines 130-134)
+
+      ## Test File
+
+      `apps/mobile-notifications-service/src/__tests__/routes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Notification listing repository errors** (notificationRoutes.ts:85)
+         - Test: Mock repository to throw error
+         - Expected: 500 response with error message
+
+      2. **Status check repository errors** (statusRoutes.ts:85)
+         - Test: Mock status repository to fail
+         - Expected: 500 response with error message
+
+      3. **Webhook processing error branches** (webhookRoutes.ts:130-134)
+         - Test: Send webhook that triggers error path
+         - Expected: Appropriate error response
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -E "(notificationRoutes|statusRoutes|webhookRoutes).ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Low (~1 hour)
+
+  - title: "[Coverage] Task 2.1: WhatsApp - Mapping Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/routes/mappingRoutes.ts` (branch coverage: 55.55%).
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/routes/mappingRoutes.ts`
+
+      **Branch Coverage:** 55.55%
+      **Uncovered Lines:** 146-158, 232, 305
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/routes/mappingRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Phone mapping creation errors** (lines 146-158)
+         - Test: Create mapping with invalid phone number format
+         - Test: Create mapping for already mapped number
+         - Expected: 400 response with validation errors
+
+      2. **Phone mapping update failures** (line 232)
+         - Test: Update mapping that doesn't exist
+         - Expected: 404 response
+
+      3. **Phone mapping deletion edge cases** (line 305)
+         - Test: Delete mapping that doesn't exist
+         - Expected: 404 response
+
+      4. **Validation error responses**
+         - Test: Various invalid input combinations
+         - Expected: Proper validation error messages
+
+      ## Acceptance Criteria
+
+      - [ ] All 4 test cases implemented and passing
+      - [ ] Branch coverage improved from 55.55% to at least 75%
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "mappingRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      High (~2 hours)
+
+  - title: "[Coverage] Task 2.2: WhatsApp - Message Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/routes/messageRoutes.ts` (branch coverage: 80%).
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/routes/messageRoutes.ts`
+
+      **Branch Coverage:** 80%
+      **Uncovered Lines:** 134, 454, 544, 569
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/routes/messageRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Message sending validation errors** (line 134)
+         - Test: Send message with invalid recipient
+         - Expected: 400 response
+
+      2. **Media message error handling** (line 454)
+         - Test: Send media message with invalid media URL
+         - Expected: Appropriate error response
+
+      3. **Reply message failures** (line 544)
+         - Test: Reply to non-existent message
+         - Expected: 404 or 400 response
+
+      4. **Rate limiting responses** (line 569)
+         - Test: Trigger rate limit condition
+         - Expected: 429 response
+
+      ## Acceptance Criteria
+
+      - [ ] All 4 test cases implemented and passing
+      - [ ] Branch coverage improved from 80% to at least 90%
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "messageRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      High (~2-3 hours)
+
+  - title: "[Coverage] Task 2.3: WhatsApp - Webhook Routes Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/routes/webhookRoutes.ts` (branch coverage: 76.84%).
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/routes/webhookRoutes.ts`
+
+      **Branch Coverage:** 76.84%
+      **Uncovered Lines:** 263, 457, 623-630
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/routes/webhookRoutes.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Webhook signature validation failures** (line 263)
+         - Test: Send webhook with invalid signature
+         - Expected: 401 response
+
+      2. **Unknown message type handling** (line 457)
+         - Test: Send webhook with unknown message type
+         - Expected: Graceful handling, logged warning
+
+      3. **Status update processing errors** (line 623-630)
+         - Test: Send malformed status update
+         - Expected: Appropriate error handling
+
+      4. **Error recovery paths**
+         - Test: Simulate transient failures
+         - Expected: Proper error responses
+
+      ## Acceptance Criteria
+
+      - [ ] All 4 test cases implemented and passing
+      - [ ] Branch coverage improved from 76.84% to at least 85%
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "webhookRoutes.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      High (~2-3 hours)
+
+  - title: "[Coverage] Task 3.1: WhatsApp - Process Audio Message Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/domain/inbox/usecases/processAudioMessage.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/domain/inbox/usecases/processAudioMessage.ts`
+
+      **Uncovered Lines:** 84, 222-225
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/usecases/processAudioMessage.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Transcription service failure handling** (line 84)
+         - Test: Mock transcription service to return error
+         - Expected: Error result with appropriate code
+
+      2. **Audio format validation errors** (line 222-225)
+         - Test: Process audio with unsupported format
+         - Expected: Validation error returned
+
+      3. **Storage upload failures**
+         - Test: Mock storage to fail upload
+         - Expected: Error propagated correctly
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "processAudioMessage.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1-2 hours)
+
+  - title: "[Coverage] Task 3.2: WhatsApp - Process Webhook Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/domain/inbox/usecases/processWhatsAppWebhook.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/domain/inbox/usecases/processWhatsAppWebhook.ts`
+
+      **Uncovered Lines:** 184, 298, 332, 355
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/processWhatsAppWebhook.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Unknown webhook event types** (line 184)
+         - Test: Send webhook with unknown event type
+         - Expected: Graceful handling, event ignored
+
+      2. **Partial event processing failures** (line 298)
+         - Test: Send webhook where some events fail to process
+         - Expected: Partial success, errors logged
+
+      3. **Event deduplication edge cases** (line 332)
+         - Test: Send duplicate webhook events
+         - Expected: Duplicates detected and skipped
+
+      4. **Repository error handling** (line 355)
+         - Test: Mock repository to fail
+         - Expected: Error result returned
+
+      ## Acceptance Criteria
+
+      - [ ] All 4 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "processWhatsAppWebhook.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      High (~2-3 hours)
+
+  - title: "[Coverage] Task 3.3: WhatsApp - Transcribe Audio Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/domain/inbox/usecases/transcribeAudio.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/domain/inbox/usecases/transcribeAudio.ts`
+
+      **Uncovered Lines:** 396-405
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/usecases/transcribeAudio.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Transcription retry logic** (lines 396-405)
+         - Test: Mock transient failure then success
+         - Expected: Retry executed, eventual success
+
+      2. **Timeout handling**
+         - Test: Mock slow transcription response
+         - Expected: Timeout error after threshold
+
+      3. **Service unavailable responses**
+         - Test: Mock 503 response from service
+         - Expected: Error result with retry hint
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "transcribeAudio.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1-2 hours)
+
+  - title: "[Coverage] Task 3.4: WhatsApp - Extract Link Previews Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/domain/inbox/usecases/extractLinkPreviews.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/domain/inbox/usecases/extractLinkPreviews.ts`
+
+      **Uncovered Lines:** 169
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/usecases/extractLinkPreviews.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Open Graph fetch timeout** (line 169)
+         - Test: Mock slow response exceeding timeout
+         - Expected: Timeout error, graceful fallback
+
+      2. **Invalid HTML response handling**
+         - Test: Mock response with malformed/empty HTML
+         - Expected: Empty preview returned
+
+      ## Acceptance Criteria
+
+      - [ ] All 2 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "extractLinkPreviews.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Low (~30 minutes)
+
+  - title: "[Coverage] Task 3.5: WhatsApp - Process Image Message Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/domain/inbox/usecases/processImageMessage.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/domain/inbox/usecases/processImageMessage.ts`
+
+      **Uncovered Lines:** 288
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/usecases/processImageMessage.test.ts` (extend existing or create)
+
+      ## Required Test Cases
+
+      1. **Image processing fallback paths** (line 288)
+         - Test: Process image that triggers fallback
+         - Expected: Fallback path executed correctly
+
+      ## Acceptance Criteria
+
+      - [ ] Test case implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "processImageMessage.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Low (~30 minutes)
+
+  - title: "[Coverage] Task 4.1: Auth Service - HTTP Client Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/auth-service/src/routes/httpClient.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/auth-service/src/routes/httpClient.ts`
+
+      **Uncovered Lines:** 26-43
+
+      ## Test File
+
+      `apps/auth-service/src/__tests__/httpClient.test.ts` (create new)
+
+      ## Required Test Cases
+
+      1. **Request timeout handling** (lines 26-43)
+         - Test: Mock slow response exceeding timeout
+         - Expected: Timeout error thrown
+
+      2. **Network error responses**
+         - Test: Mock network failure (ECONNREFUSED, etc.)
+         - Expected: Appropriate error type
+
+      3. **Retry logic**
+         - Test: Mock transient failure then success
+         - Expected: Retry executed if configured
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "httpClient.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1 hour)
+
+  - title: "[Coverage] Task 4.2: WhatsApp - Firestore Repository Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in WhatsApp Firestore repositories.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target Files
+
+      - `apps/whatsapp-service/src/infra/firestore/whatsappWebhookEventRepository.ts` (lines 174, 213, 241, 252)
+      - `apps/whatsapp-service/src/infra/firestore/whatsappMessageRepository.ts` (line 39)
+      - `apps/whatsapp-service/src/infra/firestore/phoneMappingRepository.ts` (line 83)
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/infra/repositories.test.ts` (create new)
+
+      ## Required Test Cases
+
+      1. **Firestore error handling in event storage** (whatsappWebhookEventRepository.ts)
+         - Test: Mock Firestore to throw error on write
+         - Expected: Error propagated with context
+
+      2. **Message retrieval failures** (whatsappMessageRepository.ts:39)
+         - Test: Mock Firestore to throw error on read
+         - Expected: Error result returned
+
+      3. **Phone mapping lookup errors** (phoneMappingRepository.ts:83)
+         - Test: Mock Firestore to fail on query
+         - Expected: Error handled gracefully
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -E "(whatsappWebhookEventRepository|whatsappMessageRepository|phoneMappingRepository).ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1-2 hours)
+
+  - title: "[Coverage] Task 4.3: WhatsApp - Link Preview Fetcher Tests"
+    labels:
+      - testing
+      - coverage
+      - copilot
+    body: |
+      ## Objective
+
+      Add tests for error handling in `apps/whatsapp-service/src/infra/linkpreview/openGraphFetcher.ts`.
+
+      ## ⚠️ MANDATORY: Repository Standards
+
+      Before writing ANY code, you MUST:
+
+      1. **Read `.github/copilot-instructions.md`** — contains all coding standards
+      2. **Read `.github/instructions/apps.instructions.md`** — app-specific patterns
+      3. **Run Prettier before CI**: `npx prettier --write .`
+      4. **All verification must pass**: `npm run ci`
+
+      ## Target File
+
+      `apps/whatsapp-service/src/infra/linkpreview/openGraphFetcher.ts`
+
+      **Uncovered Lines:** 137, 154-157, 234
+
+      ## Test File
+
+      `apps/whatsapp-service/src/__tests__/infra/openGraphFetcher.test.ts` (create new)
+
+      ## Required Test Cases
+
+      1. **HTML parsing edge cases** (line 137)
+         - Test: HTML with unusual encoding or structure
+         - Expected: Graceful parsing or fallback
+
+      2. **Meta tag extraction failures** (lines 154-157)
+         - Test: HTML without standard OG meta tags
+         - Expected: Empty/partial preview returned
+
+      3. **Malformed HTML handling** (line 234)
+         - Test: Response with invalid/broken HTML
+         - Expected: Error handled, no crash
+
+      ## Acceptance Criteria
+
+      - [ ] All 3 test cases implemented and passing
+      - [ ] Code follows `.github/copilot-instructions.md` standards
+      - [ ] `npx prettier --write .` executed
+      - [ ] `npm run ci` passes
+
+      ## Coverage Reporting (REQUIRED)
+
+      **Before starting**, run and record output:
+      ```bash
+      npm run test:coverage 2>&1 | grep -A2 "openGraphFetcher.ts"
+      ```
+
+      **After completing**, include BOTH outputs in PR description.
+
+      ## Effort Estimate
+
+      Medium (~1 hour)
+
