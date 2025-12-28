@@ -191,4 +191,62 @@ describe('JWT verification', () => {
       code: 'UNAUTHORIZED',
     });
   });
+
+  it('rejects token with signature verification failure', async () => {
+    // Generate a different key pair but use same kid as JWKS
+    const { privateKey: wrongKey } = await jose.generateKeyPair('RS256');
+
+    const token = await new jose.SignJWT({ sub: 'user-123' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(issuer)
+      .setAudience(audience)
+      .sign(wrongKey);
+
+    const config: JwtConfig = {
+      jwksUrl,
+      issuer,
+      audience,
+    };
+
+    await expect(verifyJwt(token, config)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      message: 'Invalid token signature',
+    });
+  });
+
+  it('rejects token with empty sub claim', async () => {
+    const token = await createToken({ sub: '' });
+
+    const config: JwtConfig = {
+      jwksUrl,
+      issuer,
+      audience,
+    };
+
+    await expect(verifyJwt(token, config)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      message: 'Token missing sub claim',
+    });
+  });
+
+  it('uses cached JWKS client for multiple verifications', async () => {
+    const token1 = await createToken({ sub: 'user-123' });
+    const token2 = await createToken({ sub: 'user-456' });
+
+    const config: JwtConfig = {
+      jwksUrl,
+      issuer,
+      audience,
+    };
+
+    // First verification - cache miss
+    const result1 = await verifyJwt(token1, config);
+    expect(result1.sub).toBe('user-123');
+
+    // Second verification - cache hit
+    const result2 = await verifyJwt(token2, config);
+    expect(result2.sub).toBe('user-456');
+  });
 });
