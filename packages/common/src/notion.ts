@@ -255,7 +255,7 @@ export async function getPageWithPreview(
 /**
  * Extract title from Notion page properties.
  */
-function extractPageTitle(properties: Record<string, unknown>): string {
+export function extractPageTitle(properties: Record<string, unknown>): string {
   const titleProp =
     properties['title'] ?? properties['Title'] ?? properties['Name'] ?? properties['name'];
 
