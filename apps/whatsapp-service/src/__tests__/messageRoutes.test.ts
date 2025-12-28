@@ -288,12 +288,15 @@ describe('WhatsApp Message Routes', () => {
         webhookEventId: 'event-signed-url-fail',
       });
 
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
       // Configure fake to fail getSignedUrl
       ctx.mediaStorage.setFailGetSignedUrl(true);
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/media`,
+        url: `/whatsapp/messages/${messageId}/media`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -454,12 +457,15 @@ describe('WhatsApp Message Routes', () => {
         webhookEventId: 'event-thumb-signed-url-fail',
       });
 
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
       // Configure fake to fail getSignedUrl
       ctx.mediaStorage.setFailGetSignedUrl(true);
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/whatsapp/messages/${saveResult.ok ? saveResult.value.id : 'unknown'}/thumbnail`,
+        url: `/whatsapp/messages/${messageId}/thumbnail`,
         headers: { authorization: `Bearer ${token}` },
       });
 
