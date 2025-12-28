@@ -19,8 +19,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         description: 'Receive Notion webhooks (stub - accepts any JSON)',
         tags: ['webhooks'],
         body: {
-          type: 'object',
-          description: 'Webhook payload (any JSON)',
+          description: 'Webhook payload (any JSON object)',
         },
         response: {
           200: {

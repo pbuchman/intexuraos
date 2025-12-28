@@ -25,4 +25,22 @@ describe('POST /notion-webhooks', () => {
     expect(body.success).toBe(true);
     expect(body.data.received).toBe(true);
   });
+
+  it('returns 400 validation error when payload is not an object', async () => {
+    // Send an array instead of an object - arrays fail z.record() validation
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/notion-webhooks',
+      payload: ['array', 'not', 'object'],
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string; details?: { errors: unknown[] } };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(body.error.message).toBe('Validation failed');
+  });
 });
