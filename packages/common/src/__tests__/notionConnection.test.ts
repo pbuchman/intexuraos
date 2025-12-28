@@ -230,5 +230,33 @@ describe('notionConnection', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
     });
+
+    it('handles disconnecting user with incomplete existing data', async () => {
+      // Seed a document with missing promptVaultPageId and createdAt fields
+      fakeFirestore.seedCollection('notion_connections', [
+        {
+          id: 'user-incomplete',
+          data: {
+            userId: 'user-incomplete',
+            notionToken: 'token-xyz',
+            connected: true,
+            updatedAt: '2024-12-01T00:00:00.000Z',
+            // Missing promptVaultPageId and createdAt to trigger fallback branches
+          },
+        },
+      ]);
+
+      const result = await disconnectNotion('user-incomplete');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.connected).toBe(false);
+        // Should use fallback empty string for missing promptVaultPageId
+        expect(result.value.promptVaultPageId).toBe('');
+        // Should use fallback current time for missing createdAt
+        expect(result.value.createdAt).toBe('2025-01-01T12:00:00.000Z');
+        expect(result.value.updatedAt).toBe('2025-01-01T12:00:00.000Z');
+      }
+    });
   });
 });
