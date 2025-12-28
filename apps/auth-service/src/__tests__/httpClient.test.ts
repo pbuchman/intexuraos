@@ -44,6 +44,14 @@ describe('httpClient utilities', () => {
       expect(result.status).toBe(200);
       expect(result.body).toEqual({ raw: 'plain text' });
     });
+    it('handles malformed JSON response gracefully', async () => {
+      nock('https://api.example.com')
+        .post('/endpoint')
+        .reply(200, '{invalid: json}', { 'Content-Type': 'application/json' });
+      const result = await postFormUrlEncoded('https://api.example.com/endpoint', 'key=value');
+      expect(result.status).toBe(200);
+      expect(result.body).toEqual({ raw: '{invalid: json}' });
+    });
     it('handles empty response', async () => {
       nock('https://api.example.com').post('/endpoint').reply(204, '');
       const result = await postFormUrlEncoded('https://api.example.com/endpoint', 'key=value');
