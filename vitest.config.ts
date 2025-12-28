@@ -5,6 +5,8 @@ export default defineConfig({
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    // Setup file to mock Firebase and prevent GCP connections
+    setupFiles: ['./vitest.setup.ts'],
     // Run tests sequentially to avoid race conditions in shared state
     sequence: {
       shuffle: false,
