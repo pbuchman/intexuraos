@@ -1,7 +1,7 @@
 /**
  * Use case for disconnecting Notion integration.
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type { ConnectionRepository } from '../ports/index.js';
 
 /**

@@ -59,7 +59,7 @@ import {
   getPrompt,
   updatePrompt,
 } from '../../infra/notion/promptApi.js';
-import { ok, err } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common-core';
 
 describe('promptApi', () => {
   beforeEach(() => {

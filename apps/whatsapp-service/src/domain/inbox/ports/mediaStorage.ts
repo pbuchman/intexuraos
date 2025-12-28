@@ -2,7 +2,7 @@
  * Port for media storage operations.
  * Abstracts GCS-specific operations for the domain layer.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { InboxError } from './repositories.js';
 
 /**

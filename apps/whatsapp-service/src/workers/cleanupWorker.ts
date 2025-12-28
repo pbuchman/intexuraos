@@ -11,7 +11,7 @@
  * - Idempotent: treats "file not found" as success (may have been deleted already)
  */
 import { PubSub, type Message } from '@google-cloud/pubsub';
-import { getErrorMessage } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { MediaCleanupEvent, MediaStoragePort } from '../domain/inbox/index.js';
 
 /**

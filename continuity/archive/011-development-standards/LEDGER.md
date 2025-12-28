@@ -122,6 +122,23 @@ Update `eslint.config.js` to enforce new package boundaries:
 - Fix any ESLint violations
 - Ensure all tests pass
 
+#### Task 1.10: Remove packages/common facade completely
+
+**Status:** ✅ COMPLETED
+
+Removed the facade package and updated all imports to use specific modules directly.
+
+**Changes Made:**
+
+1. Updated 100+ import statements across all apps
+2. Updated `packages/http-server/src/health.ts` and `packages/http-server/src/__tests__/health.test.ts`
+3. Removed `packages/common` directory
+4. Updated root `tsconfig.json` references
+5. Updated all `apps/*/package.json` dependencies
+6. Updated all `apps/*/tsconfig.json` references
+7. Updated `eslint.config.js` boundaries
+8. All 973 tests pass, `npm run ci` succeeds
+
 ---
 
 ## Standard 2: Hard Cross-App Isolation

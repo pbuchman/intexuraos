@@ -31,7 +31,6 @@ export default tseslint.config(
         { type: 'common-http', pattern: ['packages/common-http/src/**'], mode: 'folder' },
         { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
-        { type: 'common', pattern: ['packages/common/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -53,17 +52,11 @@ export default tseslint.config(
             { from: 'infra-firestore', allow: ['infra-firestore', 'common-core'] },
             // infra-notion can import from common-core and infra-firestore
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
-            // common is a facade, can import from all decomposed packages
-            {
-              from: 'common',
-              allow: ['common', 'common-core', 'common-http', 'infra-firestore', 'infra-notion'],
-            },
-            // http-server can import from common and decomposed packages
+            // http-server can import from decomposed packages
             {
               from: 'http-server',
               allow: [
                 'http-server',
-                'common',
                 'common-core',
                 'common-http',
                 'infra-firestore',
@@ -74,7 +67,6 @@ export default tseslint.config(
             {
               from: 'apps',
               allow: [
-                'common',
                 'common-core',
                 'common-http',
                 'infra-firestore',

@@ -7,5 +7,9 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"],
-  "references": [{ "path": "../common" }]
+  "references": [
+    { "path": "../common-core" },
+    { "path": "../common-http" },
+    { "path": "../infra-firestore" }
+  ]
 }

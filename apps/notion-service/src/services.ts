@@ -2,7 +2,8 @@
  * Service wiring for notion-service.
  * Provides backward-compatible service container for routes.
  */
-import type { NotionLogger, Result, NotionError } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
+import type { NotionLogger, NotionError } from '@intexuraos/infra-notion';
 import {
   saveNotionConnection,
   getNotionConnection,

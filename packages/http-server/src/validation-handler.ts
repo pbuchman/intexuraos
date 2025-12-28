@@ -4,6 +4,8 @@
  */
 
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
+// Import the module that augments FastifyReply with .fail() method
+import '@intexuraos/common-http';
 
 /**
  * Type guard for Fastify validation errors.

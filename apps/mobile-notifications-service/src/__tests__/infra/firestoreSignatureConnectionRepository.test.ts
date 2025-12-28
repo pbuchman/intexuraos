@@ -3,7 +3,7 @@
  * Uses FakeFirestore for in-memory testing.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/common';
+import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { FirestoreSignatureConnectionRepository } from '../../infra/firestore/index.js';
 import type { CreateSignatureConnectionInput } from '../../domain/notifications/index.js';

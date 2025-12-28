@@ -2,7 +2,7 @@
  * Port for prompt storage operations.
  * This is the main repository interface for the PromptVault domain.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type {
   Prompt,
   PromptId,

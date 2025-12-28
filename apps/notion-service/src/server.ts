@@ -7,8 +7,8 @@ import {
   intexuraFastifyPlugin,
   fastifyAuthPlugin,
   registerQuietHealthCheckLogging,
-  type NotionLogger,
-} from '@intexuraos/common';
+} from '@intexuraos/common-http';
+import type { NotionLogger } from '@intexuraos/infra-notion';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import {
   checkSecrets,

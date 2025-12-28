@@ -5,7 +5,6 @@
     { "path": "packages/common-http" },
     { "path": "packages/infra-firestore" },
     { "path": "packages/infra-notion" },
-    { "path": "packages/common" },
     { "path": "packages/http-contracts" },
     { "path": "packages/http-server" },
     { "path": "apps/auth-service" },

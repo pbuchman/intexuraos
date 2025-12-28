@@ -2,7 +2,8 @@
  * Health check utilities for IntexuraOS services.
  */
 
-import { getErrorMessage, getFirestore } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 
 /**
  * Health status values.

@@ -7,7 +7,7 @@ import * as jose from 'jose';
 import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { clearJwksCache } from '@intexuraos/common';
+import { clearJwksCache } from '@intexuraos/common-http';
 import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppUserMappingRepository,

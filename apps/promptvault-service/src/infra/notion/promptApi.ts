@@ -2,16 +2,14 @@
  * Notion API for PromptVault operations.
  * Simplified: direct functions, no abstraction layers.
  */
+import { ok, err, type Result } from '@intexuraos/common-core';
 import {
-  ok,
-  err,
-  type Result,
   createNotionClient,
   mapNotionError,
   extractPageTitle,
   type NotionLogger,
   type NotionError,
-} from '@intexuraos/common';
+} from '@intexuraos/infra-notion';
 import { getNotionToken, getNotionConnection, isNotionConnected } from '../firestore/index.js';
 
 // ============================================================================

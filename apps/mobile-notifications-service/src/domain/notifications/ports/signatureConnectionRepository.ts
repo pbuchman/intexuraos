@@ -2,7 +2,7 @@
  * Port for SignatureConnection persistence.
  * Implemented by infra layer (Firestore).
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { SignatureConnection, CreateSignatureConnectionInput } from '../models/index.js';
 
 /**

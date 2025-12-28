@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { handleValidationError } from '@intexuraos/common';
+import { handleValidationError } from '@intexuraos/common-http';
 import { webhookRequestSchema } from './schemas.js';
 
 export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {

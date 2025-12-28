@@ -96,19 +96,29 @@ The existing infrastructure meets all requirements. No changes needed.
    - `notion.ts` - Notion client utilities
    - `notionConnection.ts` - Notion connection repository
 
-#### Files Modified
+#### Task 1.10: Remove packages/common Facade (COMPLETED)
 
-- `packages/common/src/index.ts` - Converted to facade re-exporting from decomposed packages
-- `packages/common/package.json` - Updated dependencies
-- `packages/common/tsconfig.json` - Added references
-- `tsconfig.json` - Added new package references
-- `eslint.config.js` - Added boundary rules for new packages
-- `vitest.config.ts` - Excluded decomposed packages from coverage (covered via facade)
+**packages/common removed entirely.** All apps now import directly from decomposed packages:
 
-#### Backward Compatibility
+**Updated Files:**
 
-The `packages/common` package now acts as a facade, re-exporting everything from
-the decomposed packages. Existing code continues to work without import changes.
+- All `apps/*/src/**/*.ts` - Import statements updated (100+ files)
+- All `apps/*/package.json` - Dependencies updated
+- All `apps/*/tsconfig.json` - References updated
+- `packages/http-server/src/health.ts` - Import from specific packages
+- `packages/http-server/package.json` - Updated dependencies
+- `packages/http-server/tsconfig.json` - Updated references
+- `tsconfig.json` - Removed packages/common reference
+- `eslint.config.js` - Removed 'common' boundary element
+
+**Import Migration:**
+| From `@intexuraos/common` | To |
+| --- | --- |
+| `Result`, `ok`, `err`, `isOk`, `isErr` | `@intexuraos/common-core` |
+| `ErrorCode`, `getErrorMessage`, `IntexuraOSError` | `@intexuraos/common-core` |
+| `intexuraFastifyPlugin`, `requireAuth`, `handleValidationError` | `@intexuraos/common-http` |
+| `getFirestore`, `createFakeFirestore`, `setFirestore` | `@intexuraos/infra-firestore` |
+| `NotionLogger`, `NotionError`, `validateNotionToken` | `@intexuraos/infra-notion` |
 
 ---
 
@@ -158,10 +168,13 @@ Routes already delegate to use-cases. No changes needed.
 
 ### Phase 2
 
-- [x] Standard 1 tasks (1.1-1.8) completed
-- [x] All tests pass (1122 tests)
+- [x] Standard 1 tasks (1.1-1.10) completed
+- [x] packages/common facade removed completely
+- [x] All apps import directly from decomposed packages
+- [x] All tests pass (973 tests)
 - [x] `npm run ci` passes
 - [x] auth-service route refactoring (Task 3.1) - tokenRoutes refactored
 - [x] whatsapp-service route review (Task 3.2) - No changes needed
 - [x] promptvault-service route review (Task 3.3) - No changes needed
+- [x] mobile-notifications-service route review (Task 3.4) - No changes needed
 - [x] mobile-notifications-service route review (Task 3.4) - No changes needed

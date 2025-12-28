@@ -3,11 +3,14 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock @intexuraos/common before importing health module
-vi.mock('@intexuraos/common', () => ({
+// Mock specific modules before importing health module
+vi.mock('@intexuraos/common-core', () => ({
   getErrorMessage: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : 'Unknown error'
   ),
+}));
+
+vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: vi.fn(),
 }));
 

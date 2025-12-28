@@ -2,7 +2,7 @@
  * Port for event publishing.
  * Abstracts Pub/Sub-specific operations for the domain layer.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { InboxError } from './repositories.js';
 import type { MediaCleanupEvent } from '../events/index.js';
 

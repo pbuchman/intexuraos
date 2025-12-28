@@ -6,7 +6,7 @@
  * 2. Map Notion error codes to appropriate domain errors
  * 3. Return connection details with page preview on success
  */
-import { err, ok, type Result } from '@intexuraos/common';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { ConnectionRepository, NotionApi, NotionError } from '../ports/index.js';
 
 /**

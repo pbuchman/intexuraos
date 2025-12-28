@@ -2,7 +2,7 @@
  * WhatsApp Cloud API Message Sender.
  * Sends messages using the WhatsApp Business Cloud API.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { WhatsAppMessageSender } from '../../domain/inbox/index.js';
 import type { InboxError } from '../../domain/inbox/models/InboxNote.js';
 

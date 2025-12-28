@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { handleValidationError } from '@intexuraos/common';
+import { handleValidationError } from '@intexuraos/common-http';
 import { refreshAccessToken, type RefreshAccessTokenErrorCode } from '../domain/identity/index.js';
 import { refreshTokenRequestSchema } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
