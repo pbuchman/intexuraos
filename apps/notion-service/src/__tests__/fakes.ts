@@ -36,12 +36,31 @@ export class FakeNotionConnectionRepository {
       updatedAt: string;
     }
   >();
+  private shouldFailSave = false;
+  private shouldFailGet = false;
+  private shouldFailDisconnect = false;
+
+  setFailNextSave(fail: boolean): void {
+    this.shouldFailSave = fail;
+  }
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextDisconnect(fail: boolean): void {
+    this.shouldFailDisconnect = fail;
+  }
 
   saveConnection(
     userId: string,
     promptVaultPageId: string,
     notionToken: string
   ): Promise<Result<NotionConnectionPublic, NotionError>> {
+    if (this.shouldFailSave) {
+      this.shouldFailSave = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
+    }
     const now = new Date().toISOString();
     const existing = this.connections.get(userId);
     this.connections.set(userId, {
@@ -62,6 +81,10 @@ export class FakeNotionConnectionRepository {
   }
 
   getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated get failure' }));
+    }
     const conn = this.connections.get(userId);
     if (conn === undefined) return Promise.resolve(ok(null));
     return Promise.resolve(
@@ -86,6 +109,12 @@ export class FakeNotionConnectionRepository {
   }
 
   disconnect(userId: string): Promise<Result<NotionConnectionPublic, NotionError>> {
+    if (this.shouldFailDisconnect) {
+      this.shouldFailDisconnect = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated disconnect failure' })
+      );
+    }
     const conn = this.connections.get(userId);
     if (conn === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Connection not found' }));
@@ -130,6 +159,8 @@ export class MockNotionApiAdapter {
   private pages = new Map<string, { title: string; content: string; url: string }>();
   private inaccessiblePages = new Set<string>();
   private invalidTokens = new Set<string>();
+  private unauthorizedTokens = new Set<string>();
+  private shouldFailWithError: NotionError | null = null;
 
   validateToken(token: string): Promise<Result<boolean, NotionError>> {
     if (this.invalidTokens.has(token)) {
@@ -139,7 +170,7 @@ export class MockNotionApiAdapter {
   }
 
   getPageWithPreview(
-    _token: string,
+    token: string,
     pageId: string
   ): Promise<
     Result<
@@ -150,6 +181,16 @@ export class MockNotionApiAdapter {
       NotionError
     >
   > {
+    // Check for forced error first
+    if (this.shouldFailWithError !== null) {
+      const error = this.shouldFailWithError;
+      this.shouldFailWithError = null;
+      return Promise.resolve(err(error));
+    }
+    // Check for unauthorized token
+    if (this.unauthorizedTokens.has(token)) {
+      return Promise.resolve(err({ code: 'UNAUTHORIZED', message: 'Invalid token' }));
+    }
     if (this.inaccessiblePages.has(pageId)) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Page not found' }));
     }
@@ -178,9 +219,19 @@ export class MockNotionApiAdapter {
     this.invalidTokens.add(token);
   }
 
+  setTokenUnauthorized(token: string): void {
+    this.unauthorizedTokens.add(token);
+  }
+
+  setNextError(error: NotionError): void {
+    this.shouldFailWithError = error;
+  }
+
   clear(): void {
     this.pages.clear();
     this.inaccessiblePages.clear();
     this.invalidTokens.clear();
+    this.unauthorizedTokens.clear();
+    this.shouldFailWithError = null;
   }
 }
