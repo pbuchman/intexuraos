@@ -351,6 +351,16 @@ import { getErrorMessage } from '@intexuraos/common';
 
 **No external dependencies required.** Tests use in-memory fake repositories via dependency injection.
 
+### ⚠️ Important for Copilot Coding Agent
+
+**DO NOT attempt to connect to GCP, Firebase, or any external services when running tests.**
+
+- Tests do NOT require `gcloud`, Firebase emulator, or any cloud connectivity
+- All Firestore operations are mocked via fake repositories (in-memory)
+- All external HTTP calls (Auth0, Notion, WhatsApp) are mocked via `nock`
+- If you see `metadata.google.internal` or similar GCP endpoints — you're doing it wrong
+- Just run `npm run test` or `npm run ci` — everything is self-contained
+
 ### Architecture
 
 | Component                | Test Strategy                                               |
