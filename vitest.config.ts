@@ -76,16 +76,8 @@ export default defineConfig({
         '**/infra/speechmatics/adapter.ts',
         '**/infra/gcs/mediaStorageAdapter.ts',
 
-        // BLOCKED: Complex external SDK interactions requiring extensive mocking
-        // Notion client with pages/blocks API; ~470 lines
-        '**/infra/notion/promptApi.ts',
-
         // BLOCKED: Pub/Sub subscription handler requiring subscription.on() mocking
-        '**/workers/cleanupWorker.ts',
-
-        // BLOCKED: Notion client wrapper with logging fetch
-        // Partially covered but requires complex mocking for full coverage
-        '**/notion.ts',
+        '**/workers/cleanupWorker.ts'
       ],
       thresholds: {
         lines: 90,
