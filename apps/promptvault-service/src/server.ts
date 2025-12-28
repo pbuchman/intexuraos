@@ -14,10 +14,9 @@ import {
   checkSecrets,
   checkFirestore,
   checkNotionSdk,
-  computeOverallStatus,
+  buildHealthResponse,
   createValidationErrorHandler,
   type HealthCheck,
-  type HealthResponse,
 } from '@intexuraos/http-server';
 import { promptVaultRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
@@ -474,15 +473,8 @@ export async function buildServer(): Promise<FastifyInstance> {
         checkNotionSdk(),
         firestoreCheck,
       ];
-      const status = computeOverallStatus(checks);
 
-      const response: HealthResponse = {
-        status,
-        serviceName: SERVICE_NAME,
-        version: SERVICE_VERSION,
-        timestamp: new Date().toISOString(),
-        checks: checks.map((c) => c),
-      };
+      const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
 
       void reply.header('x-health-duration-ms', String(Date.now() - started));
       return await reply.type('application/json').send(response);
