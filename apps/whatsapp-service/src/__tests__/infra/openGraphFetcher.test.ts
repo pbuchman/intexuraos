@@ -214,6 +214,75 @@ describe('OpenGraphFetcher', () => {
 
       vi.useRealTimers();
     });
+
+    it('returns TOO_LARGE when streaming response exceeds limit (no content-length header)', async () => {
+      // Create a fetcher with small max response size to trigger streaming limit
+      const smallFetcher = new OpenGraphFetcher({
+        timeoutMs: 5000,
+        maxResponseSize: 50,
+      });
+
+      // Return a large response without content-length header so size is checked during streaming
+      const largeContent = '<html>'.padEnd(100, 'x') + '</html>';
+      nock('https://example.com').get('/large-stream').reply(200, largeContent, {
+        'content-type': 'text/html',
+        // No content-length header, so size is checked during streaming
+      });
+
+      const result = await smallFetcher.fetchPreview('https://example.com/large-stream');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOO_LARGE');
+        expect(result.error.message).toContain('exceeded');
+      }
+    });
+
+    it('returns FETCH_FAILED for unknown non-Error exceptions', async () => {
+      // Mock the global fetch to throw a non-Error value
+      const originalFetch = global.fetch;
+      global.fetch = (): never => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'string-error';
+      };
+
+      try {
+        const result = await fetcher.fetchPreview('https://example.com/error');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('FETCH_FAILED');
+          expect(result.error.message).toBe('Unknown error');
+        }
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it('returns FETCH_FAILED when response has no body', async () => {
+      // Mock fetch to return a response with null body
+      const originalFetch = global.fetch;
+      global.fetch = (): Promise<Response> =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'content-type': 'text/html' }),
+          body: null,
+        } as Response);
+
+      try {
+        const result = await fetcher.fetchPreview('https://example.com/nobody');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('FETCH_FAILED');
+          expect(result.error.message).toBe('No response body');
+        }
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
   });
 
   describe('configuration', () => {
