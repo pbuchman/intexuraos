@@ -49,10 +49,13 @@ export {
   type NotionLogger,
   type NotionErrorCode,
   type NotionError,
+  type NotionPagePreview,
   mapNotionError,
   createNotionClient,
   NotionClient,
   type BlockObjectResponse,
+  validateNotionToken,
+  getPageWithPreview,
 } from './notion.js';
 
 // Testing utilities
