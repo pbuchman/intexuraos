@@ -112,6 +112,35 @@ describe('Authenticated Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
+
+    it('returns 500 on notification repository failure', async () => {
+      const userId = 'user-notif-fail';
+      const token = await createToken({ sub: userId });
+
+      // Add signature connection so we reach the notification repository call
+      await ctx.signatureRepo.save({
+        userId,
+        signatureHash: hashSignature('test-signature'),
+      });
+
+      // Make notification repository fail
+      ctx.notificationRepo.setFailNextFind(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications/status',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Simulated find failure');
+    });
   });
 
   describe('POST /mobile-notifications/connect', () => {
