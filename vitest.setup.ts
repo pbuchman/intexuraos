@@ -30,3 +30,4 @@ process.env.LOG_LEVEL = 'silent';
 // Prevent any GCP metadata lookups
 process.env.GOOGLE_APPLICATION_CREDENTIALS = '';
 process.env.GCLOUD_PROJECT = 'test-project';
+
