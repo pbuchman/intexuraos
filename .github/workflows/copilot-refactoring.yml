@@ -1,14 +1,10 @@
 name: Copilot Refactoring Pass
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   create-refactoring-issue:
-    # Only run on PR merges, not direct pushes
-    if: github.event.head_commit.message != '' && contains(github.event.head_commit.message, 'Merge pull request')
     runs-on: ubuntu-latest
     environment: copilot
     permissions:
