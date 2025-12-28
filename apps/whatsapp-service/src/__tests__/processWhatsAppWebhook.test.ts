@@ -19,10 +19,15 @@ import { ok, err } from '@intexuraos/common';
 class FakeInboxNotesRepository implements InboxNotesRepository {
   private notes = new Map<string, InboxNote>();
   private shouldFail = false;
+  private shouldReturnWithoutId = false;
 
   createNote(note: InboxNote): Promise<Result<InboxNote, InboxError>> {
     if (this.shouldFail) {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Fake error' }));
+    }
+    if (this.shouldReturnWithoutId) {
+      // Return note without id to test edge case
+      return Promise.resolve(ok({ ...note }));
     }
     const created = { ...note, id: `note-${String(Date.now())}` };
     this.notes.set(created.id, created);
@@ -47,6 +52,10 @@ class FakeInboxNotesRepository implements InboxNotesRepository {
     this.shouldFail = fail;
   }
 
+  setReturnWithoutId(returnWithoutId: boolean): void {
+    this.shouldReturnWithoutId = returnWithoutId;
+  }
+
   getAll(): InboxNote[] {
     return Array.from(this.notes.values());
   }
@@ -54,6 +63,7 @@ class FakeInboxNotesRepository implements InboxNotesRepository {
   clear(): void {
     this.notes.clear();
     this.shouldFail = false;
+    this.shouldReturnWithoutId = false;
   }
 }
 
@@ -166,6 +176,47 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       }
     });
 
+    it('ignores payloads where entry array has undefined first element', async () => {
+      // Create payload with sparse array to trigger NO_ENTRY_DATA
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [],
+      };
+      // Manually manipulate the array to have length but undefined element
+      const entries = payload.entry as unknown[];
+      entries.length = 1;
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_ENTRY_DATA');
+      }
+    });
+
+    it('ignores payloads where changes array has undefined first element', async () => {
+      // Create payload with sparse array in changes to trigger NO_CHANGE_DATA
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [{ id: 'entry-1', changes: [] }],
+      };
+      // Manually manipulate the changes array to have length but undefined element
+      const entry = payload.entry?.[0];
+      if (entry !== undefined) {
+        const changes = entry.changes as unknown[];
+        changes.length = 1;
+      }
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_CHANGE_DATA');
+      }
+    });
+
     it('ignores unsupported phone number IDs', async () => {
       const payload = createValidPayload('+1234567890', 'Hello', 'unsupported-phone-id');
 
@@ -242,6 +293,192 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
         expect(result.value.ignoredReason?.code).toBe('NON_TEXT_MESSAGE');
       }
     });
+
+    it('ignores payloads with missing phone number ID in metadata', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {},
+                  messages: [
+                    {
+                      from: '+1234567890',
+                      id: 'wamid.123',
+                      timestamp: '12345',
+                      type: 'text',
+                      text: { body: 'Hello' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_PHONE_NUMBER_ID');
+      }
+    });
+
+    it('ignores payloads with empty phone number ID in metadata', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: '' },
+                  messages: [
+                    {
+                      from: '+1234567890',
+                      id: 'wamid.123',
+                      timestamp: '12345',
+                      type: 'text',
+                      text: { body: 'Hello' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_PHONE_NUMBER_ID');
+      }
+    });
+
+    it('ignores payloads where messages array has undefined first element', async () => {
+      // Create payload with sparse array to trigger NO_MESSAGE_DATA
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: 'allowed-phone-id' },
+                  // Array with length > 0 but undefined first element
+                  messages: [],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      // Manually manipulate the array to have length but undefined element
+      // TypeScript types don't allow this directly, so we cast
+      const entry = payload.entry?.[0];
+      if (entry?.changes?.[0]?.value.messages !== undefined) {
+        const messages = entry.changes[0].value.messages as unknown[];
+        messages.length = 1;
+      }
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_MESSAGE_DATA');
+      }
+    });
+
+    it('ignores text messages with empty body', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: 'allowed-phone-id' },
+                  messages: [
+                    {
+                      from: '+1234567890',
+                      id: 'wamid.123',
+                      timestamp: '12345',
+                      type: 'text',
+                      text: { body: '' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_TEXT_BODY');
+      }
+    });
+
+    it('ignores text messages with missing text object', async () => {
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: { phone_number_id: 'allowed-phone-id' },
+                  messages: [
+                    {
+                      from: '+1234567890',
+                      id: 'wamid.123',
+                      timestamp: '12345',
+                      type: 'text',
+                      // text object is missing
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.ignoredReason?.code).toBe('NO_TEXT_BODY');
+      }
+    });
   });
 
   describe('user mapping', () => {
@@ -310,6 +547,53 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
         expect(result.value.inboxNote?.title.length).toBeLessThanOrEqual(60); // "WA: " + 50 + "..."
       }
     });
+
+    it('creates inbox note with phone number only as sender when no contact name', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone]);
+
+      // Create payload without contacts profile name
+      const payload: WhatsAppWebhookPayload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: 'entry-1',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '+10000000000',
+                    phone_number_id: 'allowed-phone-id',
+                  },
+                  // No contacts array - sender name should be just the phone number
+                  messages: [
+                    {
+                      from: phone,
+                      id: 'wamid.123',
+                      timestamp: String(Math.floor(Date.now() / 1000)),
+                      type: 'text',
+                      text: { body: 'Hello without contact name' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.inboxNote).toBeDefined();
+        // Sender should be just the phone number without the name
+        expect(result.value.inboxNote?.sender).toBe(phone);
+      }
+    });
   });
 
   describe('error handling', () => {
@@ -326,6 +610,54 @@ describe('ProcessWhatsAppWebhookUseCase', () => {
       if (result.ok) {
         expect(result.value.status).toBe('FAILED');
         expect(result.value.failureDetails).toContain('Failed to create inbox note');
+      }
+    });
+
+    it('returns error when getMapping repository call fails', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone]);
+      mappingRepo.setFailGetMapping(true);
+
+      const payload = createValidPayload(phone, 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Simulated getMapping failure');
+      }
+    });
+
+    it('returns error when findUserByPhoneNumber repository call fails', async () => {
+      mappingRepo.setFailFindUserByPhoneNumber(true);
+
+      const payload = createValidPayload('+1234567890', 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Simulated findUserByPhoneNumber failure');
+      }
+    });
+
+    it('updates event status without inboxNoteId when created note has no id', async () => {
+      const phone = '+1234567890';
+      await mappingRepo.saveMapping('user-1', [phone]);
+      notesRepo.setReturnWithoutId(true);
+
+      const payload = createValidPayload(phone, 'Hello');
+
+      const result = await useCase.execute('event-1', payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.inboxNote).toBeDefined();
+        // Note should not have an id
+        expect(result.value.inboxNote?.id).toBeUndefined();
       }
     });
   });
