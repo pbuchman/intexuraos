@@ -1,9 +1,11 @@
 /**
  * Tests for HTTP client utility
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from '../routes/httpClient.js';
+import https from 'node:https';
+import { EventEmitter } from 'node:events';
 describe('httpClient utilities', () => {
   beforeAll(() => {
     nock.disableNetConnect();
@@ -75,6 +77,56 @@ describe('httpClient utilities', () => {
       const result = await postFormUrlEncoded('https://api.example.com:8443/endpoint', 'key=value');
       expect(result.status).toBe(200);
       expect(result.body).toEqual({ status: 'ok' });
+    });
+
+    it('handles response with undefined statusCode', async () => {
+      // Mock the https.request to return a response with undefined statusCode
+      const originalRequest = https.request;
+
+      // Create properly typed mock objects
+      interface MockRequest extends EventEmitter {
+        end: (body: string, encoding: string) => void;
+      }
+
+      interface MockResponse extends EventEmitter {
+        statusCode?: number;
+      }
+
+      type ResponseCallback = (res: MockResponse) => void;
+
+      const mockRequest = vi.fn((_options, callback: ResponseCallback | undefined) => {
+        const req = new EventEmitter() as MockRequest;
+        req.end = vi.fn((_body: string, _encoding: string): void => {
+          // Create a mock response with undefined statusCode (by not setting it)
+          const res = new EventEmitter() as MockResponse;
+          // Don't set statusCode - leave it undefined to test the ?? 0 fallback
+
+          // Call the callback with our mock response
+          if (callback !== undefined) {
+            callback(res);
+          }
+
+          // Simulate data and end events
+          setImmediate(() => {
+            res.emit('data', Buffer.from('{"status":"ok"}'));
+            res.emit('end');
+          });
+        });
+        return req;
+      });
+
+      // Temporarily replace https.request with our mock
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+      https.request = mockRequest as any;
+
+      try {
+        const result = await postFormUrlEncoded('https://api.example.com/endpoint', 'key=value');
+        expect(result.status).toBe(0);
+        expect(result.body).toEqual({ status: 'ok' });
+      } finally {
+        // Restore original
+        https.request = originalRequest;
+      }
     });
   });
 });
