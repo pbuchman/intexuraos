@@ -154,6 +154,54 @@ describe('ExtractLinkPreviewsUseCase', () => {
       const msg = await messageRepo.getMessage(testMessage.id);
       expect(msg.ok && msg.value?.linkPreview?.status).toBe('failed');
     });
+
+    it('handles non-Error thrown values with fallback message', async () => {
+      const throwingFetcher = {
+        fetchPreview(): Promise<never> {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return Promise.reject('string error, not Error instance');
+        },
+      };
+      const throwingUseCase = new ExtractLinkPreviewsUseCase({
+        messageRepository: messageRepo,
+        linkPreviewFetcher: throwingFetcher,
+      });
+      await throwingUseCase.execute(
+        { messageId: testMessage.id, userId: 'user-123', text: 'https://weird.com' },
+        logger
+      );
+      const msg = await messageRepo.getMessage(testMessage.id);
+      expect(msg.ok && msg.value?.linkPreview?.status).toBe('failed');
+      if (msg.ok && msg.value?.linkPreview?.status === 'failed') {
+        expect(msg.value.linkPreview.error?.message).toBe('Unknown error');
+      }
+    });
+
+    it('handles malformed HTML with empty preview gracefully', async () => {
+      const emptyPreviewFetcher = {
+        fetchPreview(url: string): Promise<Result<LinkPreview, LinkPreviewError>> {
+          // Returns a preview with only the URL (simulating empty/malformed HTML)
+          return Promise.resolve({ ok: true, value: { url } });
+        },
+      };
+      const emptyUseCase = new ExtractLinkPreviewsUseCase({
+        messageRepository: messageRepo,
+        linkPreviewFetcher: emptyPreviewFetcher,
+      });
+      await emptyUseCase.execute(
+        { messageId: testMessage.id, userId: 'user-123', text: 'https://empty.com' },
+        logger
+      );
+      const msg = await messageRepo.getMessage(testMessage.id);
+      expect(msg.ok && msg.value?.linkPreview?.status).toBe('completed');
+      if (msg.ok && msg.value?.linkPreview?.status === 'completed') {
+        expect(msg.value.linkPreview.previews?.length).toBe(1);
+        const preview = msg.value.linkPreview.previews?.[0];
+        expect(preview?.url).toBe('https://empty.com');
+        expect(preview?.title).toBeUndefined();
+        expect(preview?.description).toBeUndefined();
+      }
+    });
   });
   describe('state transitions', () => {
     it('sets pending state before fetching', async () => {
