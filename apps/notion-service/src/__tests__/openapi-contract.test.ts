@@ -98,21 +98,17 @@ describe('notion-service OpenAPI contract', () => {
   it('has required endpoints documented', () => {
     const paths = openapiSpec.paths;
 
-    expect(paths?.['/v1/integrations/notion/connect']).toBeDefined();
-    expect(paths?.['/v1/integrations/notion/status']).toBeDefined();
-    expect(paths?.['/v1/integrations/notion/disconnect']).toBeDefined();
-    expect(paths?.['/v1/webhooks/notion']).toBeDefined();
+    expect(paths?.['/notion/connect']).toBeDefined();
+    expect(paths?.['/notion/status']).toBeDefined();
+    expect(paths?.['/notion/disconnect']).toBeDefined();
+    expect(paths?.['/notion-webhooks']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
 
   it('protected endpoints require bearerAuth security', () => {
     const paths = openapiSpec.paths;
 
-    const protectedEndpoints = [
-      '/v1/integrations/notion/connect',
-      '/v1/integrations/notion/status',
-      '/v1/integrations/notion/disconnect',
-    ];
+    const protectedEndpoints = ['/notion/connect', '/notion/status', '/notion/disconnect'];
 
     for (const endpoint of protectedEndpoints) {
       const methods = paths?.[endpoint];

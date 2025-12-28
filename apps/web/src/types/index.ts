@@ -27,7 +27,7 @@ export interface ApiErrorResponse {
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 /**
- * User info from /v1/auth/me
+ * User info from /auth/me
  */
 export interface UserInfo {
   userId: string;
@@ -99,6 +99,40 @@ export interface TranscriptionError {
 }
 
 /**
+ * Link preview status for messages with URLs.
+ */
+export type LinkPreviewStatus = 'pending' | 'completed' | 'failed';
+
+/**
+ * Link preview data extracted from Open Graph metadata.
+ */
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  favicon?: string;
+  siteName?: string;
+}
+
+/**
+ * Link preview error details
+ */
+export interface LinkPreviewError {
+  code: string;
+  message: string;
+}
+
+/**
+ * Link preview state for messages
+ */
+export interface LinkPreviewState {
+  status: LinkPreviewStatus;
+  previews?: LinkPreview[];
+  error?: LinkPreviewError;
+}
+
+/**
  * WhatsApp message from whatsapp-service
  */
 export interface WhatsAppMessage {
@@ -113,6 +147,7 @@ export interface WhatsAppMessage {
   transcriptionStatus?: TranscriptionStatus;
   transcription?: string;
   transcriptionError?: TranscriptionError;
+  linkPreview?: LinkPreviewState;
 }
 
 /**
@@ -121,6 +156,7 @@ export interface WhatsAppMessage {
 export interface WhatsAppMessagesResponse {
   messages: WhatsAppMessage[];
   fromNumber: string | null;
+  nextCursor?: string;
 }
 
 /**

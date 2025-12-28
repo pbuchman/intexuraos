@@ -7,7 +7,8 @@ import {
   type ProcessImageMessageInput,
   type ProcessImageMessageDeps,
   type ProcessImageMessageLogger,
-} from '../../domain/inbox/usecases/processImageMessage.js';
+  type WhatsAppWebhookEvent,
+} from '../../domain/inbox/index.js';
 import {
   FakeWhatsAppWebhookEventRepository,
   FakeWhatsAppMessageRepository,
@@ -15,7 +16,6 @@ import {
   FakeWhatsAppCloudApiPort,
   FakeThumbnailGeneratorPort,
 } from '../fakes.js';
-import type { WhatsAppWebhookEvent } from '../../domain/inbox/ports/repositories.js';
 
 function createTestLogger(): ProcessImageMessageLogger {
   return {
@@ -299,6 +299,34 @@ describe('ProcessImageMessageUseCase', () => {
       expect(result.ok).toBe(true);
       const messages = messageRepository.getAll();
       expect(messages[0]?.media?.mimeType).toBe('image/png');
+    });
+
+    it('handles unknown image mime type with fallback extension', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      whatsappCloudApi.setMediaUrl('media-id-unknown', {
+        url: 'https://example.com/media/image.tiff',
+        mimeType: 'image/tiff',
+        fileSize: 1000,
+      });
+      whatsappCloudApi.setMediaContent(
+        'https://example.com/media/image.tiff',
+        Buffer.from('fake-tiff-content')
+      );
+
+      const input = createTestInput({
+        imageMedia: {
+          id: 'media-id-unknown',
+          mimeType: 'image/tiff',
+          sha256: 'abc123',
+        },
+      });
+      const result = await usecase.execute(input, logger);
+
+      expect(result.ok).toBe(true);
+      // The unknown mime type should use 'bin' extension fallback
+      if (result.ok) {
+        expect(result.value.gcsPath).toContain('.bin');
+      }
     });
   });
 });

@@ -9,7 +9,7 @@
  */
 import type { Result } from '@intexuraos/common';
 import { ok, err } from '@intexuraos/common';
-import { normalizePhoneNumber } from '../routes/v1/shared.js';
+import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   WhatsAppWebhookEventRepository,
   WhatsAppUserMappingRepository,
@@ -37,6 +37,10 @@ import type {
   SendMessageResult,
   ThumbnailGeneratorPort,
   ThumbnailResult,
+  LinkPreviewFetcherPort,
+  LinkPreview,
+  LinkPreviewError,
+  LinkPreviewState,
 } from '../domain/inbox/index.js';
 import { randomUUID } from 'node:crypto';
 
@@ -198,12 +202,16 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(fullMessage));
   }
 
-  getMessagesByUser(userId: string, limit = 100): Promise<Result<WhatsAppMessage[], InboxError>> {
+  getMessagesByUser(
+    userId: string,
+    options?: { limit?: number; cursor?: string }
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+    const limit = options?.limit ?? 50;
     const userMessages = Array.from(this.messages.values())
       .filter((m) => m.userId === userId)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
       .slice(0, limit);
-    return Promise.resolve(ok(userMessages));
+    return Promise.resolve(ok({ messages: userMessages }));
   }
 
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
@@ -233,6 +241,19 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
     }
     message.transcription = transcription;
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateLinkPreview(
+    userId: string,
+    messageId: string,
+    linkPreview: LinkPreviewState
+  ): Promise<Result<void, InboxError>> {
+    const message = this.messages.get(messageId);
+    if (message?.userId !== userId) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
+    }
+    message.linkPreview = linkPreview;
     return Promise.resolve(ok(undefined));
   }
 
@@ -668,5 +689,58 @@ export class FakeThumbnailGeneratorPort implements ThumbnailGeneratorPort {
   clear(): void {
     this.shouldFail = false;
     this.customResult = null;
+  }
+}
+
+/**
+ * Fake link preview fetcher port for testing.
+ */
+export class FakeLinkPreviewFetcherPort implements LinkPreviewFetcherPort {
+  private previews = new Map<string, LinkPreview>();
+  private shouldFail = false;
+  private failureError: LinkPreviewError = { code: 'FETCH_FAILED', message: 'Simulated failure' };
+
+  /**
+   * Set a preview result for a specific URL.
+   */
+  setPreview(url: string, preview: LinkPreview): void {
+    this.previews.set(url, preview);
+  }
+
+  /**
+   * Configure the fake to fail all requests.
+   */
+  setFail(fail: boolean, error?: LinkPreviewError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failureError = error;
+    }
+  }
+
+  fetchPreview(url: string): Promise<Result<LinkPreview, LinkPreviewError>> {
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failureError));
+    }
+
+    const preview = this.previews.get(url);
+    if (preview !== undefined) {
+      return Promise.resolve(ok(preview));
+    }
+
+    // Return a default preview for any URL
+    return Promise.resolve(
+      ok({
+        url,
+        title: `Title for ${url}`,
+        description: `Description for ${url}`,
+        siteName: new URL(url).hostname,
+      })
+    );
+  }
+
+  clear(): void {
+    this.previews.clear();
+    this.shouldFail = false;
+    this.failureError = { code: 'FETCH_FAILED', message: 'Simulated failure' };
   }
 }

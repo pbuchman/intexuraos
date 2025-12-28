@@ -12,7 +12,7 @@ export async function connectMobileNotifications(
   const body = deviceLabel !== undefined ? { deviceLabel } : {};
   return await apiRequest<MobileNotificationsConnectResponse>(
     config.mobileNotificationsServiceUrl,
-    '/v1/mobile-notifications/connect',
+    '/mobile-notifications/connect',
     accessToken,
     { method: 'POST', body }
   );
@@ -34,7 +34,7 @@ export async function getMobileNotifications(
   }
   const queryString = params.toString();
   const path =
-    queryString !== '' ? `/v1/mobile-notifications?${queryString}` : '/v1/mobile-notifications';
+    queryString !== '' ? `/mobile-notifications?${queryString}` : '/mobile-notifications';
 
   return await apiRequest<MobileNotificationsResponse>(
     config.mobileNotificationsServiceUrl,
@@ -52,8 +52,29 @@ export async function deleteMobileNotification(
 ): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.mobileNotificationsServiceUrl,
-    `/v1/mobile-notifications/${notificationId}`,
+    `/mobile-notifications/${notificationId}`,
     accessToken,
     { method: 'DELETE' }
+  );
+}
+
+/**
+ * Status response from mobile notifications service.
+ */
+export interface MobileNotificationsStatusResponse {
+  configured: boolean;
+  lastNotificationAt: string | null;
+}
+
+/**
+ * Get mobile notifications status (whether signature is configured).
+ */
+export async function getMobileNotificationsStatus(
+  accessToken: string
+): Promise<MobileNotificationsStatusResponse> {
+  return await apiRequest<MobileNotificationsStatusResponse>(
+    config.mobileNotificationsServiceUrl,
+    '/mobile-notifications/status',
+    accessToken
   );
 }

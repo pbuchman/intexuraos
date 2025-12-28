@@ -10,7 +10,7 @@ import {
   getFirestore,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common';
-import { v1Routes } from './routes/v1/index.js';
+import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
 const SERVICE_NAME = 'mobile-notifications-service';
@@ -169,6 +169,69 @@ export async function buildServer(): Promise<FastifyInstance> {
     disableRequestLogging: true,
   });
 
+  // Capture raw body for debugging JSON parse errors
+  // Only capture for webhook endpoint where we see these errors
+  app.addHook('preParsing', async (request, _reply, payload) => {
+    if (request.url === '/mobile-notifications/webhooks') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of payload) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+      }
+      const rawBody = Buffer.concat(chunks);
+      // Store raw body on request for error handler to access
+      (request as { rawBody?: string }).rawBody = rawBody.toString('utf8');
+      // Return a new readable stream with the same data
+      const { Readable } = await import('stream');
+      return Readable.from(rawBody);
+    }
+    return payload;
+  });
+
+  // Global error handler - logs all errors including schema validation
+  app.setErrorHandler((error, request, reply) => {
+    // Extract error properties safely
+    const fastifyError = error as {
+      statusCode?: number;
+      validation?: unknown;
+      validationContext?: string;
+      message: string;
+    };
+
+    const statusCode = fastifyError.statusCode ?? 500;
+    const errorCode = statusCode >= 500 ? 'INTERNAL_ERROR' : 'INVALID_REQUEST';
+
+    // Log the error with full details
+    // Include rawBody if captured (for JSON parse errors)
+    const rawBody = (request as { rawBody?: string }).rawBody;
+    request.log.error(
+      {
+        err: error,
+        requestId: request.id,
+        url: request.url,
+        method: request.method,
+        statusCode,
+        validation: fastifyError.validation,
+        validationContext: fastifyError.validationContext,
+        ...(rawBody !== undefined ? { rawBody } : {}),
+      },
+      `Request error: ${fastifyError.message}`
+    );
+
+    // Send structured error response
+    return reply.status(statusCode).send({
+      success: false,
+      error: {
+        code: errorCode,
+        message: fastifyError.message,
+        details: fastifyError.validation ?? undefined,
+      },
+      diagnostics: {
+        requestId: request.id,
+        durationMs: Date.now() - request.startTime,
+      },
+    });
+  });
+
   // Register quiet health check logging (skips /health endpoint logs)
   registerQuietHealthCheckLogging(app);
 
@@ -224,8 +287,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Register auth plugin (JWT validation)
   await app.register(fastifyAuthPlugin);
 
-  // Register v1 routes
-  await app.register(v1Routes);
+  // Register mobile notifications routes
+  await app.register(mobileNotificationsRoutes);
 
   // Health endpoint
   app.get(

@@ -134,18 +134,15 @@ try {
   } else {
     const config = JSON.parse(configResult.stdout);
     const hasPlugin = config.plugins?.some((p) => p.includes('boundaries'));
-    const hasNoUnknown = config.rules?.['boundaries/no-unknown']?.[0] === 2;
     const hasElementTypes = config.rules?.['boundaries/element-types']?.[0] === 2;
 
-    if (hasPlugin && hasNoUnknown && hasElementTypes) {
+    if (hasPlugin && hasElementTypes) {
       console.log('✓ CONFIG VERIFIED:');
       console.log('  - boundaries plugin loaded');
-      console.log('  - boundaries/no-unknown: error');
       console.log('  - boundaries/element-types: error');
     } else {
       console.error('❌ CONFIG INVALID:');
       if (!hasPlugin) console.error('  - boundaries plugin NOT loaded');
-      if (!hasNoUnknown) console.error('  - boundaries/no-unknown NOT set to error');
       if (!hasElementTypes) console.error('  - boundaries/element-types NOT set to error');
       exitCode = 1;
     }

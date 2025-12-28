@@ -39,6 +39,8 @@ export async function apiRequest<T>(
   const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
+    // Disable caching to always get fresh data
+    cache: 'no-store',
   };
 
   if (body !== undefined) {

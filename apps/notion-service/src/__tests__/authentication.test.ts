@@ -9,7 +9,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is missing', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
     });
 
     expect(response.statusCode).toBe(401);
@@ -24,7 +24,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED when Authorization header is invalid format', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
       headers: {
         authorization: 'InvalidFormat',
       },
@@ -42,7 +42,7 @@ describe('Authentication', () => {
   it('returns 401 UNAUTHORIZED for invalid JWT', async () => {
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
       headers: {
         authorization: 'Bearer invalid-jwt-token',
       },
@@ -62,7 +62,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -83,7 +83,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },
@@ -104,7 +104,7 @@ describe('Authentication', () => {
 
     const response = await ctx.app.inject({
       method: 'GET',
-      url: '/v1/integrations/notion/status',
+      url: '/notion/status',
       headers: {
         authorization: `Bearer ${token}`,
       },

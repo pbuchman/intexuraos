@@ -1,3 +1,5 @@
+import type { LinkPreviewState } from './LinkPreview.js';
+
 /**
  * Domain model for stored WhatsApp messages.
  * Represents a text, image, or audio message received via WhatsApp webhook.
@@ -167,6 +169,12 @@ export interface WhatsAppMessage {
    * Contains job ID, status, result, and API call tracking.
    */
   transcription?: TranscriptionState;
+
+  /**
+   * Link preview state for messages with URLs.
+   * Contains extracted Open Graph metadata.
+   */
+  linkPreview?: LinkPreviewState;
 
   /**
    * Timestamp from WhatsApp (Unix epoch string).

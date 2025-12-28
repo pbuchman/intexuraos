@@ -84,7 +84,7 @@ describe('auth-service OpenAPI contract', () => {
   it('every POST endpoint with JSON body has requestBody with schema', () => {
     const paths = openapiSpec.paths;
 
-    const postEndpoints = ['/v1/auth/device/start', '/v1/auth/device/poll', '/v1/auth/refresh'];
+    const postEndpoints = ['/auth/device/start', '/auth/device/poll', '/auth/refresh'];
 
     for (const endpoint of postEndpoints) {
       const post = paths?.[endpoint]?.['post'];
@@ -95,10 +95,10 @@ describe('auth-service OpenAPI contract', () => {
   it('has required endpoints documented', () => {
     const paths = openapiSpec.paths;
 
-    expect(paths?.['/v1/auth/device/start']).toBeDefined();
-    expect(paths?.['/v1/auth/device/poll']).toBeDefined();
-    expect(paths?.['/v1/auth/refresh']).toBeDefined();
-    expect(paths?.['/v1/auth/config']).toBeDefined();
+    expect(paths?.['/auth/device/start']).toBeDefined();
+    expect(paths?.['/auth/device/poll']).toBeDefined();
+    expect(paths?.['/auth/refresh']).toBeDefined();
+    expect(paths?.['/auth/config']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
   });
 });

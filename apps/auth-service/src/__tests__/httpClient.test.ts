@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import nock from 'nock';
-import { postFormUrlEncoded, toFormUrlEncodedBody } from '../routes/v1/httpClient.js';
+import { postFormUrlEncoded, toFormUrlEncodedBody } from '../routes/httpClient.js';
 describe('httpClient utilities', () => {
   beforeAll(() => {
     nock.disableNetConnect();

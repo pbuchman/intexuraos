@@ -18,6 +18,7 @@ import {
   FakeSpeechTranscriptionPort,
   FakeWhatsAppCloudApiPort,
   FakeThumbnailGeneratorPort,
+  FakeLinkPreviewFetcherPort,
 } from './fakes.js';
 import type { Config } from '../config.js';
 
@@ -323,6 +324,7 @@ export function setupTestContext(): TestContext {
       transcriptionService: new FakeSpeechTranscriptionPort(),
       whatsappCloudApi: context.whatsappCloudApi,
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
+      linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
     });
 
     clearJwksCache();

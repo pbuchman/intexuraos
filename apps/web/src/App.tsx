@@ -1,6 +1,8 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
+import { PWAProvider } from '@/context/pwa-context';
+import { IOSInstallBanner, AndroidInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
 import {
   LoginPage,
@@ -114,21 +116,26 @@ function AppRoutes(): React.JSX.Element {
 
 export function App(): React.JSX.Element {
   return (
-    <Auth0Provider
-      domain={config.auth0Domain}
-      clientId={config.auth0ClientId}
-      authorizationParams={{
-        redirect_uri: window.location.origin,
-        audience: config.authAudience,
-        scope: 'openid profile email',
-      }}
-      cacheLocation="localstorage"
-    >
-      <HashRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </HashRouter>
-    </Auth0Provider>
+    <PWAProvider>
+      <Auth0Provider
+        domain={config.auth0Domain}
+        clientId={config.auth0ClientId}
+        authorizationParams={{
+          redirect_uri: window.location.origin,
+          audience: config.authAudience,
+          scope: 'openid profile email',
+        }}
+        cacheLocation="localstorage"
+      >
+        <HashRouter>
+          <AuthProvider>
+            <AppRoutes />
+            <UpdateBanner />
+            <IOSInstallBanner />
+            <AndroidInstallBanner />
+          </AuthProvider>
+        </HashRouter>
+      </Auth0Provider>
+    </PWAProvider>
   );
 }

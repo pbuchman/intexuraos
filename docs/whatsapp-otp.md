@@ -175,7 +175,7 @@ POST https://graph.facebook.com/v21.0/{phone_number_id}/messages
 ### 5.1 Request OTP
 
 ```
-POST /v1/whatsapp/verify/request
+POST /whatsapp/verify/request
 
 Request:
 {
@@ -215,7 +215,7 @@ Response 409 (phone already mapped):
 ### 5.2 Verify OTP
 
 ```
-POST /v1/whatsapp/verify/confirm
+POST /whatsapp/verify/confirm
 
 Request:
 {
@@ -266,7 +266,7 @@ Response 423 (locked):
 ### 5.3 Resend OTP
 
 ```
-POST /v1/whatsapp/verify/resend
+POST /whatsapp/verify/resend
 
 Request:
 {
@@ -291,7 +291,7 @@ Response 200:
 
 Document ID: Auto-generated (verification ID)
 
-```typescript
+```ts-example
 interface WhatsAppVerification {
   id: string; // Document ID / verification ID
   userId: string; // User requesting verification
@@ -333,7 +333,7 @@ Index 2: phoneNumberHash ASC, status ASC, createdAt DESC
 - Never log OTP values
 - Store only SHA256 hash of OTP
 
-```typescript
+```ts-example
 import { randomInt, createHash } from 'node:crypto';
 
 function generateOTP(): { code: string; hash: string } {
@@ -355,7 +355,7 @@ function generateOTP(): { code: string; hash: string } {
 - Use constant-time comparison for OTP verification
 - Return same response time regardless of failure reason
 
-```typescript
+```ts-example
 import { timingSafeEqual } from 'node:crypto';
 
 function verifyOTP(providedCode: string, storedHash: string): boolean {
@@ -393,7 +393,7 @@ function verifyOTP(providedCode: string, storedHash: string): boolean {
 
 Use Firestore or Redis for rate limit counters:
 
-```typescript
+```ts-example
 interface RateLimitEntry {
   key: string; // e.g., "otp_request:{phoneHash}"
   count: number;
@@ -488,7 +488,7 @@ interface RateLimitEntry {
 - [ ] Create `VerifyOTPUseCase`
 - [ ] Create `ResendOTPUseCase`
 - [ ] Implement rate limiting
-- [ ] Add routes: `/v1/whatsapp/verify/request`, `/confirm`, `/resend`
+- [ ] Add routes: `/whatsapp/verify/request`, `/confirm`, `/resend`
 - [ ] Register WhatsApp message template with Meta
 - [ ] Add integration tests
 - [ ] Update OpenAPI spec
