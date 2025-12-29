@@ -21,8 +21,7 @@ steps:
     args: ['ci']
 
   # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
-  # Compares with last SUCCESSFUL build to avoid skipping changes from failed builds
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - name: 'node:22'
     id: 'detect-affected'
     waitFor: ['npm-ci']
     entrypoint: 'node'
@@ -30,7 +29,6 @@ steps:
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'PROJECT_ID=$PROJECT_ID'
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # All build steps wait only for detect-affected, enabling parallel execution

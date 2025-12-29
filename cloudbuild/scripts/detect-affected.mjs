@@ -164,7 +164,10 @@ function getDiffRange() {
       } catch {
         console.log('Could not find last successful commit in history, fetching more...');
         try {
-          execSync(`git fetch --unshallow origin ${BRANCH_NAME} || git fetch --depth=500 origin ${BRANCH_NAME}`, { stdio: 'pipe' });
+          execSync(
+            `git fetch --unshallow origin ${BRANCH_NAME} || git fetch --depth=500 origin ${BRANCH_NAME}`,
+            { stdio: 'pipe' }
+          );
           execSync(`git cat-file -e ${lastSuccessCommit}`, { stdio: 'pipe' });
           console.log(`Comparing with last successful build: ${lastSuccessCommit}`);
           return `${lastSuccessCommit}..${commitSha}`;
