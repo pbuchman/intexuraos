@@ -85,14 +85,14 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 4-0: Create Firestore repository ✓
 - 4-1: Create LLM adapters ✓
 - 4-2: Create notification adapter ✓
+- 5-0: Create JSON schemas ✓
 
 **Now:**
 
-- 5-0: Create JSON schemas
+- 5-1: Create research routes
 
 **Next:**
 
-- 5-1: Create research routes
 - 5-2: Setup server
 - 5-3: Create DI container
 
