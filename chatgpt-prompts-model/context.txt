@@ -217,7 +217,7 @@ Note: Authentication state is managed by ChatGPT OAuth, not tracked in model sta
 # API ENDPOINTS REFERENCE
 
 ## Auth Service
-Base: `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app`
+Base: `https://intexuraos-user-service-ooafxzbaua-lm.a.run.app`
 - OAuth authorization and token exchange handled by ChatGPT Actions
 - `GET /auth/oauth/authorize` — Redirects to Auth0 (used by ChatGPT)
 - `POST /auth/oauth/token` — Token exchange (used by ChatGPT)
