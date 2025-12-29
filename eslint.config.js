@@ -47,6 +47,7 @@ export default tseslint.config(
         { type: 'common-http', pattern: ['packages/common-http/src/**'], mode: 'folder' },
         { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
+        { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -68,6 +69,8 @@ export default tseslint.config(
             { from: 'infra-firestore', allow: ['infra-firestore', 'common-core'] },
             // infra-notion can import from common-core and infra-firestore
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
+            // infra-whatsapp can import from common-core
+            { from: 'infra-whatsapp', allow: ['infra-whatsapp', 'common-core'] },
             // http-server can import from decomposed packages
             {
               from: 'http-server',
@@ -87,6 +90,7 @@ export default tseslint.config(
                 'common-http',
                 'infra-firestore',
                 'infra-notion',
+                'infra-whatsapp',
                 'http-contracts',
                 'http-server',
                 'apps',
