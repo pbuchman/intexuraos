@@ -2,7 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
 
-const DEFAULT_MODEL = 'gemini-2.0-flash-exp';
+const DEFAULT_MODEL = 'gemini-3-pro-preview';
+const VALIDATION_MODEL = 'gemini-2.0-flash-lite';
 
 export interface GeminiClient {
   research(prompt: string): Promise<Result<ResearchResult, GeminiError>>;
@@ -11,6 +12,7 @@ export interface GeminiClient {
     originalPrompt: string,
     reports: SynthesisInput[]
   ): Promise<Result<string, GeminiError>>;
+  validateKey(): Promise<Result<boolean, GeminiError>>;
 }
 
 function logRequest(
@@ -130,6 +132,22 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         return ok(text);
       } catch (error) {
         logError('synthesize', requestId, startTime, error);
+        return err(mapGeminiError(error));
+      }
+    },
+
+    async validateKey(): Promise<Result<boolean, GeminiError>> {
+      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 4, 'test');
+
+      try {
+        const model = genAI.getGenerativeModel({ model: VALIDATION_MODEL });
+        const result = await model.generateContent('Say "ok"');
+        result.response.text();
+
+        logResponse('validateKey', requestId, startTime, 2, 'ok');
+        return ok(true);
+      } catch (error) {
+        logError('validateKey', requestId, startTime, error);
         return err(mapGeminiError(error));
       }
     },

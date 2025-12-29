@@ -454,9 +454,10 @@ This rule exists because excluding code from coverage is technical debt that com
 
 ### Test File TypeScript Configuration
 
-**Test files (`src/__tests__/**`) are EXCLUDED from TypeScript compilation (`tsc`).**
+**Test files (`src/**tests**/**`) are EXCLUDED from TypeScript compilation (`tsc`).\*\*
 
 This is intentional — tests are:
+
 - Run by Vitest which uses **esbuild** for transpilation (not `tsc`)
 - Ignored by ESLint (in `eslint.config.js` ignores)
 - Not part of the production build
@@ -474,21 +475,25 @@ TS2307: Cannot find module '@intexuraos/common-core' or its corresponding type d
 ```
 
 **This is a FALSE POSITIVE.** The error appears because:
+
 - Test files are in `exclude` in `tsconfig.json`
 - IDE's TypeScript Language Server cannot resolve workspace package imports
 - But Vitest resolves them correctly at runtime
 
 **DO NOT attempt to "fix" these IDE errors by:**
+
 - ❌ Removing `src/__tests__` from `exclude` in `tsconfig.json`
 - ❌ Adding test dependencies to production dependencies
 - ❌ Creating separate tsconfig for tests
 
 **If you remove `__tests__` from exclude, `npm run build` will FAIL with:**
+
 - Missing type declarations (e.g., `Cannot find module 'nock'`)
 - Implicit `any` errors in test code
 - Other strict mode violations in test files
 
 **Verification:** Tests work correctly despite IDE errors:
+
 ```bash
 npm run test                    # All tests pass
 npm run typecheck               # No errors (tests excluded)

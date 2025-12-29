@@ -4,7 +4,7 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
@@ -12,6 +12,17 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeUserSettingsRepository, FakeEncryptor } from './fakes.js';
+
+// Mock the infra packages for validation testing
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: vi.fn(),
+}));
+vi.mock('@intexuraos/infra-gpt', () => ({
+  createGptClient: vi.fn(),
+}));
+vi.mock('@intexuraos/infra-claude', () => ({
+  createClaudeClient: vi.fn(),
+}));
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
@@ -159,14 +170,21 @@ describe('LLM Keys Routes', () => {
       expect(body.data.anthropic).toBeNull();
     });
 
-    it('returns configured status for set keys', { timeout: 20000 }, async () => {
+    it('returns masked keys for configured providers', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-with-keys';
+      // Use base64-encoded API keys that FakeEncryptor can decode
+      const googleKey = 'AIzaSyB1234567890abcdefghij'; // 28 chars
+      const anthropicKey = 'sk-ant-api1234567890abcd'; // 25 chars
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
-          anthropic: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          anthropic: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -190,9 +208,10 @@ describe('LLM Keys Routes', () => {
         data: { google: string | null; openai: string | null; anthropic: string | null };
       };
       expect(body.success).toBe(true);
-      expect(body.data.google).toBe('configured');
+      // Now returns masked keys like "AIza...ghij" instead of 'configured'
+      expect(body.data.google).toBe('AIza...ghij');
       expect(body.data.openai).toBeNull();
-      expect(body.data.anthropic).toBe('configured');
+      expect(body.data.anthropic).toBe('sk-a...abcd');
     });
 
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {
@@ -218,6 +237,44 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns null when decryption fails', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-decrypt-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      // Make decryption fail
+      fakeEncryptor.setFailNextDecrypt(true);
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { google: string | null; openai: string | null; anthropic: string | null };
+      };
+      expect(body.success).toBe(true);
+      // Returns null when decryption fails
+      expect(body.data.google).toBeNull();
     });
   });
 
@@ -483,12 +540,14 @@ describe('LLM Keys Routes', () => {
 
     it('deletes key successfully', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-delete-key';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
-          openai: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -539,6 +598,311 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('API Key Validation (non-test environment)', () => {
+    const originalNodeEnv = process.env['NODE_ENV'];
+
+    beforeEach(() => {
+      // Set to non-test environment to enable validation
+      process.env['NODE_ENV'] = 'development';
+    });
+
+    afterEach(() => {
+      // Restore original NODE_ENV
+      process.env['NODE_ENV'] = originalNodeEnv;
+      vi.resetAllMocks();
+    });
+
+    it('validates Google API key successfully', { timeout: 20000 }, async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      const mockValidateKey = vi.fn().mockResolvedValue({ ok: true });
+      vi.mocked(createGeminiClient).mockReturnValue({
+        validateKey: mockValidateKey,
+      } as ReturnType<typeof createGeminiClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-google-valid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'AIzaSyB1234567890abcdef',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockValidateKey).toHaveBeenCalled();
+    });
+
+    it('returns 400 when Google API key is invalid', { timeout: 20000 }, async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      vi.mocked(createGeminiClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'INVALID_KEY', message: 'Invalid key' },
+        }),
+      } as unknown as ReturnType<typeof createGeminiClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-google-invalid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'invalid-google-key-1234',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Invalid Google API key');
+    });
+
+    it('returns 400 when Google API returns other error', { timeout: 20000 }, async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      vi.mocked(createGeminiClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'OTHER_ERROR', message: 'Rate limited' },
+        }),
+      } as unknown as ReturnType<typeof createGeminiClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-google-other-error';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'some-google-key-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Google API error: Rate limited');
+    });
+
+    it('validates OpenAI API key successfully', { timeout: 20000 }, async () => {
+      const { createGptClient } = await import('@intexuraos/infra-gpt');
+      const mockValidateKey = vi.fn().mockResolvedValue({ ok: true });
+      vi.mocked(createGptClient).mockReturnValue({
+        validateKey: mockValidateKey,
+      } as ReturnType<typeof createGptClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-openai-valid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'openai',
+          apiKey: 'sk-proj1234567890abcdef',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockValidateKey).toHaveBeenCalled();
+    });
+
+    it('returns 400 when OpenAI API key is invalid', { timeout: 20000 }, async () => {
+      const { createGptClient } = await import('@intexuraos/infra-gpt');
+      vi.mocked(createGptClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'INVALID_KEY', message: 'Invalid key' },
+        }),
+      } as unknown as ReturnType<typeof createGptClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-openai-invalid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'openai',
+          apiKey: 'sk-invalid-key-123456',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Invalid OpenAI API key');
+    });
+
+    it('returns 400 when OpenAI API returns other error', { timeout: 20000 }, async () => {
+      const { createGptClient } = await import('@intexuraos/infra-gpt');
+      vi.mocked(createGptClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'API_ERROR', message: 'Service unavailable' },
+        }),
+      } as unknown as ReturnType<typeof createGptClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-openai-other-error';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'openai',
+          apiKey: 'sk-some-openai-key-1234',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('OpenAI API error: Service unavailable');
+    });
+
+    it('validates Anthropic API key successfully', { timeout: 20000 }, async () => {
+      const { createClaudeClient } = await import('@intexuraos/infra-claude');
+      const mockValidateKey = vi.fn().mockResolvedValue({ ok: true });
+      vi.mocked(createClaudeClient).mockReturnValue({
+        validateKey: mockValidateKey,
+      } as ReturnType<typeof createClaudeClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-anthropic-valid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'anthropic',
+          apiKey: 'sk-ant-api1234567890',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockValidateKey).toHaveBeenCalled();
+    });
+
+    it('returns 400 when Anthropic API key is invalid', { timeout: 20000 }, async () => {
+      const { createClaudeClient } = await import('@intexuraos/infra-claude');
+      vi.mocked(createClaudeClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'INVALID_KEY', message: 'Invalid key' },
+        }),
+      } as unknown as ReturnType<typeof createClaudeClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-anthropic-invalid';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'anthropic',
+          apiKey: 'sk-ant-invalid-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Invalid Anthropic API key');
+    });
+
+    it('returns 400 when Anthropic API returns other error', { timeout: 20000 }, async () => {
+      const { createClaudeClient } = await import('@intexuraos/infra-claude');
+      vi.mocked(createClaudeClient).mockReturnValue({
+        validateKey: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'QUOTA_EXCEEDED', message: 'Quota exceeded' },
+        }),
+      } as unknown as ReturnType<typeof createClaudeClient>);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-anthropic-other-error';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'anthropic',
+          apiKey: 'sk-ant-some-key-123456',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.error.message).toBe('Anthropic API error: Quota exceeded');
     });
   });
 });

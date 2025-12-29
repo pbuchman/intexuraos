@@ -144,10 +144,10 @@ export async function processResearch(
 function getModelName(provider: LlmProvider): string {
   switch (provider) {
     case 'google':
-      return 'Gemini';
+      return 'Gemini 3 Pro';
     case 'openai':
-      return 'GPT-4o';
+      return 'GPT-5.2 Pro';
     case 'anthropic':
-      return 'Claude';
+      return 'Claude Opus 4.5';
   }
 }

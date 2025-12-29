@@ -2,11 +2,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type { ClaudeConfig, ResearchResult, ClaudeError } from './types.js';
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-opus-4-5';
+const VALIDATION_MODEL = 'claude-haiku-4-5';
 const MAX_TOKENS = 8192;
 
 export interface ClaudeClient {
   research(prompt: string): Promise<Result<ResearchResult, ClaudeError>>;
+  validateKey(): Promise<Result<boolean, ClaudeError>>;
 }
 
 function logRequest(
@@ -86,6 +88,29 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         return ok({ content });
       } catch (error) {
         logError('research', requestId, startTime, error);
+        return err(mapClaudeError(error));
+      }
+    },
+
+    async validateKey(): Promise<Result<boolean, ClaudeError>> {
+      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 9, 'Say "ok"');
+
+      try {
+        const response = await client.messages.create({
+          model: VALIDATION_MODEL,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Say "ok"' }],
+        });
+
+        const textBlocks = response.content.filter(
+          (block): block is Anthropic.TextBlock => block.type === 'text'
+        );
+        const content = textBlocks.map((b) => b.text).join('');
+
+        logResponse('validateKey', requestId, startTime, content.length, content);
+        return ok(true);
+      } catch (error) {
+        logError('validateKey', requestId, startTime, error);
         return err(mapClaudeError(error));
       }
     },
