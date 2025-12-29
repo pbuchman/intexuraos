@@ -25,11 +25,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
     "sourceMap": true,
-    "composite": true,
-    "incremental": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   }

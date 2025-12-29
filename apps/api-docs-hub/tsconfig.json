@@ -1,15 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "noEmit": true,
+    "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
-  "references": [
-    { "path": "../../packages/common-core" },
-    { "path": "../../packages/common-http" },
-    { "path": "../../packages/http-server" }
-  ]
+  "exclude": ["node_modules", "dist", "src/__tests__"]
 }

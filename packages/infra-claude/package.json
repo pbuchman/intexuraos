@@ -3,11 +3,14 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "build": "tsc --build",
-    "clean": "rm -rf dist .tsbuildinfo"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
