@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common';
+import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common-http';
 import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import type { Config } from './config.js';
 

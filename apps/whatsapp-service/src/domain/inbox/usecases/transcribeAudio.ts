@@ -23,7 +23,7 @@ import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { SpeechTranscriptionPort } from '../ports/transcription.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
-import { getErrorMessage } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
 
 /**
  * Input for transcribing an audio message.

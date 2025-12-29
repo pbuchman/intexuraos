@@ -12,7 +12,7 @@
 import type { LinkPreviewState, LinkPreview } from '../models/LinkPreview.js';
 import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { LinkPreviewFetcherPort } from '../ports/linkPreviewFetcher.js';
-import { getErrorMessage } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
 
 /**
  * Maximum number of URLs to process per message.

@@ -3,8 +3,8 @@
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */
-import type { Result } from '@intexuraos/common';
-import { ok, err } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type {
   SignatureConnectionRepository,
   SignatureConnection,

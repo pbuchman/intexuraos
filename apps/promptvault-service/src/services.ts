@@ -2,7 +2,8 @@
  * Service wiring for promptvault-service.
  * Provides backward-compatible service container for routes.
  */
-import type { NotionLogger, Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
+import type { NotionLogger } from '@intexuraos/infra-notion';
 import {
   saveNotionConnection,
   getNotionConnection,

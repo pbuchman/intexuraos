@@ -22,7 +22,10 @@
     "dev": "DOTENV_CONFIG_PATH=.env node --watch -r dotenv/config dist/index.js"
   },
   "dependencies": {
-    "@intexuraos/common": "*",
+    "@intexuraos/common-core": "*",
+    "@intexuraos/common-http": "*",
+    "@intexuraos/infra-firestore": "*",
+    "@intexuraos/infra-notion": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@fastify/cors": "^10.0.1",

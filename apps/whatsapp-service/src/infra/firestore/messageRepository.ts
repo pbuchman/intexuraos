@@ -1,7 +1,8 @@
 /**
  * Firestore repository for WhatsApp messages.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 import type { InboxError } from './webhookEventRepository.js';
 import type {

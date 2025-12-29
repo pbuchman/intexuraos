@@ -4,7 +4,7 @@
  *
  * Logging: Every decision point is logged for debugging and audit.
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type {
   SignatureConnectionRepository,
   NotificationRepository,

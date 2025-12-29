@@ -2,7 +2,7 @@
  * Adapter for ThumbnailGeneratorPort.
  * Wraps the existing generateThumbnail function as a port implementation.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type {
   ThumbnailGeneratorPort,
   ThumbnailResult,

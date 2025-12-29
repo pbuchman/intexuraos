@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth, handleValidationError } from '@intexuraos/common';
+import { requireAuth, handleValidationError } from '@intexuraos/common-http';
 import { createPrompt, listPrompts, getPrompt, updatePrompt } from '../domain/promptvault/index.js';
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
 import { getServices } from '../services.js';

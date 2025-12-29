@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
-import { clearJwksCache } from '@intexuraos/common';
+import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';

@@ -10,5 +10,5 @@ export {
   updatePrompt,
 } from './promptApi.js';
 
-// Re-export shared Notion utilities from common
-export { validateNotionToken, getPageWithPreview } from '@intexuraos/common';
+// Re-export shared Notion utilities from infra-notion
+export { validateNotionToken, getPageWithPreview } from '@intexuraos/infra-notion';

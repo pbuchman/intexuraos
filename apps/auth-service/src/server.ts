@@ -8,7 +8,7 @@ import {
   intexuraFastifyPlugin,
   fastifyAuthPlugin,
   registerQuietHealthCheckLogging,
-} from '@intexuraos/common';
+} from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import {
   checkSecrets,

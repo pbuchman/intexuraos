@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { ok, err } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeAuth0Client } from './fakes.js';

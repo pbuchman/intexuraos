@@ -9,7 +9,7 @@ import {
   type LinkPreview,
   type LinkPreviewError,
 } from '../../domain/inbox/index.js';
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import { FakeWhatsAppMessageRepository, FakeLinkPreviewFetcherPort } from '../fakes.js';
 class MockLogger implements ExtractLinkPreviewsLogger {
   infoLogs: { data: Record<string, unknown>; message: string }[] = [];

@@ -7,7 +7,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth, tryAuth } from '@intexuraos/common';
+import { requireAuth, tryAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { loadAuth0Config } from './shared.js';
 

@@ -2,7 +2,8 @@
  * Firestore implementation of NotificationRepository.
  * Stores mobile notifications with cursor-based pagination.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   NotificationRepository,
   Notification,

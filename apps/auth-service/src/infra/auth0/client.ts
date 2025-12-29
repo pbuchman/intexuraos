@@ -2,7 +2,7 @@
  * Auth0 client implementation for OAuth2 operations.
  */
 
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { Auth0Client, RefreshResult, AuthError } from '../../domain/identity/index.js';
 
 /**

@@ -2,7 +2,7 @@
  * Domain ports for Inbox repositories.
  * These interfaces define what the domain needs from infrastructure.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage, TranscriptionState } from '../models/WhatsAppMessage.js';
 import type { LinkPreviewState } from '../models/LinkPreview.js';

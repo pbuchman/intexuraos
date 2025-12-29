@@ -3,8 +3,8 @@
  * Mocks @google-cloud/pubsub SDK to test message handling without real Pub/Sub.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { Result } from '@intexuraos/common';
-import { ok, err } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { MediaStoragePort, InboxError, MediaCleanupEvent } from '../../domain/inbox/index.js';
 
 // Create mock subscription with event emitter pattern

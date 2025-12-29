@@ -8,7 +8,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { validatePhoneNumber } from './shared.js';
 

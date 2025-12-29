@@ -1,7 +1,7 @@
 /**
  * Use case for deleting a notification with ownership verification.
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type { NotificationRepository, RepositoryError } from '../ports/index.js';
 
 /**

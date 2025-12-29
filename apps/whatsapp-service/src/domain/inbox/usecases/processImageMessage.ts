@@ -9,7 +9,7 @@
  * 5. Save message to Firestore
  * 6. Update webhook event status
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type { InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {

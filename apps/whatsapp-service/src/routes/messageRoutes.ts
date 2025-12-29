@@ -6,7 +6,7 @@
  * - DELETE /whatsapp/messages/:message_id — delete a message
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 
 interface MessageParams {

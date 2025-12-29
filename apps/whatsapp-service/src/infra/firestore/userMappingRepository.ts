@@ -1,7 +1,8 @@
 /**
  * Firestore repository for WhatsApp user phone number mappings.
  */
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type { InboxError } from './webhookEventRepository.js';
 import { normalizePhoneNumber } from '../../routes/shared.js';
 

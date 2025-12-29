@@ -3,7 +3,7 @@
  * Generates a crypto-secure token, hashes it, and stores the hash.
  */
 import { randomBytes, createHash } from 'node:crypto';
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type { SignatureConnectionRepository, RepositoryError } from '../ports/index.js';
 import type { CreateSignatureConnectionInput } from '../models/index.js';
 

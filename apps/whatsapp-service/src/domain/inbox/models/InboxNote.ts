@@ -2,7 +2,7 @@
  * Domain models for Inbox.
  * Pure domain entities with no external dependencies.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 
 /**
  * Source of the inbox note.

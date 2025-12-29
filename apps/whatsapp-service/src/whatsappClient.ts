@@ -3,7 +3,7 @@
  * Implements the WhatsApp Business Cloud API for outbound messaging and media retrieval.
  */
 
-import { getErrorMessage } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
 
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 30000;
 

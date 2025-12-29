@@ -1,7 +1,7 @@
 /**
  * Use case for listing user's notifications with pagination.
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type {
   NotificationRepository,
   RepositoryError,

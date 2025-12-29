@@ -12,7 +12,7 @@
  * - Consider min_scale=1 for reliability
  */
 import { BatchClient } from '@speechmatics/batch-client';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import pino from 'pino';
 import type {
   SpeechTranscriptionPort,

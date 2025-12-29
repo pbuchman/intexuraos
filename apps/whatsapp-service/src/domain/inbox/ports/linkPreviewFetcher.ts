@@ -2,7 +2,7 @@
  * Port for fetching link previews (Open Graph metadata).
  * Abstracts HTTP fetching and HTML parsing for the domain layer.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { LinkPreview, LinkPreviewError } from '../models/LinkPreview.js';
 
 /**

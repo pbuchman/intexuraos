@@ -6,7 +6,8 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr, handleValidationError, getErrorMessage } from '@intexuraos/common';
+import { isErr, getErrorMessage } from '@intexuraos/common-core';
+import { handleValidationError } from '@intexuraos/common-http';
 import type { AuthTokens, AuthTokenRepository } from '../domain/identity/index.js';
 import { getServices } from '../services.js';
 import {

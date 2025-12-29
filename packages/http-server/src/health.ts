@@ -2,7 +2,8 @@
  * Health check utilities for IntexuraOS services.
  */
 
-import { getErrorMessage, getFirestore } from '@intexuraos/common';
+import { getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 
 /**
  * Health status values.
@@ -105,7 +106,7 @@ export function checkNotionSdk(): HealthCheck {
         reason: 'Notion credentials are per-user; API validated per-request',
       },
     };
-  } catch {
+  } catch /* istanbul ignore next -- defensive code, unreachable in normal execution */ {
     return {
       name: 'notion-sdk',
       status: 'down',

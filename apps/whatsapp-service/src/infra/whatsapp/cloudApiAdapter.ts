@@ -2,7 +2,7 @@
  * Adapter for WhatsApp Cloud API port.
  * Wraps existing whatsappClient functions as a port implementation.
  */
-import { ok, err, type Result } from '@intexuraos/common';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type {
   WhatsAppCloudApiPort,
   MediaUrlInfo,

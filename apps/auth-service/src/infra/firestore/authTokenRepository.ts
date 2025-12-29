@@ -3,7 +3,8 @@
  * Stores per-user Auth0 tokens with encrypted refresh tokens.
  */
 
-import { ok, err, type Result, getErrorMessage, getFirestore } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   AuthTokenRepository,
   AuthTokens,

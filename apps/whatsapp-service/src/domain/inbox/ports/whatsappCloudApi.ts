@@ -2,7 +2,7 @@
  * Port for WhatsApp Cloud API client operations.
  * Abstracts media downloading and URL fetching from the domain.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { InboxError } from './repositories.js';
 
 /**

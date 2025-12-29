@@ -3,7 +3,7 @@
  * Uses sharp to create thumbnails for images.
  */
 import sharp from 'sharp';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { InboxError } from '../../domain/inbox/index.js';
 
 const MAX_THUMBNAIL_EDGE = 256;

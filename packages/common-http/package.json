@@ -1,0 +1,29 @@
+{
+  "name": "@intexuraos/common-http",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*",
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.0.1",
+    "jose": "^5.9.6",
+    "zod": "^3.24.1"
+  }
+}

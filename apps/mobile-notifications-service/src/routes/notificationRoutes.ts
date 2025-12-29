@@ -4,7 +4,7 @@
  * DELETE /mobile-notifications/:notification_id - Delete notification.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { listNotifications, deleteNotification } from '../domain/notifications/index.js';
 import { listNotificationsResponseSchema } from './schemas.js';

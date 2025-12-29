@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
-import { clearJwksCache } from '@intexuraos/common';
+import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeSignatureConnectionRepository, FakeNotificationRepository } from './fakes.js';
 import { setServices, resetServices } from '../services.js';
 

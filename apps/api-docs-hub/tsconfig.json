@@ -7,5 +7,11 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
-  "references": [{ "path": "../../packages/common" }, { "path": "../../packages/http-server" }]
+  "references": [
+    { "path": "../../packages/common-core" },
+    { "path": "../../packages/common-http" },
+    { "path": "../../packages/infra-firestore" },
+    { "path": "../../packages/infra-notion" },
+    { "path": "../../packages/http-server" }
+  ]
 }
