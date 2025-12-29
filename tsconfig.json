@@ -8,6 +8,7 @@
     { "path": "packages/infra-whatsapp" },
     { "path": "packages/infra-gemini" },
     { "path": "packages/infra-claude" },
+    { "path": "packages/infra-gpt" },
     { "path": "packages/http-contracts" },
     { "path": "packages/http-server" },
     { "path": "apps/user-service" },

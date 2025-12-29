@@ -74,14 +74,16 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 1-0: Create infra-whatsapp package ✓
 - 1-1: Create infra-gemini package ✓
 - 1-2: Create infra-claude package ✓
+- 1-3: Create infra-gpt package ✓
 
 **Now:**
 
-- 1-3: Create infra-gpt package
+- 2-0: Add encryption utility to common-core
 
 **Next:**
 
-- 2-0: Add encryption utility to common-core
+- 2-1: Extend UserSettings model with llmApiKeys
+- 2-2: Add user-settings routes for API keys
 
 ## Open Questions
 
@@ -106,7 +108,7 @@ continuity/014-llm-orchestrator/
 ├── 1-0-infra-whatsapp.md (DONE)
 ├── 1-1-infra-gemini.md (DONE)
 ├── 1-2-infra-claude.md (DONE)
-├── 1-3-infra-gpt.md
+├── 1-3-infra-gpt.md (DONE)
 ├── 2-0-encryption-util.md
 ├── 2-1-user-settings-model.md
 ├── 2-2-user-settings-routes.md

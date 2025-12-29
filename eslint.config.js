@@ -50,6 +50,7 @@ export default tseslint.config(
         { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
         { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
+        { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -77,6 +78,8 @@ export default tseslint.config(
             { from: 'infra-gemini', allow: ['infra-gemini', 'common-core'] },
             // infra-claude can import from common-core
             { from: 'infra-claude', allow: ['infra-claude', 'common-core'] },
+            // infra-gpt can import from common-core
+            { from: 'infra-gpt', allow: ['infra-gpt', 'common-core'] },
             // http-server can import from decomposed packages
             {
               from: 'http-server',
@@ -99,6 +102,7 @@ export default tseslint.config(
                 'infra-whatsapp',
                 'infra-gemini',
                 'infra-claude',
+                'infra-gpt',
                 'http-contracts',
                 'http-server',
                 'apps',
