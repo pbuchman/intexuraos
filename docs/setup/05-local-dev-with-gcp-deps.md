@@ -89,7 +89,7 @@ LOG_LEVEL=debug
 
 ```bash
 # Terminal 1: Auth service
-cd apps/auth-service
+cd apps/user-service
 npm run dev
 
 # Terminal 2: PromptVault service
@@ -145,7 +145,7 @@ intexuraos/
 ├── docker/
 │   └── docker-compose.yaml
 ├── apps/
-│   ├── auth-service/
+│   ├── user-service/
 │   │   └── .env        # Service-specific overrides (gitignored)
 │   └── promptvault-service/
 │       └── .env        # Service-specific overrides (gitignored)

@@ -54,7 +54,7 @@ Score ≥ 8.0 allows saving. Below that, the model suggests improvements.
 
 Uses IntexuraOS services:
 
-- **auth-service** — OAuth authentication via Auth0
+- **user-service** — OAuth authentication via Auth0
 - **promptvault-service** — Notion API integration for prompt storage
 
 ## Files

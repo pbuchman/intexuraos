@@ -16,9 +16,9 @@ Before starting this issue, ensure ALL of these are complete:
 
 **Tier 1:**
 
-- [x] `1-0-auth-service-token-routes.md` - Auth routes tested
-- [x] `1-1-auth-service-device-routes.md` - Device routes tested
-- [x] `1-2-auth-service-shared-httpclient.md` - Auth utilities tested
+- [x] `1-0-user-service-token-routes.md` - Auth routes tested
+- [x] `1-1-user-service-device-routes.md` - Device routes tested
+- [x] `1-2-user-service-shared-httpclient.md` - Auth utilities tested
 - [x] `1-3-promptvault-usecases.md` - Promptvault use cases tested
 - [x] `1-4-whatsapp-webhook-usecase.md` - WhatsApp use case tested
 - [x] `1-5-whatsapp-routes.md` - WhatsApp routes tested
@@ -57,8 +57,8 @@ Before starting this issue, ensure ALL of these are complete:
 
 All infra adapters need tests now that the `**/infra/**` exclusion is narrowed:
 
-- `apps/auth-service/src/infra/auth0/` - Auth0 client
-- `apps/auth-service/src/infra/firestore/` - Token repository
+- `apps/user-service/src/infra/auth0/` - Auth0 client
+- `apps/user-service/src/infra/firestore/` - Token repository
 - `apps/promptvault-service/src/infra/notion/` - Prompt API
 - `apps/promptvault-service/src/infra/firestore/` - Connection repository
 - `apps/notion-service/src/infra/notion/` - Notion API
@@ -113,8 +113,8 @@ npm run test:coverage
 ===
 
 4. For each app, create infra test files following patterns from Tier 1:
-   - `apps/auth-service/src/__tests__/infra/auth0Client.test.ts`
-   - `apps/auth-service/src/__tests__/infra/authTokenRepository.test.ts`
+   - `apps/user-service/src/__tests__/infra/auth0Client.test.ts`
+   - `apps/user-service/src/__tests__/infra/authTokenRepository.test.ts`
    - Similar for other apps
 
 5. Add tests focusing on:

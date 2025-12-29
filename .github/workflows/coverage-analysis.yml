@@ -207,7 +207,7 @@ jobs:
 
               // Determine service name from path
               let serviceName = 'Unknown Service';
-              if (file.path.includes('auth-service')) serviceName = 'Auth Service';
+              if (file.path.includes('user-service')) serviceName = 'User Service';
               else if (file.path.includes('whatsapp-service')) serviceName = 'WhatsApp Service';
               else if (file.path.includes('promptvault-service')) serviceName = 'PromptVault Service';
               else if (file.path.includes('notion-service')) serviceName = 'Notion Service';

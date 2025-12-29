@@ -91,9 +91,9 @@ variable "web_app_domain" {
 
 locals {
   services = {
-    auth_service = {
-      name      = "intexuraos-auth-service"
-      app_path  = "apps/auth-service"
+    user_service = {
+      name      = "intexuraos-user-service"
+      app_path  = "apps/user-service"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -276,7 +276,7 @@ module "secret_manager" {
     # Speechmatics API secrets
     "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
     # Web frontend service URLs (public, non-sensitive)
-    "INTEXURAOS_AUTH_SERVICE_URL"                 = "Auth service Cloud Run URL for web frontend"
+    "INTEXURAOS_USER_SERVICE_URL"                 = "User service Cloud Run URL for web frontend"
     "INTEXURAOS_PROMPTVAULT_SERVICE_URL"          = "PromptVault service Cloud Run URL for web frontend"
     "INTEXURAOS_WHATSAPP_SERVICE_URL"             = "WhatsApp service Cloud Run URL for web frontend"
     "INTEXURAOS_NOTION_SERVICE_URL"               = "Notion service Cloud Run URL for web frontend"
@@ -336,20 +336,20 @@ module "pubsub_media_cleanup" {
 # Cloud Run Services
 # -----------------------------------------------------------------------------
 
-module "auth_service" {
+module "user_service" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.auth_service.name
-  service_account = module.iam.service_accounts["auth_service"]
-  port            = local.services.auth_service.port
-  min_scale       = local.services.auth_service.min_scale
-  max_scale       = local.services.auth_service.max_scale
+  service_name    = local.services.user_service.name
+  service_account = module.iam.service_accounts["user_service"]
+  port            = local.services.user_service.port
+  min_scale       = local.services.user_service.min_scale
+  max_scale       = local.services.user_service.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/auth-service:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/user-service:latest"
 
   secrets = {
     AUTH0_DOMAIN                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
@@ -515,7 +515,7 @@ module "api_docs_hub" {
 
   # Plain env vars for OpenAPI URLs (not secrets)
   env_vars = {
-    AUTH_SERVICE_OPENAPI_URL                 = "${module.auth_service.service_url}/openapi.json"
+    USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
     PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
     NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
@@ -525,7 +525,7 @@ module "api_docs_hub" {
   depends_on = [
     module.artifact_registry,
     module.iam,
-    module.auth_service,
+    module.user_service,
     module.promptvault_service,
     module.notion_service,
     module.whatsapp_service,
@@ -569,9 +569,9 @@ output "artifact_registry_url" {
   value       = module.artifact_registry.repository_url
 }
 
-output "auth_service_url" {
-  description = "Auth Service URL"
-  value       = module.auth_service.service_url
+output "user_service_url" {
+  description = "User Service URL"
+  value       = module.user_service.service_url
 }
 
 output "promptvault_service_url" {

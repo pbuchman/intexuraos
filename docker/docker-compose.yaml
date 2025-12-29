@@ -2,10 +2,10 @@
 # Usage: docker compose -f docker/docker-compose.yaml up --build
 
 services:
-  auth-service:
+  user-service:
     build:
       context: ..
-      dockerfile: apps/auth-service/Dockerfile
+      dockerfile: apps/user-service/Dockerfile
     ports:
       - '8080:8080'
     environment:
@@ -40,7 +40,7 @@ services:
       start_period: 10s
       retries: 3
     depends_on:
-      auth-service:
+      user-service:
         condition: service_healthy
 
   whatsapp-service:
@@ -62,7 +62,7 @@ services:
       start_period: 10s
       retries: 3
     depends_on:
-      auth-service:
+      user-service:
         condition: service_healthy
 
 # For local development with GCP dependencies:

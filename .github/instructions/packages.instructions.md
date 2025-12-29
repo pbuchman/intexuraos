@@ -4,7 +4,7 @@ applyTo: 'packages/**'
 
 # Packages Instructions
 
-See [CLAUDE.md — Packages section](../CLAUDE.md#packages-packages) for full instructions.
+See [CLAUDE.md — Packages section](../../.claude/CLAUDE.md#packages-packages) for full instructions.
 
 **Quick reference:**
 

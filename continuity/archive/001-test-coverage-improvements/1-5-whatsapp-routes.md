@@ -136,4 +136,4 @@ npm run ci
 If JWT auth mocking is complex:
 
 1. Use existing testUtils.ts patterns for JWT creation
-2. Reference auth-service tests for JWT patterns
+2. Reference user-service tests for JWT patterns

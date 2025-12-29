@@ -68,7 +68,7 @@ None currently.
 
 **Files:**
 
-- `apps/auth-service/src/domain/identity/usecases/refreshAccessToken.ts`
+- `apps/user-service/src/domain/identity/usecases/refreshAccessToken.ts`
 - `apps/notion-service/src/routes/integrationRoutes.ts`
 - `packages/http-server/src/health.ts`
 - `packages/common/src/notionConnection.ts`

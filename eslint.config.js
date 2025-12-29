@@ -11,6 +11,7 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           allowDefaultProject: ['*.config.ts', '*.config.js', 'vitest.setup.ts'],
+          defaultProject: './tsconfig.json',
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -158,6 +159,9 @@ export default tseslint.config(
       'docker/**',
       'scripts/**',
       'vitest.setup.ts',
+      '**/__tests__/**',
+      '**/*.test.ts',
+      '**/*.spec.ts',
     ],
   }
 );

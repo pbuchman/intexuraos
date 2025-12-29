@@ -26,7 +26,7 @@
 
 ## Problem Statement
 
-The auth-service has remaining coverage gaps:
+The user-service has remaining coverage gaps:
 
 1. `shared.ts` (75%): lines 49-56 - likely validation/error handling utilities
 2. `deviceRoutes.ts` (81.67%): lines 160-261, 280-320 - device authorization flow
@@ -39,8 +39,8 @@ Note: tokenRoutes.ts is covered separately in 1-0.
 
 ### In Scope
 
-- `apps/auth-service/src/routes/v1/shared.ts`
-- `apps/auth-service/src/routes/v1/deviceRoutes.ts`
+- `apps/user-service/src/routes/v1/shared.ts`
+- `apps/user-service/src/routes/v1/deviceRoutes.ts`
 - Extending existing test files
 
 ### Out of Scope
@@ -66,14 +66,14 @@ Note: tokenRoutes.ts is covered separately in 1-0.
 1. Read the source files:
 
 ===
-cat apps/auth-service/src/routes/v1/shared.ts
-cat apps/auth-service/src/routes/v1/deviceRoutes.ts
+cat apps/user-service/src/routes/v1/shared.ts
+cat apps/user-service/src/routes/v1/deviceRoutes.ts
 ===
 
 2. Read existing tests:
 
 ===
-cat apps/auth-service/src/**tests**/deviceRoutes.test.ts
+cat apps/user-service/src/**tests**/deviceRoutes.test.ts
 ===
 
 3. Identify uncovered paths in deviceRoutes.ts (lines 160-261, 280-320):

@@ -4,7 +4,7 @@ applyTo: 'apps/web/**'
 
 # Web App Instructions
 
-See [CLAUDE.md — Web App section](../CLAUDE.md#web-app-appsweb) for full instructions.
+See [CLAUDE.md — Web App section](../../.claude/CLAUDE.md#web-app-appsweb) for full instructions.
 
 **Quick reference:**
 

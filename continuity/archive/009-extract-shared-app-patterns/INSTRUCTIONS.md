@@ -6,7 +6,7 @@ Migrate `apps/promptvault-service` to use shared packages under `packages/*` (at
 
 ## Background
 
-Currently, each service (auth-service, promptvault-service, notion-service, etc.) duplicates:
+Currently, each service (user-service, promptvault-service, notion-service, etc.) duplicates:
 
 1. **OpenAPI schemas** — ErrorCode, Diagnostics, ApiOk, ApiError, HealthCheck, HealthResponse
 2. **Fastify JSON Schemas** — $id-based schemas for route validation
@@ -31,7 +31,7 @@ This duplication leads to:
 
 ### Out of Scope
 
-- Migrating other services (auth-service, notion-service, etc.) — that's future work
+- Migrating other services (user-service, notion-service, etc.) — that's future work
 - Changing API behavior or response formats
 - Adding new features
 - Changing business logic

@@ -36,7 +36,7 @@ Operations should be safe to retry. Running the same action twice with the same 
 ┌─────────────────────────────────────────────────────────┐
 │                  IntexuraOS (Execution)                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │ auth-service│  │notion-svc   │  │promptvault-svc  │  │
+│  │ user-service│  │notion-svc   │  │promptvault-svc  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────┘  │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │                 Domain Layer                        ││

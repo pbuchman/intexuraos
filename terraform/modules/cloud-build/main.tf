@@ -98,6 +98,13 @@ resource "google_project_iam_member" "cloud_build_secret_accessor" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs to query previous builds (for affected service detection)
+resource "google_project_iam_member" "cloud_build_viewer" {
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.viewer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Webhook Trigger for Development Branch
 # -----------------------------------------------------------------------------

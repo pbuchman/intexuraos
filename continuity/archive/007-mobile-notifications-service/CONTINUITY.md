@@ -79,7 +79,7 @@ Create a new `mobile-notifications` service that:
 
 ## Reasoning Narrative
 
-Service follows existing patterns from whatsapp-service and auth-service.
+Service follows existing patterns from whatsapp-service and user-service.
 Domain structure: `domain/notifications/{models, ports, usecases}`
 Infra adapters for Firestore repositories.
 Routes kept minimal - business logic in usecases.

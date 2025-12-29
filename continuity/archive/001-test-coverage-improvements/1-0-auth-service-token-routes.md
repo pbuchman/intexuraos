@@ -1,4 +1,4 @@
-# 1-0 - Add Tests for auth-service Token Routes
+# 1-0 - Add Tests for user-service Token Routes
 
 **Tier:** 1 (Depends on: ALL Tier 0 issues must be complete)
 
@@ -29,7 +29,7 @@ Before starting this issue, ensure these are complete:
 ### Coverage Tooling
 
 - Test command: `npm run test:coverage`
-- Test location: `apps/auth-service/src/__tests__/`
+- Test location: `apps/user-service/src/__tests__/`
 
 ### Changes from Tier 0
 
@@ -41,7 +41,7 @@ Before starting this issue, ensure these are complete:
 
 ## Problem Statement
 
-Current coverage for `apps/auth-service/src/routes/v1/tokenRoutes.ts`: **43.97%**
+Current coverage for `apps/user-service/src/routes/v1/tokenRoutes.ts`: **43.97%**
 
 Uncovered lines: 77-174 (most of the file)
 
@@ -53,8 +53,8 @@ This file handles token refresh operations and is critical for auth flows but ha
 
 ### In Scope
 
-- `apps/auth-service/src/routes/v1/tokenRoutes.ts`
-- Create or extend `apps/auth-service/src/__tests__/tokenRoutes.test.ts`
+- `apps/user-service/src/routes/v1/tokenRoutes.ts`
+- Create or extend `apps/user-service/src/__tests__/tokenRoutes.test.ts`
 
 ### Out of Scope
 
@@ -79,14 +79,14 @@ This file handles token refresh operations and is critical for auth flows but ha
 1. Read the source file to understand the routes:
 
 ===
-cat apps/auth-service/src/routes/v1/tokenRoutes.ts
+cat apps/user-service/src/routes/v1/tokenRoutes.ts
 ===
 
 2. Read existing test patterns (established in 0-2):
 
 ===
-cat apps/auth-service/src/**tests**/deviceRoutes.test.ts
-cat apps/auth-service/src/**tests**/frontendRoutes.test.ts
+cat apps/user-service/src/**tests**/deviceRoutes.test.ts
+cat apps/user-service/src/**tests**/frontendRoutes.test.ts
 ===
 
 3. Identify test cases needed:
@@ -96,7 +96,7 @@ cat apps/auth-service/src/**tests**/frontendRoutes.test.ts
    - POST /v1/auth/refresh when Auth0 returns error
    - POST /v1/auth/refresh when Firestore fails
 
-4. Create test file `apps/auth-service/src/__tests__/tokenRoutes.test.ts` if not exists, or extend it
+4. Create test file `apps/user-service/src/__tests__/tokenRoutes.test.ts` if not exists, or extend it
 
 5. Implement tests following existing patterns
 
@@ -111,7 +111,7 @@ npm run ci
 
 ## Definition of Done
 
-- [ ] `apps/auth-service/src/routes/v1/tokenRoutes.ts` coverage ≥ 85%
+- [ ] `apps/user-service/src/routes/v1/tokenRoutes.ts` coverage ≥ 85%
 - [ ] All happy path scenarios tested
 - [ ] Error scenarios tested (invalid token, Auth0 errors, Firestore errors)
 - [ ] `npm run ci` passes

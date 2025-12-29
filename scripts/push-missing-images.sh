@@ -36,6 +36,56 @@ log_success() { echo -e "${GREEN}✓${NC} $1"; }
 log_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
 log_error() { echo -e "${RED}✗${NC} $1"; }
 
+# Validate Dockerfile references only existing packages
+validate_dockerfile() {
+    local service="$1"
+    local dockerfile="${REPO_ROOT}/apps/${service}/Dockerfile"
+    local errors=()
+
+    if [[ ! -f "$dockerfile" ]]; then
+        log_error "Dockerfile not found: $dockerfile"
+        return 1
+    fi
+
+    # Extract COPY commands for packages and check they exist
+    while IFS= read -r line; do
+        # Match COPY commands like: COPY packages/xxx/package*.json
+        if [[ "$line" =~ COPY[[:space:]]+packages/([^/]+)/ ]]; then
+            local pkg="${BASH_REMATCH[1]}"
+            local pkg_dir="${REPO_ROOT}/packages/${pkg}"
+            if [[ ! -d "$pkg_dir" ]]; then
+                errors+=("Package directory not found: packages/${pkg}")
+            elif [[ ! -f "${pkg_dir}/package.json" ]]; then
+                errors+=("Missing package.json in: packages/${pkg}")
+            fi
+        fi
+        # Match workspace references like: -w @intexuraos/xxx or --workspace=@intexuraos/xxx
+        if [[ "$line" =~ @intexuraos/([a-z0-9-]+) ]]; then
+            local ws_name="${BASH_REMATCH[1]}"
+            # Check if it's an app or package
+            if [[ -d "${REPO_ROOT}/apps/${ws_name}" ]]; then
+                continue
+            elif [[ -d "${REPO_ROOT}/packages/${ws_name}" ]]; then
+                if [[ ! -f "${REPO_ROOT}/packages/${ws_name}/package.json" ]]; then
+                    errors+=("Missing package.json for workspace: @intexuraos/${ws_name}")
+                fi
+            else
+                errors+=("Unknown workspace reference: @intexuraos/${ws_name}")
+            fi
+        fi
+    done < "$dockerfile"
+
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        log_error "Dockerfile validation failed for ${service}:"
+        for err in "${errors[@]}"; do
+            echo -e "    ${RED}•${NC} $err"
+        done
+        return 1
+    fi
+
+    return 0
+}
+
 # Verify we're in the correct directory
 verify_directory() {
     if [[ ! -d "${REPO_ROOT}/apps" ]]; then
@@ -90,6 +140,12 @@ build_and_push() {
     local service="$2"
     local dockerfile="${REPO_ROOT}/apps/${service}/Dockerfile"
     local image_tag="${registry}/${service}:latest"
+
+    # Validate Dockerfile before building
+    if ! validate_dockerfile "$service"; then
+        log_error "Skipping ${service} due to Dockerfile validation errors"
+        return 1
+    fi
 
     log_info "Building ${service}..."
 

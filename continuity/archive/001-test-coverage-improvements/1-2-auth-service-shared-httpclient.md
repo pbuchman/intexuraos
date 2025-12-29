@@ -1,4 +1,4 @@
-# 1-2 - Add Tests for auth-service Shared and HTTP Client
+# 1-2 - Add Tests for user-service Shared and HTTP Client
 
 **Tier:** 1 (Depends on: ALL Tier 0 issues must be complete)
 
@@ -26,7 +26,7 @@ Before starting this issue, ensure these are complete:
 ### Coverage Tooling
 
 - Test command: `npm run test:coverage`
-- Test location: `apps/auth-service/src/__tests__/`
+- Test location: `apps/user-service/src/__tests__/`
 
 ### Changes from Tier 0
 
@@ -39,8 +39,8 @@ Before starting this issue, ensure these are complete:
 
 Current coverage:
 
-- `apps/auth-service/src/routes/v1/shared.ts`: **75%** (lines 49-56 uncovered)
-- `apps/auth-service/src/routes/v1/httpClient.ts`: **87.5%** (lines 46-48, 54-55, 61 uncovered)
+- `apps/user-service/src/routes/v1/shared.ts`: **75%** (lines 49-56 uncovered)
+- `apps/user-service/src/routes/v1/httpClient.ts`: **87.5%** (lines 46-48, 54-55, 61 uncovered)
 
 These utility files contain reusable logic for auth routes and need better coverage.
 
@@ -50,8 +50,8 @@ These utility files contain reusable logic for auth routes and need better cover
 
 ### In Scope
 
-- `apps/auth-service/src/routes/v1/shared.ts`
-- `apps/auth-service/src/routes/v1/httpClient.ts`
+- `apps/user-service/src/routes/v1/shared.ts`
+- `apps/user-service/src/routes/v1/httpClient.ts`
 
 ### Out of Scope
 
@@ -75,8 +75,8 @@ These utility files contain reusable logic for auth routes and need better cover
 1. Read source files:
 
 ===
-cat apps/auth-service/src/routes/v1/shared.ts
-cat apps/auth-service/src/routes/v1/httpClient.ts
+cat apps/user-service/src/routes/v1/shared.ts
+cat apps/user-service/src/routes/v1/httpClient.ts
 ===
 
 2. Identify uncovered code:
@@ -84,8 +84,8 @@ cat apps/auth-service/src/routes/v1/httpClient.ts
    - httpClient.ts lines 46-48, 54-55, 61: likely HTTP error scenarios
 
 3. Create test files if they don't exist:
-   - `apps/auth-service/src/__tests__/shared.test.ts`
-   - `apps/auth-service/src/__tests__/httpClient.test.ts`
+   - `apps/user-service/src/__tests__/shared.test.ts`
+   - `apps/user-service/src/__tests__/httpClient.test.ts`
 
 4. Add unit tests for:
    - shared.ts: All exported utility functions
@@ -106,8 +106,8 @@ npm run ci
 
 ## Definition of Done
 
-- [ ] `apps/auth-service/src/routes/v1/shared.ts` coverage ≥ 95%
-- [ ] `apps/auth-service/src/routes/v1/httpClient.ts` coverage ≥ 95%
+- [ ] `apps/user-service/src/routes/v1/shared.ts` coverage ≥ 95%
+- [ ] `apps/user-service/src/routes/v1/httpClient.ts` coverage ≥ 95%
 - [ ] `npm run ci` passes
 
 ---

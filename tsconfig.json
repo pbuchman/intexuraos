@@ -7,7 +7,7 @@
     { "path": "packages/infra-notion" },
     { "path": "packages/http-contracts" },
     { "path": "packages/http-server" },
-    { "path": "apps/auth-service" },
+    { "path": "apps/user-service" },
     { "path": "apps/promptvault-service" },
     { "path": "apps/whatsapp-service" },
     { "path": "apps/notion-service" },

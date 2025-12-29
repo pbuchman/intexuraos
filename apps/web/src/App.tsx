@@ -5,6 +5,7 @@ import { PWAProvider } from '@/context/pwa-context';
 import { IOSInstallBanner, AndroidInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
 import {
+  HomePage,
   LoginPage,
   DashboardPage,
   NotionConnectionPage,
@@ -44,15 +45,34 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 }
 
+function HomeRoute(): React.JSX.Element {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-600 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <HomePage />;
+}
+
 function AppRoutes(): React.JSX.Element {
   return (
     <Routes>
+      <Route path="/" element={<HomeRoute />} />
       <Route
         path="/login"
         element={
@@ -62,15 +82,16 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <DashboardPage />
           </ProtectedRoute>
         }
       />
+      {/* Settings routes */}
       <Route
-        path="/notion"
+        path="/settings/notion"
         element={
           <ProtectedRoute>
             <NotionConnectionPage />
@@ -78,7 +99,7 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/whatsapp"
+        path="/settings/whatsapp"
         element={
           <ProtectedRoute>
             <WhatsAppConnectionPage />
@@ -86,7 +107,16 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/whatsapp-notes"
+        path="/settings/mobile"
+        element={
+          <ProtectedRoute>
+            <MobileNotificationsConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Feature routes */}
+      <Route
+        path="/notes"
         element={
           <ProtectedRoute>
             <WhatsAppNotesPage />
@@ -94,22 +124,21 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/mobile-notifications"
-        element={
-          <ProtectedRoute>
-            <MobileNotificationsConnectionPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/mobile-notifications/list"
+        path="/notifications"
         element={
           <ProtectedRoute>
             <MobileNotificationsListPage />
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Redirects for old URLs (backward compatibility) */}
+      <Route path="/notion" element={<Navigate to="/settings/notion" replace />} />
+      <Route path="/whatsapp" element={<Navigate to="/settings/whatsapp" replace />} />
+      <Route path="/whatsapp-notes" element={<Navigate to="/notes" replace />} />
+      <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
+      <Route path="/mobile-notifications/list" element={<Navigate to="/notifications" replace />} />
+      {/* 404 fallback */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

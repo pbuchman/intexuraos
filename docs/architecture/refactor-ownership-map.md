@@ -17,7 +17,7 @@ After migration, each app owns its domain logic in `src/domain/` and app-specifi
 
 ```
 apps/
-├── auth-service/
+├── user-service/
 │   └── src/
 │       ├── domain/
 │       │   └── identity/        ← from @intexuraos/domain-identity
@@ -104,7 +104,7 @@ packages/
 
 | Domain                  | Owner App           | Current Package                  | Target Location                                    |
 | ----------------------- | ------------------- | -------------------------------- | -------------------------------------------------- |
-| Identity (auth, tokens) | auth-service        | `@intexuraos/domain-identity`    | `apps/auth-service/src/domain/identity/`           |
+| Identity (auth, tokens) | user-service        | `@intexuraos/domain-identity`    | `apps/user-service/src/domain/identity/`           |
 | Inbox (WhatsApp, notes) | whatsapp-service    | `@intexuraos/domain-inbox`       | `apps/whatsapp-service/src/domain/inbox/`          |
 | PromptVault (prompts)   | promptvault-service | `@intexuraos/domain-promptvault` | `apps/promptvault-service/src/domain/promptvault/` |
 
@@ -112,8 +112,8 @@ packages/
 
 | Adapter                        | Owner               | Current Package               | Target Location                                 |
 | ------------------------------ | ------------------- | ----------------------------- | ----------------------------------------------- |
-| Auth0Client                    | auth-service        | `@intexuraos/infra-auth0`     | `apps/auth-service/src/infra/auth0/`            |
-| FirestoreAuthTokenRepository   | auth-service        | `@intexuraos/infra-firestore` | `apps/auth-service/src/infra/firestore/`        |
+| Auth0Client                    | user-service        | `@intexuraos/infra-auth0`     | `apps/user-service/src/infra/auth0/`            |
+| FirestoreAuthTokenRepository   | user-service        | `@intexuraos/infra-firestore` | `apps/user-service/src/infra/firestore/`        |
 | NotionPromptRepository         | promptvault-service | `@intexuraos/infra-notion`    | `apps/promptvault-service/src/infra/notion/`    |
 | NotionConnectionRepository     | promptvault-service | `@intexuraos/infra-firestore` | `apps/promptvault-service/src/infra/firestore/` |
 | NotionInboxNotesRepository     | whatsapp-service    | `@intexuraos/infra-notion`    | `apps/whatsapp-service/src/infra/notion/`       |
@@ -135,7 +135,7 @@ packages/
 
 | Service             | Depends On                                                                                         |
 | ------------------- | -------------------------------------------------------------------------------------------------- |
-| auth-service        | `@intexuraos/common`, `@intexuraos/infra-firestore` (client only)                                  |
+| user-service        | `@intexuraos/common`, `@intexuraos/infra-firestore` (client only)                                  |
 | promptvault-service | `@intexuraos/common`, `@intexuraos/infra-firestore` (client), `@intexuraos/infra-notion` (adapter) |
 | notion-service      | `@intexuraos/common`, `@intexuraos/infra-firestore` (client), `@intexuraos/infra-notion` (adapter) |
 | whatsapp-service    | `@intexuraos/common`, `@intexuraos/infra-firestore` (client)                                       |

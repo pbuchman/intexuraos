@@ -265,7 +265,7 @@ issues:
     body: |
       ## Objective
 
-      Add test for uncovered branch in `apps/auth-service/src/routes/oauthRoutes.ts` (lines 95-96).
+      Add test for uncovered branch in `apps/user-service/src/routes/oauthRoutes.ts` (lines 95-96).
 
       ## ⚠️ MANDATORY: Repository Standards
 
@@ -275,7 +275,7 @@ issues:
 
       ## Target File
 
-      `apps/auth-service/src/routes/oauthRoutes.ts`
+      `apps/user-service/src/routes/oauthRoutes.ts`
 
       **Uncovered Lines:** 95-96
 
@@ -287,7 +287,7 @@ issues:
 
       ## Test File
 
-      `apps/auth-service/src/__tests__/oauthRoutes.test.ts`
+      `apps/user-service/src/__tests__/oauthRoutes.test.ts`
 
       ## Acceptance Criteria
 
@@ -429,7 +429,7 @@ issues:
     body: |
       ## Objective
 
-      Add test for uncovered branch in `apps/auth-service/src/routes/httpClient.ts` (line 43).
+      Add test for uncovered branch in `apps/user-service/src/routes/httpClient.ts` (line 43).
 
       ## ⚠️ MANDATORY: Repository Standards
 
@@ -439,7 +439,7 @@ issues:
 
       ## Target File
 
-      `apps/auth-service/src/routes/httpClient.ts`
+      `apps/user-service/src/routes/httpClient.ts`
 
       **Uncovered Lines:** 43
 
@@ -451,7 +451,7 @@ issues:
 
       ## Test File
 
-      `apps/auth-service/src/__tests__/httpClient.test.ts`
+      `apps/user-service/src/__tests__/httpClient.test.ts`
 
       ## Acceptance Criteria
 

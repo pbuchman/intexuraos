@@ -6,7 +6,7 @@ This document describes the Cloud Run service configuration and operations.
 
 | Service             | Cloud Run Name                   | Port | Health Endpoint |
 | ------------------- | -------------------------------- | ---- | --------------- |
-| Auth Service        | `intexuraos-auth-service`        | 8080 | `/health`       |
+| Auth Service        | `intexuraos-user-service`        | 8080 | `/health`       |
 | PromptVault Service | `intexuraos-promptvault-service` | 8080 | `/health`       |
 | Notion Service      | `intexuraos-notion-service`      | 8080 | `/health`       |
 
@@ -39,11 +39,11 @@ Services receive secrets from Secret Manager:
 gcloud run services list
 
 # Get specific service details
-gcloud run services describe intexuraos-auth-service --region=europe-central2
+gcloud run services describe intexuraos-user-service --region=europe-central2
 gcloud run services describe intexuraos-promptvault-service --region=europe-central2
 
 # Get service URL
-gcloud run services describe intexuraos-auth-service \
+gcloud run services describe intexuraos-user-service \
   --region=europe-central2 \
   --format="value(status.url)"
 ```
@@ -51,17 +51,17 @@ gcloud run services describe intexuraos-auth-service \
 ## View Logs
 
 ```bash
-# Stream logs for auth-service
-gcloud run services logs read intexuraos-auth-service \
+# Stream logs for user-service
+gcloud run services logs read intexuraos-user-service \
   --region=europe-central2 \
   --tail=50
 
 # Stream logs (follow mode)
-gcloud run services logs tail intexuraos-auth-service \
+gcloud run services logs tail intexuraos-user-service \
   --region=europe-central2
 
 # Filter by severity
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=intexuraos-auth-service AND severity>=ERROR" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=intexuraos-user-service AND severity>=ERROR" \
   --limit=20
 ```
 
@@ -73,7 +73,7 @@ Verify services are healthy:
 
 ```bash
 # Get service URLs
-AUTH_URL=$(gcloud run services describe intexuraos-auth-service \
+AUTH_URL=$(gcloud run services describe intexuraos-user-service \
   --region=europe-central2 --format="value(status.url)")
 PROMPTVAULT_URL=$(gcloud run services describe intexuraos-promptvault-service \
   --region=europe-central2 --format="value(status.url)")
@@ -91,7 +91,7 @@ Expected response:
 ```json
 {
   "status": "ok",
-  "serviceName": "auth-service",
+  "serviceName": "user-service",
   "version": "0.0.1",
   "timestamp": "2024-01-01T12:00:00.000Z",
   "checks": [
@@ -120,9 +120,9 @@ OpenAPI spec:
 Deploy a specific image manually:
 
 ```bash
-# Deploy auth-service
-gcloud run deploy intexuraos-auth-service \
-  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/auth-service:latest \
+# Deploy user-service
+gcloud run deploy intexuraos-user-service \
+  --image=europe-central2-docker.pkg.dev/PROJECT_ID/intexuraos-dev/user-service:latest \
   --region=europe-central2 \
   --platform=managed
 
@@ -145,12 +145,12 @@ Rollback to a previous revision:
 
 ```bash
 # List revisions
-gcloud run revisions list --service=intexuraos-auth-service --region=europe-central2
+gcloud run revisions list --service=intexuraos-user-service --region=europe-central2
 
 # Route traffic to specific revision
-gcloud run services update-traffic intexuraos-auth-service \
+gcloud run services update-traffic intexuraos-user-service \
   --region=europe-central2 \
-  --to-revisions=intexuraos-auth-service-00001-abc=100
+  --to-revisions=intexuraos-user-service-00001-abc=100
 ```
 
 ## Troubleshooting
@@ -161,7 +161,7 @@ Check startup probe configuration and health endpoint.
 
 ```bash
 # View recent logs
-gcloud run services logs read intexuraos-auth-service \
+gcloud run services logs read intexuraos-user-service \
   --region=europe-central2 \
   --limit=100
 ```
@@ -182,7 +182,7 @@ Services scale to zero. First request after idle period takes longer.
 To keep warm (not recommended for dev):
 
 ```bash
-gcloud run services update intexuraos-auth-service \
+gcloud run services update intexuraos-user-service \
   --min-instances=1 \
   --region=europe-central2
 ```

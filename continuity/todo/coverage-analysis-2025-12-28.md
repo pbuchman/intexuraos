@@ -141,7 +141,7 @@ These are defensive/unreachable code paths that cannot be reasonably tested:
 
 ### Issue 5: OAuth Routes Error Handling
 
-**File:** `apps/auth-service/src/routes/oauthRoutes.ts`
+**File:** `apps/user-service/src/routes/oauthRoutes.ts`
 **Current:** 94.73% lines, 94.23% branches
 **Uncovered:** 95-96
 
@@ -198,7 +198,7 @@ These are defensive/unreachable code paths that cannot be reasonably tested:
 
 ### Issue 9: HTTP Client Branch Coverage
 
-**File:** `apps/auth-service/src/routes/httpClient.ts`
+**File:** `apps/user-service/src/routes/httpClient.ts`
 **Current:** 100% lines, 83.33% branches
 **Uncovered:** 43
 

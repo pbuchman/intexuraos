@@ -25,10 +25,10 @@
 **Importers (apps):**
 | App | Import | File |
 |-----|--------|------|
-| auth-service | `type { AuthTokens }` | `routes/deviceRoutes.ts` |
-| auth-service | `type { AuthTokens }` | `routes/tokenRoutes.ts` |
+| user-service | `type { AuthTokens }` | `routes/deviceRoutes.ts` |
+| user-service | `type { AuthTokens }` | `routes/tokenRoutes.ts` |
 
-**Proposed Owner:** `auth-service`
+**Proposed Owner:** `user-service`
 
 **Status:** Single-service usage. Direct colocate candidate.
 
@@ -97,13 +97,13 @@
 **Importers (apps):**
 | App | Import | File |
 |-----|--------|------|
-| auth-service | `Auth0ClientImpl`, `loadAuth0Config` | `routes/tokenRoutes.ts` |
+| user-service | `Auth0ClientImpl`, `loadAuth0Config` | `routes/tokenRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`
 
-**Multi-service:** NO (auth-service only)
+**Multi-service:** NO (user-service only)
 
-**Classification:** **COLOCATE** to `apps/auth-service/src/infra/auth0/`
+**Classification:** **COLOCATE** to `apps/user-service/src/infra/auth0/`
 
 ---
 
@@ -124,8 +124,8 @@
 **Importers (apps):**
 | App | Import | File |
 |-----|--------|------|
-| auth-service | `getFirestore` | `server.ts` |
-| auth-service | `FirestoreAuthTokenRepository` | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
+| user-service | `getFirestore` | `server.ts` |
+| user-service | `FirestoreAuthTokenRepository` | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
 | promptvault-service | `getFirestore` | `server.ts` |
 | promptvault-service | `FirestoreNotionConnectionRepository` | `services.ts` |
 | promptvault-service | `FakeNotionConnectionRepository` | `__tests__/testUtils.ts` |
@@ -142,7 +142,7 @@
 
 - Core `getFirestore` client is shared
 - Repository implementations are app-specific:
-  - `FirestoreAuthTokenRepository` → auth-service only
+  - `FirestoreAuthTokenRepository` → user-service only
   - `FirestoreNotionConnectionRepository` → promptvault + notion + whatsapp
   - `FirestoreWhatsAppWebhookEventRepository` → whatsapp-service only
   - `FirestoreWhatsAppUserMappingRepository` → whatsapp-service only
@@ -199,7 +199,7 @@
 
 | Package                          | Owner App           | Multi-service?                  | Action                          |
 | -------------------------------- | ------------------- | ------------------------------- | ------------------------------- |
-| `@intexuraos/domain-identity`    | auth-service        | No                              | Colocate                        |
+| `@intexuraos/domain-identity`    | user-service        | No                              | Colocate                        |
 | `@intexuraos/domain-inbox`       | whatsapp-service    | No                              | Colocate                        |
 | `@intexuraos/domain-promptvault` | promptvault-service | Yes (notion-service uses types) | Colocate + extract shared types |
 
@@ -207,7 +207,7 @@
 
 | Package                       | Shared Part           | Colocate Part              |
 | ----------------------------- | --------------------- | -------------------------- |
-| `@intexuraos/infra-auth0`     | None                  | All → auth-service         |
+| `@intexuraos/infra-auth0`     | None                  | All → user-service         |
 | `@intexuraos/infra-firestore` | `getFirestore` client | Repositories → owning apps |
 | `@intexuraos/infra-notion`    | `NotionApiAdapter`    | Repositories → owning apps |
 
@@ -215,9 +215,9 @@
 
 ## Migration Order (Recommended)
 
-1. **domain-identity** → auth-service (simplest, no cross-deps)
+1. **domain-identity** → user-service (simplest, no cross-deps)
 2. **domain-inbox** → whatsapp-service (single user)
-3. **infra-auth0** → auth-service (single user)
+3. **infra-auth0** → user-service (single user)
 4. **domain-promptvault** → promptvault-service (extract shared Notion types first)
 5. **infra-firestore** repositories → split to owning apps
 6. **infra-notion** repositories → split to owning apps

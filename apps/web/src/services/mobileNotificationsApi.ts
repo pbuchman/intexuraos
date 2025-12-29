@@ -19,11 +19,22 @@ export async function connectMobileNotifications(
 }
 
 /**
+ * Filter options for notifications list.
+ */
+export interface NotificationFilterOptions {
+  limit?: number;
+  cursor?: string;
+  source?: string;
+  app?: string;
+  title?: string;
+}
+
+/**
  * Get mobile notifications for the current user.
  */
 export async function getMobileNotifications(
   accessToken: string,
-  options?: { limit?: number; cursor?: string }
+  options?: NotificationFilterOptions
 ): Promise<MobileNotificationsResponse> {
   const params = new URLSearchParams();
   if (options?.limit !== undefined) {
@@ -31,6 +42,15 @@ export async function getMobileNotifications(
   }
   if (options?.cursor !== undefined) {
     params.set('cursor', options.cursor);
+  }
+  if (options?.source !== undefined) {
+    params.set('source', options.source);
+  }
+  if (options?.app !== undefined) {
+    params.set('app', options.app);
+  }
+  if (options?.title !== undefined) {
+    params.set('title', options.title);
   }
   const queryString = params.toString();
   const path =
@@ -41,6 +61,23 @@ export async function getMobileNotifications(
     path,
     accessToken
   );
+}
+
+/**
+ * Valid filter fields for getFilterValues.
+ */
+export type FilterField = 'app' | 'source';
+
+/**
+ * Get distinct values for a filter field.
+ */
+export async function getFilterValues(accessToken: string, field: FilterField): Promise<string[]> {
+  const result = await apiRequest<{ values: string[] }>(
+    config.mobileNotificationsServiceUrl,
+    `/mobile-notifications/filter-values?field=${field}`,
+    accessToken
+  );
+  return result.values;
 }
 
 /**

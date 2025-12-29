@@ -205,7 +205,7 @@ For complex multi-step tasks, we use a **continuity ledger** — a compaction-sa
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │                        Apps Layer                         │  │
 │  │  ┌─────────────┐  ┌────────────────┐  ┌─────────────────┐ │  │
-│  │  │auth-service │  │promptvault-svc │  │  whatsapp-svc   │ │  │
+│  │  │user-service │  │promptvault-svc │  │  whatsapp-svc   │ │  │
 │  │  │ src/domain/ │  │  src/domain/   │  │   src/domain/   │ │  │
 │  │  │ src/infra/  │  │  src/infra/    │  │   src/infra/    │ │  │
 │  │  └─────────────┘  └────────────────┘  └────────┬────────┘ │  │
@@ -232,7 +232,7 @@ Each app owns its domain logic and infrastructure adapters:
 
 | App                          | Domain (`src/domain/`)   | Infra (`src/infra/`)                 |
 | ---------------------------- | ------------------------ | ------------------------------------ |
-| auth-service                 | identity (tokens, users) | auth0, firestore                     |
+| user-service                 | identity (tokens, users) | auth0, firestore                     |
 | promptvault-service          | promptvault (prompts)    | notion, firestore                    |
 | whatsapp-service             | inbox (messages, notes)  | notion, firestore, gcs, speechmatics |
 | notion-service               | (orchestration only)     | notion, firestore                    |
@@ -302,7 +302,7 @@ For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
 
 | Service                      | Purpose                                 | Base Path                 |
 | ---------------------------- | --------------------------------------- | ------------------------- |
-| auth-service                 | OAuth2 flows, JWT validation            | `/auth/*`                 |
+| user-service                 | OAuth2 flows, JWT validation            | `/auth/*`                 |
 | promptvault-service          | Prompt templates, Notion integration    | `/prompt-vault/*`         |
 | whatsapp-service             | WhatsApp webhook, transcription         | `/whatsapp/*`             |
 | mobile-notifications-service | Android notification capture via Tasker | `/mobile-notifications/*` |
@@ -481,7 +481,7 @@ npm install
 npm run ci
 
 # Start services locally
-cd apps/auth-service && npm run dev
+cd apps/user-service && npm run dev
 ```
 
 ### Environment Variables
@@ -540,7 +540,7 @@ npm run test:coverage     # With coverage report
 ### Mocking Strategy
 
 - **Firestore:** Emulator for integration tests
-- **Auth0:** Fake client in `apps/auth-service/src/__tests__/fakes.ts`
+- **Auth0:** Fake client in `apps/user-service/src/__tests__/fakes.ts`
 - **Notion:** Fake adapter in `apps/*/src/__tests__/fakes.ts`
 - **External HTTP:** No real calls in unit tests
 
@@ -588,11 +588,11 @@ steps:
 
 ```bash
 # List revisions
-gcloud run revisions list --service=auth-service --region=europe-west4
+gcloud run revisions list --service=user-service --region=europe-west4
 
 # Rollback to previous revision
-gcloud run services update-traffic auth-service \
-  --to-revisions=auth-service-00001-abc=100 \
+gcloud run services update-traffic user-service \
+  --to-revisions=user-service-00001-abc=100 \
   --region=europe-west4
 ```
 
@@ -607,7 +607,7 @@ All services expose `GET /health`:
 ```json
 {
   "status": "ok",
-  "serviceName": "auth-service",
+  "serviceName": "user-service",
   "version": "0.0.1",
   "timestamp": "2024-01-15T10:30:00.000Z",
   "checks": [

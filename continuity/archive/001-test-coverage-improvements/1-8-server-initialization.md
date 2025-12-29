@@ -38,7 +38,7 @@ Before starting this issue, ensure these are complete:
 
 Server files have gaps in coverage:
 
-- `apps/auth-service/src/server.ts`: **91.74%** (lines 68-91, 252-254 uncovered)
+- `apps/user-service/src/server.ts`: **91.74%** (lines 68-91, 252-254 uncovered)
 - `apps/notion-service/src/server.ts`: **91.57%** (lines 305-306, 355-357 uncovered)
 - `apps/promptvault-service/src/server.ts`: **93.06%** (lines 360-361, 410-412 uncovered)
 - `apps/whatsapp-service/src/server.ts`: **90.2%** (lines 60-83, 172-173 uncovered)
@@ -76,14 +76,14 @@ These typically contain error handling and edge cases in server initialization.
 1. Read server files to identify uncovered lines:
 
 ===
-cat apps/auth-service/src/server.ts | head -100
+cat apps/user-service/src/server.ts | head -100
 cat apps/whatsapp-service/src/server.ts | head -100
 ===
 
 2. Check existing systemEndpoints tests:
 
 ===
-cat apps/auth-service/src/**tests**/systemEndpoints.test.ts
+cat apps/user-service/src/**tests**/systemEndpoints.test.ts
 ===
 
 3. Identify uncovered scenarios (typically):

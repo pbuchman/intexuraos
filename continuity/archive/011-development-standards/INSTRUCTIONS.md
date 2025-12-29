@@ -41,7 +41,7 @@ All decision logic MUST live in domain/usecase layers.
 **Status:** PARTIALLY COMPLETED - See LEDGER.md for detailed task list (Tasks 3.1-3.5)
 
 - ✅ notion-service (Task 3.5)
-- ⬜ auth-service (Task 3.1) - REQUIRES IMPLEMENTATION
+- ⬜ user-service (Task 3.1) - REQUIRES IMPLEMENTATION
 - ⬜ whatsapp-service (Task 3.2) - REQUIRES REVIEW
 - ⬜ promptvault-service (Task 3.3) - REQUIRES REVIEW
 - ⬜ mobile-notifications-service (Task 3.4) - REQUIRES REVIEW
