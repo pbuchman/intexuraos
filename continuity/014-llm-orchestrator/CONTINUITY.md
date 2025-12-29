@@ -73,14 +73,14 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - **All task files created (Tier 1-8)**
 - 1-0: Create infra-whatsapp package ✓
 - 1-1: Create infra-gemini package ✓
+- 1-2: Create infra-claude package ✓
 
 **Now:**
 
-- 1-2: Create infra-claude package
+- 1-3: Create infra-gpt package
 
 **Next:**
 
-- 1-3: Create infra-gpt package
 - 2-0: Add encryption utility to common-core
 
 ## Open Questions
@@ -105,7 +105,7 @@ continuity/014-llm-orchestrator/
 ├── 0-2-eslint-tsconfig.md (DONE)
 ├── 1-0-infra-whatsapp.md (DONE)
 ├── 1-1-infra-gemini.md (DONE)
-├── 1-2-infra-claude.md
+├── 1-2-infra-claude.md (DONE)
 ├── 1-3-infra-gpt.md
 ├── 2-0-encryption-util.md
 ├── 2-1-user-settings-model.md
