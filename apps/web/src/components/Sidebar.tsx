@@ -86,7 +86,9 @@ export function Sidebar(): React.JSX.Element {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isOrchestratorOpen, setIsOrchestratorOpen] = useState(false);
+  const [isOrchestratorOpen, setIsOrchestratorOpen] = useState(() =>
+    window.location.hash.includes('/research')
+  );
   const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
   const location = useLocation();
 
@@ -199,7 +201,7 @@ export function Sidebar(): React.JSX.Element {
           <X className="h-5 w-5" />
         </button>
 
-        <nav className="mt-8 flex-1 space-y-1 p-3 md:mt-0">
+        <nav className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
           {/* Top nav items */}
           {topNavItems.map((item) => (
             <NavLink
@@ -323,11 +325,7 @@ export function Sidebar(): React.JSX.Element {
               onClick={(): void => {
                 setIsNotificationsOpen(!isNotificationsOpen);
               }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/notifications')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
             >
               <BellRing className="h-5 w-5 shrink-0" />
               {!isCollapsed ? (

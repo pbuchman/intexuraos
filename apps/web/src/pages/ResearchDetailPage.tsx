@@ -54,6 +54,17 @@ export function ResearchDetailPage(): React.JSX.Element {
 
   const status = STATUS_CONFIG[research.status];
   const isProcessing = research.status === 'pending' || research.status === 'processing';
+  const showLlmStatus = isProcessing || research.status === 'failed';
+
+  const getDisplayTitle = (): string => {
+    if (research.title !== '') {
+      return research.title;
+    }
+    if (research.status === 'failed') {
+      return 'Research Failed';
+    }
+    return 'Processing...';
+  };
 
   return (
     <Layout>
@@ -65,9 +76,7 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">
-            {research.title !== '' ? research.title : 'Processing...'}
-          </h2>
+          <h2 className="text-2xl font-bold text-slate-900">{getDisplayTitle()}</h2>
           <p className={`mt-1 text-sm ${status.color}`}>
             {status.label}
             {research.status === 'processing' ? (
@@ -81,7 +90,12 @@ export function ResearchDetailPage(): React.JSX.Element {
         <p className="text-slate-700">{research.prompt}</p>
       </Card>
 
-      {isProcessing ? <ProcessingStatus llmResults={research.llmResults} /> : null}
+      {showLlmStatus ? (
+        <ProcessingStatus
+          llmResults={research.llmResults}
+          title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
+        />
+      ) : null}
 
       {research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
         <Card title="Synthesis Report" className="mb-6">
@@ -127,19 +141,32 @@ export function ResearchDetailPage(): React.JSX.Element {
   );
 }
 
-function ProcessingStatus({ llmResults }: { llmResults: LlmResult[] }): React.JSX.Element {
+interface ProcessingStatusProps {
+  llmResults: LlmResult[];
+  title?: string;
+}
+
+function ProcessingStatus({
+  llmResults,
+  title = 'Processing Status',
+}: ProcessingStatusProps): React.JSX.Element {
   return (
-    <Card title="Processing Status" className="mb-6">
+    <Card title={title} className="mb-6">
       <div className="space-y-3">
         {llmResults.map((result) => (
-          <div key={result.provider} className="flex items-center gap-3">
-            <StatusDot status={result.status} />
-            <span className="capitalize">{result.provider}</span>
-            <span className="text-sm text-slate-500">
-              {result.status === 'completed' && result.durationMs !== undefined
-                ? `(${(result.durationMs / 1000).toFixed(1)}s)`
-                : ''}
-            </span>
+          <div key={result.provider} className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <StatusDot status={result.status} />
+              <span className="capitalize">{result.provider}</span>
+              <span className="text-sm text-slate-500">
+                {result.status === 'completed' && result.durationMs !== undefined
+                  ? `(${(result.durationMs / 1000).toFixed(1)}s)`
+                  : ''}
+              </span>
+            </div>
+            {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
+              <p className="ml-6 text-sm text-red-600">{result.error}</p>
+            ) : null}
           </div>
         ))}
       </div>

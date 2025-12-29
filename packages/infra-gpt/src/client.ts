@@ -9,14 +9,69 @@ export interface GptClient {
   research(prompt: string): Promise<Result<ResearchResult, GptError>>;
 }
 
+function logRequest(
+  method: string,
+  model: string,
+  promptLength: number,
+  promptPreview: string
+): { requestId: string; startTime: number } {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+  // eslint-disable-next-line no-console
+  console.info(
+    `[GPT:${method}] Request`,
+    JSON.stringify({ requestId, model, promptLength, promptPreview })
+  );
+  return { requestId, startTime };
+}
+
+function logResponse(
+  method: string,
+  requestId: string,
+  startTime: number,
+  responseLength: number,
+  responsePreview: string
+): void {
+  // eslint-disable-next-line no-console
+  console.info(
+    `[GPT:${method}] Response`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      responseLength,
+      responsePreview,
+    })
+  );
+}
+
+function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[GPT:${method}] Error`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  );
+}
+
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
+  const modelName = config.model ?? DEFAULT_MODEL;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+      const { requestId, startTime } = logRequest(
+        'research',
+        modelName,
+        prompt.length,
+        prompt.slice(0, 200)
+      );
+
       try {
         const response = await client.chat.completions.create({
-          model: config.model ?? DEFAULT_MODEL,
+          model: modelName,
           max_tokens: MAX_TOKENS,
           messages: [
             {
@@ -34,8 +89,10 @@ export function createGptClient(config: GptConfig): GptClient {
         const firstChoice = response.choices[0];
         const content = firstChoice?.message.content ?? '';
 
+        logResponse('research', requestId, startTime, content.length, content.slice(0, 200));
         return ok({ content });
       } catch (error) {
+        logError('research', requestId, startTime, error);
         return err(mapGptError(error));
       }
     },

@@ -43,7 +43,7 @@ export function ResearchListPage(): React.JSX.Element {
       </div>
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
         </div>
       ) : null}
