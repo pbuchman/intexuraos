@@ -99,7 +99,7 @@ This project is developed with LLMs as **senior reviewers, architects, and autom
 ### Continuity Ledger Pattern
 
 For complex multi-step tasks, we use a **continuity ledger** — a compaction-safe markdown file (`CONTINUITY.md`) that logs every decision, reasoning step, and state transition.
-This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.prompt.md](.github/prompts/continuity.prompt.md) for the orchestration protocol or [sample feature](./continuity/archive/014-llm-orchestrator/CONTINUITY.md) developed with this pattern.
+This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.md](.claude/commands/continuity.md) for the orchestration protocol or [sample feature](./continuity/archive/014-llm-orchestrator/CONTINUITY.md) developed with this pattern.
 
 ---
 
