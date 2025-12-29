@@ -77,14 +77,17 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 1-3: Create infra-gpt package ✓
 - 2-0: Add encryption utility to common-core ✓
 - 2-1: Extend UserSettings model with llmApiKeys ✓
+- 2-2: Add user-settings routes for API keys ✓
 
 **Now:**
 
-- 2-2: Add user-settings routes for API keys
+- 3-0: Create domain models for Research entity
 
 **Next:**
 
-- Tier 3: Domain models, ports, usecases
+- 3-1: Define domain ports
+- 3-2: Add synthesis config
+- 3-3: Create usecases
 
 ## Open Questions
 
@@ -112,7 +115,7 @@ continuity/014-llm-orchestrator/
 ├── 1-3-infra-gpt.md (DONE)
 ├── 2-0-encryption-util.md (DONE)
 ├── 2-1-user-settings-model.md (DONE)
-├── 2-2-user-settings-routes.md
+├── 2-2-user-settings-routes.md (DONE)
 ├── 3-0-domain-models.md
 ├── 3-1-domain-ports.md
 ├── 3-2-synthesis-config.md

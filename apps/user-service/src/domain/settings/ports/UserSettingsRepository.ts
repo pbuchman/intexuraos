@@ -3,8 +3,8 @@
  * Implemented by infra layer (Firestore).
  */
 
-import type { Result } from '@intexuraos/common-core';
-import type { UserSettings } from '../models/UserSettings.js';
+import type { Result, EncryptedValue } from '@intexuraos/common-core';
+import type { UserSettings, LlmProvider } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 
 /**
@@ -22,4 +22,19 @@ export interface UserSettingsRepository {
    * Creates or updates the settings document.
    */
   saveSettings(settings: UserSettings): Promise<Result<UserSettings, SettingsError>>;
+
+  /**
+   * Update a single LLM API key for a user.
+   * Creates the settings document if it doesn't exist.
+   */
+  updateLlmApiKey(
+    userId: string,
+    provider: LlmProvider,
+    encryptedKey: EncryptedValue
+  ): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Delete a single LLM API key for a user.
+   */
+  deleteLlmApiKey(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>>;
 }
