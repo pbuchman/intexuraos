@@ -1,0 +1,70 @@
+/**
+ * Research domain models.
+ * Core entities for the LLM research orchestration.
+ */
+
+export type LlmProvider = 'google' | 'openai' | 'anthropic';
+
+export type ResearchStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export type LlmResultStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface LlmResult {
+  provider: LlmProvider;
+  model: string;
+  status: LlmResultStatus;
+  result?: string;
+  error?: string;
+  sources?: string[];
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+}
+
+export interface Research {
+  id: string;
+  userId: string;
+  title: string;
+  prompt: string;
+  selectedLlms: LlmProvider[];
+  status: ResearchStatus;
+  llmResults: LlmResult[];
+  synthesizedResult?: string;
+  synthesisError?: string;
+  startedAt: string;
+  completedAt?: string;
+  totalDurationMs?: number;
+}
+
+function getDefaultModel(provider: LlmProvider): string {
+  switch (provider) {
+    case 'google':
+      return 'gemini-2.0-flash-exp';
+    case 'openai':
+      return 'gpt-4o';
+    case 'anthropic':
+      return 'claude-sonnet-4-20250514';
+  }
+}
+
+export function createResearch(params: {
+  id: string;
+  userId: string;
+  prompt: string;
+  selectedLlms: LlmProvider[];
+}): Research {
+  return {
+    id: params.id,
+    userId: params.userId,
+    title: '',
+    prompt: params.prompt,
+    selectedLlms: params.selectedLlms,
+    status: 'pending',
+    llmResults: params.selectedLlms.map((provider) => ({
+      provider,
+      model: getDefaultModel(provider),
+      status: 'pending' as const,
+    })),
+    startedAt: new Date().toISOString(),
+  };
+}
