@@ -82,15 +82,16 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 3-1: Define domain ports ✓
 - 3-2: Add synthesis config ✓
 - 3-3: Create usecases ✓
+- 4-0: Create Firestore repository ✓
 
 **Now:**
 
-- 4-0: Create Firestore repository
+- 4-1: Create LLM adapters
 
 **Next:**
 
-- 4-1: Create LLM adapters
 - 4-2: Create notification adapter
+- Tier 5: Routes/Server setup
 
 ## Open Questions
 
