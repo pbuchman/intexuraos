@@ -3,7 +3,19 @@
  * Provides dependency injection for domain adapters.
  */
 
-import type { ResearchRepository } from './domain/research/index.js';
+import { Firestore } from '@google-cloud/firestore';
+import { FirestoreResearchRepository } from './infra/research/index.js';
+import {
+  createLlmProviders,
+  createSynthesizer,
+  type DecryptedApiKeys,
+} from './infra/llm/index.js';
+import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
+import {
+  processResearch,
+  type ResearchRepository,
+  type NotificationSender,
+} from './domain/research/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -22,7 +34,7 @@ let container: ServiceContainer | null = null;
  */
 export function getServices(): ServiceContainer {
   if (container === null) {
-    throw new Error('Service container not initialized. Call setServices() first.');
+    throw new Error('Service container not initialized. Call initializeServices() first.');
   }
   return container;
 }
@@ -39,4 +51,146 @@ export function setServices(services: ServiceContainer): void {
  */
 export function resetServices(): void {
   container = null;
+}
+
+/**
+ * Fetch user's decrypted API keys from user-service.
+ */
+async function getUserApiKeys(userId: string): Promise<DecryptedApiKeys> {
+  const userServiceUrl = process.env['USER_SERVICE_URL'] ?? 'http://localhost:8081';
+  const internalAuthToken = process.env['INTERNAL_AUTH_TOKEN'] ?? '';
+
+  try {
+    const response = await fetch(`${userServiceUrl}/internal/users/${userId}/llm-keys`, {
+      headers: {
+        'X-Internal-Auth': internalAuthToken,
+      },
+    });
+
+    if (!response.ok) {
+      return {};
+    }
+
+    const data = (await response.json()) as {
+      google?: string;
+      openai?: string;
+      anthropic?: string;
+    };
+
+    return data;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Fetch user's WhatsApp phone number from user-service.
+ */
+async function getUserWhatsAppPhone(userId: string): Promise<string | null> {
+  const userServiceUrl = process.env['USER_SERVICE_URL'] ?? 'http://localhost:8081';
+  const internalAuthToken = process.env['INTERNAL_AUTH_TOKEN'] ?? '';
+
+  try {
+    const response = await fetch(`${userServiceUrl}/internal/users/${userId}/whatsapp-phone`, {
+      headers: {
+        'X-Internal-Auth': internalAuthToken,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { phone?: string };
+    return data.phone ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create the notification sender based on environment configuration.
+ */
+function createNotificationSender(): NotificationSender {
+  const whatsappAccessToken = process.env['WHATSAPP_ACCESS_TOKEN'];
+  const whatsappPhoneNumberId = process.env['WHATSAPP_PHONE_NUMBER_ID'];
+
+  if (
+    whatsappAccessToken !== undefined &&
+    whatsappAccessToken !== '' &&
+    whatsappPhoneNumberId !== undefined &&
+    whatsappPhoneNumberId !== ''
+  ) {
+    return new WhatsAppNotificationSender(
+      {
+        accessToken: whatsappAccessToken,
+        phoneNumberId: whatsappPhoneNumberId,
+      },
+      {
+        getPhoneNumber: getUserWhatsAppPhone,
+      }
+    );
+  }
+
+  return new NoopNotificationSender();
+}
+
+/**
+ * Initialize the service container with all dependencies.
+ */
+export function initializeServices(): void {
+  const firestore = new Firestore();
+  const researchRepo = new FirestoreResearchRepository(firestore);
+  const notificationSender = createNotificationSender();
+
+  /**
+   * Process research asynchronously (fire and forget).
+   */
+  const processResearchAsync = (researchId: string): void => {
+    void (async (): Promise<void> => {
+      try {
+        // Get research to find user ID
+        const research = await researchRepo.findById(researchId);
+        if (!research.ok || research.value === null) {
+          return;
+        }
+
+        // Get user's API keys
+        const apiKeys = await getUserApiKeys(research.value.userId);
+
+        // Synthesizer always uses Google (Gemini)
+        const googleKey = apiKeys.google;
+        if (googleKey === undefined) {
+          await researchRepo.update(researchId, {
+            status: 'failed',
+            synthesisError: 'Google API key required for synthesis',
+          });
+          return;
+        }
+
+        // Create LLM providers with user's keys
+        const llmProviders = createLlmProviders(apiKeys);
+        const synthesizer = createSynthesizer(googleKey);
+
+        // Process research
+        await processResearch(researchId, {
+          researchRepo,
+          llmProviders,
+          synthesizer,
+          notificationSender,
+        });
+      } catch (error) {
+        /* Fire-and-forget: log error but don't throw */
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        // eslint-disable-next-line no-console
+        console.error('Error processing research:', message);
+      }
+    })();
+  };
+
+  container = {
+    researchRepo,
+    generateId: (): string => crypto.randomUUID(),
+    processResearchAsync,
+  };
 }
