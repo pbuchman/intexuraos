@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # IntexuraOS — Claude Instructions
 
 **All rules below are verified by `npm run ci`. If CI passes, rules are satisfied.**
@@ -28,21 +34,30 @@ apps/
     routes/     → HTTP transport layer
     services.ts → Dependency injection container
 packages/
-  common/         → Shared utilities only (Result types, JWT, redaction)
-  http-contracts/ → OpenAPI schemas, Fastify JSON schemas
+  common-core/    → Result types, error utilities (leaf package)
+  common-http/    → HTTP response helpers, JWT utilities (leaf package)
+  http-contracts/ → OpenAPI schemas, Fastify JSON schemas (leaf package)
   http-server/    → Health checks, validation error handler
+  infra-firestore/→ Firestore client wrapper
+  infra-notion/   → Notion client wrapper
+  infra-whatsapp/ → WhatsApp API client
+  infra-claude/   → Anthropic Claude API client
+  infra-gemini/   → Google Gemini API client
+  infra-gpt/      → OpenAI GPT API client
 terraform/        → Infrastructure as code
 docs/             → All documentation
 ```
 
 ### Import Rules (enforced by ESLint boundaries)
 
-| From             | Can Import                                |
-| ---------------- | ----------------------------------------- |
-| `http-contracts` | nothing (leaf package)                    |
-| `common`         | nothing (leaf package)                    |
-| `http-server`    | `common` only                             |
-| `apps/*`         | `common`, `http-contracts`, `http-server` |
+| From             | Can Import                                             |
+| ---------------- | ------------------------------------------------------ |
+| `common-core`    | nothing (leaf package)                                 |
+| `common-http`    | nothing (leaf package)                                 |
+| `http-contracts` | nothing (leaf package)                                 |
+| `http-server`    | `common-core`, `common-http`                           |
+| `infra-*`        | `common-core`, `common-http`                           |
+| `apps/*`         | `common-*`, `http-contracts`, `http-server`, `infra-*` |
 
 **Forbidden:**
 
@@ -109,11 +124,18 @@ const tokenRepo = getServices().authTokenRepository;
 
 ### Package Structure
 
-| Package          | Purpose                                    | Dependencies |
-| ---------------- | ------------------------------------------ | ------------ |
-| `common`         | Result types, JWT, redaction, HTTP helpers | none (leaf)  |
-| `http-contracts` | OpenAPI schemas, Fastify JSON schemas      | none (leaf)  |
-| `http-server`    | Health checks, validation error handler    | `common`     |
+| Package           | Purpose                                 | Dependencies       |
+| ----------------- | --------------------------------------- | ------------------ |
+| `common-core`     | Result types, error utilities           | none (leaf)        |
+| `common-http`     | HTTP response helpers, JWT utilities    | none (leaf)        |
+| `http-contracts`  | OpenAPI schemas, Fastify JSON schemas   | none (leaf)        |
+| `http-server`     | Health checks, validation error handler | `common-core/http` |
+| `infra-firestore` | Firestore client wrapper                | `common-core/http` |
+| `infra-notion`    | Notion API client wrapper               | `common-core/http` |
+| `infra-whatsapp`  | WhatsApp Business API client            | `common-core/http` |
+| `infra-claude`    | Anthropic Claude API client             | `common-core/http` |
+| `infra-gemini`    | Google Gemini API client                | `common-core/http` |
+| `infra-gpt`       | OpenAI GPT API client                   | `common-core/http` |
 
 ### Common Package Rules
 
@@ -123,25 +145,35 @@ const tokenRepo = getServices().authTokenRepository;
 | No external service deps | Code review             |
 | Imports nothing          | ESLint boundaries       |
 
-**`packages/common` contains:**
+**`packages/common-core` contains:**
 
-- Result types and utilities
-- HTTP response helpers
+- Result types and utilities (`Result<T, E>`)
+- Error message extraction utilities
 - Redaction utilities
-- JWT/auth utilities
-- Firestore/Notion client wrappers (shared utilities only)
 
-**Forbidden in common:**
+**`packages/common-http` contains:**
+
+- HTTP response helpers
+- JWT/auth utilities
+
+**Forbidden in common packages:**
 
 - Business logic / domain rules
 - App-specific code
-- External service implementations (only client wrappers)
+- External service implementations
 
 ### Package Naming
 
-- `@intexuraos/common`
+- `@intexuraos/common-core`
+- `@intexuraos/common-http`
 - `@intexuraos/http-contracts`
 - `@intexuraos/http-server`
+- `@intexuraos/infra-firestore`
+- `@intexuraos/infra-notion`
+- `@intexuraos/infra-whatsapp`
+- `@intexuraos/infra-claude`
+- `@intexuraos/infra-gemini`
+- `@intexuraos/infra-gpt`
 
 ---
 
@@ -419,6 +451,16 @@ This rule exists because excluding code from coverage is technical debt that com
 - All Firestore operations mocked via fake repositories
 - All external HTTP calls mocked via `nock`
 - Just run `npm run test` — everything is self-contained
+
+### Common Commands
+
+```bash
+npm run test                           # Run all tests
+npm run test:watch                     # Watch mode
+npm run test:coverage                  # With coverage report
+npx vitest path/to/file.test.ts        # Run single test file
+npx vitest -t "test name pattern"      # Run tests matching pattern
+```
 
 ### Test Setup Pattern
 
