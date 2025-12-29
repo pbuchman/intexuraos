@@ -81,14 +81,16 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 3-0: Create domain models for Research ✓
 - 3-1: Define domain ports ✓
 - 3-2: Add synthesis config ✓
+- 3-3: Create usecases ✓
 
 **Now:**
 
-- 3-3: Create usecases
+- 4-0: Create Firestore repository
 
 **Next:**
 
-- Tier 4: Infrastructure (firestore repo, adapters, notification)
+- 4-1: Create LLM adapters
+- 4-2: Create notification adapter
 
 ## Open Questions
 
