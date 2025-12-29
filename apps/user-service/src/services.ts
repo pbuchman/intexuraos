@@ -1,5 +1,5 @@
 /**
- * Service wiring for auth-service.
+ * Service wiring for user-service.
  * Provides dependency injection for domain adapters.
  */
 import type { AuthTokenRepository, Auth0Client } from './domain/identity/index.js';

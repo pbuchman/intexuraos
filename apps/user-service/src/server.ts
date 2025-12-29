@@ -18,7 +18,7 @@ import {
 } from '@intexuraos/http-server';
 import { authRoutes } from './routes/routes.js';
 
-const SERVICE_NAME = 'auth-service';
+const SERVICE_NAME = 'user-service';
 const SERVICE_VERSION = '0.0.1';
 
 // Required secrets for this service
@@ -35,7 +35,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development
   const servers = [
     {
-      url: 'https://intexuraos-auth-service-cj44trunra-lm.a.run.app',
+      url: 'https://intexuraos-user-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8080', description: 'Local' },

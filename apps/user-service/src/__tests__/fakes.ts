@@ -1,5 +1,5 @@
 /**
- * Fake repositories for auth-service testing.
+ * Fake repositories for user-service testing.
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */

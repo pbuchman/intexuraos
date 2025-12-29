@@ -1,5 +1,5 @@
 /**
- * Firestore infrastructure for auth-service.
+ * Firestore infrastructure for user-service.
  */
 
 export { FirestoreAuthTokenRepository } from './authTokenRepository.js';

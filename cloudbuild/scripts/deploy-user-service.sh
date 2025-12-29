@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=cloudbuild/scripts/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-SERVICE="auth-service"
-CLOUD_RUN_SERVICE="intexuraos-auth-service"
+SERVICE="user-service"
+CLOUD_RUN_SERVICE="intexuraos-user-service"
 
 require_env_vars REGION ARTIFACT_REGISTRY_URL COMMIT_SHA
 

@@ -52,7 +52,7 @@ describe('System Endpoints', () => {
       checks: { name: string; status: string }[];
     };
     expect(body.status).toBe('ok');
-    expect(body.serviceName).toBe('auth-service');
+    expect(body.serviceName).toBe('user-service');
     expect(body.checks).toBeInstanceOf(Array);
   });
 
@@ -83,7 +83,7 @@ describe('System Endpoints', () => {
       paths: Record<string, unknown>;
     };
     expect(spec.openapi).toMatch(/^3\./);
-    expect(spec.info.title).toBe('auth-service');
+    expect(spec.info.title).toBe('user-service');
     expect(spec.paths['/auth/device/start']).toBeDefined();
     expect(spec.paths['/auth/device/poll']).toBeDefined();
     expect(spec.paths['/auth/config']).toBeDefined();

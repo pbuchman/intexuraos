@@ -9,7 +9,7 @@ import { setServices, resetServices, type ServiceContainer } from '../services.j
 import { FakeSignatureConnectionRepository, FakeNotificationRepository } from './fakes.js';
 import { hashSignature } from '../domain/notifications/index.js';
 
-// Test JWT (from auth-service tests pattern)
+// Test JWT (from user-service tests pattern)
 const TEST_USER_ID = 'auth0|test-user-123';
 const TEST_JWT =
   'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5In0.' +
