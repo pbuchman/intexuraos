@@ -6,6 +6,11 @@
  * - packages/common/** affects all services
  * - apps/<service>/** affects that service (owns domain + infra)
  *
+ * Comparison strategy:
+ * - Compares with the last SUCCESSFUL Cloud Build commit (not just HEAD~1)
+ * - This ensures failed builds don't cause changes to be skipped
+ * - Falls back to HEAD~1 if no successful build found or API unavailable
+ *
  * Output: /workspace/affected.json
  * Format: {
  *   "services": ["auth-service", "promptvault-service", "whatsapp-service", "api-docs-hub"]
@@ -18,6 +23,8 @@ import { join } from 'node:path';
 
 const WORKSPACE = process.env.WORKSPACE || '/workspace';
 const OUTPUT_FILE = join(WORKSPACE, 'affected.json');
+const PROJECT_ID = process.env.PROJECT_ID || process.env.GCLOUD_PROJECT;
+const BRANCH_NAME = process.env.BRANCH_NAME || 'development';
 
 // Service dependencies - each app owns its domain and infra
 // terraform/ changes affect all services (infrastructure changes require redeploy)
@@ -95,23 +102,85 @@ const SERVICE_DEPS = {
 };
 
 /**
+ * Get the commit SHA of the last successful Cloud Build.
+ * Uses gcloud CLI to query Cloud Build API.
+ *
+ * @returns {string|null} Commit SHA or null if not found
+ */
+function getLastSuccessfulBuildCommit() {
+  if (!PROJECT_ID) {
+    console.log('PROJECT_ID not set, cannot query Cloud Build API');
+    return null;
+  }
+
+  try {
+    // Query for the last successful build on this branch (excluding current build)
+    // Filter: status=SUCCESS, source.repoSource.branchName matches, sorted by createTime desc
+    const result = execSync(
+      `gcloud builds list \
+        --project="${PROJECT_ID}" \
+        --filter="status=SUCCESS AND substitutions._BRANCH_NAME=${BRANCH_NAME}" \
+        --sort-by="~createTime" \
+        --limit=1 \
+        --format="value(substitutions.COMMIT_SHA)"`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    if (result && result.length === 40) {
+      console.log(`Found last successful build commit: ${result}`);
+      return result;
+    }
+
+    console.log('No successful build found via gcloud, will use fallback');
+    return null;
+  } catch (error) {
+    console.log(`Could not query Cloud Build API: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * Get the git diff range.
+ * Compares current commit with last successful build.
+ * Returns null if no comparison base found (triggers full rebuild).
+ *
+ * @returns {string|null} Diff range or null for full rebuild
  */
 function getDiffRange() {
   const commitSha = process.env.COMMIT_SHA;
 
   if (commitSha) {
-    // In Cloud Build, compare with previous commit
-    try {
-      execSync('git fetch --depth=2 origin', { stdio: 'pipe' });
-      return `${commitSha}~1..${commitSha}`;
-    } catch {
-      console.log('Could not fetch previous commit, comparing with HEAD~1');
-      return 'HEAD~1..HEAD';
+    // Try to get last successful build commit
+    const lastSuccessCommit = getLastSuccessfulBuildCommit();
+
+    if (lastSuccessCommit && lastSuccessCommit !== commitSha) {
+      // Fetch enough history to include the last successful commit
+      try {
+        execSync(`git fetch --depth=100 origin ${BRANCH_NAME}`, { stdio: 'pipe' });
+        // Verify the commit exists in our history
+        execSync(`git cat-file -e ${lastSuccessCommit}`, { stdio: 'pipe' });
+        console.log(`Comparing with last successful build: ${lastSuccessCommit}`);
+        return `${lastSuccessCommit}..${commitSha}`;
+      } catch {
+        console.log('Could not find last successful commit in history, fetching more...');
+        try {
+          execSync(`git fetch --unshallow origin ${BRANCH_NAME} || git fetch --depth=500 origin ${BRANCH_NAME}`, { stdio: 'pipe' });
+          execSync(`git cat-file -e ${lastSuccessCommit}`, { stdio: 'pipe' });
+          console.log(`Comparing with last successful build: ${lastSuccessCommit}`);
+          return `${lastSuccessCommit}..${commitSha}`;
+        } catch {
+          console.log('Still could not find commit in history');
+        }
+      }
     }
+
+    // No valid comparison base - trigger full rebuild
+    console.log('No successful build baseline found - will rebuild ALL services');
+    return null;
   }
 
-  // Local fallback
+  // Local fallback - use HEAD~1 for local testing only
+  console.log('Local mode: comparing with HEAD~1');
   return 'HEAD~1..HEAD';
 }
 
@@ -162,27 +231,39 @@ function main() {
   console.log('=== Detecting Affected Services ===');
   console.log(`COMMIT_SHA: ${process.env.COMMIT_SHA || 'not set'}`);
   console.log(`BRANCH_NAME: ${process.env.BRANCH_NAME || 'not set'}`);
+  console.log(`PROJECT_ID: ${PROJECT_ID || 'not set'}`);
   console.log(`Output file: ${OUTPUT_FILE}`);
 
   const diffRange = getDiffRange();
-  console.log(`Diff range: ${diffRange}`);
 
-  const changedFiles = getChangedFiles(diffRange);
-  console.log(`Changed files (${changedFiles.length}):`);
-  for (const file of changedFiles.slice(0, 20)) {
-    console.log(`  - ${file}`);
-  }
-  if (changedFiles.length > 20) {
-    console.log(`  ... and ${changedFiles.length - 20} more`);
+  let changedFiles;
+  let affectedServices;
+
+  if (diffRange === null) {
+    // No baseline - rebuild everything
+    console.log('Full rebuild triggered - all services affected');
+    changedFiles = ['<full-rebuild>'];
+    affectedServices = Object.keys(SERVICE_DEPS).sort();
+  } else {
+    console.log(`Diff range: ${diffRange}`);
+    changedFiles = getChangedFiles(diffRange);
+    console.log(`Changed files (${changedFiles.length}):`);
+    for (const file of changedFiles.slice(0, 20)) {
+      console.log(`  - ${file}`);
+    }
+    if (changedFiles.length > 20) {
+      console.log(`  ... and ${changedFiles.length - 20} more`);
+    }
+    affectedServices = getAffectedServices(changedFiles);
   }
 
-  const affectedServices = getAffectedServices(changedFiles);
   console.log(`\nAffected services: ${affectedServices.join(', ') || 'none'}`);
 
   const output = {
     services: affectedServices,
     changedFilesCount: changedFiles.length,
-    diffRange,
+    diffRange: diffRange || 'full-rebuild',
+    fullRebuild: diffRange === null,
     timestamp: new Date().toISOString(),
   };
 
