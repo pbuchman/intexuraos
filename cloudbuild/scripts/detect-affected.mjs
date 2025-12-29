@@ -90,6 +90,16 @@ const SERVICE_DEPS = {
     'tsconfig.json',
     'tsconfig.base.json',
   ],
+  'llm-orchestrator-service': [
+    'apps/llm-orchestrator-service/',
+    'packages/common/',
+    'terraform/',
+    'cloudbuild/',
+    'package.json',
+    'package-lock.json',
+    'tsconfig.json',
+    'tsconfig.base.json',
+  ],
   web: [
     'apps/web/',
     'terraform/',
