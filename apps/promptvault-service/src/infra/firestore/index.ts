@@ -9,4 +9,4 @@ export {
   getNotionToken,
   isNotionConnected,
   disconnectNotion,
-} from '@intexuraos/common';
+} from '@intexuraos/infra-notion';

@@ -481,7 +481,6 @@ describe('TranscribeAudioUseCase', () => {
         upload: mediaStorage.upload.bind(mediaStorage),
         uploadThumbnail: mediaStorage.uploadThumbnail.bind(mediaStorage),
         delete: mediaStorage.delete.bind(mediaStorage),
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         getSignedUrl: vi.fn().mockRejectedValue('String error thrown'),
       };
 

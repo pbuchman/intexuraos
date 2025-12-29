@@ -1,7 +1,7 @@
 /**
  * Use case for getting a single prompt by ID.
  */
-import { err, type Result } from '@intexuraos/common';
+import { err, type Result } from '@intexuraos/common-core';
 import type { Prompt, PromptId, PromptVaultError } from '../models/index.js';
 import { createPromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';

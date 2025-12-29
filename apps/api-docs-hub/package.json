@@ -22,7 +22,7 @@
     "dev": "node --watch dist/index.js"
   },
   "dependencies": {
-    "@intexuraos/common": "*",
+    "@intexuraos/common-http": "*",
     "@intexuraos/http-server": "*",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",

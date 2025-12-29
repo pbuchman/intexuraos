@@ -7,8 +7,8 @@
  * Coverage note: Some methods may show low coverage until all Tier 1 test issues
  * are completed (see docs/continuity/1-4-whatsapp-webhook-usecase.md, 1-5-whatsapp-routes.md).
  */
-import type { Result } from '@intexuraos/common';
-import { ok, err } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   WhatsAppWebhookEventRepository,

@@ -10,7 +10,7 @@ import {
   isNotionConnected,
   disconnectNotion,
 } from '../../infra/firestore/index.js';
-import { createFakeFirestore, setFirestore, type FakeFirestore } from '@intexuraos/common';
+import { createFakeFirestore, setFirestore, type FakeFirestore } from '@intexuraos/infra-firestore';
 
 describe('notionConnectionRepository', () => {
   let fakeFirestore: FakeFirestore;

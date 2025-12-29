@@ -11,7 +11,7 @@
  * 2. Update `services.ts` to inject the new adapter
  * 3. No changes needed in domain or route code
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { TranscriptionApiCall, TranscriptionError } from '../models/WhatsAppMessage.js';
 
 /**

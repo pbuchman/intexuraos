@@ -4,11 +4,36 @@
  * POST   /notion/connect    - Connect Notion integration
  * GET    /notion/status     - Get integration status
  * DELETE /notion/disconnect - Disconnect integration
+ *
+ * Routes are thin adapters - business logic lives in domain/integration/usecases.
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
+import {
+  connectNotion,
+  getNotionStatus,
+  disconnectNotion,
+  type ConnectNotionErrorCode,
+} from '../domain/integration/index.js';
+
+/**
+ * Map domain error codes to HTTP error codes.
+ */
+function mapConnectErrorToHttp(
+  code: ConnectNotionErrorCode
+): 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'DOWNSTREAM_ERROR' {
+  switch (code) {
+    case 'PAGE_NOT_ACCESSIBLE':
+    case 'VALIDATION_ERROR':
+      return 'INVALID_REQUEST';
+    case 'INVALID_TOKEN':
+      return 'UNAUTHORIZED';
+    case 'DOWNSTREAM_ERROR':
+      return 'DOWNSTREAM_ERROR';
+  }
+}
 
 export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /notion/connect
@@ -75,55 +100,26 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         notionToken: string;
         promptVaultPageId: string;
       };
+
+      // Delegate to use-case
       const { connectionRepository, notionApi } = getServices();
-
-      // Validate page access BEFORE saving connection
-      const pageValidation = await notionApi.getPageWithPreview(notionToken, promptVaultPageId);
-      if (!pageValidation.ok) {
-        const errorCode = pageValidation.error.code;
-        if (errorCode === 'NOT_FOUND') {
-          return await reply.fail(
-            'INVALID_REQUEST',
-            `Could not access page with ID "${promptVaultPageId}". ` +
-              'Make sure the page exists and is shared with your Notion integration. ' +
-              'You can share a page by clicking "..." menu → "Add connections" → select your integration.',
-            undefined,
-            { pageId: promptVaultPageId, notionError: pageValidation.error.message }
-          );
-        }
-        if (errorCode === 'UNAUTHORIZED') {
-          return await reply.fail(
-            'UNAUTHORIZED',
-            'Invalid Notion token. Please reconnect your Notion integration.',
-            undefined,
-            { notionError: pageValidation.error.message }
-          );
-        }
-        return await reply.fail('DOWNSTREAM_ERROR', pageValidation.error.message, undefined, {
-          notionError: pageValidation.error.code,
-        });
-      }
-
-      // Page is accessible - save the connection
-      const result = await connectionRepository.saveConnection(
-        user.userId,
+      const result = await connectNotion(connectionRepository, notionApi, {
+        userId: user.userId,
+        notionToken,
         promptVaultPageId,
-        notionToken
-      );
+      });
 
+      // Map result to HTTP response
       if (!result.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+        return await reply.fail(
+          mapConnectErrorToHttp(result.error.code),
+          result.error.message,
+          undefined,
+          result.error.details
+        );
       }
 
-      const config = result.value;
-      return await reply.ok({
-        connected: config.connected,
-        promptVaultPageId: config.promptVaultPageId,
-        createdAt: config.createdAt,
-        updatedAt: config.updatedAt,
-        pageTitle: pageValidation.value.page.title,
-        pageUrl: pageValidation.value.page.url,
-      });
+      return await reply.ok(result.value);
     }
   );
 
@@ -175,21 +171,16 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
+      // Delegate to use-case
       const { connectionRepository } = getServices();
-      const result = await connectionRepository.getConnection(user.userId);
+      const result = await getNotionStatus(connectionRepository, { userId: user.userId });
 
+      // Map result to HTTP response
       if (!result.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      const config = result.value;
-      return await reply.ok({
-        configured: config !== null,
-        connected: config?.connected ?? false,
-        promptVaultPageId: config?.promptVaultPageId ?? null,
-        createdAt: config?.createdAt ?? null,
-        updatedAt: config?.updatedAt ?? null,
-      });
+      return await reply.ok(result.value);
     }
   );
 
@@ -241,19 +232,16 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
+      // Delegate to use-case
       const { connectionRepository } = getServices();
-      const result = await connectionRepository.disconnectConnection(user.userId);
+      const result = await disconnectNotion(connectionRepository, { userId: user.userId });
 
+      // Map result to HTTP response
       if (!result.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      const config = result.value;
-      return await reply.ok({
-        connected: config.connected,
-        promptVaultPageId: config.promptVaultPageId,
-        updatedAt: config.updatedAt,
-      });
+      return await reply.ok(result.value);
     }
   );
 

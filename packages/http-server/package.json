@@ -20,7 +20,9 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@intexuraos/common": "*",
+    "@intexuraos/common-core": "*",
+    "@intexuraos/common-http": "*",
+    "@intexuraos/infra-firestore": "*",
     "fastify": "^5.1.0"
   }
 }

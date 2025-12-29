@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThumbnailGeneratorAdapter } from '../../infra/media/index.js';
 import * as thumbnailGenerator from '../../infra/media/thumbnailGenerator.js';
-import { ok, err } from '@intexuraos/common';
+import { ok, err } from '@intexuraos/common-core';
 
 vi.mock('../../infra/media/thumbnailGenerator.js', () => ({
   generateThumbnail: vi.fn(),

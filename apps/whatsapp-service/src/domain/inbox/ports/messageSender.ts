@@ -2,7 +2,7 @@
  * WhatsApp Message Sender Port.
  * Defines the interface for sending WhatsApp messages.
  */
-import type { Result } from '@intexuraos/common';
+import type { Result } from '@intexuraos/common-core';
 import type { InboxError } from './repositories.js';
 
 /**

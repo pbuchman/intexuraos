@@ -3,7 +3,7 @@
  * POST /mobile-notifications/connect - Create a new signature connection.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createConnection } from '../domain/notifications/index.js';
 import { connectRequestSchema, connectResponseSchema } from './schemas.js';
