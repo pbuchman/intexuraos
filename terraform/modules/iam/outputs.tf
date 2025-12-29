@@ -7,6 +7,7 @@ output "service_accounts" {
     whatsapp_service             = google_service_account.whatsapp_service.email
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
+    llm_orchestrator_service     = google_service_account.llm_orchestrator_service.email
   }
 }
 
@@ -38,5 +39,10 @@ output "api_docs_hub_sa" {
 output "mobile_notifications_service_sa" {
   description = "Mobile Notifications service service account email"
   value       = google_service_account.mobile_notifications_service.email
+}
+
+output "llm_orchestrator_service_sa" {
+  description = "LLM Orchestrator service service account email"
+  value       = google_service_account.llm_orchestrator_service.email
 }
 
