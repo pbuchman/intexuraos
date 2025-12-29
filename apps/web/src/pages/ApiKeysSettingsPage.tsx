@@ -13,17 +13,17 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: 'google',
     name: 'Google (Gemini)',
-    description: 'Required for research synthesis. Enables web search grounding.',
+    description: 'Required for research synthesis. Enables Gemini 3 Pro with web search grounding.',
   },
   {
     id: 'openai',
     name: 'OpenAI (GPT)',
-    description: 'Optional. Adds GPT-4o to research options.',
+    description: 'Optional. Adds GPT-5.2 Pro to research options.',
   },
   {
     id: 'anthropic',
     name: 'Anthropic (Claude)',
-    description: 'Optional. Adds Claude with web search to research options.',
+    description: 'Optional. Adds Claude Opus 4.5 with web search to research options.',
   },
 ];
 
@@ -94,11 +94,11 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
             key={provider.id}
             provider={provider}
             currentValue={keys?.[provider.id] ?? null}
-            onSave={(apiKey): void => {
-              void setKey(provider.id, apiKey);
+            onSave={async (apiKey): Promise<void> => {
+              await setKey(provider.id, apiKey);
             }}
-            onDelete={(): void => {
-              void deleteKey(provider.id);
+            onDelete={async (): Promise<void> => {
+              await deleteKey(provider.id);
             }}
           />
         ))}
@@ -110,8 +110,8 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
 interface ApiKeyCardProps {
   provider: ProviderConfig;
   currentValue: string | null;
-  onSave: (apiKey: string) => void;
-  onDelete: () => void;
+  onSave: (apiKey: string) => Promise<void>;
+  onDelete: () => Promise<void>;
 }
 
 function ApiKeyCard({
@@ -124,21 +124,31 @@ function ApiKeyCard({
   const [inputValue, setInputValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = (): void => {
-    const error = validateApiKeyFormat(provider.id, inputValue);
-    if (error !== null) {
-      setValidationError(error);
+  const handleSave = async (): Promise<void> => {
+    const formatError = validateApiKeyFormat(provider.id, inputValue);
+    if (formatError !== null) {
+      setValidationError(formatError);
       return;
     }
     setValidationError(null);
-    onSave(inputValue);
-    setInputValue('');
-    setIsEditing(false);
+    setIsSaving(true);
+
+    try {
+      await onSave(inputValue);
+      setInputValue('');
+      setIsEditing(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save API key';
+      setValidationError(errorMessage);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (): void => {
-    onDelete();
+  const handleDelete = async (): Promise<void> => {
+    await onDelete();
     setShowDeleteConfirm(false);
   };
 
@@ -200,13 +210,22 @@ function ApiKeyCard({
               setInputValue(e.target.value);
               setValidationError(null);
             }}
+            disabled={isSaving}
           />
           {validationError !== null ? (
             <p className="text-sm text-red-600">{validationError}</p>
           ) : null}
+          {isSaving ? <p className="text-sm text-blue-600">Validating API key...</p> : null}
           <div className="flex gap-3">
-            <Button type="button" onClick={handleSave} disabled={inputValue.length < 10}>
-              Save
+            <Button
+              type="button"
+              onClick={(): void => {
+                void handleSave();
+              }}
+              disabled={inputValue.length < 10 || isSaving}
+              isLoading={isSaving}
+            >
+              {isSaving ? 'Validating...' : 'Save'}
             </Button>
             {isEditing ? (
               <Button
@@ -217,6 +236,7 @@ function ApiKeyCard({
                   setInputValue('');
                   setValidationError(null);
                 }}
+                disabled={isSaving}
               >
                 Cancel
               </Button>
@@ -229,7 +249,13 @@ function ApiKeyCard({
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="mb-3 text-sm text-red-800">Are you sure you want to delete this API key?</p>
           <div className="flex gap-3">
-            <Button type="button" variant="danger" onClick={handleDelete}>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={(): void => {
+                void handleDelete();
+              }}
+            >
               Delete
             </Button>
             <Button

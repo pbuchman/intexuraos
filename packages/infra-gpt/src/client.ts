@@ -2,11 +2,13 @@ import OpenAI from 'openai';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type { GptConfig, ResearchResult, GptError } from './types.js';
 
-const DEFAULT_MODEL = 'gpt-4o';
+const DEFAULT_MODEL = 'gpt-5.2-pro';
+const VALIDATION_MODEL = 'gpt-5-nano';
 const MAX_TOKENS = 8192;
 
 export interface GptClient {
   research(prompt: string): Promise<Result<ResearchResult, GptError>>;
+  validateKey(): Promise<Result<boolean, GptError>>;
 }
 
 function logRequest(
@@ -93,6 +95,25 @@ export function createGptClient(config: GptConfig): GptClient {
         return ok({ content });
       } catch (error) {
         logError('research', requestId, startTime, error);
+        return err(mapGptError(error));
+      }
+    },
+
+    async validateKey(): Promise<Result<boolean, GptError>> {
+      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 9, 'Say "ok"');
+
+      try {
+        const response = await client.chat.completions.create({
+          model: VALIDATION_MODEL,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Say "ok"' }],
+        });
+
+        const content = response.choices[0]?.message.content ?? '';
+        logResponse('validateKey', requestId, startTime, content.length, content);
+        return ok(true);
+      } catch (error) {
+        logError('validateKey', requestId, startTime, error);
         return err(mapGptError(error));
       }
     },

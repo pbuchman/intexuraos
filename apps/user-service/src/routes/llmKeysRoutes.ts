@@ -8,8 +8,60 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
+import type { EncryptedValue } from '@intexuraos/common-core';
+import { createGeminiClient } from '@intexuraos/infra-gemini';
+import { createGptClient } from '@intexuraos/infra-gpt';
+import { createClaudeClient } from '@intexuraos/infra-claude';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
+
+/**
+ * Validate API key by making a test request to the provider.
+ * Returns error message if invalid, null if valid.
+ * Skipped in test environment (NODE_ENV=test).
+ */
+async function validateApiKeyWithProvider(
+  provider: LlmProvider,
+  apiKey: string
+): Promise<string | null> {
+  // Skip validation in test environment
+  if (process.env['NODE_ENV'] === 'test') {
+    return null;
+  }
+
+  switch (provider) {
+    case 'google': {
+      const client = createGeminiClient({ apiKey });
+      const result = await client.validateKey();
+      if (!result.ok) {
+        return result.error.code === 'INVALID_KEY'
+          ? 'Invalid Google API key'
+          : `Google API error: ${result.error.message}`;
+      }
+      return null;
+    }
+    case 'openai': {
+      const client = createGptClient({ apiKey });
+      const result = await client.validateKey();
+      if (!result.ok) {
+        return result.error.code === 'INVALID_KEY'
+          ? 'Invalid OpenAI API key'
+          : `OpenAI API error: ${result.error.message}`;
+      }
+      return null;
+    }
+    case 'anthropic': {
+      const client = createClaudeClient({ apiKey });
+      const result = await client.validateKey();
+      if (!result.ok) {
+        return result.error.code === 'INVALID_KEY'
+          ? 'Invalid Anthropic API key'
+          : `Anthropic API error: ${result.error.message}`;
+      }
+      return null;
+    }
+  }
+}
 
 /**
  * Mask an API key for display.
@@ -100,11 +152,20 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const settings = result.value;
       const llmApiKeys = settings?.llmApiKeys;
+      const { encryptor } = getServices();
+
+      // Decrypt and mask keys for display
+      const getMaskedKey = (encryptedKey: EncryptedValue | undefined): string | null => {
+        if (encryptedKey === undefined || encryptor === null) return null;
+        const decrypted = encryptor.decrypt(encryptedKey);
+        if (!decrypted.ok) return null;
+        return maskApiKey(decrypted.value);
+      };
 
       return await reply.ok({
-        google: llmApiKeys?.google !== undefined ? 'configured' : null,
-        openai: llmApiKeys?.openai !== undefined ? 'configured' : null,
-        anthropic: llmApiKeys?.anthropic !== undefined ? 'configured' : null,
+        google: getMaskedKey(llmApiKeys?.google),
+        openai: getMaskedKey(llmApiKeys?.openai),
+        anthropic: getMaskedKey(llmApiKeys?.anthropic),
       });
     }
   );
@@ -212,6 +273,12 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
+      }
+
+      // Validate API key with actual provider
+      const validationError = await validateApiKeyWithProvider(body.provider, body.apiKey);
+      if (validationError !== null) {
+        return await reply.fail('INVALID_REQUEST', validationError);
       }
 
       const { userSettingsRepository, encryptor } = getServices();

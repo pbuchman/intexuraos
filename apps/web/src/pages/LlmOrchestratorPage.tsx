@@ -10,9 +10,9 @@ interface ProviderOption {
 }
 
 const PROVIDERS: ProviderOption[] = [
-  { id: 'google', name: 'Gemini (with web search)' },
-  { id: 'openai', name: 'GPT-4o' },
-  { id: 'anthropic', name: 'Claude (with web search)' },
+  { id: 'google', name: 'Gemini 3 Pro (with web search)' },
+  { id: 'openai', name: 'GPT-5.2 Pro' },
+  { id: 'anthropic', name: 'Claude Opus 4.5 (with web search)' },
 ];
 
 export function LlmOrchestratorPage(): React.JSX.Element {
@@ -100,9 +100,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               rows={6}
               disabled={submitting}
             />
-            <p className="text-sm text-slate-500">
-              {String(prompt.length)}/10000 characters (minimum 10)
-            </p>
+            <p className="text-sm text-slate-500">{String(prompt.length)}/20000 characters</p>
           </div>
         </Card>
 

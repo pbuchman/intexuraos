@@ -11,7 +11,7 @@ export const createResearchBodySchema = {
     prompt: {
       type: 'string',
       minLength: 10,
-      maxLength: 10000,
+      maxLength: 20000,
     },
     selectedLlms: {
       type: 'array',

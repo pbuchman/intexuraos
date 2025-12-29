@@ -39,11 +39,11 @@ export interface Research {
 function getDefaultModel(provider: LlmProvider): string {
   switch (provider) {
     case 'google':
-      return 'gemini-2.0-flash-exp';
+      return 'gemini-3-pro-preview';
     case 'openai':
-      return 'gpt-4o';
+      return 'gpt-5.2-pro';
     case 'anthropic':
-      return 'claude-sonnet-4-20250514';
+      return 'claude-opus-4-5';
   }
 }
 
