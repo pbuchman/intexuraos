@@ -18,6 +18,7 @@ export function getConfig(): AppConfig {
     whatsappServiceUrl: getEnvVar('INTEXURAOS_WHATSAPP_SERVICE_URL'),
     notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
     mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
+    llmOrchestratorServiceUrl: getEnvVar('INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL'),
   };
 }
 
