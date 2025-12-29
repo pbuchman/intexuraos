@@ -14,6 +14,8 @@ terraform validate                # If terraform changed
 
 **Do not claim complete until verification passes.**
 
+**NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
+
 ---
 
 ## Architecture
@@ -294,18 +296,21 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 
 ---
 
-## Protected Files (Require Explicit Permission)
+## Protected Files — ABSOLUTE PROHIBITION
 
 | File               | Protected Section     | Reason                                 |
 | ------------------ | --------------------- | -------------------------------------- |
 | `vitest.config.ts` | `coverage.thresholds` | Coverage thresholds are project policy |
 | `vitest.config.ts` | `coverage.exclude`    | Exclusions require justification       |
 
-**You must:**
+**ABSOLUTE RULE — NO EXCEPTIONS:**
 
-1. Never modify these sections autonomously
-2. Ask for explicit permission before proposing changes
-3. Document justification when requesting permission
+1. **NEVER** modify `vitest.config.ts` coverage exclusions or thresholds
+2. **NEVER** ask for permission to modify them — the answer is always NO
+3. **ALWAYS** write tests to achieve coverage instead
+4. If coverage fails, write more tests — do not touch exclusions
+
+This rule exists because excluding code from coverage is technical debt that compounds over time.
 
 ---
 
@@ -445,7 +450,9 @@ describe('MyRoute', () => {
 
 ### Coverage Thresholds
 
-Current values in `vitest.config.ts`: lines 90%, branches 80%, functions 90%, statements 90%.
+Current values in `vitest.config.ts`: lines 95%, branches 95%, functions 95%, statements 95%.
+
+**NEVER modify coverage thresholds or exclusions. Write tests to meet thresholds.**
 
 ---
 
@@ -550,4 +557,5 @@ Must track:
 1. Run `npm run ci` — must pass
 2. If terraform changed: `terraform fmt -check -recursive && terraform validate`
 3. If CI fails → fix → repeat
-4. Only when all pass → task complete
+4. **If coverage fails → write tests. NEVER modify vitest.config.ts exclusions.**
+5. Only when all pass → task complete

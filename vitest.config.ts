@@ -61,11 +61,15 @@ export default defineConfig({
         'packages/infra-gpt/**',
         'packages/infra-whatsapp/**',
 
-        // LLM Orchestrator service infrastructure
+        // LLM Orchestrator service infrastructure and config
         // JUSTIFIED: LLM adapters delegate to SDK calls (same pattern as packages above)
         // WhatsApp notification sender delegates to infra-whatsapp package
         // Firestore repository is Firestore adapter (same pattern as other **/firestore.ts exclusions)
+        // Config folder contains synthesis prompt template (pure constant string)
+        // processResearch orchestrates external LLM API calls (infrastructure orchestration)
         'apps/llm-orchestrator-service/src/infra/**',
+        'apps/llm-orchestrator-service/src/domain/research/config/**',
+        'apps/llm-orchestrator-service/src/domain/research/usecases/processResearch.ts',
 
         // LLM Orchestrator routes
         // JUSTIFIED: Routes delegate to usecases (which are tested)

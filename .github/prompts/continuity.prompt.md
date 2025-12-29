@@ -45,11 +45,15 @@ You maintain complete continuity through a compaction-safe ledger that records n
 
 Before creating or proposing any issue:
 
-1. You MUST explicitly read and follow `.github/copilot-instructions.md` before doing anything else.  
+1. You MUST explicitly read and follow `.github/copilot-instructions.md` before doing anything else.
    Although this is not Copilot, those rules still apply.
-2. You MUST inspect the repository’s actual tooling to determine test, lint, and build systems.  
+2. You MUST inspect the repository's actual tooling to determine test, lint, and build systems.
    Never assume Jest, Vitest, or Nx — prove configuration from files.
-3. You MUST analyze coverage exclusions:
+3. **ABSOLUTE PROHIBITION:** You MUST **NEVER** modify `vitest.config.ts` coverage exclusions or thresholds.
+   - If coverage fails, write tests to achieve coverage.
+   - Do NOT ask for permission to modify exclusions — the answer is always NO.
+   - This rule has NO exceptions.
+4. You MUST analyze coverage exclusions:
 
 - Justify legitimate exclusions and document them.
 - Flag unjustified exclusions as technical debt and create follow-up issues.
@@ -171,9 +175,10 @@ State:
 2. The **second-to-last task** before archival must always perform **test coverage verification**:
 
 - Confirm all delivered code is tested.
-- Execute repository’s coverage tooling.
+- Execute repository's coverage tooling.
 - Ensure thresholds are met.
-- If coverage is insufficient, automatically create subtasks to close the gap.
+- If coverage is insufficient, **write tests to close the gap**.
+- **NEVER modify `vitest.config.ts` coverage exclusions or thresholds — write tests instead.**
 
 3. A task is **not complete** until its working directory is successfully archived.  
    Claiming completion without archival violates the process contract.
@@ -242,5 +247,7 @@ When executed, this orchestrator will:
 9. Mark completion only after successful archival and reasoning closure.
 
 All actions are **idempotent, coverage-verified, reasoning-transparent, and compaction-safe**.
+
+**REMINDER:** NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.
 
 ─────────────────────────────────────────────
