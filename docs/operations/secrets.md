@@ -15,6 +15,7 @@ IntexuraOS stores secrets in **GCP Secret Manager** with the `INTEXURAOS_*` pref
 | `INTEXURAOS_AUTH_ISSUER`           | Expected JWT issuer              | all services     |
 | `INTEXURAOS_AUTH_AUDIENCE`         | Expected JWT audience            | all services     |
 | `INTEXURAOS_TOKEN_ENCRYPTION_KEY`  | AES-256 key for refresh tokens   | user-service     |
+| `INTEXURAOS_ENCRYPTION_KEY`        | AES-256 key for LLM API keys     | user-service     |
 | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN` | WhatsApp API access token        | whatsapp-service |
 | `INTEXURAOS_WHATSAPP_PHONE_ID`     | WhatsApp phone number ID         | whatsapp-service |
 | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN` | Webhook verification token       | whatsapp-service |
@@ -40,6 +41,9 @@ AUTH0_CLIENT_SECRET=your-client-secret
 
 # Token Encryption (generate with: openssl rand -base64 32)
 INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-32-byte-key
+
+# LLM API Keys Encryption (generate with: openssl rand -base64 32)
+INTEXURAOS_ENCRYPTION_KEY=your-base64-32-byte-key
 
 # Logging
 LOG_LEVEL=debug

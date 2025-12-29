@@ -7,6 +7,6 @@
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/__tests__"],
+  "exclude": ["node_modules", "dist"],
   "references": [{ "path": "../common-core" }, { "path": "../infra-firestore" }]
 }

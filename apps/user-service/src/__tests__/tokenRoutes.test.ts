@@ -109,6 +109,7 @@ describe('Token Refresh Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null,
+          encryptor: null,
         });
 
         app = await buildServer();
@@ -139,6 +140,7 @@ describe('Token Refresh Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
+          encryptor: null,
         });
       });
 
@@ -188,6 +190,7 @@ describe('Token Refresh Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
+          encryptor: null,
         });
       });
 
@@ -241,6 +244,7 @@ describe('Token Refresh Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
+          encryptor: null,
         });
 
         // Store a refresh token for tests
@@ -334,6 +338,7 @@ describe('Token Refresh Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
+          encryptor: null,
         });
 
         // Store a refresh token for tests

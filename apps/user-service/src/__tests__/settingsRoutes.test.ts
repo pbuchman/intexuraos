@@ -81,6 +81,7 @@ describe('Settings Routes', () => {
       authTokenRepository: fakeAuthTokenRepo,
       userSettingsRepository: fakeSettingsRepo,
       auth0Client: null,
+      encryptor: null,
     });
   });
 

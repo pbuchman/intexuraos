@@ -294,6 +294,7 @@ describe('Device Authorization Flow', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null, // Not used in device flow (uses direct HTTP calls)
+          encryptor: null,
         });
       });
 
