@@ -22,7 +22,7 @@ packages/infra-gemini/
 // types.ts
 export interface GeminiConfig {
   apiKey: string;
-  model?: string;  // default: 'gemini-2.0-flash-exp'
+  model?: string; // default: 'gemini-2.0-flash-exp'
 }
 
 export interface ResearchParams {

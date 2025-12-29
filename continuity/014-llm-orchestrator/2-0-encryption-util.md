@@ -12,13 +12,13 @@ Add AES-256-GCM encryption utility for securing API keys before Firestore storag
 import { Result, ok, err } from './result.js';
 
 export interface EncryptionConfig {
-  key: string;  // 32 bytes (256 bits), base64 encoded
+  key: string; // 32 bytes (256 bits), base64 encoded
 }
 
 export interface EncryptedValue {
-  ciphertext: string;  // base64
-  iv: string;          // base64
-  tag: string;         // base64
+  ciphertext: string; // base64
+  iv: string; // base64
+  tag: string; // base64
 }
 
 export interface Encryptor {
@@ -39,8 +39,14 @@ export function createEncryptor(config: EncryptionConfig): Encryptor;
 ## Update packages/common-core/src/index.ts
 
 Add export:
+
 ```typescript
-export { type EncryptionConfig, type EncryptedValue, type Encryptor, createEncryptor } from './encryption.js';
+export {
+  type EncryptionConfig,
+  type EncryptedValue,
+  type Encryptor,
+  createEncryptor,
+} from './encryption.js';
 ```
 
 ## Verification

@@ -18,11 +18,13 @@ Build an LLM Orchestrator module allowing users to run research prompts across m
 ## Current Repository State
 
 **Existing:**
+
 - `apps/user-service/src/domain/settings/` — UserSettings model WITHOUT llmApiKeys
 - `packages/infra-firestore/` — Firestore utilities
 - `packages/common-core/` — Result types, error handling
 
-**Empty directories (to be scaffolded):**
+**To be created:**
+
 - `packages/infra-whatsapp/`
 - `packages/infra-gemini/`
 - `packages/infra-claude/`

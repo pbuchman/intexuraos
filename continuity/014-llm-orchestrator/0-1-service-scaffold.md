@@ -26,6 +26,7 @@ apps/llm-orchestrator-service/
 ## Files to Create
 
 ### package.json
+
 ```json
 {
   "name": "@intexuraos/llm-orchestrator-service",
@@ -47,6 +48,7 @@ apps/llm-orchestrator-service/
 ```
 
 ### tsconfig.json
+
 ```json
 {
   "extends": "../../tsconfig.base.json",

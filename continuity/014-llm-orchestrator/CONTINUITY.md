@@ -37,16 +37,17 @@ Initialized continuity workflow for LLM Orchestrator feature.
 
 **Current Repository State:**
 
-| Component | Status |
-|-----------|--------|
-| user-service/domain/settings | EXISTS - needs llmApiKeys |
-| packages/infra-whatsapp | EMPTY directory |
-| packages/infra-gemini | EMPTY directory |
-| packages/infra-claude | EMPTY directory |
-| packages/infra-gpt | EMPTY directory |
-| apps/llm-orchestrator-service | EMPTY directory |
+| Component                     | Status                    |
+| ----------------------------- | ------------------------- |
+| user-service/domain/settings  | EXISTS - needs llmApiKeys |
+| packages/infra-whatsapp       | EMPTY directory           |
+| packages/infra-gemini         | EMPTY directory           |
+| packages/infra-claude         | EMPTY directory           |
+| packages/infra-gpt            | EMPTY directory           |
+| apps/llm-orchestrator-service | EMPTY directory           |
 
 **UserSettings Model (current):**
+
 ```typescript
 interface UserSettings {
   userId: string;
@@ -74,14 +75,14 @@ interface UserSettings {
 - Continuity workflow initialization
 - Repository state analysis
 - INSTRUCTIONS.md created
+- 0-0: Cleanup empty placeholder directories
 
 **Now:**
 
-- 0-0: Cleanup empty placeholder directories
+- 0-1: Create llm-orchestrator-service scaffold
 
 **Next:**
 
-- 0-1: Create llm-orchestrator-service scaffold
 - 0-2: Add to root tsconfig, ESLint config
 - 1-0 through 1-3: Create infra packages
 
@@ -91,12 +92,12 @@ interface UserSettings {
    - Gemini: gemini-2.0-flash-exp or gemini-2.5-pro?
    - GPT: gpt-4o or o1-preview?
    - Claude: claude-3-5-sonnet or claude-opus-4?
-   (Will verify during implementation)
+     (Will verify during implementation)
 
 2. **Service-to-service auth:** llm-orchestrator-service needs user's API keys
    - Option A: JWT forwarding
    - Option B: Direct Firestore access
-   (Likely Option B for simplicity)
+     (Likely Option B for simplicity)
 
 ## Working Set
 

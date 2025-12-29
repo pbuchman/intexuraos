@@ -22,7 +22,7 @@ packages/infra-claude/
 // types.ts
 export interface ClaudeConfig {
   apiKey: string;
-  model?: string;  // default: 'claude-sonnet-4-20250514'
+  model?: string; // default: 'claude-sonnet-4-20250514'
 }
 
 export interface ResearchParams {

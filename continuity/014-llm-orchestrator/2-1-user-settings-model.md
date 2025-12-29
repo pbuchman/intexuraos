@@ -29,15 +29,15 @@ import { EncryptedValue } from '@intexuraos/common-core';
  * Keys are encrypted using AES-256-GCM before storage.
  */
 export interface LlmApiKeys {
-  google?: EncryptedValue;    // Gemini API key
-  openai?: EncryptedValue;    // OpenAI API key
+  google?: EncryptedValue; // Gemini API key
+  openai?: EncryptedValue; // OpenAI API key
   anthropic?: EncryptedValue; // Anthropic API key
 }
 
 export interface UserSettings {
   userId: string;
   notifications: NotificationSettings;
-  llmApiKeys?: LlmApiKeys;  // NEW
+  llmApiKeys?: LlmApiKeys; // NEW
   createdAt: string;
   updatedAt: string;
 }

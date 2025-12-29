@@ -9,6 +9,7 @@ Add llm-orchestrator-service to root configuration files.
 ### 1. tsconfig.json (root)
 
 Add reference:
+
 ```json
 { "path": "apps/llm-orchestrator-service" }
 ```
@@ -16,11 +17,13 @@ Add reference:
 ### 2. eslint.config.js
 
 Add to `boundaries/elements`:
+
 ```javascript
 { type: 'llm-orchestrator', pattern: ['apps/llm-orchestrator-service/src/**'], mode: 'folder' }
 ```
 
 Add to `boundaries/element-types` rules:
+
 ```javascript
 {
   from: 'llm-orchestrator',
@@ -35,6 +38,7 @@ Add to `boundaries/element-types` rules:
 ```
 
 Add to `no-restricted-imports` patterns:
+
 ```javascript
 {
   group: ['@intexuraos/llm-orchestrator-service', '@intexuraos/llm-orchestrator-service/**'],

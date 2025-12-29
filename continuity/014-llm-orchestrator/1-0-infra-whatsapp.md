@@ -26,8 +26,8 @@ export interface WhatsAppConfig {
 }
 
 export interface SendMessageParams {
-  to: string;       // Phone number with country code
-  message: string;  // Text message content
+  to: string; // Phone number with country code
+  message: string; // Text message content
 }
 
 // sender.ts

@@ -53,11 +53,11 @@ export function createResearch(params: {
   return {
     id: params.id,
     userId: params.userId,
-    title: '',  // Generated later via Gemini
+    title: '', // Generated later via Gemini
     prompt: params.prompt,
     selectedLlms: params.selectedLlms,
     status: 'pending',
-    llmResults: params.selectedLlms.map(provider => ({
+    llmResults: params.selectedLlms.map((provider) => ({
       provider,
       model: getDefaultModel(provider),
       status: 'pending',
@@ -68,9 +68,12 @@ export function createResearch(params: {
 
 function getDefaultModel(provider: LlmProvider): string {
   switch (provider) {
-    case 'google': return 'gemini-2.0-flash-exp';
-    case 'openai': return 'gpt-4o';
-    case 'anthropic': return 'claude-sonnet-4-20250514';
+    case 'google':
+      return 'gemini-2.0-flash-exp';
+    case 'openai':
+      return 'gpt-4o';
+    case 'anthropic':
+      return 'claude-sonnet-4-20250514';
   }
 }
 ```

@@ -7,6 +7,7 @@ Remove empty placeholder directories or properly initialize them with package.js
 ## Current State
 
 Empty directories exist:
+
 - `packages/infra-whatsapp/`
 - `packages/infra-gemini/`
 - `packages/infra-claude/`

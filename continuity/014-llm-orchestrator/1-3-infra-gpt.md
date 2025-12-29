@@ -22,7 +22,7 @@ packages/infra-gpt/
 // types.ts
 export interface GptConfig {
   apiKey: string;
-  model?: string;  // default: 'gpt-4o'
+  model?: string; // default: 'gpt-4o'
 }
 
 export interface ResearchParams {
