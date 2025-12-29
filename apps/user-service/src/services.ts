@@ -3,7 +3,11 @@
  * Provides dependency injection for domain adapters.
  */
 import type { AuthTokenRepository, Auth0Client } from './domain/identity/index.js';
-import { FirestoreAuthTokenRepository } from './infra/firestore/index.js';
+import type { UserSettingsRepository } from './domain/settings/index.js';
+import {
+  FirestoreAuthTokenRepository,
+  FirestoreUserSettingsRepository,
+} from './infra/firestore/index.js';
 import {
   Auth0ClientImpl,
   loadAuth0Config as loadAuth0ConfigFromInfra,
@@ -14,6 +18,7 @@ import {
  */
 export interface ServiceContainer {
   authTokenRepository: AuthTokenRepository;
+  userSettingsRepository: UserSettingsRepository;
   auth0Client: Auth0Client | null;
 }
 
@@ -27,6 +32,7 @@ export function getServices(): ServiceContainer {
     const auth0Config = loadAuth0ConfigFromInfra();
     container = {
       authTokenRepository: new FirestoreAuthTokenRepository(),
+      userSettingsRepository: new FirestoreUserSettingsRepository(),
       auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
     };
   }

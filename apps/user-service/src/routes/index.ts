@@ -9,6 +9,7 @@ import { tokenRoutes } from './tokenRoutes.js';
 import { configRoutes } from './configRoutes.js';
 import { oauthRoutes } from './oauthRoutes.js';
 import { frontendRoutes } from './frontendRoutes.js';
+import { settingsRoutes } from './settingsRoutes.js';
 
 export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.register(deviceRoutes);
@@ -16,5 +17,6 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.register(configRoutes);
   fastify.register(oauthRoutes);
   fastify.register(frontendRoutes);
+  fastify.register(settingsRoutes);
   done();
 };

@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeAuthTokenRepository } from './fakes.js';
+import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
@@ -292,6 +292,7 @@ describe('Device Authorization Flow', () => {
         // Inject fake repository to avoid Firestore connection during token storage
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null, // Not used in device flow (uses direct HTTP calls)
         });
       });

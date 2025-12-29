@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { ok, err } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeAuth0Client } from './fakes.js';
+import { FakeAuthTokenRepository, FakeAuth0Client, FakeUserSettingsRepository } from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
@@ -107,6 +107,7 @@ describe('Token Refresh Routes', () => {
         // Set services with null auth0Client
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null,
         });
 
@@ -136,6 +137,7 @@ describe('Token Refresh Routes', () => {
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
         });
       });
@@ -184,6 +186,7 @@ describe('Token Refresh Routes', () => {
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
         });
       });
@@ -236,6 +239,7 @@ describe('Token Refresh Routes', () => {
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
         });
 
@@ -328,6 +332,7 @@ describe('Token Refresh Routes', () => {
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: fakeAuth0Client,
         });
 

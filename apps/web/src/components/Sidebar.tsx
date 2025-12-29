@@ -14,7 +14,11 @@ import {
   Menu,
   X,
   Settings,
+  Heart,
 } from 'lucide-react';
+import { useAuth } from '@/context';
+import { getUserSettings } from '@/services/authApi';
+import type { NotificationFilter } from '@/types';
 
 interface NavItem {
   to: string;
@@ -30,15 +34,34 @@ const settingsItems: NavItem[] = [
   { to: '/settings/notion', label: 'Notion', icon: FileText },
 ];
 
-const bottomNavItems: NavItem[] = [
-  { to: '/notes', label: 'Notes', icon: MessageSquare },
-  { to: '/notifications', label: 'Notifications', icon: BellRing },
-];
+const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
+
+/**
+ * Format app package name to a display-friendly name
+ * e.g., "com.whatsapp" -> "WhatsApp"
+ */
+function formatAppName(app: string): string {
+  // Get last segment of package name
+  const parts = app.split('.');
+  const lastPart = parts[parts.length - 1] ?? app;
+
+  // Capitalize first letter
+  const formatted = lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+
+  // Truncate if too long
+  if (formatted.length > 15) {
+    return formatted.slice(0, 12) + '...';
+  }
+  return formatted;
+}
 
 export function Sidebar(): React.JSX.Element {
+  const { getAccessToken, user } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
   const location = useLocation();
 
   // Auto-expand settings when on a settings page
@@ -47,6 +70,28 @@ export function Sidebar(): React.JSX.Element {
       setIsSettingsOpen(true);
     }
   }, [location.pathname]);
+
+  // Auto-expand notifications when on notifications page
+  useEffect(() => {
+    if (location.pathname.startsWith('/notifications')) {
+      setIsNotificationsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Fetch saved filters
+  useEffect(() => {
+    const fetchFilters = async (): Promise<void> => {
+      if (user?.sub === undefined) return;
+      try {
+        const token = await getAccessToken();
+        const settings = await getUserSettings(token, user.sub);
+        setSavedFilters(settings.notifications.filters);
+      } catch {
+        /* Best-effort fetch, ignore errors */
+      }
+    };
+    void fetchFilters();
+  }, [getAccessToken, user?.sub]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -184,6 +229,68 @@ export function Sidebar(): React.JSX.Element {
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Notifications section (collapsible with saved filters) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsNotificationsOpen(!isNotificationsOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/notifications')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <BellRing className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Notifications</span>
+                  {isNotificationsOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Notifications sub-items */}
+            {isNotificationsOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                <NavLink
+                  to="/notifications"
+                  end
+                  className={({ isActive }): string =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`
+                  }
+                >
+                  <Bell className="h-4 w-4 shrink-0" />
+                  <span>All</span>
+                </NavLink>
+                {savedFilters.map((filter) => (
+                  <NavLink
+                    key={filter.app}
+                    to={`/notifications?app=${encodeURIComponent(filter.app)}`}
+                    className={(): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        location.search === `?app=${encodeURIComponent(filter.app)}`
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <Heart className="h-4 w-4 shrink-0 fill-current text-pink-600" />
+                    <span title={filter.app}>{formatAppName(filter.app)}</span>
                   </NavLink>
                 ))}
               </div>

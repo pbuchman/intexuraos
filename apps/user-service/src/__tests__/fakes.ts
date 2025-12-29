@@ -13,6 +13,11 @@ import type {
   Auth0Client,
   RefreshResult,
 } from '../domain/identity/index.js';
+import type {
+  UserSettingsRepository,
+  UserSettings,
+  SettingsError,
+} from '../domain/settings/index.js';
 
 /**
  * Fake Auth token repository for testing.
@@ -192,5 +197,67 @@ export class FakeAuth0Client implements Auth0Client {
         refreshToken: undefined,
       })
     );
+  }
+}
+
+/**
+ * Fake User settings repository for testing.
+ */
+export class FakeUserSettingsRepository implements UserSettingsRepository {
+  private settings = new Map<string, UserSettings>();
+  private shouldFailGet = false;
+  private shouldFailSave = false;
+
+  /**
+   * Configure the fake to fail the next getSettings call.
+   */
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  /**
+   * Configure the fake to fail the next saveSettings call.
+   */
+  setFailNextSave(fail: boolean): void {
+    this.shouldFailSave = fail;
+  }
+
+  /**
+   * Store settings directly (for test setup).
+   */
+  setSettings(settings: UserSettings): void {
+    this.settings.set(settings.userId, settings);
+  }
+
+  getSettings(userId: string): Promise<Result<UserSettings | null, SettingsError>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated get failure' }));
+    }
+    const settings = this.settings.get(userId);
+    return Promise.resolve(ok(settings ?? null));
+  }
+
+  saveSettings(settings: UserSettings): Promise<Result<UserSettings, SettingsError>> {
+    if (this.shouldFailSave) {
+      this.shouldFailSave = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
+    }
+    this.settings.set(settings.userId, settings);
+    return Promise.resolve(ok(settings));
+  }
+
+  /**
+   * Clear all settings (for test cleanup).
+   */
+  clear(): void {
+    this.settings.clear();
+  }
+
+  /**
+   * Get stored settings (for test verification).
+   */
+  getStoredSettings(userId: string): UserSettings | undefined {
+    return this.settings.get(userId);
   }
 }
