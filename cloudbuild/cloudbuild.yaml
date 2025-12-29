@@ -295,6 +295,49 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===== llm-orchestrator-service =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-llm-orchestrator-service'
+    waitFor: ['detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building llm-orchestrator-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest \
+            -f apps/llm-orchestrator-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest
+        else
+          echo "llm-orchestrator-service not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-llm-orchestrator-service'
+    waitFor: ['build-push-llm-orchestrator-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-llm-orchestrator-service.sh
+        else
+          echo "llm-orchestrator-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'
@@ -314,6 +357,7 @@ steps:
         INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
         INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
+        INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL)
         EOF
           echo "Secrets written to /workspace/apps/web/.env"
         else
