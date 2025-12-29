@@ -667,5 +667,129 @@ describe('Settings Routes', () => {
         { name: 'MultiFilter', app: 'com.whatsapp', source: 'tasker', title: 'urgent' },
       ]);
     });
+
+    it('allows clearing all filters (empty array)', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-clear-filters';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: {
+          filters: [
+            { name: 'Filter1', app: 'com.app1' },
+            { name: 'Filter2', app: 'com.app2' },
+          ],
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: { filters: [] },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          userId: string;
+          notifications: { filters: unknown[] };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications.filters).toEqual([]);
+    });
+
+    it('allows adding multiple filters at once', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-multi-add';
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [
+              {
+                name: 'android auto',
+                app: 'com.google.android.projection.gearhead',
+                source: 'tasker',
+                title: 'looking',
+              },
+              { name: 'whatsapp', app: 'com.whatsapp', title: 'looking' },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          notifications: {
+            filters: { name: string; app?: string; source?: string; title?: string }[];
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications.filters).toHaveLength(2);
+      expect(body.data.notifications.filters[0]?.name).toBe('android auto');
+      expect(body.data.notifications.filters[1]?.name).toBe('whatsapp');
+    });
+
+    it(
+      'handles string payload (Fastify auto-parses JSON strings)',
+      { timeout: 20000 },
+      async () => {
+        // Note: Fastify's inject() with string payload automatically parses it as JSON
+        // So this test verifies normal behavior - in real HTTP, double-stringified JSON
+        // would be rejected at the body validation level because the body schema
+        // expects an object with { notifications: { filters: [] } }
+        app = await buildServer();
+
+        const userId = 'auth0|user-string-payload';
+        const token = await createToken({
+          sub: userId,
+        });
+
+        // When using inject with a string payload, Fastify parses it as JSON
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/users/${encodeURIComponent(userId)}/settings`,
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+          },
+          payload: JSON.stringify({ notifications: { filters: [] } }),
+        });
+
+        // Fastify inject() auto-parses the string, so this actually works
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { notifications: { filters: unknown[] } };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.notifications.filters).toEqual([]);
+      }
+    );
   });
 });

@@ -3,16 +3,31 @@ import tseslint from 'typescript-eslint';
 import boundaries from 'eslint-plugin-boundaries';
 import globals from 'globals';
 export default tseslint.config(
+  // Global ignores - must be first
+  {
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/*.js',
+      '**/*.mjs',
+      '**/*.cjs',
+      'docker/**',
+      'scripts/**',
+      'vitest.setup.ts',
+      'vitest.config.ts',
+      '**/__tests__/**',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
     languageOptions: {
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ['*.config.ts', '*.config.js', 'vitest.setup.ts'],
-          defaultProject: './tsconfig.json',
-        },
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
@@ -147,21 +162,5 @@ export default tseslint.config(
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
     },
-  },
-  {
-    ignores: [
-      '**/dist/**',
-      '**/node_modules/**',
-      '**/coverage/**',
-      '**/*.js',
-      '**/*.mjs',
-      '**/*.cjs',
-      'docker/**',
-      'scripts/**',
-      'vitest.setup.ts',
-      '**/__tests__/**',
-      '**/*.test.ts',
-      '**/*.spec.ts',
-    ],
   }
 );
