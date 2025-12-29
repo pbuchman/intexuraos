@@ -12,6 +12,8 @@ export type {
   UserSettings,
   NotificationFilter,
   NotificationSettings,
+  LlmProvider,
+  LlmApiKeys,
 } from './models/UserSettings.js';
 export { createDefaultSettings } from './models/UserSettings.js';
 export type { SettingsError, SettingsErrorCode } from './models/SettingsError.js';

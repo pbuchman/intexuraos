@@ -3,6 +3,8 @@
  * Represents user preferences and configuration.
  */
 
+import type { EncryptedValue } from '@intexuraos/common-core';
+
 /**
  * A notification filter configuration.
  * Requires a unique name and at least one filter criterion.
@@ -22,11 +24,27 @@ export interface NotificationSettings {
 }
 
 /**
+ * LLM provider identifiers.
+ */
+export type LlmProvider = 'google' | 'openai' | 'anthropic';
+
+/**
+ * Encrypted LLM API keys for third-party providers.
+ * Keys are encrypted using AES-256-GCM before storage.
+ */
+export interface LlmApiKeys {
+  google?: EncryptedValue; // Gemini API key
+  openai?: EncryptedValue; // OpenAI API key
+  anthropic?: EncryptedValue; // Anthropic API key
+}
+
+/**
  * User settings aggregate.
  */
 export interface UserSettings {
   userId: string;
   notifications: NotificationSettings;
+  llmApiKeys?: LlmApiKeys;
   createdAt: string;
   updatedAt: string;
 }
