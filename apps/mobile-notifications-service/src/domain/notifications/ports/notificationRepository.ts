@@ -14,11 +14,21 @@ export interface RepositoryError {
 }
 
 /**
+ * Filter options for listing notifications.
+ * Only one of source or app should be provided at a time.
+ */
+export interface FilterOptions {
+  source?: string;
+  app?: string;
+}
+
+/**
  * Pagination options for listing notifications.
  */
 export interface PaginationOptions {
   limit: number;
   cursor?: string;
+  filter?: FilterOptions;
 }
 
 /**

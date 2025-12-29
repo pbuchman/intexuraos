@@ -3,7 +3,9 @@ import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
 import { getMobileNotifications, deleteMobileNotification, ApiError } from '@/services';
 import type { MobileNotification } from '@/types';
-import { Trash2, Bell, RefreshCw, X } from 'lucide-react';
+import { Trash2, Bell, RefreshCw, X, Filter } from 'lucide-react';
+
+type FilterType = 'none' | 'source' | 'app';
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
@@ -155,6 +157,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [filterType, setFilterType] = useState<FilterType>('none');
+  const [filterValue, setFilterValue] = useState('');
 
   const fetchNotifications = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -167,7 +171,13 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         setError(null);
 
         const token = await getAccessToken();
-        const response = await getMobileNotifications(token);
+        const options: { source?: string; app?: string } = {};
+        if (filterType === 'source' && filterValue !== '') {
+          options.source = filterValue;
+        } else if (filterType === 'app' && filterValue !== '') {
+          options.app = filterValue;
+        }
+        const response = await getMobileNotifications(token, options);
 
         setNotifications(response.notifications);
         setNextCursor(response.nextCursor);
@@ -178,7 +188,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         setIsRefreshing(false);
       }
     },
-    [getAccessToken]
+    [getAccessToken, filterType, filterValue]
   );
 
   const loadMore = async (): Promise<void> => {
@@ -187,7 +197,13 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     try {
       setIsLoadingMore(true);
       const token = await getAccessToken();
-      const response = await getMobileNotifications(token, { cursor: nextCursor });
+      const options: { cursor: string; source?: string; app?: string } = { cursor: nextCursor };
+      if (filterType === 'source' && filterValue !== '') {
+        options.source = filterValue;
+      } else if (filterType === 'app' && filterValue !== '') {
+        options.app = filterValue;
+      }
+      const response = await getMobileNotifications(token, options);
 
       setNotifications((prev) => [...prev, ...response.notifications]);
       setNextCursor(response.nextCursor);
@@ -198,9 +214,26 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     }
   };
 
+  // Reset and fetch when filter changes
   useEffect(() => {
+    setNotifications([]);
+    setNextCursor(undefined);
     void fetchNotifications();
   }, [fetchNotifications]);
+
+  const handleFilterTypeChange = (newType: FilterType): void => {
+    setFilterType(newType);
+    setFilterValue('');
+  };
+
+  const handleFilterValueChange = (value: string): void => {
+    setFilterValue(value);
+  };
+
+  const handleClearFilter = (): void => {
+    setFilterType('none');
+    setFilterValue('');
+  };
 
   const handleDelete = async (notificationId: string): Promise<void> => {
     setDeletingIds((prev) => new Set(prev).add(notificationId));
@@ -271,15 +304,62 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         </div>
       ) : null}
 
+      {/* Filter controls */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Filter className="h-5 w-5 text-slate-400" />
+        <select
+          value={filterType}
+          onChange={(e): void => {
+            handleFilterTypeChange(e.target.value as FilterType);
+          }}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="none">No Filter</option>
+          <option value="source">Filter by Source</option>
+          <option value="app">Filter by App</option>
+        </select>
+
+        {filterType !== 'none' ? (
+          <>
+            <input
+              type="text"
+              value={filterValue}
+              onChange={(e): void => {
+                handleFilterValueChange(e.target.value);
+              }}
+              placeholder={filterType === 'source' ? 'e.g., tasker' : 'e.g., com.whatsapp'}
+              className="w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleClearFilter}
+              className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            >
+              Clear
+            </button>
+          </>
+        ) : null}
+      </div>
+
       <div className="space-y-4">
         {notifications.length === 0 ? (
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bell className="mb-4 h-12 w-12 text-slate-300" />
-              <h3 className="text-lg font-medium text-slate-700">No notifications yet</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Notifications from your mobile device will appear here.
-              </p>
+              {filterType !== 'none' && filterValue !== '' ? (
+                <>
+                  <h3 className="text-lg font-medium text-slate-700">No matching notifications</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    No notifications found matching your filter. Try a different filter value.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium text-slate-700">No notifications yet</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Notifications from your mobile device will appear here.
+                  </p>
+                </>
+              )}
             </div>
           </Card>
         ) : (

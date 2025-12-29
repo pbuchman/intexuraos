@@ -23,7 +23,7 @@ export async function connectMobileNotifications(
  */
 export async function getMobileNotifications(
   accessToken: string,
-  options?: { limit?: number; cursor?: string }
+  options?: { limit?: number; cursor?: string; source?: string; app?: string }
 ): Promise<MobileNotificationsResponse> {
   const params = new URLSearchParams();
   if (options?.limit !== undefined) {
@@ -31,6 +31,12 @@ export async function getMobileNotifications(
   }
   if (options?.cursor !== undefined) {
     params.set('cursor', options.cursor);
+  }
+  if (options?.source !== undefined) {
+    params.set('source', options.source);
+  }
+  if (options?.app !== undefined) {
+    params.set('app', options.app);
   }
   const queryString = params.toString();
   const path =
