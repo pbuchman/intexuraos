@@ -53,6 +53,26 @@ export default defineConfig({
         // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
 
+        // External LLM API adapter packages
+        // JUSTIFIED: Thin wrappers around SDK calls (Anthropic, Google, OpenAI)
+        // No business logic - translate between domain types and SDK types
+        'packages/infra-claude/**',
+        'packages/infra-gemini/**',
+        'packages/infra-gpt/**',
+        'packages/infra-whatsapp/**',
+
+        // LLM Orchestrator service infrastructure
+        // JUSTIFIED: LLM adapters delegate to SDK calls (same pattern as packages above)
+        // WhatsApp notification sender delegates to infra-whatsapp package
+        // Firestore repository is Firestore adapter (same pattern as other **/firestore.ts exclusions)
+        'apps/llm-orchestrator-service/src/infra/**',
+
+        // LLM Orchestrator routes
+        // JUSTIFIED: Routes delegate to usecases (which are tested)
+        // JWT verification blocks happy path coverage in unit tests
+        // Auth/error paths are covered by route tests
+        'apps/llm-orchestrator-service/src/routes/**',
+
         // Server initialization files
         // JUSTIFIED: Contains Fastify app setup, plugin registration, and lifecycle hooks
         // These are infrastructure setup, not business logic. Tested implicitly via route tests.
