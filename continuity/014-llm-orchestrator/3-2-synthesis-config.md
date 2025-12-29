@@ -1,14 +1,50 @@
 # Task 3-2: Create Synthesis Prompt Configuration
 
-## Objective
+**Tier:** 3 (Domain layer — no dependencies within tier)
 
-Create the synthesis prompt configuration for combining LLM research results.
+---
 
-## File to Create
+## Context Snapshot
 
-`apps/llm-orchestrator-service/src/domain/research/config/synthesisPrompt.ts`
+- Research domain models defined (3-0)
+- Gemini will synthesize results from multiple LLMs
+- Synthesis prompt is a domain concern (business logic)
+- Configuration lives in domain layer, used by usecases
 
-## Content
+**Working according to:** `.github/prompts/continuity.prompt.md`
+
+---
+
+## Problem Statement
+
+Define the synthesis prompt template used by Gemini to combine research outputs from multiple LLMs into a unified report.
+
+---
+
+## Scope
+
+**In scope:**
+
+- Create `SYNTHESIS_PROMPT` constant with detailed instructions
+- Create `buildSynthesisInput()` helper to format prompt + reports
+- Create `TITLE_GENERATION_PROMPT` for generating research titles
+
+**Non-scope:**
+
+- Actual Gemini API calls (done in infra layer)
+- Response parsing
+
+---
+
+## Required Approach
+
+### Step 1: Create config directory
+
+```bash
+mkdir -p apps/llm-orchestrator-service/src/domain/research/config
+```
+
+### Step 2: Create config/synthesisPrompt.ts
 
 ```typescript
 export const SYNTHESIS_PROMPT = `
@@ -25,18 +61,14 @@ Given the ORIGINAL PROMPT and ONE or MORE research reports, produce a single com
 
 INPUTS FORMAT
 ===ORIGINAL_PROMPT_START===
-[PASTE THE ORIGINAL PROMPT GIVEN TO THE INDIVIDUAL MODELS, IN FULL]
+[The original research prompt]
 ===ORIGINAL_PROMPT_END===
 
-===REPORT_START model: <MODEL_NAME_1>===
-[PASTE RESEARCH REPORT 1 IN FULL, WITHOUT SHORTENING]
-===REPORT_END model: <MODEL_NAME_1>===
+===REPORT_START model: <MODEL_NAME>===
+[Research report content]
+===REPORT_END model: <MODEL_NAME>===
 
-===REPORT_START model: <MODEL_NAME_2>===
-[PASTE RESEARCH REPORT 2 IN FULL, WITHOUT SHORTENING]
-===REPORT_END model: <MODEL_NAME_2>===
-
-...repeat for additional reports...
+(Repeat for each report)
 
 OUTPUT STRUCTURE (Markdown)
 # Synthesis Report
@@ -67,39 +99,90 @@ RULES
 - Always cite which model(s) support each claim
 - If only one report, structure output the same way but skip comparative sections
 - Preserve all URLs and citations from source reports
+- Write in clear, professional prose
+`;
+
+export const TITLE_GENERATION_PROMPT = `Generate a concise, descriptive title (5-10 words maximum) for this research prompt. The title should capture the main topic or question being researched. Return only the title, no quotes or extra formatting.
+
+Research prompt:
 `;
 
 export function buildSynthesisInput(
   originalPrompt: string,
   reports: Array<{ model: string; content: string }>
 ): string {
-  let input = \`===ORIGINAL_PROMPT_START===
-\${originalPrompt}
-===ORIGINAL_PROMPT_END===
-
-\`;
+  const parts: string[] = [
+    `===ORIGINAL_PROMPT_START===`,
+    originalPrompt,
+    `===ORIGINAL_PROMPT_END===`,
+    '',
+  ];
 
   for (const report of reports) {
-    input += \`===REPORT_START model: \${report.model}===
-\${report.content}
-===REPORT_END model: \${report.model}===
-
-\`;
+    parts.push(`===REPORT_START model: ${report.model}===`);
+    parts.push(report.content);
+    parts.push(`===REPORT_END model: ${report.model}===`);
+    parts.push('');
   }
 
-  return input;
+  return parts.join('\n');
 }
 ```
 
-## Verification
+### Step 3: Create config/index.ts
+
+```typescript
+export {
+  SYNTHESIS_PROMPT,
+  TITLE_GENERATION_PROMPT,
+  buildSynthesisInput,
+} from './synthesisPrompt.js';
+```
+
+### Step 4: Update domain/research/index.ts
+
+```typescript
+export * from './models/index.js';
+export * from './ports/index.js';
+export * from './config/index.js';
+```
+
+---
+
+## Step Checklist
+
+- [ ] Create config directory
+- [ ] Create `synthesisPrompt.ts` with SYNTHESIS_PROMPT
+- [ ] Add TITLE_GENERATION_PROMPT constant
+- [ ] Create `buildSynthesisInput()` helper
+- [ ] Create `config/index.ts` with exports
+- [ ] Update `domain/research/index.ts`
+- [ ] Run verification commands
+
+---
+
+## Definition of Done
+
+1. `SYNTHESIS_PROMPT` constant defined with detailed instructions
+2. `TITLE_GENERATION_PROMPT` constant defined
+3. `buildSynthesisInput()` helper function works correctly
+4. All exports available from domain/research
+5. `npm run typecheck` passes
+
+---
+
+## Verification Commands
 
 ```bash
 npm run typecheck
+npm run lint
 ```
 
-## Acceptance Criteria
+---
 
-- [ ] SYNTHESIS_PROMPT constant defined
-- [ ] buildSynthesisInput helper function
-- [ ] Exported from config/index.ts
-- [ ] `npm run typecheck` passes
+## Rollback Plan
+
+If verification fails:
+
+1. Remove config directory
+2. Revert changes to domain/research/index.ts
