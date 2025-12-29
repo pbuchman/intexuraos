@@ -19,7 +19,7 @@ const COLLECTION_NAME = 'user_settings';
 interface UserSettingsDoc {
   userId: string;
   notifications: {
-    filters: { app: string }[];
+    filters: { name: string; app?: string; source?: string; title?: string }[];
   };
   createdAt: string;
   updatedAt: string;

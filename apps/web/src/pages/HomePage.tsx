@@ -58,14 +58,15 @@ function HeroSection(): React.JSX.Element {
         <h2 className="mb-6 max-w-4xl text-4xl font-bold leading-tight tracking-tight text-white md:text-6xl lg:text-7xl">
           Your personal operating system{' '}
           <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">
-            runs on motion
+            runs on Notion
           </span>
         </h2>
 
         {/* Sub-headline */}
         <p className="mb-10 max-w-2xl text-lg leading-relaxed text-slate-400 md:text-xl">
-          Capture what you actually do—messages, voice, photos, signals—and turn raw motion into
-          structured, executable truth. No apps. No dashboards. Just WhatsApp.
+          Capture what you actually do: messages, voice, photos, signals and turn raw motion into
+          structured, executable truth. No complicated apps. No technical dashboards. Just WhatsApp
+          and Notion.
         </p>
 
         {/* CTAs */}
@@ -100,7 +101,7 @@ function HeroSection(): React.JSX.Element {
 function PrinciplesSection(): React.JSX.Element {
   const principles = [
     {
-      title: 'Motion as Truth',
+      title: 'Notion as Truth',
       description:
         "We don't ask what you plan to do. We watch what you actually do. Real actions become real data.",
     },
@@ -217,7 +218,7 @@ function SignalLayerSection(): React.JSX.Element {
     {
       icon: Bell,
       title: 'App Activity',
-      description: "See which apps demand your attention—and which don't.",
+      description: "See which apps demand your attention - and which don't.",
     },
     {
       icon: Smartphone,
@@ -241,7 +242,7 @@ function SignalLayerSection(): React.JSX.Element {
           </h2>
           <p className="text-lg text-slate-400">
             IntexuraOS captures notifications from your mobile device—banking alerts, group chat
-            summaries, delivery updates—and extracts the signals that matter.
+            summaries, delivery updates —and extracts the signals that matter.
           </p>
         </div>
 
@@ -304,8 +305,8 @@ function StructureLayerSection(): React.JSX.Element {
             </span>
           </h2>
           <p className="mx-auto max-w-2xl text-lg text-slate-400">
-            IntexuraOS includes TATA GPT—a custom AI model for iterative thinking. Feed it raw
-            ideas. Get back structured prompts, refined questions, and executable frameworks.
+            IntexuraOS includes Prompt Vault GPT - a custom AI model for iterative thinking. Feed it
+            raw ideas. Get back structured prompts, refined questions, and executable frameworks.
           </p>
           <p className="mt-4 font-mono text-sm text-slate-500">
             This isn&apos;t chat. It&apos;s structured cognition.
@@ -365,7 +366,7 @@ function IntegrationsSection(): React.JSX.Element {
             Connects where you already work
           </h2>
           <p className="text-slate-400">
-            IntexuraOS integrates with the tools you use—not the ones you should use.
+            IntexuraOS integrates with the tools you use — not the ones you should use.
           </p>
         </div>
 

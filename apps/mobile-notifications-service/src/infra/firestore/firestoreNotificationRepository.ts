@@ -11,6 +11,7 @@ import type {
   RepositoryError,
   PaginationOptions,
   PaginatedNotifications,
+  DistinctFilterField,
 } from '../../domain/notifications/index.js';
 
 const COLLECTION_NAME = 'mobile_notifications';
@@ -153,13 +154,19 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       // Take only the requested number of results
       const resultDocs = hasMore ? docs.slice(0, options.limit) : docs;
 
-      const notifications: Notification[] = resultDocs.map((docSnap) => {
+      let notifications: Notification[] = resultDocs.map((docSnap) => {
         const data = docSnap.data() as NotificationDoc;
         return {
           id: docSnap.id,
           ...data,
         };
       });
+
+      // Apply title filter in memory (case-insensitive partial match)
+      if (options.filter?.title !== undefined) {
+        const titleFilter = options.filter.title.toLowerCase();
+        notifications = notifications.filter((n) => n.title.toLowerCase().includes(titleFilter));
+      }
 
       const result: PaginatedNotifications = { notifications };
 
@@ -212,6 +219,32 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: getErrorMessage(error, 'Failed to delete notification'),
+      });
+    }
+  }
+
+  async getDistinctValues(
+    userId: string,
+    field: DistinctFilterField
+  ): Promise<Result<string[], RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const snapshot = await db.collection(COLLECTION_NAME).where('userId', '==', userId).get();
+
+      const values = new Set<string>();
+      for (const doc of snapshot.docs) {
+        const data = doc.data() as NotificationDoc;
+        const value = data[field];
+        if (value.length > 0) {
+          values.add(value);
+        }
+      }
+
+      return ok(Array.from(values).sort());
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: getErrorMessage(error, 'Failed to get distinct values'),
       });
     }
   }

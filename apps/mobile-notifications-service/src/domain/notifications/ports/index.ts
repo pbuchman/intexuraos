@@ -9,4 +9,6 @@ export type {
   NotificationRepository,
   PaginationOptions,
   PaginatedNotifications,
+  FilterOptions,
+  DistinctFilterField,
 } from './notificationRepository.js';

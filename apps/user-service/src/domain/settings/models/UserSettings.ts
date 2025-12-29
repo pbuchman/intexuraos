@@ -5,9 +5,13 @@
 
 /**
  * A notification filter configuration.
+ * Requires a unique name and at least one filter criterion.
  */
 export interface NotificationFilter {
-  app: string; // e.g., "com.whatsapp"
+  name: string; // Unique within user's filters
+  app?: string; // e.g., "com.whatsapp"
+  source?: string; // e.g., "tasker"
+  title?: string; // Partial match, case-insensitive
 }
 
 /**

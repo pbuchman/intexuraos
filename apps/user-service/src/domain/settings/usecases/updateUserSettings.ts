@@ -25,7 +25,7 @@ export interface UpdateUserSettingsInput {
 /**
  * Error codes for update settings failures.
  */
-export type UpdateUserSettingsErrorCode = 'FORBIDDEN' | 'INTERNAL_ERROR';
+export type UpdateUserSettingsErrorCode = 'FORBIDDEN' | 'INVALID_REQUEST' | 'INTERNAL_ERROR';
 
 /**
  * Update settings error.
@@ -62,6 +62,31 @@ export async function updateUserSettings(
       code: 'FORBIDDEN',
       message: 'You can only update your own settings',
     });
+  }
+
+  // Validate filters
+  const filters = notifications.filters;
+
+  // Check for duplicate filter names
+  const filterNames = new Set<string>();
+  for (const filter of filters) {
+    if (filterNames.has(filter.name)) {
+      return err({
+        code: 'INVALID_REQUEST',
+        message: `Duplicate filter name: ${filter.name}`,
+      });
+    }
+    filterNames.add(filter.name);
+  }
+
+  // Check that each filter has at least one criterion
+  for (const filter of filters) {
+    if (filter.app === undefined && filter.source === undefined && filter.title === undefined) {
+      return err({
+        code: 'INVALID_REQUEST',
+        message: `Filter "${filter.name}" must have at least one criterion (app, source, or title)`,
+      });
+    }
   }
 
   // Get existing settings or create defaults

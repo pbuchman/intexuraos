@@ -187,7 +187,10 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         notifications: {
-          filters: [{ app: 'com.whatsapp' }, { app: 'com.slack' }],
+          filters: [
+            { name: 'WhatsApp', app: 'com.whatsapp' },
+            { name: 'Slack', app: 'com.slack' },
+          ],
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-15T00:00:00.000Z',
@@ -212,7 +215,7 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { app: string }[] };
+          notifications: { filters: { name: string; app?: string }[] };
           createdAt: string;
           updatedAt: string;
         };
@@ -220,8 +223,8 @@ describe('Settings Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
       expect(body.data.notifications.filters).toEqual([
-        { app: 'com.whatsapp' },
-        { app: 'com.slack' },
+        { name: 'WhatsApp', app: 'com.whatsapp' },
+        { name: 'Slack', app: 'com.slack' },
       ]);
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(body.data.updatedAt).toBe('2025-01-15T00:00:00.000Z');
@@ -312,7 +315,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ app: 'com.whatsapp' }] },
+          notifications: { filters: [{ name: 'WhatsApp', app: 'com.whatsapp' }] },
         },
       });
 
@@ -341,7 +344,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ app: 'com.whatsapp' }] },
+          notifications: { filters: [{ name: 'WhatsApp', app: 'com.whatsapp' }] },
         },
       });
 
@@ -350,19 +353,19 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { app: string }[] };
+          notifications: { filters: { name: string; app?: string }[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
-      expect(body.data.notifications.filters).toEqual([{ app: 'com.whatsapp' }]);
+      expect(body.data.notifications.filters).toEqual([{ name: 'WhatsApp', app: 'com.whatsapp' }]);
 
       // Verify it was saved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored).toBeDefined();
-      expect(stored?.notifications.filters).toEqual([{ app: 'com.whatsapp' }]);
+      expect(stored?.notifications.filters).toEqual([{ name: 'WhatsApp', app: 'com.whatsapp' }]);
     });
 
     it('updates existing settings', { timeout: 20000 }, async () => {
@@ -370,7 +373,7 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         notifications: {
-          filters: [{ app: 'com.old-app' }],
+          filters: [{ name: 'OldApp', app: 'com.old-app' }],
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -389,7 +392,12 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ app: 'com.new-app' }, { app: 'com.another-app' }] },
+          notifications: {
+            filters: [
+              { name: 'NewApp', app: 'com.new-app' },
+              { name: 'AnotherApp', app: 'com.another-app' },
+            ],
+          },
         },
       });
 
@@ -398,15 +406,15 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { app: string }[] };
+          notifications: { filters: { name: string; app: string }[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.notifications.filters).toEqual([
-        { app: 'com.new-app' },
-        { app: 'com.another-app' },
+        { name: 'NewApp', app: 'com.new-app' },
+        { name: 'AnotherApp', app: 'com.another-app' },
       ]);
       // Should preserve original createdAt
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
@@ -451,7 +459,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ app: 'com.test' }] },
+          notifications: { filters: [{ name: 'TestFilter', app: 'com.test' }] },
         },
       });
 
@@ -480,7 +488,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ app: 'com.test' }] },
+          notifications: { filters: [{ name: 'TestFilter', app: 'com.test' }] },
         },
       });
 
@@ -491,6 +499,173 @@ describe('Settings Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 400 when filter names are duplicated', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-dup-names',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/auth0|user-dup-names/settings',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [
+              { name: 'MyFilter', app: 'com.app1' },
+              { name: 'MyFilter', app: 'com.app2' },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Duplicate filter name');
+    });
+
+    it('returns 400 when filter has no criteria', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-no-criteria',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/auth0|user-no-criteria/settings',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [{ name: 'EmptyFilter' }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('must have at least one criterion');
+    });
+
+    it('accepts filter with source criterion only', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-source-only';
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [{ name: 'SourceFilter', source: 'tasker' }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          notifications: { filters: { name: string; source: string }[] };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications.filters).toEqual([{ name: 'SourceFilter', source: 'tasker' }]);
+    });
+
+    it('accepts filter with title criterion only', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-title-only';
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [{ name: 'TitleFilter', title: 'important' }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          notifications: { filters: { name: string; title: string }[] };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications.filters).toEqual([
+        { name: 'TitleFilter', title: 'important' },
+      ]);
+    });
+
+    it('accepts filter with multiple criteria', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-multi-criteria';
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          notifications: {
+            filters: [
+              { name: 'MultiFilter', app: 'com.whatsapp', source: 'tasker', title: 'urgent' },
+            ],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          notifications: {
+            filters: { name: string; app: string; source: string; title: string }[];
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications.filters).toEqual([
+        { name: 'MultiFilter', app: 'com.whatsapp', source: 'tasker', title: 'urgent' },
+      ]);
     });
   });
 });
