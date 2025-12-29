@@ -167,7 +167,9 @@ function getLastSuccessfulBuildCommit() {
 
     // Find the most recent successful build on our branch (excluding current build)
     const currentCommit = process.env.COMMIT_SHA;
-    console.log(`Current commit: ${currentCommit}, looking for previous builds on branch: ${BRANCH_NAME}`);
+    console.log(
+      `Current commit: ${currentCommit}, looking for previous builds on branch: ${BRANCH_NAME}`
+    );
 
     for (const build of data.builds) {
       const buildCommit = build.substitutions?.COMMIT_SHA;

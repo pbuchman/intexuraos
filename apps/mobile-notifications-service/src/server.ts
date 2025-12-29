@@ -190,7 +190,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   // CORS for cross-origin API access (web app + api-docs-hub)
   await app.register(fastifyCors, {
     origin: true,
-    methods: ['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
   await app.register(fastifySwagger, buildOpenApiOptions());

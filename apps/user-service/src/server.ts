@@ -150,10 +150,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Register quiet health check logging (skips /health endpoint logs)
   registerQuietHealthCheckLogging(app);
 
-  // CORS for cross-origin OpenAPI access (api-docs-hub)
+  // CORS for cross-origin API access from web app
   await app.register(fastifyCors, {
     origin: true,
-    methods: ['GET', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
   // Support application/x-www-form-urlencoded (OAuth2 standard)
