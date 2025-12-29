@@ -80,14 +80,15 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 2-2: Add user-settings routes for API keys ✓
 - 3-0: Create domain models for Research ✓
 - 3-1: Define domain ports ✓
+- 3-2: Add synthesis config ✓
 
 **Now:**
 
-- 3-2: Add synthesis config
+- 3-3: Create usecases
 
 **Next:**
 
-- 3-3: Create usecases
+- Tier 4: Infrastructure (firestore repo, adapters, notification)
 
 ## Open Questions
 
