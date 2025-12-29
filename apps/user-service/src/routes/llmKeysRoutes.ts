@@ -310,7 +310,10 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { userSettingsRepository } = getServices();
 
-      const deleteResult = await userSettingsRepository.deleteLlmApiKey(params.uid, params.provider);
+      const deleteResult = await userSettingsRepository.deleteLlmApiKey(
+        params.uid,
+        params.provider
+      );
 
       if (!deleteResult.ok) {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);

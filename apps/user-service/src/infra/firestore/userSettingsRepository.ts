@@ -3,7 +3,13 @@
  * Stores per-user settings with notification filters.
  */
 
-import { ok, err, type Result, type EncryptedValue, getErrorMessage } from '@intexuraos/common-core';
+import {
+  ok,
+  err,
+  type Result,
+  type EncryptedValue,
+  getErrorMessage,
+} from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { FieldValue } from '@google-cloud/firestore';
 import type {
@@ -126,7 +132,10 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
-  async deleteLlmApiKey(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>> {
+  async deleteLlmApiKey(
+    userId: string,
+    provider: LlmProvider
+  ): Promise<Result<void, SettingsError>> {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);

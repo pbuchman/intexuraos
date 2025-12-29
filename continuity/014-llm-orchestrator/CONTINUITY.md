@@ -88,16 +88,19 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 5-0: Create JSON schemas ✓
 - 5-1: Create research routes ✓
 - 5-2: Setup server ✓
+- 5-3: Create DI container ✓
 
 **Now:**
 
-- 5-3: Create DI container
+- Tier 6: Frontend (API keys page, orchestrator page, etc.)
 
 **Next:**
 
-- Tier 6: Frontend (API keys page, orchestrator page, etc.)
 - Tier 7: Deployment (Terraform, Cloud Build)
 - Tier 8: Verification (tests, coverage)
+
+**Backend Complete!** All Tiers 0-5 implemented. The llm-orchestrator-service
+has domain models, ports, usecases, infrastructure adapters, routes, and DI container.
 
 ## Open Questions
 

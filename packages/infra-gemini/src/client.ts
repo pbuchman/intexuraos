@@ -7,7 +7,10 @@ const DEFAULT_MODEL = 'gemini-2.0-flash-exp';
 export interface GeminiClient {
   research(prompt: string): Promise<Result<ResearchResult, GeminiError>>;
   generateTitle(prompt: string): Promise<Result<string, GeminiError>>;
-  synthesize(originalPrompt: string, reports: SynthesisInput[]): Promise<Result<string, GeminiError>>;
+  synthesize(
+    originalPrompt: string,
+    reports: SynthesisInput[]
+  ): Promise<Result<string, GeminiError>>;
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {

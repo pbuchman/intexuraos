@@ -5,11 +5,7 @@
 
 import { Firestore } from '@google-cloud/firestore';
 import { FirestoreResearchRepository } from './infra/research/index.js';
-import {
-  createLlmProviders,
-  createSynthesizer,
-  type DecryptedApiKeys,
-} from './infra/llm/index.js';
+import { createLlmProviders, createSynthesizer, type DecryptedApiKeys } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
 import {
   processResearch,

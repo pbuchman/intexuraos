@@ -82,10 +82,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
     }
   }
 
-  async update(
-    id: string,
-    updates: Partial<Research>
-  ): Promise<Result<Research, RepositoryError>> {
+  async update(id: string, updates: Partial<Research>): Promise<Result<Research, RepositoryError>> {
     try {
       await this.collection.doc(id).update(updates);
       const updated = await this.findById(id);
