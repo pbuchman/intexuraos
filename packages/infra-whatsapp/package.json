@@ -1,0 +1,15 @@
+{
+  "name": "@intexuraos/infra-whatsapp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*"
+  }
+}

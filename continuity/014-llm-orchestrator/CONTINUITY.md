@@ -71,14 +71,15 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 0-1: Create llm-orchestrator-service scaffold
 - 0-2: Add to root tsconfig, ESLint config
 - **All task files created (Tier 1-8)**
+- 1-0: Create infra-whatsapp package ✓
 
 **Now:**
 
-- 1-0: Create infra-whatsapp package
+- 1-1: Create infra-gemini package
 
 **Next:**
 
-- 1-1 through 1-3: Create remaining infra packages
+- 1-2, 1-3: Create remaining infra packages (claude, gpt)
 - 2-0: Add encryption utility to common-core
 
 ## Open Questions
@@ -101,7 +102,7 @@ continuity/014-llm-orchestrator/
 ├── 0-0-cleanup-empty-dirs.md (DONE)
 ├── 0-1-service-scaffold.md (DONE)
 ├── 0-2-eslint-tsconfig.md (DONE)
-├── 1-0-infra-whatsapp.md
+├── 1-0-infra-whatsapp.md (DONE)
 ├── 1-1-infra-gemini.md
 ├── 1-2-infra-claude.md
 ├── 1-3-infra-gpt.md
