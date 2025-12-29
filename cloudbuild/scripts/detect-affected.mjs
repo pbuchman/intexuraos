@@ -103,7 +103,7 @@ const SERVICE_DEPS = {
 
 /**
  * Get the commit SHA of the last successful Cloud Build.
- * Uses gcloud CLI to query Cloud Build API.
+ * Uses Cloud Build REST API via curl (available in node:22 image).
  *
  * @returns {string|null} Commit SHA or null if not found
  */
@@ -114,24 +114,57 @@ function getLastSuccessfulBuildCommit() {
   }
 
   try {
-    // Query for the last successful build on this branch (excluding current build)
-    // Filter: status=SUCCESS, source.repoSource.branchName matches, sorted by createTime desc
-    const result = execSync(
-      `gcloud builds list \
-        --project="${PROJECT_ID}" \
-        --filter="status=SUCCESS AND substitutions._BRANCH_NAME=${BRANCH_NAME}" \
-        --sort-by="~createTime" \
-        --limit=1 \
-        --format="value(substitutions.COMMIT_SHA)"`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-
-    if (result && result.length === 40) {
-      console.log(`Found last successful build commit: ${result}`);
-      return result;
+    // Get access token from metadata server (available in Cloud Build)
+    let accessToken;
+    try {
+      accessToken = execSync(
+        'curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | grep -o \'"access_token":"[^"]*\' | cut -d\'"\' -f4',
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 }
+      ).trim();
+    } catch {
+      console.log('Could not get access token from metadata server (not in GCP?)');
+      return null;
     }
 
-    console.log('No successful build found via gcloud, will use fallback');
+    if (!accessToken) {
+      console.log('Empty access token, cannot query Cloud Build API');
+      return null;
+    }
+
+    // Query Cloud Build API for last successful build
+    // Filter: status=SUCCESS, sorted by createTime desc
+    const filter = encodeURIComponent(`status="SUCCESS"`);
+    const apiUrl = `https://cloudbuild.googleapis.com/v1/projects/${PROJECT_ID}/builds?filter=${filter}&pageSize=10`;
+
+    const response = execSync(
+      `curl -s -H "Authorization: Bearer ${accessToken}" "${apiUrl}"`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 }
+    );
+
+    const data = JSON.parse(response);
+
+    if (!data.builds || data.builds.length === 0) {
+      console.log('No successful builds found in Cloud Build API');
+      return null;
+    }
+
+    // Find the most recent successful build on our branch (excluding current build)
+    const currentCommit = process.env.COMMIT_SHA;
+    for (const build of data.builds) {
+      const buildCommit = build.substitutions?.COMMIT_SHA;
+      const buildBranch = build.substitutions?.BRANCH_NAME;
+
+      // Skip current build and builds from other branches
+      if (buildCommit === currentCommit) continue;
+      if (buildBranch && buildBranch !== BRANCH_NAME) continue;
+
+      if (buildCommit && buildCommit.length === 40) {
+        console.log(`Found last successful build commit: ${buildCommit}`);
+        return buildCommit;
+      }
+    }
+
+    console.log('No matching successful build found for this branch');
     return null;
   } catch (error) {
     console.log(`Could not query Cloud Build API: ${error.message}`);

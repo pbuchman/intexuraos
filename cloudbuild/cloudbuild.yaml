@@ -22,7 +22,7 @@ steps:
 
   # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
   # Compares with last SUCCESSFUL build to avoid skipping changes from failed builds
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - name: 'node:22'
     id: 'detect-affected'
     waitFor: ['npm-ci']
     entrypoint: 'node'
