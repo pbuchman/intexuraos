@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
 import { getMobileNotifications, deleteMobileNotification, ApiError } from '@/services';
-import type { MobileNotification } from '@/types';
-import { Trash2, Bell, RefreshCw, X, Filter } from 'lucide-react';
+import { getUserSettings, updateUserSettings } from '@/services/authApi';
+import type { MobileNotification, NotificationFilter } from '@/types';
+import { Trash2, Bell, RefreshCw, X, Filter, Heart } from 'lucide-react';
 
 type FilterType = 'none' | 'source' | 'app';
 
@@ -56,6 +58,8 @@ interface NotificationCardProps {
   notification: MobileNotification;
   onDelete: (id: string) => void;
   isDeleting: boolean;
+  isSaved: boolean;
+  onToggleSave: (app: string) => void;
 }
 
 /**
@@ -65,6 +69,8 @@ function NotificationCard({
   notification,
   onDelete,
   isDeleting,
+  isSaved,
+  onToggleSave,
 }: NotificationCardProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -134,22 +140,38 @@ function NotificationCard({
           ) : null}
         </div>
 
-        {/* Delete button - always visible for mobile accessibility */}
-        <button
-          onClick={handleDeleteClick}
-          disabled={isDeleting || showDeleteConfirm}
-          className="shrink-0 rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="Delete notification"
-        >
-          <Trash2 className="h-5 w-5" />
-        </button>
+        {/* Action buttons - always visible for mobile accessibility */}
+        <div className="flex shrink-0 gap-1">
+          <button
+            onClick={(): void => {
+              onToggleSave(notification.app);
+            }}
+            className={`rounded-lg p-2 transition-all ${
+              isSaved
+                ? 'text-pink-600 hover:bg-pink-50'
+                : 'text-slate-400 hover:bg-pink-50 hover:text-pink-600'
+            }`}
+            aria-label={isSaved ? 'Remove from saved filters' : 'Save as filter'}
+          >
+            <Heart className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} />
+          </button>
+          <button
+            onClick={handleDeleteClick}
+            disabled={isDeleting || showDeleteConfirm}
+            className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Delete notification"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 export function MobileNotificationsListPage(): React.JSX.Element {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
@@ -159,6 +181,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [filterType, setFilterType] = useState<FilterType>('none');
   const [filterValue, setFilterValue] = useState('');
+  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
 
   const fetchNotifications = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -263,6 +286,51 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   const handleRefresh = (): void => {
     void fetchNotifications(true);
+  };
+
+  // Fetch saved filters on mount
+  useEffect(() => {
+    const fetchSavedFilters = async (): Promise<void> => {
+      if (user?.sub === undefined) return;
+      try {
+        const token = await getAccessToken();
+        const settings = await getUserSettings(token, user.sub);
+        setSavedFilters(settings.notifications.filters);
+      } catch {
+        /* Best-effort fetch, ignore errors */
+      }
+    };
+    void fetchSavedFilters();
+  }, [getAccessToken, user?.sub]);
+
+  // Apply filter from URL search params
+  useEffect(() => {
+    const urlAppFilter = searchParams.get('app');
+    if (urlAppFilter !== null && urlAppFilter !== '') {
+      setFilterType('app');
+      setFilterValue(urlAppFilter);
+    }
+  }, [searchParams]);
+
+  const handleToggleSave = async (app: string): Promise<void> => {
+    if (user?.sub === undefined) return;
+
+    const isCurrentlySaved = savedFilters.some((f) => f.app === app);
+    const newFilters = isCurrentlySaved
+      ? savedFilters.filter((f) => f.app !== app)
+      : [...savedFilters, { app }];
+
+    // Optimistically update UI
+    setSavedFilters(newFilters);
+
+    try {
+      const token = await getAccessToken();
+      await updateUserSettings(token, user.sub, { filters: newFilters });
+    } catch (e) {
+      // Revert on error
+      setSavedFilters(savedFilters);
+      setError(e instanceof ApiError ? e.message : 'Failed to save filter');
+    }
   };
 
   if (isLoading) {
@@ -371,6 +439,10 @@ export function MobileNotificationsListPage(): React.JSX.Element {
                 void handleDelete(id);
               }}
               isDeleting={deletingIds.has(notification.id)}
+              isSaved={savedFilters.some((f) => f.app === notification.app)}
+              onToggleSave={(app): void => {
+                void handleToggleSave(app);
+              }}
             />
           ))
         )}

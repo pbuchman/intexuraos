@@ -226,12 +226,13 @@ describe('Frontend Auth Routes', () => {
         process.env['AUTH_ISSUER'] = issuer;
 
         const { setServices, resetServices } = await import('../services.js');
-        const { FakeAuthTokenRepository } = await import('./fakes.js');
+        const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');
 
         const fakeTokenRepo = new FakeAuthTokenRepository();
         fakeTokenRepo.setThrowOnDeleteTokens(true);
         setServices({
           authTokenRepository: fakeTokenRepo,
+          userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null,
         });
 
@@ -440,12 +441,14 @@ describe('Frontend Auth Routes', () => {
         { timeout: 20000 },
         async () => {
           const { setServices, resetServices } = await import('../services.js');
-          const { FakeAuthTokenRepository } = await import('./fakes.js');
+          const { FakeAuthTokenRepository, FakeUserSettingsRepository } =
+            await import('./fakes.js');
 
           const fakeTokenRepo = new FakeAuthTokenRepository();
           fakeTokenRepo.setThrowOnHasRefreshToken(true);
           setServices({
             authTokenRepository: fakeTokenRepo,
+            userSettingsRepository: new FakeUserSettingsRepository(),
             auth0Client: null,
           });
 
