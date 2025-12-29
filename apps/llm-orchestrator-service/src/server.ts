@@ -15,6 +15,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
+import { researchRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'llm-orchestrator-service';
 const SERVICE_VERSION = '0.0.1';
@@ -188,6 +189,9 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifySwaggerUi, {
     routePrefix: '/docs',
   });
+
+  // Register research routes
+  await app.register(researchRoutes);
 
   app.get(
     '/openapi.json',
