@@ -4,18 +4,9 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
-import {
-  intexuraFastifyPlugin,
-  fastifyAuthPlugin,
-  registerQuietHealthCheckLogging,
-} from '@intexuraos/common-http';
+import { fastifyAuthPlugin, intexuraFastifyPlugin, registerQuietHealthCheckLogging, } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import {
-  checkSecrets,
-  checkFirestore,
-  buildHealthResponse,
-  type HealthCheck,
-} from '@intexuraos/http-server';
+import { buildHealthResponse, checkFirestore, checkSecrets, type HealthCheck, } from '@intexuraos/http-server';
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';
@@ -178,11 +169,13 @@ export async function buildServer(): Promise<FastifyInstance> {
       ).validation;
 
       const errors = validation.map((v) => {
-        const rawPath = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-
-        // When a required top-level property is missing, fastify-ajv may report instancePath=""
-        // The tests expect the missing field name.
-        const path = rawPath === '' ? 'device_code' : rawPath;
+        // When instancePath is empty, extract field name from error message if possible
+        // Example: "must have required property 'device_code'" -> "device_code"
+        let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
+        if (path === '') {
+          const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
+          path = requiredMatch?.[1] ?? '<root>';
+        }
 
         return {
           path,
