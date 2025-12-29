@@ -2,6 +2,7 @@
  * Service wiring for user-service.
  * Provides dependency injection for domain adapters.
  */
+import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
 import type { AuthTokenRepository, Auth0Client } from './domain/identity/index.js';
 import type { UserSettingsRepository } from './domain/settings/index.js';
 import {
@@ -20,9 +21,25 @@ export interface ServiceContainer {
   authTokenRepository: AuthTokenRepository;
   userSettingsRepository: UserSettingsRepository;
   auth0Client: Auth0Client | null;
+  encryptor: Encryptor | null;
 }
 
 let container: ServiceContainer | null = null;
+
+/**
+ * Get or create the service container.
+ */
+/**
+ * Load encryption key from environment and create encryptor.
+ * Returns null if key is not configured (optional feature).
+ */
+function loadEncryptor(): Encryptor | null {
+  const encryptionKey = process.env['INTEXURAOS_ENCRYPTION_KEY'];
+  if (encryptionKey === undefined || encryptionKey === '') {
+    return null;
+  }
+  return createEncryptor(encryptionKey);
+}
 
 /**
  * Get or create the service container.
@@ -34,6 +51,7 @@ export function getServices(): ServiceContainer {
       authTokenRepository: new FirestoreAuthTokenRepository(),
       userSettingsRepository: new FirestoreUserSettingsRepository(),
       auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
+      encryptor: loadEncryptor(),
     };
   }
   return container;
