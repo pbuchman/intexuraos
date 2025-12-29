@@ -25,7 +25,7 @@ export async function updateUserSettings(
     accessToken,
     {
       method: 'PATCH',
-      body: JSON.stringify({ notifications }),
+      body: { notifications },
     }
   );
 }

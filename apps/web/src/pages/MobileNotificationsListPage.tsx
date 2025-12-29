@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
@@ -23,6 +23,9 @@ interface ActiveFilters {
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
+
+/** Debounce delay for title search in milliseconds */
+const TITLE_SEARCH_DEBOUNCE_MS = 500;
 
 /**
  * Format relative time (e.g., "2h ago", "5m ago")
@@ -166,9 +169,15 @@ function NotificationCard({
 
 /**
  * Check if active filters have any values set.
+ * Also checks titleInput for pending debounced input.
  */
-function hasActiveFilters(filters: ActiveFilters): boolean {
-  return filters.app !== '' || filters.source !== '' || filters.title !== '';
+function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean {
+  return (
+    filters.app !== '' ||
+    filters.source !== '' ||
+    filters.title !== '' ||
+    (titleInput !== undefined && titleInput !== '')
+  );
 }
 
 export function MobileNotificationsListPage(): React.JSX.Element {
@@ -184,6 +193,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   // Multi-dimension filter state
   const [filters, setFilters] = useState<ActiveFilters>({ app: '', source: '', title: '' });
+  // Separate state for title input (immediate update for UX, debounced for API)
+  const [titleInput, setTitleInput] = useState('');
+  const titleDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Dropdown options from backend
   const [appOptions, setAppOptions] = useState<string[]>([]);
@@ -213,6 +225,23 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     };
     void loadFilterOptions();
   }, [getAccessToken]);
+
+  // Debounce title input - only update filters.title after user stops typing
+  useEffect(() => {
+    if (titleDebounceTimer.current !== null) {
+      clearTimeout(titleDebounceTimer.current);
+    }
+
+    titleDebounceTimer.current = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, title: titleInput }));
+    }, TITLE_SEARCH_DEBOUNCE_MS);
+
+    return (): void => {
+      if (titleDebounceTimer.current !== null) {
+        clearTimeout(titleDebounceTimer.current);
+      }
+    };
+  }, [titleInput]);
 
   const fetchNotifications = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -287,6 +316,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   const handleClearFilters = (): void => {
     setFilters({ app: '', source: '', title: '' });
+    setTitleInput('');
     setFilterName('');
   };
 
@@ -341,11 +371,13 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     const urlSource = searchParams.get('source');
     const urlTitle = searchParams.get('title');
     if (urlApp !== null || urlSource !== null || urlTitle !== null) {
+      const newTitle = urlTitle ?? '';
       setFilters({
         app: urlApp ?? '',
         source: urlSource ?? '',
-        title: urlTitle ?? '',
+        title: newTitle,
       });
+      setTitleInput(newTitle);
     }
   }, [searchParams]);
 
@@ -355,7 +387,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
       setError('Filter name is required');
       return;
     }
-    if (!hasActiveFilters(filters)) {
+    if (!hasActiveFilters(filters, titleInput)) {
       setError('At least one filter criterion is required');
       return;
     }
@@ -373,8 +405,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     if (filters.source !== '') {
       newFilter.source = filters.source;
     }
-    if (filters.title !== '') {
-      newFilter.title = filters.title;
+    // Use titleInput to capture pending debounced input
+    if (titleInput !== '') {
+      newFilter.title = titleInput;
     }
 
     const newFilters = [...savedFilters, newFilter];
@@ -498,9 +531,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
             <label className="text-xs text-slate-500">Title contains</label>
             <input
               type="text"
-              value={filters.title}
+              value={titleInput}
               onChange={(e): void => {
-                setFilters((prev) => ({ ...prev, title: e.target.value }));
+                setTitleInput(e.target.value);
               }}
               placeholder="Search in title..."
               className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -508,7 +541,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
           </div>
 
           {/* Clear button */}
-          {hasActiveFilters(filters) ? (
+          {hasActiveFilters(filters, titleInput) ? (
             <button
               onClick={handleClearFilters}
               className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-200 hover:text-slate-700"
@@ -519,7 +552,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         </div>
 
         {/* Save filter row */}
-        {hasActiveFilters(filters) ? (
+        {hasActiveFilters(filters, titleInput) ? (
           <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs text-slate-500">Filter name</label>
@@ -578,7 +611,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bell className="mb-4 h-12 w-12 text-slate-300" />
-              {hasActiveFilters(filters) ? (
+              {hasActiveFilters(filters, titleInput) ? (
                 <>
                   <h3 className="text-lg font-medium text-slate-700">No matching notifications</h3>
                   <p className="mt-1 text-sm text-slate-500">
