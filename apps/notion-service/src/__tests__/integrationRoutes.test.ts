@@ -10,6 +10,25 @@ describe('Notion Integration Routes', () => {
   const ctx = setupTestContext();
 
   describe('POST /notion/connect', () => {
+    it('returns 401 UNAUTHORIZED when no auth token provided', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/notion/connect',
+        payload: {
+          notionToken: 'secret-notion-token',
+          promptVaultPageId: 'page-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('connects successfully, validates page access, and includes page info in response', async () => {
       const token = await createToken({ sub: 'user-123' });
 
@@ -299,6 +318,21 @@ describe('Notion Integration Routes', () => {
   });
 
   describe('DELETE /notion/disconnect', () => {
+    it('returns 401 UNAUTHORIZED when no auth token provided', async () => {
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/notion/disconnect',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
     it('disconnects successfully', async () => {
       const token = await createToken({ sub: 'user-789' });
 
