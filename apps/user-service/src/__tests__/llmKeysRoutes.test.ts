@@ -1,0 +1,544 @@
+/**
+ * Tests for LLM API Keys routes:
+ * - GET /users/:uid/settings/llm-keys
+ * - PATCH /users/:uid/settings/llm-keys
+ * - DELETE /users/:uid/settings/llm-keys/:provider
+ */
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import Fastify from 'fastify';
+import * as jose from 'jose';
+import { clearJwksCache } from '@intexuraos/common-http';
+import { buildServer } from '../server.js';
+import { setServices, resetServices } from '../services.js';
+import { FakeAuthTokenRepository, FakeUserSettingsRepository, FakeEncryptor } from './fakes.js';
+
+const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const AUTH0_CLIENT_ID = 'test-client-id';
+const AUTH_AUDIENCE = 'urn:intexuraos:api';
+
+describe('LLM Keys Routes', () => {
+  let app: FastifyInstance;
+  let jwksServer: FastifyInstance;
+  let privateKey: jose.KeyLike;
+  let jwksUrl: string;
+  const issuer = `https://${AUTH0_DOMAIN}/`;
+
+  let fakeAuthTokenRepo: FakeAuthTokenRepository;
+  let fakeSettingsRepo: FakeUserSettingsRepository;
+  let fakeEncryptor: FakeEncryptor;
+
+  async function createToken(claims: Record<string, unknown>): Promise<string> {
+    const builder = new jose.SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setIssuer(issuer)
+      .setAudience(AUTH_AUDIENCE)
+      .setExpirationTime('1h');
+
+    return await builder.sign(privateKey);
+  }
+
+  beforeAll(async () => {
+    const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
+    privateKey = privKey;
+
+    const publicKeyJwk = await jose.exportJWK(publicKey);
+    publicKeyJwk.kid = 'test-key-1';
+    publicKeyJwk.alg = 'RS256';
+    publicKeyJwk.use = 'sig';
+
+    jwksServer = Fastify({ logger: false });
+
+    jwksServer.get('/.well-known/jwks.json', async (_req, reply) => {
+      return await reply.send({
+        keys: [publicKeyJwk],
+      });
+    });
+
+    await jwksServer.listen({ port: 0, host: '127.0.0.1' });
+    const address = jwksServer.server.address();
+    if (address !== null && typeof address === 'object') {
+      jwksUrl = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+    }
+  });
+
+  afterAll(async () => {
+    await jwksServer.close();
+  });
+
+  beforeEach(() => {
+    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
+    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
+    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    process.env['AUTH_JWKS_URL'] = jwksUrl;
+    process.env['AUTH_ISSUER'] = issuer;
+
+    clearJwksCache();
+
+    fakeAuthTokenRepo = new FakeAuthTokenRepository();
+    fakeSettingsRepo = new FakeUserSettingsRepository();
+    fakeEncryptor = new FakeEncryptor();
+    setServices({
+      authTokenRepository: fakeAuthTokenRepo,
+      userSettingsRepository: fakeSettingsRepo,
+      auth0Client: null,
+      encryptor: fakeEncryptor,
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+    resetServices();
+  });
+
+  describe('GET /users/:uid/settings/llm-keys', () => {
+    it('returns 401 when no auth token', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/users/user-123/settings/llm-keys',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 403 when accessing another user keys', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-123',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/users/auth0|other-user/settings/llm-keys',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns null for all providers when no keys configured', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-no-keys';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { google: string | null; openai: string | null; anthropic: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.google).toBeNull();
+      expect(body.data.openai).toBeNull();
+      expect(body.data.anthropic).toBeNull();
+    });
+
+    it('returns configured status for set keys', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-with-keys';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+          anthropic: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { google: string | null; openai: string | null; anthropic: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.google).toBe('configured');
+      expect(body.data.openai).toBeNull();
+      expect(body.data.anthropic).toBe('configured');
+    });
+
+    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-error';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('PATCH /users/:uid/settings/llm-keys', () => {
+    it('returns 401 when no auth token', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/user-123/settings/llm-keys',
+        payload: {
+          provider: 'google',
+          apiKey: 'test-api-key-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 403 when updating another user keys', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-123',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/users/auth0|other-user/settings/llm-keys',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'test-api-key-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('stores encrypted key and returns masked value', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-set-key';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'AIzaSyB1234567890abcdef',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { provider: string; masked: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.provider).toBe('google');
+      expect(body.data.masked).toBe('AIza...cdef');
+
+      // Verify key was stored
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmApiKeys?.google).toBeDefined();
+    });
+
+    it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
+      // Set encryptor to null
+      setServices({
+        authTokenRepository: fakeAuthTokenRepo,
+        userSettingsRepository: fakeSettingsRepo,
+        auth0Client: null,
+        encryptor: null,
+      });
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-no-encrypt';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'test-api-key-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns 500 when encryption fails', { timeout: 20000 }, async () => {
+      fakeEncryptor.setFailNextEncrypt(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-encrypt-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'openai',
+          apiKey: 'sk-test1234567890abcdef',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when repository update fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextUpdateLlmKey(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-update-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'anthropic',
+          apiKey: 'sk-ant-test1234567890',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 400 when apiKey is too short', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-short-key';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'google',
+          apiKey: 'short',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when provider is invalid', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-invalid-provider';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'invalid-provider',
+          apiKey: 'test-api-key-12345',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('DELETE /users/:uid/settings/llm-keys/:provider', () => {
+    it('returns 401 when no auth token', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/users/user-123/settings/llm-keys/google',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 403 when deleting another user keys', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-123',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/users/auth0|other-user/settings/llm-keys/google',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('deletes key successfully', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-delete-key';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: 'encrypted' },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      // Verify key was deleted
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmApiKeys?.google).toBeUndefined();
+      expect(stored?.llmApiKeys?.openai).toBeDefined();
+    });
+
+    it('returns 500 when repository delete fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextDeleteLlmKey(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-delete-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+});
