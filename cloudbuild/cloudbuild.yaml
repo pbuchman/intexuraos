@@ -31,6 +31,7 @@ steps:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=${_REGION}'
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # All build steps wait only for detect-affected, enabling parallel execution

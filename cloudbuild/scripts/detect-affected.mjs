@@ -139,10 +139,15 @@ function getLastSuccessfulBuildCommit() {
     // Query Cloud Build API for last successful build
     // Filter: status=SUCCESS, sorted by createTime desc
     console.log('Querying Cloud Build API for successful builds...');
-    const filter = encodeURIComponent(`status="SUCCESS"`);
-    const apiUrl = `https://cloudbuild.googleapis.com/v1/projects/${PROJECT_ID}/builds?filter=${filter}&pageSize=10`;
 
-    const response = execSync(`curl -s -H "Authorization: Bearer ${accessToken}" "${apiUrl}"`, {
+    // Try regional endpoint first (Cloud Build v2 uses regions)
+    const REGION = process.env.REGION || 'europe-west1';
+    let filter = encodeURIComponent(`status="SUCCESS"`);
+    let apiUrl = `https://cloudbuild.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/builds?filter=${filter}&pageSize=10`;
+
+    console.log(`API URL: ${apiUrl}`);
+
+    let response = execSync(`curl -s -H "Authorization: Bearer ${accessToken}" "${apiUrl}"`, {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 10000,
@@ -153,13 +158,29 @@ function getLastSuccessfulBuildCommit() {
       data = JSON.parse(response);
     } catch (parseError) {
       console.log('Failed to parse Cloud Build API response');
-      console.log('Response preview:', response.substring(0, 200));
+      console.log('Response preview:', response.substring(0, 500));
+      return null;
+    }
+
+    // Check for API errors
+    if (data.error) {
+      console.log('Cloud Build API returned error:');
+      console.log(`  Code: ${data.error.code}`);
+      console.log(`  Message: ${data.error.message}`);
+      console.log(`  Status: ${data.error.status}`);
+      if (data.error.code === 403) {
+        console.log(
+          '\n⚠️  Permission denied. The Cloud Build service account needs cloudbuild.builds.viewer role.'
+        );
+        console.log('   Run: cd terraform/environments/dev && terraform apply');
+      }
       return null;
     }
 
     if (!data.builds || data.builds.length === 0) {
       console.log('No successful builds found in Cloud Build API');
       console.log('This is expected for the first build after setup');
+      console.log('Raw API response:', JSON.stringify(data, null, 2).substring(0, 500));
       return null;
     }
 
