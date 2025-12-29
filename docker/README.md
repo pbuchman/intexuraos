@@ -27,7 +27,7 @@ docker compose -f docker/docker-compose.yaml down
 
 | Service             | Local Port | Health Check                 |
 | ------------------- | ---------- | ---------------------------- |
-| auth-service        | 8080       | http://localhost:8080/health |
+| user-service        | 8080       | http://localhost:8080/health |
 | promptvault-service | 8081       | http://localhost:8081/health |
 
 ## Testing

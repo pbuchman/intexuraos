@@ -90,7 +90,7 @@ infra/
   notion/
     *Api.ts          # Notion API adapters
   auth0/
-    client.ts        # Auth0 client (auth-service only)
+    client.ts        # Auth0 client (user-service only)
 ```
 
 **Allowed contents:**
@@ -148,7 +148,7 @@ infra/
 | Type           | Pattern                      | Example                    |
 | -------------- | ---------------------------- | -------------------------- |
 | Shared package | `@intexuraos/common`         | `@intexuraos/common`       |
-| App            | `@intexuraos/<name>-service` | `@intexuraos/auth-service` |
+| App            | `@intexuraos/<name>-service` | `@intexuraos/user-service` |
 | Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |
 | Use case       | `*UseCase.ts`                | `createPromptUseCase.ts`   |
 | API adapter    | `*Api.ts`                    | `promptApi.ts`             |

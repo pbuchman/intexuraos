@@ -4,7 +4,7 @@ applyTo: 'terraform/**'
 
 # Terraform Instructions
 
-See [CLAUDE.md — Terraform section](../CLAUDE.md#terraform-terraform) for full instructions.
+See [CLAUDE.md — Terraform section](../../.claude/CLAUDE.md#terraform-terraform) for full instructions.
 
 **Quick reference:**
 

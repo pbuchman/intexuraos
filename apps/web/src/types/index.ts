@@ -203,3 +203,26 @@ export interface MobileNotificationsConnectResponse {
   connectionId: string;
   signature: string;
 }
+
+/**
+ * Notification filter configuration.
+ * Requires a unique name and at least one filter criterion.
+ */
+export interface NotificationFilter {
+  name: string;
+  app?: string;
+  source?: string;
+  title?: string;
+}
+
+/**
+ * User settings from user-service
+ */
+export interface UserSettings {
+  userId: string;
+  notifications: {
+    filters: NotificationFilter[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}

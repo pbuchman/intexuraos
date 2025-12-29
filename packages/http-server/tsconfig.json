@@ -6,7 +6,7 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"],
+  "exclude": ["dist", "node_modules", "src/__tests__"],
   "references": [
     { "path": "../common-core" },
     { "path": "../common-http" },

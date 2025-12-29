@@ -14,27 +14,27 @@ export function IOSInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 text-white p-4 shadow-lg safe-area-inset-bottom">
-      <div className="max-w-lg mx-auto relative">
+    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-slate-900 p-4 text-white shadow-lg">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <button
           onClick={dismissIOSInstallPrompt}
-          className="absolute -top-1 -right-1 p-1 text-slate-400 hover:text-white"
+          className="absolute -right-1 -top-1 p-1 text-slate-400 hover:text-white"
           aria-label="Dismiss"
         >
-          <X className="w-5 h-5" />
+          <X className="h-5 w-5" />
         </button>
 
-        <p className="font-semibold text-sm mb-2">Install IntexuraOS</p>
-        <p className="text-sm text-slate-300 mb-3">
+        <p className="mb-2 text-sm font-semibold">Install IntexuraOS</p>
+        <p className="mb-3 text-sm text-slate-300">
           Add this app to your home screen for the best experience.
         </p>
 
         <div className="flex items-center gap-2 text-sm text-slate-300">
           <span>Tap</span>
-          <Share className="w-5 h-5 text-blue-400" />
+          <Share className="h-5 w-5 text-blue-400" />
           <span>then</span>
-          <PlusSquare className="w-5 h-5 text-blue-400" />
-          <span className="text-white font-medium">"Add to Home Screen"</span>
+          <PlusSquare className="h-5 w-5 text-blue-400" />
+          <span className="font-medium text-white">"Add to Home Screen"</span>
         </div>
       </div>
     </div>
@@ -53,17 +53,17 @@ export function AndroidInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-blue-600 text-white p-4 shadow-lg safe-area-inset-bottom">
-      <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
+    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-blue-600 p-4 text-white shadow-lg">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div>
-          <p className="font-semibold text-sm">Install IntexuraOS</p>
+          <p className="text-sm font-semibold">Install IntexuraOS</p>
           <p className="text-sm text-blue-100">Add to your home screen for quick access.</p>
         </div>
         <button
           onClick={(): void => {
             void installApp();
           }}
-          className="px-4 py-2 bg-white text-blue-600 font-semibold rounded-lg text-sm whitespace-nowrap hover:bg-blue-50 transition-colors"
+          className="whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
         >
           Install
         </button>
@@ -75,21 +75,23 @@ export function AndroidInstallBanner(): React.JSX.Element | null {
 /**
  * Update available notification banner.
  * Shows when a new service worker is waiting to activate.
+ * Only displays when app is installed as PWA.
  */
 export function UpdateBanner(): React.JSX.Element | null {
-  const { updateAvailable, applyUpdate } = usePWA();
+  const { updateAvailable, applyUpdate, isInstalled } = usePWA();
 
-  if (!updateAvailable) {
+  // Only show update banner when app is installed as PWA
+  if (!updateAvailable || !isInstalled) {
     return null;
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-amber-950 p-3 shadow-lg safe-area-inset-top">
-      <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-amber-950 shadow-lg safe-area-inset-top">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <p className="text-sm font-medium">A new version is available</p>
         <button
           onClick={applyUpdate}
-          className="px-3 py-1.5 bg-amber-950 text-amber-50 font-semibold rounded-lg text-sm whitespace-nowrap hover:bg-amber-900 transition-colors"
+          className="whitespace-nowrap rounded-lg bg-amber-950 px-4 py-2 text-sm font-semibold text-amber-50 transition-colors hover:bg-amber-900"
         >
           Update now
         </button>

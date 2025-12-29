@@ -123,7 +123,7 @@ All services implement `GET /health` with consistent response shape.
 ```json
 {
   "status": "ok",
-  "serviceName": "auth-service",
+  "serviceName": "user-service",
   "version": "0.0.1",
   "timestamp": "2024-01-15T10:30:00.000Z",
   "checks": [
@@ -221,7 +221,7 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 
 | Variable                          | Description                             |
 | --------------------------------- | --------------------------------------- |
-| `AUTH_SERVICE_OPENAPI_URL`        | URL to auth-service OpenAPI JSON        |
+| `AUTH_SERVICE_OPENAPI_URL`        | URL to user-service OpenAPI JSON        |
 | `PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
 | `NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
 | `WHATSAPP_SERVICE_OPENAPI_URL`    | URL to whatsapp-service OpenAPI JSON    |
@@ -395,9 +395,9 @@ This provides a stable identifier across sessions.
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
 
-## auth-service Endpoints
+## user-service Endpoints
 
-The auth-service provides Device Authorization Flow helpers for CLI/device authentication.
+The user-service provides Device Authorization Flow helpers for CLI/device authentication.
 
 ### Configuration
 

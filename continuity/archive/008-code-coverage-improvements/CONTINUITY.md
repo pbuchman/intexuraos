@@ -77,9 +77,9 @@
 
 1. `packages/common/src/testing/firestoreFake.ts`
 2. `packages/common/src/testing/index.ts`
-3. `apps/auth-service/src/__tests__/encryption.test.ts`
-4. `apps/auth-service/src/__tests__/infra/auth0Client.test.ts`
-5. `apps/auth-service/src/__tests__/infra/authTokenRepository.test.ts`
+3. `apps/user-service/src/__tests__/encryption.test.ts`
+4. `apps/user-service/src/__tests__/infra/auth0Client.test.ts`
+5. `apps/user-service/src/__tests__/infra/authTokenRepository.test.ts`
 6. `apps/whatsapp-service/src/__tests__/usecases/extractLinkPreviews.test.ts`
 7. `apps/whatsapp-service/src/__tests__/infra/thumbnailGenerator.test.ts`
 8. `apps/whatsapp-service/src/__tests__/infra/whatsappClient.test.ts`

@@ -21,6 +21,7 @@ steps:
     args: ['ci']
 
   # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
+  # Compares with last SUCCESSFUL build to avoid skipping changes from failed builds
   - name: 'node:22'
     id: 'detect-affected'
     waitFor: ['npm-ci']
@@ -29,47 +30,49 @@ steps:
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=${_REGION}'
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # All build steps wait only for detect-affected, enabling parallel execution
   # Build+Push use gcr.io/cloud-builders/docker, Deploy uses cloud-sdk
 
-  # ===== auth-service =====
+  # ===== user-service =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-auth-service'
+    id: 'build-push-user-service'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          echo "=== Building auth-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/auth-service:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"user-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building user-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/user-service:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/auth-service:latest \
-            -f apps/auth-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/auth-service:latest
+            -t ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/user-service:latest \
+            -f apps/user-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/user-service:latest
         else
-          echo "auth-service not affected, skipping."
+          echo "user-service not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-auth-service'
-    waitFor: ['build-push-auth-service']
+    id: 'deploy-user-service'
+    waitFor: ['build-push-user-service']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"auth-service"' /workspace/affected.json 2>/dev/null; then
-          bash cloudbuild/scripts/deploy-auth-service.sh
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"user-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-user-service.sh
         else
-          echo "auth-service not affected, skipping deploy."
+          echo "user-service not affected, skipping deploy."
         fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
@@ -306,7 +309,7 @@ steps:
         INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
         INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
         INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-        INTEXURAOS_AUTH_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_SERVICE_URL)
+        INTEXURAOS_USER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_USER_SERVICE_URL)
         INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
         INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)

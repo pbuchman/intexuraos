@@ -16,9 +16,9 @@ Before starting this issue, ensure ALL of these are complete:
 
 **Tier 1:**
 
-- [x] `1-0-auth-service-token-routes.md` - Token routes ≥85%
-- [x] `1-1-auth-service-device-routes.md` - Device routes ≥90%
-- [x] `1-2-auth-service-shared-httpclient.md` - Shared utils ≥95%
+- [x] `1-0-user-service-token-routes.md` - Token routes ≥85%
+- [x] `1-1-user-service-device-routes.md` - Device routes ≥90%
+- [x] `1-2-user-service-shared-httpclient.md` - Shared utils ≥95%
 - [x] `1-3-promptvault-usecases.md` - Use cases ≥85%
 - [x] `1-4-whatsapp-webhook-usecase.md` - Webhook use case ≥80%
 - [x] `1-5-whatsapp-routes.md` - Routes ≥85%

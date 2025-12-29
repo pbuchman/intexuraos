@@ -1,3 +1,4 @@
+export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { DashboardPage } from './DashboardPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';

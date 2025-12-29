@@ -25,7 +25,7 @@ GitHub Copilot loads instructions based on the file you're working in:
 
 | Working in                             | Instructions loaded                  |
 | -------------------------------------- | ------------------------------------ |
-| `apps/auth-service/src/routes.ts`      | Global + `apps.instructions.md`      |
+| `apps/user-service/src/routes.ts`      | Global + `apps.instructions.md`      |
 | `packages/domain/identity/src/user.ts` | Global + `packages.instructions.md`  |
 | `terraform/main.tf`                    | Global + `terraform.instructions.md` |
 | `README.md`                            | Global only                          |

@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial project structure with hexagonal architecture
-- **auth-service**: OAuth2 Device Authorization Flow, ChatGPT Actions OAuth proxy
+- **user-service**: OAuth2 Device Authorization Flow, ChatGPT Actions OAuth proxy
 - **promptvault-service**: Prompt template management with Notion integration
 - **whatsapp-service**: WhatsApp Business Cloud API webhook receiver
 - **api-docs-hub**: Unified Swagger UI aggregating all service OpenAPI specs

@@ -1,6 +1,6 @@
 # IntexuraOS — Copilot Instructions
 
-**All project instructions are maintained in [CLAUDE.md](./CLAUDE.md).**
+**All project instructions are maintained in [CLAUDE.md](../.claude/CLAUDE.md).**
 
 Please refer to that file for:
 

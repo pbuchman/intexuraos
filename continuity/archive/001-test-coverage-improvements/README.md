@@ -21,9 +21,9 @@ Tier 0 (Independent)
         │
         ▼ (all Tier 0 must be complete)
 Tier 1 (Depends on ALL Tier 0)
-├── 1-0-auth-service-token-routes.md
-├── 1-1-auth-service-device-routes.md
-├── 1-2-auth-service-shared-httpclient.md
+├── 1-0-user-service-token-routes.md
+├── 1-1-user-service-device-routes.md
+├── 1-2-user-service-shared-httpclient.md
 ├── 1-3-promptvault-usecases.md
 ├── 1-4-whatsapp-webhook-usecase.md
 ├── 1-5-whatsapp-routes.md
@@ -51,9 +51,9 @@ Tier 2 (Depends on ALL Tier 0 + Tier 1)
 
 | File                                    | Target    | Description                      | Status      |
 | --------------------------------------- | --------- | -------------------------------- | ----------- |
-| `1-0-auth-service-token-routes.md`      | 43% → 85% | Token refresh routes             | [completed] |
-| `1-1-auth-service-device-routes.md`     | 77% → 90% | Device authorization routes      | [completed] |
-| `1-2-auth-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client | [completed] |
+| `1-0-user-service-token-routes.md`      | 43% → 85% | Token refresh routes             | [completed] |
+| `1-1-user-service-device-routes.md`     | 77% → 90% | Device authorization routes      | [completed] |
+| `1-2-user-service-shared-httpclient.md` | 75% → 95% | Shared utilities and HTTP client | [completed] |
 | `1-3-promptvault-usecases.md`           | 45% → 85% | Domain use cases                 | [completed] |
 | `1-4-whatsapp-webhook-usecase.md`       | 27% → 80% | Webhook processing logic         | [completed] |
 | `1-5-whatsapp-routes.md`                | 66% → 90% | WhatsApp routes                  | [completed] |
@@ -94,7 +94,7 @@ Each issue file is self-contained. To execute:
 
 | Area                      | Current  | Target | Issue                            |
 | ------------------------- | -------- | ------ | -------------------------------- |
-| tokenRoutes.ts            | 43.97%   | 85%+   | 1-0-auth-service-token-routes.md |
+| tokenRoutes.ts            | 43.97%   | 85%+   | 1-0-user-service-token-routes.md |
 | processWhatsAppWebhook.ts | 27.11%   | 80%+   | 1-4-whatsapp-webhook-usecase.md  |
 | promptvault usecases      | 45-66%   | 85%+   | 1-3-promptvault-usecases.md      |
 | notion-service shared.ts  | 20%      | 80%+   | 1-7-notion-service-coverage.md   |

@@ -21,8 +21,8 @@ This directory contains LLM-executable issue prompts for raising test coverage f
 | whatsapp webhookRoutes.ts    | 72.37% | 94.94% | 90%+   | ✅ Done |
 | whatsapp shared.ts           | 66.66% | 100%   | 85%+   | ✅ Done |
 | notion-service shared.ts     | 20%    | 100%   | 85%+   | ✅ Done |
-| auth-service shared.ts       | 75%    | 100%   | 90%+   | ✅ Done |
-| auth-service deviceRoutes.ts | 81.67% | 98.47% | 90%+   | ✅ Done |
+| user-service shared.ts       | 75%    | 100%   | 90%+   | ✅ Done |
+| user-service deviceRoutes.ts | 81.67% | 98.47% | 90%+   | ✅ Done |
 
 ## Completed Issues (archived to ./archive/)
 
@@ -33,7 +33,7 @@ This directory contains LLM-executable issue prompts for raising test coverage f
 - [x] 1-2-promptvault-usecases.md - All usecases at 100%
 - [x] 1-3-whatsapp-routes.md - mappingRoutes 93.18%, shared.ts 100%, webhookRoutes 94.94%
 - [x] 1-4-notion-service-shared.md - shared.ts at 100%
-- [x] 1-5-auth-service-remaining.md - shared.ts at 100%, deviceRoutes at 98.47%
+- [x] 1-5-user-service-remaining.md - shared.ts at 100%, deviceRoutes at 98.47%
 - [x] 2-0-raise-thresholds-90.md - Thresholds updated to 90/82/75/90
 
 ## Execution Complete
@@ -51,7 +51,7 @@ Tier 1 (Depends on ALL Tier 0) ✅
 ├── 1-2-promptvault-usecases.md        ✅
 ├── 1-3-whatsapp-routes.md             ✅
 ├── 1-4-notion-service-shared.md       ✅
-└── 1-5-auth-service-remaining.md      ✅
+└── 1-5-user-service-remaining.md      ✅
 
 Tier 2 (Depends on ALL Tier 0 + Tier 1) ✅
 └── 2-0-raise-thresholds-90.md         ✅

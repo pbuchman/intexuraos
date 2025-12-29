@@ -157,13 +157,13 @@ In your ChatGPT GPT builder, go to **Actions** → **Authentication**:
 | **Authentication Type**   | `OAuth`                                                                        |
 | **Client ID**             | From Auth0 → Your App → Settings → Client ID                                   |
 | **Client Secret**         | From Auth0 → Your App → Settings → Client Secret                               |
-| **Authorization URL**     | `https://intexuraos-auth-service-ooafxzbaua-lm.a.run.app/auth/oauth/authorize` |
-| **Token URL**             | `https://intexuraos-auth-service-cj44trunra-lm.a.run.app/auth/oauth/token`     |
+| **Authorization URL**     | `https://intexuraos-user-service-ooafxzbaua-lm.a.run.app/auth/oauth/authorize` |
+| **Token URL**             | `https://intexuraos-user-service-cj44trunra-lm.a.run.app/auth/oauth/token`     |
 | **Scope**                 | `openid profile email offline_access`                                          |
 | **Token Exchange Method** | `Default (POST request)`                                                       |
 
 > **Important**: Both Authorization URL and Token URL must be on the same root domain as your API.
-> The auth-service `/authorize` endpoint redirects to Auth0 to satisfy ChatGPT's domain requirement.
+> The user-service `/authorize` endpoint redirects to Auth0 to satisfy ChatGPT's domain requirement.
 
 ### Update Callback URL After GPT Creation
 
@@ -250,11 +250,11 @@ export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
 
 # Populate secret versions (Terraform created the secrets, we add values)
 
-# Auth0 domain (tenant) - required for auth-service DAF endpoints
+# Auth0 domain (tenant) - required for user-service DAF endpoints
 echo -n "${AUTH0_DOMAIN}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
 
-# Auth0 client ID (from Native app) - required for auth-service DAF endpoints
+# Auth0 client ID (from Native app) - required for user-service DAF endpoints
 echo -n "${AUTH0_CLIENT_ID}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=- --project=$PROJECT_ID
 
@@ -287,7 +287,7 @@ echo -n "new-value" | \
 ### Step 1: Request Device Code
 
 ```bash
-# Using auth-service helper
+# Using user-service helper
 curl -X POST http://localhost:3000/auth/device/start \
   -H "Content-Type: application/json" \
   -d '{
@@ -324,7 +324,7 @@ Response:
 ### Step 3: Poll for Token
 
 ```bash
-# Using auth-service helper
+# Using user-service helper
 curl -X POST http://localhost:3000/auth/device/poll \
   -H "Content-Type: application/json" \
   -d '{"device_code": "XXXX-XXXX-XXXX"}'
@@ -533,7 +533,7 @@ curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
 
 **Fix:**
 
-1. Include `offline_access` in scope (default in updated auth-service)
+1. Include `offline_access` in scope (default in updated user-service)
 2. Verify API settings in Auth0 Dashboard
 
 ### Wrong Domain
@@ -593,7 +593,7 @@ export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 
 ## 12. Environment Variable Summary
 
-### auth-service
+### user-service
 
 | Variable                          | Description                               | Example                                                     |
 | --------------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
@@ -624,7 +624,7 @@ When debugging auth issues, verify in order:
 6. ✅ **Encryption Key**: Valid base64-encoded 32-byte key
 7. ✅ **Token Response**: Includes `refresh_token` field
 8. ✅ **Firestore**: `auth_tokens` collection exists and has write permissions
-9. ✅ **Logs**: Check for token storage errors in auth-service logs
+9. ✅ **Logs**: Check for token storage errors in user-service logs
 10. ✅ **Token Expiry**: Check idle and absolute lifetimes haven't expired
 
 ## 14. Production Checklist

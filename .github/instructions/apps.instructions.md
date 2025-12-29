@@ -4,7 +4,7 @@ applyTo: 'apps/**'
 
 # Apps Instructions
 
-See [CLAUDE.md — Apps section](../CLAUDE.md#apps-apps) for full instructions.
+See [CLAUDE.md — Apps section](../../.claude/CLAUDE.md#apps-apps) for full instructions.
 
 **Quick reference:**
 

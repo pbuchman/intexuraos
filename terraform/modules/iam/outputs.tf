@@ -1,7 +1,7 @@
 output "service_accounts" {
   description = "Map of service names to their service account emails"
   value = {
-    auth_service                 = google_service_account.auth_service.email
+    user_service                 = google_service_account.user_service.email
     promptvault_service          = google_service_account.promptvault_service.email
     notion_service               = google_service_account.notion_service.email
     whatsapp_service             = google_service_account.whatsapp_service.email
@@ -10,9 +10,9 @@ output "service_accounts" {
   }
 }
 
-output "auth_service_sa" {
-  description = "Auth service service account email"
-  value       = google_service_account.auth_service.email
+output "user_service_sa" {
+  description = "User service service account email"
+  value       = google_service_account.user_service.email
 }
 
 output "promptvault_service_sa" {

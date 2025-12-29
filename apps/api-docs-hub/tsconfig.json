@@ -10,8 +10,6 @@
   "references": [
     { "path": "../../packages/common-core" },
     { "path": "../../packages/common-http" },
-    { "path": "../../packages/infra-firestore" },
-    { "path": "../../packages/infra-notion" },
     { "path": "../../packages/http-server" }
   ]
 }

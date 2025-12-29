@@ -6,12 +6,19 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   MessageSquare,
   Bell,
   BellRing,
   Menu,
   X,
+  Settings,
+  Filter,
 } from 'lucide-react';
+import { useAuth } from '@/context';
+import { getUserSettings } from '@/services/authApi';
+import type { NotificationFilter } from '@/types';
 
 interface NavItem {
   to: string;
@@ -19,19 +26,87 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const navItems: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/notion', label: 'Notion Connection', icon: FileText },
-  { to: '/whatsapp', label: 'WhatsApp Connection', icon: MessageCircle },
-  { to: '/whatsapp-notes', label: 'WhatsApp Notes', icon: MessageSquare },
-  { to: '/mobile-notifications', label: 'Mobile Setup', icon: Bell },
-  { to: '/mobile-notifications/list', label: 'Notifications', icon: BellRing },
+const topNavItems: NavItem[] = [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }];
+
+const settingsItems: NavItem[] = [
+  { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { to: '/settings/mobile', label: 'Mobile', icon: Bell },
+  { to: '/settings/notion', label: 'Notion', icon: FileText },
 ];
 
+const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
+
+/**
+ * Build URL search params from a notification filter.
+ */
+function buildFilterUrl(filter: NotificationFilter): string {
+  const params = new URLSearchParams();
+  if (filter.app !== undefined) {
+    params.set('app', filter.app);
+  }
+  if (filter.source !== undefined) {
+    params.set('source', filter.source);
+  }
+  if (filter.title !== undefined) {
+    params.set('title', filter.title);
+  }
+  const queryString = params.toString();
+  return queryString !== '' ? `/notifications?${queryString}` : '/notifications';
+}
+
+/**
+ * Check if a filter matches current URL search params.
+ */
+function filterMatchesUrl(filter: NotificationFilter, search: string): boolean {
+  const params = new URLSearchParams(search);
+  const urlApp = params.get('app') ?? '';
+  const urlSource = params.get('source') ?? '';
+  const urlTitle = params.get('title') ?? '';
+
+  return (
+    (filter.app ?? '') === urlApp &&
+    (filter.source ?? '') === urlSource &&
+    (filter.title ?? '') === urlTitle
+  );
+}
+
 export function Sidebar(): React.JSX.Element {
+  const { getAccessToken, user } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
   const location = useLocation();
+
+  // Auto-expand settings when on a settings page
+  useEffect(() => {
+    if (location.pathname.startsWith('/settings')) {
+      setIsSettingsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand notifications when on notifications page
+  useEffect(() => {
+    if (location.pathname.startsWith('/notifications')) {
+      setIsNotificationsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Fetch saved filters
+  useEffect(() => {
+    const fetchFilters = async (): Promise<void> => {
+      if (user?.sub === undefined) return;
+      try {
+        const token = await getAccessToken();
+        const settings = await getUserSettings(token, user.sub);
+        setSavedFilters(settings.notifications.filters);
+      } catch {
+        /* Best-effort fetch, ignore errors */
+      }
+    };
+    void fetchFilters();
+  }, [getAccessToken, user?.sub]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -107,11 +182,12 @@ export function Sidebar(): React.JSX.Element {
         </button>
 
         <nav className="mt-8 flex-1 space-y-1 p-3 md:mt-0">
-          {navItems.map((item) => (
+          {/* Top nav items */}
+          {topNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end
               className={({ isActive }): string =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
@@ -124,6 +200,138 @@ export function Sidebar(): React.JSX.Element {
               {!isCollapsed ? <span>{item.label}</span> : null}
             </NavLink>
           ))}
+
+          {/* Settings section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsSettingsOpen(!isSettingsOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/settings')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Settings className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Settings</span>
+                  {isSettingsOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Settings sub-items */}
+            {isSettingsOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                {settingsItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Notifications section (collapsible with saved filters) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsNotificationsOpen(!isNotificationsOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/notifications')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <BellRing className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Notifications</span>
+                  {isNotificationsOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Notifications sub-items */}
+            {isNotificationsOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                <NavLink
+                  to="/notifications"
+                  end
+                  className={({ isActive }): string =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`
+                  }
+                >
+                  <Bell className="h-4 w-4 shrink-0" />
+                  <span>All</span>
+                </NavLink>
+                {savedFilters.map((filter) => (
+                  <NavLink
+                    key={filter.name}
+                    to={buildFilterUrl(filter)}
+                    className={(): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        filterMatchesUrl(filter, location.search)
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <Filter className="h-4 w-4 shrink-0 text-blue-600" />
+                    <span title={filter.name}>{filter.name}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Bottom nav items */}
+          <div className="pt-2">
+            {bottomNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end
+                className={({ isActive }): string =>
+                  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`
+                }
+              >
+                <item.icon className="h-5 w-5 shrink-0" />
+                {!isCollapsed ? <span>{item.label}</span> : null}
+              </NavLink>
+            ))}
+          </div>
         </nav>
 
         {/* Collapse button - desktop only */}

@@ -14,11 +14,27 @@ export interface RepositoryError {
 }
 
 /**
+ * Filter options for listing notifications.
+ * Multiple filters can be combined (AND logic).
+ */
+export interface FilterOptions {
+  source?: string;
+  app?: string;
+  title?: string;
+}
+
+/**
+ * Fields that support distinct value retrieval.
+ */
+export type DistinctFilterField = 'app' | 'source';
+
+/**
  * Pagination options for listing notifications.
  */
 export interface PaginationOptions {
   limit: number;
   cursor?: string;
+  filter?: FilterOptions;
 }
 
 /**
@@ -64,4 +80,13 @@ export interface NotificationRepository {
    * Delete a notification by ID.
    */
   delete(id: string): Promise<Result<void, RepositoryError>>;
+
+  /**
+   * Get distinct values for a filterable field.
+   * Used to populate filter dropdowns.
+   */
+  getDistinctValues(
+    userId: string,
+    field: DistinctFilterField
+  ): Promise<Result<string[], RepositoryError>>;
 }
