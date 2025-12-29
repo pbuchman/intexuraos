@@ -9,3 +9,4 @@ export { MobileNotificationsListPage } from './MobileNotificationsListPage.js';
 export { ApiKeysSettingsPage } from './ApiKeysSettingsPage.js';
 export { LlmOrchestratorPage } from './LlmOrchestratorPage.js';
 export { ResearchListPage } from './ResearchListPage.js';
+export { ResearchDetailPage } from './ResearchDetailPage.js';
