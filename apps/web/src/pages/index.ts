@@ -6,3 +6,4 @@ export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
 export { MobileNotificationsListPage } from './MobileNotificationsListPage.js';
+export { ApiKeysSettingsPage } from './ApiKeysSettingsPage.js';
