@@ -9,14 +9,69 @@ export interface ClaudeClient {
   research(prompt: string): Promise<Result<ResearchResult, ClaudeError>>;
 }
 
+function logRequest(
+  method: string,
+  model: string,
+  promptLength: number,
+  promptPreview: string
+): { requestId: string; startTime: number } {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+  // eslint-disable-next-line no-console
+  console.info(
+    `[Claude:${method}] Request`,
+    JSON.stringify({ requestId, model, promptLength, promptPreview })
+  );
+  return { requestId, startTime };
+}
+
+function logResponse(
+  method: string,
+  requestId: string,
+  startTime: number,
+  responseLength: number,
+  responsePreview: string
+): void {
+  // eslint-disable-next-line no-console
+  console.info(
+    `[Claude:${method}] Response`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      responseLength,
+      responsePreview,
+    })
+  );
+}
+
+function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[Claude:${method}] Error`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  );
+}
+
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
+  const modelName = config.model ?? DEFAULT_MODEL;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
+      const { requestId, startTime } = logRequest(
+        'research',
+        modelName,
+        prompt.length,
+        prompt.slice(0, 200)
+      );
+
       try {
         const response = await client.messages.create({
-          model: config.model ?? DEFAULT_MODEL,
+          model: modelName,
           max_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         });
@@ -27,8 +82,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
 
+        logResponse('research', requestId, startTime, content.length, content.slice(0, 200));
         return ok({ content });
       } catch (error) {
+        logError('research', requestId, startTime, error);
         return err(mapClaudeError(error));
       }
     },

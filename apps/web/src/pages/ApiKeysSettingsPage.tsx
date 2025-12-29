@@ -27,6 +27,39 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
+/**
+ * Validate API key format for each provider.
+ * Returns error message if invalid, null if valid.
+ */
+function validateApiKeyFormat(provider: LlmProvider, key: string): string | null {
+  if (key.length < 10) {
+    return 'API key is too short';
+  }
+
+  switch (provider) {
+    case 'google':
+      if (!key.startsWith('AIza')) {
+        return 'Google API key should start with "AIza"';
+      }
+      if (key.length !== 39) {
+        return 'Google API key should be 39 characters';
+      }
+      break;
+    case 'openai':
+      if (!key.startsWith('sk-')) {
+        return 'OpenAI API key should start with "sk-"';
+      }
+      break;
+    case 'anthropic':
+      if (!key.startsWith('sk-ant-')) {
+        return 'Anthropic API key should start with "sk-ant-"';
+      }
+      break;
+  }
+
+  return null;
+}
+
 export function ApiKeysSettingsPage(): React.JSX.Element {
   const { keys, loading, error, setKey, deleteKey } = useLlmKeys();
 
@@ -90,13 +123,18 @@ function ApiKeyCard({
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleSave = (): void => {
-    if (inputValue.length >= 10) {
-      onSave(inputValue);
-      setInputValue('');
-      setIsEditing(false);
+    const error = validateApiKeyFormat(provider.id, inputValue);
+    if (error !== null) {
+      setValidationError(error);
+      return;
     }
+    setValidationError(null);
+    onSave(inputValue);
+    setInputValue('');
+    setIsEditing(false);
   };
 
   const handleDelete = (): void => {
@@ -160,8 +198,12 @@ function ApiKeyCard({
             value={inputValue}
             onChange={(e): void => {
               setInputValue(e.target.value);
+              setValidationError(null);
             }}
           />
+          {validationError !== null ? (
+            <p className="text-sm text-red-600">{validationError}</p>
+          ) : null}
           <div className="flex gap-3">
             <Button type="button" onClick={handleSave} disabled={inputValue.length < 10}>
               Save
@@ -173,6 +215,7 @@ function ApiKeyCard({
                 onClick={(): void => {
                   setIsEditing(false);
                   setInputValue('');
+                  setValidationError(null);
                 }}
               >
                 Cancel

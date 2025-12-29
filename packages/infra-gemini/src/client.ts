@@ -13,38 +13,98 @@ export interface GeminiClient {
   ): Promise<Result<string, GeminiError>>;
 }
 
+function logRequest(
+  method: string,
+  model: string,
+  promptLength: number,
+  promptPreview: string
+): { requestId: string; startTime: number } {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+  // eslint-disable-next-line no-console
+  console.info(
+    `[Gemini:${method}] Request`,
+    JSON.stringify({ requestId, model, promptLength, promptPreview })
+  );
+  return { requestId, startTime };
+}
+
+function logResponse(
+  method: string,
+  requestId: string,
+  startTime: number,
+  responseLength: number,
+  responsePreview: string
+): void {
+  // eslint-disable-next-line no-console
+  console.info(
+    `[Gemini:${method}] Response`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      responseLength,
+      responsePreview,
+    })
+  );
+}
+
+function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[Gemini:${method}] Error`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  );
+}
+
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const genAI = new GoogleGenerativeAI(config.apiKey);
+  const modelName = config.model ?? DEFAULT_MODEL;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: config.model ?? DEFAULT_MODEL,
-        });
+      const { requestId, startTime } = logRequest(
+        'research',
+        modelName,
+        prompt.length,
+        prompt.slice(0, 200)
+      );
 
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent(prompt);
         const response = result.response;
         const text = response.text();
 
+        logResponse('research', requestId, startTime, text.length, text.slice(0, 200));
         return ok({ content: text });
       } catch (error) {
+        logError('research', requestId, startTime, error);
         return err(mapGeminiError(error));
       }
     },
 
     async generateTitle(prompt: string): Promise<Result<string, GeminiError>> {
+      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+      const { requestId, startTime } = logRequest(
+        'generateTitle',
+        modelName,
+        titlePrompt.length,
+        prompt.slice(0, 100)
+      );
+
       try {
-        const model = genAI.getGenerativeModel({
-          model: config.model ?? DEFAULT_MODEL,
-        });
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(titlePrompt);
+        const text = result.response.text().trim();
 
-        const result = await model.generateContent(
-          `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`
-        );
-
-        return ok(result.response.text().trim());
+        logResponse('generateTitle', requestId, startTime, text.length, text);
+        return ok(text);
       } catch (error) {
+        logError('generateTitle', requestId, startTime, error);
         return err(mapGeminiError(error));
       }
     },
@@ -53,16 +113,23 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       originalPrompt: string,
       reports: SynthesisInput[]
     ): Promise<Result<string, GeminiError>> {
+      const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
+      const { requestId, startTime } = logRequest(
+        'synthesize',
+        modelName,
+        synthesisPrompt.length,
+        originalPrompt.slice(0, 100)
+      );
+
       try {
-        const model = genAI.getGenerativeModel({
-          model: config.model ?? DEFAULT_MODEL,
-        });
-
-        const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
+        const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent(synthesisPrompt);
+        const text = result.response.text();
 
-        return ok(result.response.text());
+        logResponse('synthesize', requestId, startTime, text.length, text.slice(0, 200));
+        return ok(text);
       } catch (error) {
+        logError('synthesize', requestId, startTime, error);
         return err(mapGeminiError(error));
       }
     },
