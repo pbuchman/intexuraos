@@ -119,3 +119,9 @@ If thresholds not met:
 1. Add more tests
 2. Re-verify
 3. Do NOT modify vitest.config.ts thresholds without permission
+
+---
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

@@ -124,3 +124,9 @@ If verification fails:
 
 1. Revert changes to Sidebar
 2. Revert changes to App.tsx
+
+---
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

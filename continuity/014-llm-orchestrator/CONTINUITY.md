@@ -92,15 +92,22 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 
 **Now:**
 
-- Tier 6: Frontend (API keys page, orchestrator page, etc.)
+- Task 6-0: Create API Keys Service Client
 
 **Next:**
 
+- Task 6-1 to 6-6: Frontend pages
 - Tier 7: Deployment (Terraform, Cloud Build)
 - Tier 8: Verification (tests, coverage)
 
 **Backend Complete!** All Tiers 0-5 implemented. The llm-orchestrator-service
 has domain models, ports, usecases, infrastructure adapters, routes, and DI container.
+
+### 2024-12-29 — Added Continuation Directives
+
+Added "DO NOT STOP" continuation directive to all task files (6-0 through 8-2) except
+the final task (8-3). This ensures uninterrupted execution through the entire task series.
+Also updated `.github/prompts/continuity.prompt.md` with the continuation directive rule.
 
 ## Open Questions
 

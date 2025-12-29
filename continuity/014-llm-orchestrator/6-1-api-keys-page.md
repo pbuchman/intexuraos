@@ -254,3 +254,9 @@ npm run lint
 If verification fails:
 
 1. Remove `ApiKeysSettingsPage.tsx`
+
+---
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.
