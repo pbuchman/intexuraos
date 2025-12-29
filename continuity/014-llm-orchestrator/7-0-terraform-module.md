@@ -284,3 +284,9 @@ If verification fails:
 
 1. Remove module directory
 2. Revert changes to environment main.tf
+
+---
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

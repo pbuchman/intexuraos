@@ -86,8 +86,20 @@ Before creating or proposing any issue:
 - Definition of done
 - Verification commands (fenced code blocks)
 - Rollback plan
+- **Continuation directive** (see rule 4 below)
 
-4. Generate `INSTRUCTIONS.md` inside:
+4. **Continuation Directive Rule:**
+   - All task files EXCEPT the final task in the series MUST include this directive at the end:
+     ```
+     ---
+     ## Continuation
+
+     **DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.
+     ```
+   - The FINAL task in the series should NOT include this directive (allowing natural completion and user review).
+   - This ensures uninterrupted execution through the entire task series.
+
+5. Generate `INSTRUCTIONS.md` inside:
    ```
    continuity/NNN-task-name/INSTRUCTIONS.md
    ```
@@ -98,7 +110,7 @@ Before creating or proposing any issue:
 - Ledger semantics
 - Resume procedure after interruption
 
-5. **First iteration only:** After completing task generation, you MUST pause and ask the user:
+6. **First iteration only:** After completing task generation, you MUST pause and ask the user:
 
    > "Task breakdown complete. Review the generated issues in `continuity/NNN-task-name/`. Proceed with execution?"
 

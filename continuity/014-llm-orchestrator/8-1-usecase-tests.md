@@ -333,3 +333,9 @@ npm run test -- apps/llm-orchestrator-service
 If verification fails:
 
 1. Remove test files
+
+---
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.
