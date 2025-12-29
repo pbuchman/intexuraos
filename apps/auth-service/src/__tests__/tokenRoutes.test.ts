@@ -430,6 +430,45 @@ describe('Token Refresh Routes', () => {
         expect(storedTokens?.refreshToken).toBe('valid-refresh-token');
       });
 
+      it('returns tokens without optional scope and idToken when not provided', async () => {
+        fakeAuth0Client.setNextResult(
+          ok({
+            accessToken: 'new-access-token',
+            tokenType: 'Bearer',
+            expiresIn: 7200,
+            scope: undefined,
+            idToken: undefined,
+            refreshToken: undefined,
+          })
+        );
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/refresh',
+          payload: { userId: 'user-123' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: {
+            access_token: string;
+            token_type: string;
+            expires_in: number;
+            scope?: string;
+            id_token?: string;
+          };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.access_token).toBe('new-access-token');
+        expect(body.data.token_type).toBe('Bearer');
+        expect(body.data.expires_in).toBe(7200);
+        // Verify optional fields are not present when undefined
+        expect(body.data.scope).toBeUndefined();
+        expect(body.data.id_token).toBeUndefined();
+      });
+
       it('succeeds even when saveTokens fails (warning logged)', async () => {
         fakeAuth0Client.setNextResult(
           ok({

@@ -106,12 +106,58 @@ describe('Health Utilities', () => {
       expect(result.details).toEqual({ note: 'Skipped in test environment' });
     });
 
-    // Note: Testing the actual Firestore path (lines 67-84) requires
-    // removing VITEST from env, but vitest sets it automatically.
-    // The Firestore connectivity code is tested implicitly through
-    // integration tests in apps that use these health checks.
-    // The coverage for these lines is acceptable as defensive code
-    // that runs only in production environments.
+    it('returns ok when Firestore check succeeds in production mode', async () => {
+      // Temporarily clear test env markers to test production path
+      const originalVitest = process.env['VITEST'];
+      const originalNodeEnv = process.env['NODE_ENV'];
+      delete process.env['VITEST'];
+      process.env['NODE_ENV'] = 'production';
+
+      // Mock getFirestore to return a mock db
+      const { getFirestore } = await import('@intexuraos/infra-firestore');
+      const mockDb = {
+        listCollections: vi.fn().mockResolvedValue([]),
+      };
+      vi.mocked(getFirestore).mockReturnValue(mockDb as unknown as ReturnType<typeof getFirestore>);
+
+      try {
+        const result = await checkFirestore();
+
+        expect(result.name).toBe('firestore');
+        expect(result.status).toBe('ok');
+        expect(result.details).toBeNull();
+      } finally {
+        // Restore env
+        process.env['VITEST'] = originalVitest;
+        process.env['NODE_ENV'] = originalNodeEnv;
+      }
+    });
+
+    it('returns down when Firestore check fails in production mode', async () => {
+      // Temporarily clear test env markers to test production path
+      const originalVitest = process.env['VITEST'];
+      const originalNodeEnv = process.env['NODE_ENV'];
+      delete process.env['VITEST'];
+      process.env['NODE_ENV'] = 'production';
+
+      // Mock getFirestore to throw
+      const { getFirestore } = await import('@intexuraos/infra-firestore');
+      vi.mocked(getFirestore).mockImplementation(() => {
+        throw new Error('Firestore connection failed');
+      });
+
+      try {
+        const result = await checkFirestore();
+
+        expect(result.name).toBe('firestore');
+        expect(result.status).toBe('down');
+        expect(result.details).toEqual({ error: 'Firestore connection failed' });
+      } finally {
+        // Restore env
+        process.env['VITEST'] = originalVitest;
+        process.env['NODE_ENV'] = originalNodeEnv;
+      }
+    });
   });
 
   describe('checkNotionSdk', () => {

@@ -252,5 +252,27 @@ describe('Notion Connection Repository', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
     });
+
+    it('handles disconnect when existing doc has missing fields', async () => {
+      // Manually create a partial document without promptVaultPageId and createdAt
+      const db = fakeDb;
+      await db.collection('notion_connections').doc('partial-user').set({
+        userId: 'partial-user',
+        notionToken: 'some-token',
+        connected: true,
+        updatedAt: new Date().toISOString(),
+        // Note: promptVaultPageId and createdAt are missing
+      });
+
+      const result = await disconnectNotion('partial-user');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.connected).toBe(false);
+        // Should fall back to default values when fields are missing
+        expect(result.value.promptVaultPageId).toBe('');
+        expect(result.value.createdAt).toBeDefined();
+      }
+    });
   });
 });
