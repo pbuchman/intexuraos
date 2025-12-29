@@ -86,15 +86,16 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 - 4-1: Create LLM adapters ✓
 - 4-2: Create notification adapter ✓
 - 5-0: Create JSON schemas ✓
+- 5-1: Create research routes ✓
 
 **Now:**
 
-- 5-1: Create research routes
+- 5-2: Setup server
 
 **Next:**
 
-- 5-2: Setup server
 - 5-3: Create DI container
+- Tier 6: Frontend (API keys page, orchestrator page, etc.)
 
 ## Open Questions
 
