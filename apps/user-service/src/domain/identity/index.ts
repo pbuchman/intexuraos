@@ -1,5 +1,5 @@
 /**
- * Auth-service domain layer - Identity module.
+ * user-service domain layer - Identity module.
  *
  * Provides:
  * - models/    Domain entities (AuthToken, AuthError)

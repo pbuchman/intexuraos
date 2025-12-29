@@ -29,7 +29,7 @@ To achieve 90% coverage efficiently, we need robust shared test utilities. The c
 
 Current test utility files:
 
-- `apps/auth-service/src/__tests__/` - uses testUtils for JWT/JWKS mocking
+- `apps/user-service/src/__tests__/` - uses testUtils for JWT/JWKS mocking
 - `apps/notion-service/src/__tests__/fakes.ts` - 73.38% covered
 - `apps/promptvault-service/src/__tests__/fakes.ts` - 71.19% covered
 - `apps/whatsapp-service/src/__tests__/fakes.ts` - 48.57% covered
@@ -68,7 +68,7 @@ The whatsapp-service fakes have particularly low coverage (48.57%), indicating u
 1. Read each app's test utility files:
 
 ===
-cat apps/auth-service/src/**tests**/testUtils.ts
+cat apps/user-service/src/**tests**/testUtils.ts
 cat apps/notion-service/src/**tests**/fakes.ts
 cat apps/notion-service/src/**tests**/testUtils.ts
 cat apps/promptvault-service/src/**tests**/fakes.ts

@@ -1,5 +1,5 @@
 /**
- * Auth-service domain usecases.
+ * user-service domain usecases.
  */
 
 export {

@@ -13,7 +13,7 @@
  *
  * Output: /workspace/affected.json
  * Format: {
- *   "services": ["auth-service", "promptvault-service", "whatsapp-service", "api-docs-hub"]
+ *   "services": ["user-service", "promptvault-service", "whatsapp-service", "api-docs-hub"]
  * }
  */
 
@@ -30,8 +30,8 @@ const BRANCH_NAME = process.env.BRANCH_NAME || 'development';
 // terraform/ changes affect all services (infrastructure changes require redeploy)
 // cloudbuild/ changes affect all services (build/deploy logic changes require redeploy)
 const SERVICE_DEPS = {
-  'auth-service': [
-    'apps/auth-service/',
+  'user-service': [
+    'apps/user-service/',
     'packages/common/',
     'terraform/',
     'cloudbuild/',

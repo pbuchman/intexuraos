@@ -25,7 +25,7 @@
 
 ## Problem Statement
 
-`apps/auth-service/src/routes/v1/tokenRoutes.ts` has only 53.9% line coverage. The uncovered lines (85-147, 155-173) contain:
+`apps/user-service/src/routes/v1/tokenRoutes.ts` has only 53.9% line coverage. The uncovered lines (85-147, 155-173) contain:
 
 - Token refresh logic
 - Error handling paths
@@ -40,8 +40,8 @@ This is a critical auth flow that needs comprehensive test coverage.
 
 ### In Scope
 
-- `apps/auth-service/src/routes/v1/tokenRoutes.ts`
-- `apps/auth-service/src/__tests__/tokenRoutes.test.ts` (create or extend)
+- `apps/user-service/src/routes/v1/tokenRoutes.ts`
+- `apps/user-service/src/__tests__/tokenRoutes.test.ts` (create or extend)
 - Mocking Auth0 client responses
 - Mocking Firestore token repository
 
@@ -69,13 +69,13 @@ This is a critical auth flow that needs comprehensive test coverage.
 1. Read the source file to understand the logic:
 
 ===
-cat apps/auth-service/src/routes/v1/tokenRoutes.ts
+cat apps/user-service/src/routes/v1/tokenRoutes.ts
 ===
 
 2. Read existing tests:
 
 ===
-cat apps/auth-service/src/**tests**/tokenRoutes.test.ts
+cat apps/user-service/src/**tests**/tokenRoutes.test.ts
 ===
 
 3. Identify untested branches (lines 85-147, 155-173):

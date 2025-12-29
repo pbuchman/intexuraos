@@ -25,7 +25,7 @@
 
 Each app has its own test utilities but patterns are inconsistent:
 
-- `apps/auth-service/src/__tests__/` - No fakes.ts (uses inline mocks)
+- `apps/user-service/src/__tests__/` - No fakes.ts (uses inline mocks)
 - `apps/promptvault-service/src/__tests__/fakes.ts` - 71.19% coverage
 - `apps/notion-service/src/__tests__/fakes.ts` - 73.38% coverage
 - `apps/whatsapp-service/src/__tests__/fakes.ts` - 48.57% coverage

@@ -197,7 +197,7 @@ Expected outputs:
 
 ```
 artifact_registry_url = "europe-central2-docker.pkg.dev/intexuraos-dev-yourname/intexuraos-dev"
-auth_service_url = "https://intexuraos-user-service-xxxxx-ew.a.run.app"
+user_service_url = "https://intexuraos-user-service-xxxxx-ew.a.run.app"
 promptvault_service_url = "https://intexuraos-promptvault-service-xxxxx-ew.a.run.app"
 notion_service_url = "https://intexuraos-notion-service-xxxxx-ew.a.run.app"
 whatsapp_service_url = "https://intexuraos-whatsapp-service-xxxxx-ew.a.run.app"

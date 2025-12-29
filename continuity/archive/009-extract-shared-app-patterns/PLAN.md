@@ -15,7 +15,7 @@
 **Files to analyze**:
 
 - `apps/promptvault-service/src/server.ts` (651 lines)
-- `apps/auth-service/src/server.ts` (389 lines)
+- `apps/user-service/src/server.ts` (389 lines)
 - `apps/notion-service/src/server.ts` (551 lines)
 
 **Common patterns identified**:

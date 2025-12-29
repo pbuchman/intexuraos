@@ -89,7 +89,7 @@ Convert `packages/common` to re-export from new packages for backward compatibil
 
 Update imports in:
 
-- `apps/auth-service/`
+- `apps/user-service/`
 - `apps/notion-service/`
 - `apps/promptvault-service/`
 - `apps/whatsapp-service/`
@@ -173,7 +173,7 @@ The current naming convention is consistent, so this trade-off is acceptable.
 
 | Service                      | Domain Layer | Usecases Folder | Routes Need Refactoring |
 | ---------------------------- | ------------ | --------------- | ----------------------- |
-| auth-service                 | ✅           | ❌              | YES                     |
+| user-service                 | ✅           | ❌              | YES                     |
 | whatsapp-service             | ✅           | ✅              | Review needed           |
 | promptvault-service          | ✅           | ✅              | Review needed           |
 | mobile-notifications-service | ✅           | ✅              | Review needed           |
@@ -181,7 +181,7 @@ The current naming convention is consistent, so this trade-off is acceptable.
 
 ---
 
-### Task 3.1: auth-service Route Refactoring
+### Task 3.1: user-service Route Refactoring
 
 **Status:** ✅ PARTIALLY COMPLETED
 
@@ -193,13 +193,13 @@ The current naming convention is consistent, so this trade-off is acceptable.
 
 **Files Created:**
 
-- `apps/auth-service/src/domain/identity/usecases/index.ts`
-- `apps/auth-service/src/domain/identity/usecases/refreshAccessToken.ts`
+- `apps/user-service/src/domain/identity/usecases/index.ts`
+- `apps/user-service/src/domain/identity/usecases/refreshAccessToken.ts`
 
 **Files Modified:**
 
-- `apps/auth-service/src/domain/identity/index.ts` - Added usecases export
-- `apps/auth-service/src/routes/tokenRoutes.ts` - Refactored to use-case
+- `apps/user-service/src/domain/identity/index.ts` - Added usecases export
+- `apps/user-service/src/routes/tokenRoutes.ts` - Refactored to use-case
 
 **Remaining (Out of Scope for This Task):**
 

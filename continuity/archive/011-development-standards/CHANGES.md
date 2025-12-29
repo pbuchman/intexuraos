@@ -124,7 +124,7 @@ The existing infrastructure meets all requirements. No changes needed.
 
 ### Standard 3: Route Refactoring (Remaining Services)
 
-#### Task 3.1: auth-service
+#### Task 3.1: user-service
 
 **Status:** ✅ PARTIALLY COMPLETED
 
@@ -173,7 +173,7 @@ Routes already delegate to use-cases. No changes needed.
 - [x] All apps import directly from decomposed packages
 - [x] All tests pass (973 tests)
 - [x] `npm run ci` passes
-- [x] auth-service route refactoring (Task 3.1) - tokenRoutes refactored
+- [x] user-service route refactoring (Task 3.1) - tokenRoutes refactored
 - [x] whatsapp-service route review (Task 3.2) - No changes needed
 - [x] promptvault-service route review (Task 3.3) - No changes needed
 - [x] mobile-notifications-service route review (Task 3.4) - No changes needed

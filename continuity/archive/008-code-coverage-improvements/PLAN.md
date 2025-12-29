@@ -42,8 +42,8 @@
 
 ### Task 2.1: Test encryption.ts
 
-**File**: `apps/auth-service/src/__tests__/encryption.test.ts`
-**Target**: `apps/auth-service/src/infra/firestore/encryption.ts` (91 lines)
+**File**: `apps/user-service/src/__tests__/encryption.test.ts`
+**Target**: `apps/user-service/src/infra/firestore/encryption.ts` (91 lines)
 **Strategy**: Pure unit tests
 **Test cases**:
 
@@ -125,8 +125,8 @@
 
 ### Task 3.3: Test auth0/client.ts
 
-**File**: `apps/auth-service/src/__tests__/infra/auth0Client.test.ts`
-**Target**: `apps/auth-service/src/infra/auth0/client.ts` (135 lines)
+**File**: `apps/user-service/src/__tests__/infra/auth0Client.test.ts`
+**Target**: `apps/user-service/src/infra/auth0/client.ts` (135 lines)
 **Strategy**: Mock fetch with nock
 **Test cases**:
 
@@ -160,7 +160,7 @@
 
 For each repository, create tests using the shared Firestore mock:
 
-**4.1.1**: `apps/auth-service/src/__tests__/infra/authTokenRepository.test.ts`
+**4.1.1**: `apps/user-service/src/__tests__/infra/authTokenRepository.test.ts`
 
 - Target: `authTokenRepository.ts` (162 lines)
 - Test cases: saveTokens, getTokenMetadata, getRefreshToken, deleteTokens, error paths

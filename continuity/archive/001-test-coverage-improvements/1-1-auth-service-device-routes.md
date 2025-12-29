@@ -1,4 +1,4 @@
-# 1-1 - Add Tests for auth-service Device Routes
+# 1-1 - Add Tests for user-service Device Routes
 
 **Tier:** 1 (Depends on: ALL Tier 0 issues must be complete)
 
@@ -27,7 +27,7 @@ Before starting this issue, ensure these are complete:
 ### Coverage Tooling
 
 - Test command: `npm run test:coverage`
-- Test location: `apps/auth-service/src/__tests__/`
+- Test location: `apps/user-service/src/__tests__/`
 
 ### Changes from Tier 0
 
@@ -38,7 +38,7 @@ Before starting this issue, ensure these are complete:
 
 ## Problem Statement
 
-Current coverage for `apps/auth-service/src/routes/v1/deviceRoutes.ts`: **77.86%**
+Current coverage for `apps/user-service/src/routes/v1/deviceRoutes.ts`: **77.86%**
 
 Uncovered lines: 165-169, 265-269, 280-320
 
@@ -50,8 +50,8 @@ These uncovered sections include error handling paths and edge cases in the devi
 
 ### In Scope
 
-- `apps/auth-service/src/routes/v1/deviceRoutes.ts`
-- Extend `apps/auth-service/src/__tests__/deviceRoutes.test.ts`
+- `apps/user-service/src/routes/v1/deviceRoutes.ts`
+- Extend `apps/user-service/src/__tests__/deviceRoutes.test.ts`
 
 ### Out of Scope
 
@@ -76,13 +76,13 @@ These uncovered sections include error handling paths and edge cases in the devi
 1. Read source file to identify uncovered branches:
 
 ===
-cat apps/auth-service/src/routes/v1/deviceRoutes.ts
+cat apps/user-service/src/routes/v1/deviceRoutes.ts
 ===
 
 2. Read existing tests:
 
 ===
-cat apps/auth-service/src/**tests**/deviceRoutes.test.ts
+cat apps/user-service/src/**tests**/deviceRoutes.test.ts
 ===
 
 3. Identify missing test cases for lines 165-169, 265-269, 280-320:
@@ -106,7 +106,7 @@ npm run ci
 
 ## Definition of Done
 
-- [ ] `apps/auth-service/src/routes/v1/deviceRoutes.ts` coverage ≥ 90%
+- [ ] `apps/user-service/src/routes/v1/deviceRoutes.ts` coverage ≥ 90%
 - [ ] Lines 165-169, 265-269, 280-320 covered
 - [ ] `npm run ci` passes
 
