@@ -6,3 +6,7 @@ export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
 export { MobileNotificationsListPage } from './MobileNotificationsListPage.js';
+export { LLMOrchestratorPage } from './LLMOrchestratorPage.js';
+export { PreviousResearchesPage } from './PreviousResearchesPage.js';
+export { ResearchDetailPage } from './ResearchDetailPage.js';
+export { ApiKeysPage } from './ApiKeysPage.js';

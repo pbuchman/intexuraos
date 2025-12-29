@@ -15,6 +15,9 @@ import {
   X,
   Settings,
   Filter,
+  Brain,
+  Clock,
+  Key,
 } from 'lucide-react';
 import { useAuth } from '@/context';
 import { getUserSettings } from '@/services/authApi';
@@ -32,6 +35,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
   { to: '/settings/notion', label: 'Notion', icon: FileText },
+  { to: '/settings/api-keys', label: 'API Keys', icon: Key },
 ];
 
 const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
@@ -76,6 +80,7 @@ export function Sidebar(): React.JSX.Element {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isLLMOrchestratorOpen, setIsLLMOrchestratorOpen] = useState(false);
   const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
   const location = useLocation();
 
@@ -90,6 +95,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/notifications')) {
       setIsNotificationsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand LLM Orchestrator when on LLM Orchestrator page
+  useEffect(() => {
+    if (location.pathname.startsWith('/llm-orchestrator')) {
+      setIsLLMOrchestratorOpen(true);
     }
   }, [location.pathname]);
 
@@ -246,6 +258,65 @@ export function Sidebar(): React.JSX.Element {
                     <span>{item.label}</span>
                   </NavLink>
                 ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* LLM Orchestrator section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsLLMOrchestratorOpen(!isLLMOrchestratorOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/llm-orchestrator')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Brain className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">LLM Orchestrator</span>
+                  {isLLMOrchestratorOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* LLM Orchestrator sub-items */}
+            {isLLMOrchestratorOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                <NavLink
+                  to="/llm-orchestrator"
+                  end
+                  className={({ isActive }): string =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`
+                  }
+                >
+                  <Brain className="h-4 w-4 shrink-0" />
+                  <span>Research</span>
+                </NavLink>
+                <NavLink
+                  to="/llm-orchestrator/previous"
+                  className={({ isActive }): string =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`
+                  }
+                >
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span>Previous Researches</span>
+                </NavLink>
               </div>
             ) : null}
           </div>

@@ -414,7 +414,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
     try {
       const token = await getAccessToken();
-      await updateUserSettings(token, user.sub, { filters: newFilters });
+      await updateUserSettings(token, user.sub, { notifications: { filters: newFilters } });
       setSavedFilters(newFilters);
       setFilterName('');
       setError(null);
@@ -433,7 +433,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
     try {
       const token = await getAccessToken();
-      await updateUserSettings(token, user.sub, { filters: newFilters });
+      await updateUserSettings(token, user.sub, { notifications: { filters: newFilters } });
     } catch (e) {
       // Revert on error
       setSavedFilters(savedFilters);

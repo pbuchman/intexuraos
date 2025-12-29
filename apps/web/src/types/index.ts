@@ -171,6 +171,7 @@ export interface AppConfig {
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
+  llmOrchestratorServiceUrl: string;
 }
 
 /**
@@ -223,6 +224,96 @@ export interface UserSettings {
   notifications: {
     filters: NotificationFilter[];
   };
+  apiKeys?: {
+    'google-gemini'?: string;
+    'openai-gpt'?: string;
+    'anthropic-opus'?: string;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * LLM provider type
+ */
+export type LLMProvider = 'google-gemini' | 'openai-gpt' | 'anthropic-opus';
+
+/**
+ * LLM research status
+ */
+export type ResearchStatus = 'pending' | 'completed' | 'failed';
+
+/**
+ * Individual LLM result status
+ */
+export type LLMResultStatus = 'pending' | 'completed' | 'failed';
+
+/**
+ * Individual LLM result
+ */
+export interface LLMResult {
+  provider: LLMProvider;
+  status: LLMResultStatus;
+  content?: string;
+  error?: string;
+  startTime: string;
+  duration?: number;
+}
+
+/**
+ * LLM research from llm-orchestrator-service
+ */
+export interface LLMResearch {
+  id: string;
+  title: string;
+  prompt: string;
+  providers: LLMProvider[];
+  status: ResearchStatus;
+  synthesizedResult?: string;
+  synthesisError?: string;
+  llmResults: LLMResult[];
+  startTime: string;
+  totalDuration?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * LLM research list response
+ */
+export interface LLMResearchListResponse {
+  researches: LLMResearch[];
+  total: number;
+  nextCursor?: string;
+}
+
+/**
+ * LLM research submit request
+ */
+export interface LLMResearchSubmitRequest {
+  prompt: string;
+  providers: LLMProvider[];
+}
+
+/**
+ * LLM research submit response
+ */
+export interface LLMResearchSubmitResponse {
+  researchId: string;
+}
+
+/**
+ * API key validation request
+ */
+export interface ApiKeyValidationRequest {
+  provider: LLMProvider;
+  apiKey: string;
+}
+
+/**
+ * API key validation response
+ */
+export interface ApiKeyValidationResponse {
+  valid: boolean;
+  error?: string;
 }
