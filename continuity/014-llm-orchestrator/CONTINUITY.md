@@ -76,14 +76,14 @@ interface UserSettings {
 - Repository state analysis
 - INSTRUCTIONS.md created
 - 0-0: Cleanup empty placeholder directories
+- 0-1: Create llm-orchestrator-service scaffold
 
 **Now:**
 
-- 0-1: Create llm-orchestrator-service scaffold
+- 0-2: Add to root tsconfig, ESLint config
 
 **Next:**
 
-- 0-2: Add to root tsconfig, ESLint config
 - 1-0 through 1-3: Create infra packages
 
 ## Open Questions

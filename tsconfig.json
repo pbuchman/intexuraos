@@ -13,6 +13,7 @@
     { "path": "apps/notion-service" },
     { "path": "apps/api-docs-hub" },
     { "path": "apps/web" },
-    { "path": "apps/mobile-notifications-service" }
+    { "path": "apps/mobile-notifications-service" },
+    { "path": "apps/llm-orchestrator-service" }
   ]
 }

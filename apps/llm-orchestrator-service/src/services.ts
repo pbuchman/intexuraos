@@ -7,6 +7,7 @@
  * Service container holding all adapter instances.
  * Will be extended as domain adapters are implemented.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Placeholder, will be populated with adapters
 export interface ServiceContainer {
   // TODO: Add ResearchRepository, LLM adapters, WhatsApp sender
 }
@@ -17,9 +18,7 @@ let container: ServiceContainer | null = null;
  * Get or create the service container.
  */
 export function getServices(): ServiceContainer {
-  if (container === null) {
-    container = {};
-  }
+  container ??= {};
   return container;
 }
 
