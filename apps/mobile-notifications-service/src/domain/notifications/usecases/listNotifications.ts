@@ -21,6 +21,7 @@ export interface ListNotificationsInput {
   cursor?: string;
   source?: string;
   app?: string;
+  title?: string;
 }
 
 /**
@@ -37,14 +38,17 @@ export async function listNotifications(
     options.cursor = input.cursor;
   }
 
-  // Add filter if source or app is provided
-  if (input.source !== undefined || input.app !== undefined) {
+  // Add filter if any filter criteria is provided
+  if (input.source !== undefined || input.app !== undefined || input.title !== undefined) {
     options.filter = {};
     if (input.source !== undefined) {
       options.filter.source = input.source;
     }
     if (input.app !== undefined) {
       options.filter.app = input.app;
+    }
+    if (input.title !== undefined) {
+      options.filter.title = input.title;
     }
   }
 

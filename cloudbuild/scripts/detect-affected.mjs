@@ -136,10 +136,11 @@ function getLastSuccessfulBuildCommit() {
     const filter = encodeURIComponent(`status="SUCCESS"`);
     const apiUrl = `https://cloudbuild.googleapis.com/v1/projects/${PROJECT_ID}/builds?filter=${filter}&pageSize=10`;
 
-    const response = execSync(
-      `curl -s -H "Authorization: Bearer ${accessToken}" "${apiUrl}"`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 }
-    );
+    const response = execSync(`curl -s -H "Authorization: Bearer ${accessToken}" "${apiUrl}"`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000,
+    });
 
     const data = JSON.parse(response);
 

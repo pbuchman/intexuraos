@@ -205,10 +205,14 @@ export interface MobileNotificationsConnectResponse {
 }
 
 /**
- * Notification filter configuration
+ * Notification filter configuration.
+ * Requires a unique name and at least one filter criterion.
  */
 export interface NotificationFilter {
-  app: string;
+  name: string;
+  app?: string;
+  source?: string;
+  title?: string;
 }
 
 /**

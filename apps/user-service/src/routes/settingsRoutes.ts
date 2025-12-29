@@ -30,10 +30,14 @@ function mapGetErrorCode(code: GetUserSettingsErrorCode): 'FORBIDDEN' | 'INTERNA
 /**
  * Map domain error codes to HTTP error codes for UPDATE.
  */
-function mapUpdateErrorCode(code: UpdateUserSettingsErrorCode): 'FORBIDDEN' | 'INTERNAL_ERROR' {
+function mapUpdateErrorCode(
+  code: UpdateUserSettingsErrorCode
+): 'FORBIDDEN' | 'INVALID_REQUEST' | 'INTERNAL_ERROR' {
   switch (code) {
     case 'FORBIDDEN':
       return 'FORBIDDEN';
+    case 'INVALID_REQUEST':
+      return 'INVALID_REQUEST';
     case 'INTERNAL_ERROR':
       return 'INTERNAL_ERROR';
   }
@@ -45,9 +49,12 @@ function mapUpdateErrorCode(code: UpdateUserSettingsErrorCode): 'FORBIDDEN' | 'I
 const notificationFilterSchema = {
   type: 'object',
   properties: {
+    name: { type: 'string', minLength: 1, description: 'Unique filter name' },
     app: { type: 'string', minLength: 1, description: 'App package name (e.g., com.whatsapp)' },
+    source: { type: 'string', minLength: 1, description: 'Notification source (e.g., tasker)' },
+    title: { type: 'string', minLength: 1, description: 'Title filter (case-insensitive partial)' },
   },
-  required: ['app'],
+  required: ['name'],
 } as const;
 
 /**
@@ -252,7 +259,9 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const params = request.params as { uid: string };
       const body = request.body as {
-        notifications: { filters: { app: string }[] };
+        notifications: {
+          filters: { name: string; app?: string; source?: string; title?: string }[];
+        };
       };
       const { userSettingsRepository } = getServices();
 

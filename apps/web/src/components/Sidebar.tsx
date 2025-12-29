@@ -14,7 +14,7 @@ import {
   Menu,
   X,
   Settings,
-  Heart,
+  Filter,
 } from 'lucide-react';
 import { useAuth } from '@/context';
 import { getUserSettings } from '@/services/authApi';
@@ -37,22 +37,37 @@ const settingsItems: NavItem[] = [
 const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
 
 /**
- * Format app package name to a display-friendly name
- * e.g., "com.whatsapp" -> "WhatsApp"
+ * Build URL search params from a notification filter.
  */
-function formatAppName(app: string): string {
-  // Get last segment of package name
-  const parts = app.split('.');
-  const lastPart = parts[parts.length - 1] ?? app;
-
-  // Capitalize first letter
-  const formatted = lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
-
-  // Truncate if too long
-  if (formatted.length > 15) {
-    return formatted.slice(0, 12) + '...';
+function buildFilterUrl(filter: NotificationFilter): string {
+  const params = new URLSearchParams();
+  if (filter.app !== undefined) {
+    params.set('app', filter.app);
   }
-  return formatted;
+  if (filter.source !== undefined) {
+    params.set('source', filter.source);
+  }
+  if (filter.title !== undefined) {
+    params.set('title', filter.title);
+  }
+  const queryString = params.toString();
+  return queryString !== '' ? `/notifications?${queryString}` : '/notifications';
+}
+
+/**
+ * Check if a filter matches current URL search params.
+ */
+function filterMatchesUrl(filter: NotificationFilter, search: string): boolean {
+  const params = new URLSearchParams(search);
+  const urlApp = params.get('app') ?? '';
+  const urlSource = params.get('source') ?? '';
+  const urlTitle = params.get('title') ?? '';
+
+  return (
+    (filter.app ?? '') === urlApp &&
+    (filter.source ?? '') === urlSource &&
+    (filter.title ?? '') === urlTitle
+  );
 }
 
 export function Sidebar(): React.JSX.Element {
@@ -279,18 +294,18 @@ export function Sidebar(): React.JSX.Element {
                 </NavLink>
                 {savedFilters.map((filter) => (
                   <NavLink
-                    key={filter.app}
-                    to={`/notifications?app=${encodeURIComponent(filter.app)}`}
+                    key={filter.name}
+                    to={buildFilterUrl(filter)}
                     className={(): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        location.search === `?app=${encodeURIComponent(filter.app)}`
+                        filterMatchesUrl(filter, location.search)
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                       }`
                     }
                   >
-                    <Heart className="h-4 w-4 shrink-0 fill-current text-pink-600" />
-                    <span title={filter.app}>{formatAppName(filter.app)}</span>
+                    <Filter className="h-4 w-4 shrink-0 text-blue-600" />
+                    <span title={filter.name}>{filter.name}</span>
                   </NavLink>
                 ))}
               </div>

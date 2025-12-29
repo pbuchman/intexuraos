@@ -2,12 +2,24 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
-import { getMobileNotifications, deleteMobileNotification, ApiError } from '@/services';
+import {
+  getMobileNotifications,
+  deleteMobileNotification,
+  getFilterValues,
+  ApiError,
+} from '@/services';
 import { getUserSettings, updateUserSettings } from '@/services/authApi';
 import type { MobileNotification, NotificationFilter } from '@/types';
-import { Trash2, Bell, RefreshCw, X, Filter, Heart } from 'lucide-react';
+import { Trash2, Bell, RefreshCw, X, Filter, Save } from 'lucide-react';
 
-type FilterType = 'none' | 'source' | 'app';
+/**
+ * Active filter state for multi-dimension filtering.
+ */
+interface ActiveFilters {
+  app: string;
+  source: string;
+  title: string;
+}
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
@@ -58,8 +70,6 @@ interface NotificationCardProps {
   notification: MobileNotification;
   onDelete: (id: string) => void;
   isDeleting: boolean;
-  isSaved: boolean;
-  onToggleSave: (app: string) => void;
 }
 
 /**
@@ -69,8 +79,6 @@ function NotificationCard({
   notification,
   onDelete,
   isDeleting,
-  isSaved,
-  onToggleSave,
 }: NotificationCardProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -140,21 +148,8 @@ function NotificationCard({
           ) : null}
         </div>
 
-        {/* Action buttons - always visible for mobile accessibility */}
+        {/* Delete button - always visible for mobile accessibility */}
         <div className="flex shrink-0 gap-1">
-          <button
-            onClick={(): void => {
-              onToggleSave(notification.app);
-            }}
-            className={`rounded-lg p-2 transition-all ${
-              isSaved
-                ? 'text-pink-600 hover:bg-pink-50'
-                : 'text-slate-400 hover:bg-pink-50 hover:text-pink-600'
-            }`}
-            aria-label={isSaved ? 'Remove from saved filters' : 'Save as filter'}
-          >
-            <Heart className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} />
-          </button>
           <button
             onClick={handleDeleteClick}
             disabled={isDeleting || showDeleteConfirm}
@@ -169,6 +164,13 @@ function NotificationCard({
   );
 }
 
+/**
+ * Check if active filters have any values set.
+ */
+function hasActiveFilters(filters: ActiveFilters): boolean {
+  return filters.app !== '' || filters.source !== '' || filters.title !== '';
+}
+
 export function MobileNotificationsListPage(): React.JSX.Element {
   const { getAccessToken, user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -179,9 +181,38 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const [filterType, setFilterType] = useState<FilterType>('none');
-  const [filterValue, setFilterValue] = useState('');
+
+  // Multi-dimension filter state
+  const [filters, setFilters] = useState<ActiveFilters>({ app: '', source: '', title: '' });
+
+  // Dropdown options from backend
+  const [appOptions, setAppOptions] = useState<string[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<string[]>([]);
+
+  // Saved filters
   const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
+
+  // Filter name for saving
+  const [filterName, setFilterName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load dropdown options on mount
+  useEffect(() => {
+    const loadFilterOptions = async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const [apps, sources] = await Promise.all([
+          getFilterValues(token, 'app'),
+          getFilterValues(token, 'source'),
+        ]);
+        setAppOptions(apps);
+        setSourceOptions(sources);
+      } catch {
+        /* Best-effort load, ignore errors */
+      }
+    };
+    void loadFilterOptions();
+  }, [getAccessToken]);
 
   const fetchNotifications = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -194,11 +225,15 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         setError(null);
 
         const token = await getAccessToken();
-        const options: { source?: string; app?: string } = {};
-        if (filterType === 'source' && filterValue !== '') {
-          options.source = filterValue;
-        } else if (filterType === 'app' && filterValue !== '') {
-          options.app = filterValue;
+        const options: { source?: string; app?: string; title?: string } = {};
+        if (filters.source !== '') {
+          options.source = filters.source;
+        }
+        if (filters.app !== '') {
+          options.app = filters.app;
+        }
+        if (filters.title !== '') {
+          options.title = filters.title;
         }
         const response = await getMobileNotifications(token, options);
 
@@ -211,7 +246,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         setIsRefreshing(false);
       }
     },
-    [getAccessToken, filterType, filterValue]
+    [getAccessToken, filters]
   );
 
   const loadMore = async (): Promise<void> => {
@@ -220,11 +255,17 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     try {
       setIsLoadingMore(true);
       const token = await getAccessToken();
-      const options: { cursor: string; source?: string; app?: string } = { cursor: nextCursor };
-      if (filterType === 'source' && filterValue !== '') {
-        options.source = filterValue;
-      } else if (filterType === 'app' && filterValue !== '') {
-        options.app = filterValue;
+      const options: { cursor: string; source?: string; app?: string; title?: string } = {
+        cursor: nextCursor,
+      };
+      if (filters.source !== '') {
+        options.source = filters.source;
+      }
+      if (filters.app !== '') {
+        options.app = filters.app;
+      }
+      if (filters.title !== '') {
+        options.title = filters.title;
       }
       const response = await getMobileNotifications(token, options);
 
@@ -244,18 +285,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     void fetchNotifications();
   }, [fetchNotifications]);
 
-  const handleFilterTypeChange = (newType: FilterType): void => {
-    setFilterType(newType);
-    setFilterValue('');
-  };
-
-  const handleFilterValueChange = (value: string): void => {
-    setFilterValue(value);
-  };
-
-  const handleClearFilter = (): void => {
-    setFilterType('none');
-    setFilterValue('');
+  const handleClearFilters = (): void => {
+    setFilters({ app: '', source: '', title: '' });
+    setFilterName('');
   };
 
   const handleDelete = async (notificationId: string): Promise<void> => {
@@ -305,22 +337,65 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   // Apply filter from URL search params
   useEffect(() => {
-    const urlAppFilter = searchParams.get('app');
-    if (urlAppFilter !== null && urlAppFilter !== '') {
-      setFilterType('app');
-      setFilterValue(urlAppFilter);
+    const urlApp = searchParams.get('app');
+    const urlSource = searchParams.get('source');
+    const urlTitle = searchParams.get('title');
+    if (urlApp !== null || urlSource !== null || urlTitle !== null) {
+      setFilters({
+        app: urlApp ?? '',
+        source: urlSource ?? '',
+        title: urlTitle ?? '',
+      });
     }
   }, [searchParams]);
 
-  const handleToggleSave = async (app: string): Promise<void> => {
+  const handleSaveFilter = async (): Promise<void> => {
+    if (user?.sub === undefined) return;
+    if (filterName.trim() === '') {
+      setError('Filter name is required');
+      return;
+    }
+    if (!hasActiveFilters(filters)) {
+      setError('At least one filter criterion is required');
+      return;
+    }
+    // Check for duplicate names
+    if (savedFilters.some((f) => f.name === filterName.trim())) {
+      setError('A filter with this name already exists');
+      return;
+    }
+
+    setIsSaving(true);
+    const newFilter: NotificationFilter = { name: filterName.trim() };
+    if (filters.app !== '') {
+      newFilter.app = filters.app;
+    }
+    if (filters.source !== '') {
+      newFilter.source = filters.source;
+    }
+    if (filters.title !== '') {
+      newFilter.title = filters.title;
+    }
+
+    const newFilters = [...savedFilters, newFilter];
+
+    try {
+      const token = await getAccessToken();
+      await updateUserSettings(token, user.sub, { filters: newFilters });
+      setSavedFilters(newFilters);
+      setFilterName('');
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to save filter');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteFilter = async (name: string): Promise<void> => {
     if (user?.sub === undefined) return;
 
-    const isCurrentlySaved = savedFilters.some((f) => f.app === app);
-    const newFilters = isCurrentlySaved
-      ? savedFilters.filter((f) => f.app !== app)
-      : [...savedFilters, { app }];
-
-    // Optimistically update UI
+    const newFilters = savedFilters.filter((f) => f.name !== name);
     setSavedFilters(newFilters);
 
     try {
@@ -329,7 +404,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     } catch (e) {
       // Revert on error
       setSavedFilters(savedFilters);
-      setError(e instanceof ApiError ? e.message : 'Failed to save filter');
+      setError(e instanceof ApiError ? e.message : 'Failed to delete filter');
     }
   };
 
@@ -373,38 +448,128 @@ export function MobileNotificationsListPage(): React.JSX.Element {
       ) : null}
 
       {/* Filter controls */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Filter className="h-5 w-5 text-slate-400" />
-        <select
-          value={filterType}
-          onChange={(e): void => {
-            handleFilterTypeChange(e.target.value as FilterType);
-          }}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="none">No Filter</option>
-          <option value="source">Filter by Source</option>
-          <option value="app">Filter by App</option>
-        </select>
+      <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Filter className="h-5 w-5 text-slate-500" />
+          <span className="font-medium text-slate-700">Filters</span>
+        </div>
 
-        {filterType !== 'none' ? (
-          <>
+        <div className="flex flex-wrap items-end gap-3">
+          {/* App dropdown */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">App</label>
+            <select
+              value={filters.app}
+              onChange={(e): void => {
+                setFilters((prev) => ({ ...prev, app: e.target.value }));
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Apps</option>
+              {appOptions.map((app) => (
+                <option key={app} value={app}>
+                  {app}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Source dropdown */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Source</label>
+            <select
+              value={filters.source}
+              onChange={(e): void => {
+                setFilters((prev) => ({ ...prev, source: e.target.value }));
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Sources</option>
+              {sourceOptions.map((source) => (
+                <option key={source} value={source}>
+                  {source}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Title text input */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Title contains</label>
             <input
               type="text"
-              value={filterValue}
+              value={filters.title}
               onChange={(e): void => {
-                handleFilterValueChange(e.target.value);
+                setFilters((prev) => ({ ...prev, title: e.target.value }));
               }}
-              placeholder={filterType === 'source' ? 'e.g., tasker' : 'e.g., com.whatsapp'}
-              className="w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Search in title..."
+              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+          </div>
+
+          {/* Clear button */}
+          {hasActiveFilters(filters) ? (
             <button
-              onClick={handleClearFilter}
-              className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              onClick={handleClearFilters}
+              className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-200 hover:text-slate-700"
             >
-              Clear
+              Clear All
             </button>
-          </>
+          ) : null}
+        </div>
+
+        {/* Save filter row */}
+        {hasActiveFilters(filters) ? (
+          <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-500">Filter name</label>
+              <input
+                type="text"
+                value={filterName}
+                onChange={(e): void => {
+                  setFilterName(e.target.value);
+                }}
+                placeholder="e.g., Important"
+                className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={(): void => {
+                void handleSaveFilter();
+              }}
+              disabled={isSaving || filterName.trim() === ''}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              Save Filter
+            </button>
+          </div>
+        ) : null}
+
+        {/* Saved filters list */}
+        {savedFilters.length > 0 ? (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <span className="text-xs font-medium text-slate-500">Saved Filters</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {savedFilters.map((filter) => (
+                <div
+                  key={filter.name}
+                  className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-slate-700 shadow-sm"
+                >
+                  <span>{filter.name}</span>
+                  <button
+                    onClick={(): void => {
+                      void handleDeleteFilter(filter.name);
+                    }}
+                    className="text-slate-400 hover:text-red-600"
+                    aria-label={`Delete filter ${filter.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -413,11 +578,11 @@ export function MobileNotificationsListPage(): React.JSX.Element {
           <Card title="">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bell className="mb-4 h-12 w-12 text-slate-300" />
-              {filterType !== 'none' && filterValue !== '' ? (
+              {hasActiveFilters(filters) ? (
                 <>
                   <h3 className="text-lg font-medium text-slate-700">No matching notifications</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    No notifications found matching your filter. Try a different filter value.
+                    No notifications found matching your filters. Try different filter values.
                   </p>
                 </>
               ) : (
@@ -439,10 +604,6 @@ export function MobileNotificationsListPage(): React.JSX.Element {
                 void handleDelete(id);
               }}
               isDeleting={deletingIds.has(notification.id)}
-              isSaved={savedFilters.some((f) => f.app === notification.app)}
-              onToggleSave={(app): void => {
-                void handleToggleSave(app);
-              }}
             />
           ))
         )}

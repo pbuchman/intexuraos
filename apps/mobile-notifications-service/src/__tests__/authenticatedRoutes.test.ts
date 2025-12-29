@@ -467,8 +467,49 @@ describe('Authenticated Routes', () => {
       expect(body.data.notifications.every((n) => n.app === 'com.slack')).toBe(true);
     });
 
-    it('returns 400 when both source and app filters are provided', async () => {
-      const token = await createToken({ sub: 'user-dual-filter' });
+    it('filters by both source and app parameters (multi-filter)', async () => {
+      const userId = 'user-multi-filter';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-match-1',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Match',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-match-1',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-wrong-source',
+        userId,
+        source: 'automate',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Wrong Source',
+        text: 'Body',
+        timestamp: Date.now() + 1,
+        postTime: '2025-01-01T12:00:01.000Z',
+        receivedAt: '2025-01-01T12:00:01.000Z',
+        notificationId: 'ext-wrong-source',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-wrong-app',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.whatsapp',
+        title: 'Wrong App',
+        text: 'Body',
+        timestamp: Date.now() + 2,
+        postTime: '2025-01-01T12:00:02.000Z',
+        receivedAt: '2025-01-01T12:00:02.000Z',
+        notificationId: 'ext-wrong-app',
+      });
 
       const response = await ctx.app.inject({
         method: 'GET',
@@ -476,14 +517,125 @@ describe('Authenticated Routes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string; message: string };
+        data: { notifications: { source: string; app: string; title: string }[] };
       };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('Cannot filter by both');
+      expect(body.success).toBe(true);
+      expect(body.data.notifications).toHaveLength(1);
+      expect(body.data.notifications[0]?.source).toBe('tasker');
+      expect(body.data.notifications[0]?.app).toBe('com.slack');
+    });
+
+    it('filters by title parameter (case-insensitive partial match)', async () => {
+      const userId = 'user-title-filter';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-title-1',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: 'Important Meeting Reminder',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-title-1',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-title-2',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: 'Quick Update',
+        text: 'Body',
+        timestamp: Date.now() + 1,
+        postTime: '2025-01-01T12:00:01.000Z',
+        receivedAt: '2025-01-01T12:00:01.000Z',
+        notificationId: 'ext-title-2',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-title-3',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: 'Meeting Notes',
+        text: 'Body',
+        timestamp: Date.now() + 2,
+        postTime: '2025-01-01T12:00:02.000Z',
+        receivedAt: '2025-01-01T12:00:02.000Z',
+        notificationId: 'ext-title-3',
+      });
+
+      // Case-insensitive search for "meeting"
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?title=MEETING',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { notifications: { title: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications).toHaveLength(2);
+      expect(body.data.notifications.every((n) => n.title.toLowerCase().includes('meeting'))).toBe(
+        true
+      );
+    });
+
+    it('filters by all three parameters (source, app, title)', async () => {
+      const userId = 'user-all-filters';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-all-match',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Urgent Message',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-all-match',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-wrong-title',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Normal Alert',
+        text: 'Body',
+        timestamp: Date.now() + 1,
+        postTime: '2025-01-01T12:00:01.000Z',
+        receivedAt: '2025-01-01T12:00:01.000Z',
+        notificationId: 'ext-wrong-title',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?source=tasker&app=com.slack&title=urgent',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { notifications: { title: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications).toHaveLength(1);
+      expect(body.data.notifications[0]?.title).toBe('Urgent Message');
     });
 
     it('filter with pagination works correctly', async () => {

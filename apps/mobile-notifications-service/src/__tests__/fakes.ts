@@ -15,7 +15,8 @@ import type {
   CreateNotificationInput,
   PaginationOptions,
   PaginatedNotifications,
-} from '../domain/notifications/index.js';
+  DistinctFilterField,
+} from '../domain/notifications';
 
 /**
  * Fake SignatureConnection repository for testing.
@@ -227,6 +228,10 @@ export class FakeNotificationRepository implements NotificationRepository {
     if (options.filter?.app !== undefined) {
       notifications = notifications.filter((n) => n.app === options.filter?.app);
     }
+    if (options.filter?.title !== undefined) {
+      const titleFilter = options.filter.title.toLowerCase();
+      notifications = notifications.filter((n) => n.title.toLowerCase().includes(titleFilter));
+    }
 
     // Handle cursor
     if (options.cursor !== undefined) {
@@ -300,5 +305,29 @@ export class FakeNotificationRepository implements NotificationRepository {
    */
   addNotification(notification: Notification): void {
     this.notifications.set(notification.id, notification);
+  }
+
+  getDistinctValues(
+    userId: string,
+    field: DistinctFilterField
+  ): Promise<Result<string[], RepositoryError>> {
+    if (this.shouldFailFind) {
+      this.shouldFailFind = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getDistinctValues failure' })
+      );
+    }
+
+    const values = new Set<string>();
+    for (const notif of this.notifications.values()) {
+      if (notif.userId === userId) {
+        const value = notif[field];
+        if (typeof value === 'string' && value.length > 0) {
+          values.add(value);
+        }
+      }
+    }
+
+    return Promise.resolve(ok(Array.from(values).sort()));
   }
 }
