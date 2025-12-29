@@ -4,9 +4,18 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
-import { fastifyAuthPlugin, intexuraFastifyPlugin, registerQuietHealthCheckLogging, } from '@intexuraos/common-http';
+import {
+  fastifyAuthPlugin,
+  intexuraFastifyPlugin,
+  registerQuietHealthCheckLogging,
+} from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import { buildHealthResponse, checkFirestore, checkSecrets, type HealthCheck, } from '@intexuraos/http-server';
+import {
+  buildHealthResponse,
+  checkFirestore,
+  checkSecrets,
+  type HealthCheck,
+} from '@intexuraos/http-server';
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';
