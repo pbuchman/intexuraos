@@ -28,6 +28,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
     displayName: 'Mobile Notifications Service API',
   },
+  {
+    key: 'LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL',
+    displayName: 'LLM Orchestrator Service API',
+  },
 ];
 
 /**
