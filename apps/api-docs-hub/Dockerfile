@@ -13,6 +13,7 @@ COPY packages/common-core/package*.json ./packages/common-core/
 COPY packages/common-http/package*.json ./packages/common-http/
 COPY packages/http-contracts/package*.json ./packages/http-contracts/
 COPY packages/http-server/package*.json ./packages/http-server/
+COPY packages/infra-firestore/package*.json ./packages/infra-firestore/
 
 # Install ALL dependencies including root devDependencies (typescript)
 RUN npm ci
@@ -23,11 +24,13 @@ COPY packages/common-core/ ./packages/common-core/
 COPY packages/common-http/ ./packages/common-http/
 COPY packages/http-contracts/ ./packages/http-contracts/
 COPY packages/http-server/ ./packages/http-server/
+COPY packages/infra-firestore/ ./packages/infra-firestore/
 COPY apps/api-docs-hub/ ./apps/api-docs-hub/
 
 # Build packages in dependency order, then service
 RUN npm run build -w @intexuraos/common-core \
     && npm run build -w @intexuraos/http-contracts \
+    && npm run build -w @intexuraos/infra-firestore \
     && npm run build -w @intexuraos/common-http \
     && npm run build -w @intexuraos/http-server \
     && npm run build -w @intexuraos/api-docs-hub
@@ -44,6 +47,7 @@ COPY packages/common-core/package*.json ./packages/common-core/
 COPY packages/common-http/package*.json ./packages/common-http/
 COPY packages/http-contracts/package*.json ./packages/http-contracts/
 COPY packages/http-server/package*.json ./packages/http-server/
+COPY packages/infra-firestore/package*.json ./packages/infra-firestore/
 
 # Install production dependencies only
 RUN npm ci --omit=dev \
@@ -51,6 +55,7 @@ RUN npm ci --omit=dev \
     -w @intexuraos/common-http \
     -w @intexuraos/http-contracts \
     -w @intexuraos/http-server \
+    -w @intexuraos/infra-firestore \
     -w @intexuraos/api-docs-hub
 
 # Copy built files
@@ -58,6 +63,7 @@ COPY --from=builder /app/packages/common-core/dist ./packages/common-core/dist
 COPY --from=builder /app/packages/common-http/dist ./packages/common-http/dist
 COPY --from=builder /app/packages/http-contracts/dist ./packages/http-contracts/dist
 COPY --from=builder /app/packages/http-server/dist ./packages/http-server/dist
+COPY --from=builder /app/packages/infra-firestore/dist ./packages/infra-firestore/dist
 COPY --from=builder /app/apps/api-docs-hub/dist ./apps/api-docs-hub/dist
 
 # Set environment
