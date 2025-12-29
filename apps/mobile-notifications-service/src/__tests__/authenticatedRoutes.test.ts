@@ -359,6 +359,203 @@ describe('Authenticated Routes', () => {
         expect(secondBody.data.notifications).toHaveLength(2);
       }
     });
+
+    it('filters by source parameter', async () => {
+      const userId = 'user-filter-source';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-tasker-1',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.whatsapp',
+        title: 'Tasker Notification',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-1',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-automate-1',
+        userId,
+        source: 'automate',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Automate Notification',
+        text: 'Body',
+        timestamp: Date.now() + 1,
+        postTime: '2025-01-01T12:00:01.000Z',
+        receivedAt: '2025-01-01T12:00:01.000Z',
+        notificationId: 'ext-2',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?source=tasker',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { notifications: { source: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications).toHaveLength(1);
+      expect(body.data.notifications[0]?.source).toBe('tasker');
+    });
+
+    it('filters by app parameter', async () => {
+      const userId = 'user-filter-app';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-whatsapp-1',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.whatsapp',
+        title: 'WhatsApp Notification',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-1',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-slack-1',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.slack',
+        title: 'Slack Notification',
+        text: 'Body',
+        timestamp: Date.now() + 1,
+        postTime: '2025-01-01T12:00:01.000Z',
+        receivedAt: '2025-01-01T12:00:01.000Z',
+        notificationId: 'ext-2',
+      });
+      ctx.notificationRepo.addNotification({
+        id: 'notif-slack-2',
+        userId,
+        source: 'automate',
+        device: 'tablet',
+        app: 'com.slack',
+        title: 'Slack Notification 2',
+        text: 'Body',
+        timestamp: Date.now() + 2,
+        postTime: '2025-01-01T12:00:02.000Z',
+        receivedAt: '2025-01-01T12:00:02.000Z',
+        notificationId: 'ext-3',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?app=com.slack',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { notifications: { app: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.notifications).toHaveLength(2);
+      expect(body.data.notifications.every((n) => n.app === 'com.slack')).toBe(true);
+    });
+
+    it('returns 400 when both source and app filters are provided', async () => {
+      const token = await createToken({ sub: 'user-dual-filter' });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?source=tasker&app=com.slack',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Cannot filter by both');
+    });
+
+    it('filter with pagination works correctly', async () => {
+      const userId = 'user-filter-pagination';
+      const token = await createToken({ sub: userId });
+
+      // Add 4 tasker notifications and 2 automate notifications
+      for (let i = 0; i < 4; i++) {
+        ctx.notificationRepo.addNotification({
+          id: `notif-tasker-pg-${String(i)}`,
+          userId,
+          source: 'tasker',
+          device: 'phone',
+          app: 'com.example',
+          title: `Tasker ${String(i)}`,
+          text: 'Body',
+          timestamp: Date.now() + i,
+          postTime: '2025-01-01T12:00:00.000Z',
+          receivedAt: new Date(Date.now() + i).toISOString(),
+          notificationId: `ext-tasker-${String(i)}`,
+        });
+      }
+      for (let i = 0; i < 2; i++) {
+        ctx.notificationRepo.addNotification({
+          id: `notif-automate-pg-${String(i)}`,
+          userId,
+          source: 'automate',
+          device: 'phone',
+          app: 'com.example',
+          title: `Automate ${String(i)}`,
+          text: 'Body',
+          timestamp: Date.now() + 10 + i,
+          postTime: '2025-01-01T12:00:00.000Z',
+          receivedAt: new Date(Date.now() + 10 + i).toISOString(),
+          notificationId: `ext-automate-${String(i)}`,
+        });
+      }
+
+      // First page with source filter
+      const firstResponse = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications?source=tasker&limit=2',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(firstResponse.statusCode).toBe(200);
+      const firstBody = JSON.parse(firstResponse.body) as {
+        success: boolean;
+        data: { notifications: { source: string }[]; nextCursor: string | null };
+      };
+      expect(firstBody.success).toBe(true);
+      expect(firstBody.data.notifications).toHaveLength(2);
+      expect(firstBody.data.notifications.every((n) => n.source === 'tasker')).toBe(true);
+
+      // Second page with same filter
+      if (firstBody.data.nextCursor !== null) {
+        const secondResponse = await ctx.app.inject({
+          method: 'GET',
+          url: `/mobile-notifications?source=tasker&limit=2&cursor=${encodeURIComponent(firstBody.data.nextCursor)}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(secondResponse.statusCode).toBe(200);
+        const secondBody = JSON.parse(secondResponse.body) as {
+          success: boolean;
+          data: { notifications: { source: string }[] };
+        };
+        expect(secondBody.success).toBe(true);
+        expect(secondBody.data.notifications).toHaveLength(2);
+        expect(secondBody.data.notifications.every((n) => n.source === 'tasker')).toBe(true);
+      }
+    });
   });
 
   describe('DELETE /mobile-notifications/:notification_id', () => {

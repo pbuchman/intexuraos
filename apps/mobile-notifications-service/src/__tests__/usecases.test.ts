@@ -416,6 +416,200 @@ describe('listNotifications', () => {
       expect(result.error.code).toBe('INTERNAL_ERROR');
     }
   });
+
+  it('filters by source', async () => {
+    // Add notifications with different sources
+    notificationRepo.addNotification({
+      id: 'notif-1',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'phone',
+      app: 'com.whatsapp',
+      title: 'Title 1',
+      text: 'Text 1',
+      timestamp: Date.now(),
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date().toISOString(),
+      notificationId: 'ext-1',
+    });
+    notificationRepo.addNotification({
+      id: 'notif-2',
+      userId: 'user-123',
+      source: 'automate',
+      device: 'phone',
+      app: 'com.slack',
+      title: 'Title 2',
+      text: 'Text 2',
+      timestamp: Date.now() + 1,
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date(Date.now() + 1).toISOString(),
+      notificationId: 'ext-2',
+    });
+    notificationRepo.addNotification({
+      id: 'notif-3',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'tablet',
+      app: 'com.slack',
+      title: 'Title 3',
+      text: 'Text 3',
+      timestamp: Date.now() + 2,
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date(Date.now() + 2).toISOString(),
+      notificationId: 'ext-3',
+    });
+
+    const result = await listNotifications(
+      { userId: 'user-123', source: 'tasker' },
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.notifications).toHaveLength(2);
+      expect(result.value.notifications.every((n) => n.source === 'tasker')).toBe(true);
+    }
+  });
+
+  it('filters by app', async () => {
+    // Add notifications with different apps
+    notificationRepo.addNotification({
+      id: 'notif-1',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'phone',
+      app: 'com.whatsapp',
+      title: 'Title 1',
+      text: 'Text 1',
+      timestamp: Date.now(),
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date().toISOString(),
+      notificationId: 'ext-1',
+    });
+    notificationRepo.addNotification({
+      id: 'notif-2',
+      userId: 'user-123',
+      source: 'automate',
+      device: 'phone',
+      app: 'com.slack',
+      title: 'Title 2',
+      text: 'Text 2',
+      timestamp: Date.now() + 1,
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date(Date.now() + 1).toISOString(),
+      notificationId: 'ext-2',
+    });
+    notificationRepo.addNotification({
+      id: 'notif-3',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'tablet',
+      app: 'com.slack',
+      title: 'Title 3',
+      text: 'Text 3',
+      timestamp: Date.now() + 2,
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date(Date.now() + 2).toISOString(),
+      notificationId: 'ext-3',
+    });
+
+    const result = await listNotifications(
+      { userId: 'user-123', app: 'com.slack' },
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.notifications).toHaveLength(2);
+      expect(result.value.notifications.every((n) => n.app === 'com.slack')).toBe(true);
+    }
+  });
+
+  it('returns empty array when filter matches nothing', async () => {
+    notificationRepo.addNotification({
+      id: 'notif-1',
+      userId: 'user-123',
+      source: 'tasker',
+      device: 'phone',
+      app: 'com.whatsapp',
+      title: 'Title 1',
+      text: 'Text 1',
+      timestamp: Date.now(),
+      postTime: '2024-01-01T00:00:00Z',
+      receivedAt: new Date().toISOString(),
+      notificationId: 'ext-1',
+    });
+
+    const result = await listNotifications(
+      { userId: 'user-123', source: 'nonexistent' },
+      notificationRepo
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.notifications).toHaveLength(0);
+    }
+  });
+
+  it('pagination works with filter applied', async () => {
+    // Add 5 tasker notifications
+    for (let i = 1; i <= 5; i++) {
+      notificationRepo.addNotification({
+        id: `notif-tasker-${String(i)}`,
+        userId: 'user-123',
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: `Tasker Title ${String(i)}`,
+        text: `Text ${String(i)}`,
+        timestamp: Date.now() + i,
+        postTime: '2024-01-01T00:00:00Z',
+        receivedAt: new Date(Date.now() + i).toISOString(),
+        notificationId: `ext-tasker-${String(i)}`,
+      });
+    }
+    // Add 2 automate notifications (should be filtered out)
+    for (let i = 1; i <= 2; i++) {
+      notificationRepo.addNotification({
+        id: `notif-automate-${String(i)}`,
+        userId: 'user-123',
+        source: 'automate',
+        device: 'phone',
+        app: 'com.example',
+        title: `Automate Title ${String(i)}`,
+        text: `Text ${String(i)}`,
+        timestamp: Date.now() + 10 + i,
+        postTime: '2024-01-01T00:00:00Z',
+        receivedAt: new Date(Date.now() + 10 + i).toISOString(),
+        notificationId: `ext-automate-${String(i)}`,
+      });
+    }
+
+    // First page with source filter
+    const firstPage = await listNotifications(
+      { userId: 'user-123', source: 'tasker', limit: 2 },
+      notificationRepo
+    );
+    expect(firstPage.ok).toBe(true);
+    if (!firstPage.ok) return;
+    expect(firstPage.value.notifications).toHaveLength(2);
+    expect(firstPage.value.notifications.every((n) => n.source === 'tasker')).toBe(true);
+    expect(firstPage.value.nextCursor).toBeDefined();
+
+    // Second page with same filter
+    const cursor = firstPage.value.nextCursor;
+    if (cursor === undefined) return;
+
+    const secondPage = await listNotifications(
+      { userId: 'user-123', source: 'tasker', limit: 2, cursor },
+      notificationRepo
+    );
+    expect(secondPage.ok).toBe(true);
+    if (secondPage.ok) {
+      expect(secondPage.value.notifications).toHaveLength(2);
+      expect(secondPage.value.notifications.every((n) => n.source === 'tasker')).toBe(true);
+    }
+  });
 });
 
 describe('deleteNotification', () => {

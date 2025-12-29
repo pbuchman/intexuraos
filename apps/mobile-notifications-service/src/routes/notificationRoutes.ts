@@ -12,6 +12,8 @@ import { listNotificationsResponseSchema } from './schemas.js';
 interface ListQuerystring {
   limit?: number;
   cursor?: string;
+  source?: string;
+  app?: string;
 }
 
 interface DeleteParams {
@@ -34,6 +36,8 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           properties: {
             limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
             cursor: { type: 'string' },
+            source: { type: 'string', description: 'Filter by notification source' },
+            app: { type: 'string', description: 'Filter by app package name' },
           },
         },
         response: {
@@ -44,6 +48,15 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             properties: {
               success: { type: 'boolean', enum: [true] },
               data: listNotificationsResponseSchema,
+            },
+          },
+          400: {
+            description: 'Invalid request - cannot filter by both source and app',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
             },
           },
           401: {
@@ -73,9 +86,21 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return;
       }
 
-      const { limit, cursor } = request.query;
+      const { limit, cursor, source, app } = request.query;
 
-      const listInput: { userId: string; limit?: number; cursor?: string } = {
+      // Validate: cannot filter by both source and app
+      if (source !== undefined && app !== undefined) {
+        reply.status(400);
+        return await reply.fail('INVALID_REQUEST', 'Cannot filter by both source and app');
+      }
+
+      const listInput: {
+        userId: string;
+        limit?: number;
+        cursor?: string;
+        source?: string;
+        app?: string;
+      } = {
         userId: user.userId,
       };
       if (limit !== undefined) {
@@ -83,6 +108,12 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       }
       if (cursor !== undefined) {
         listInput.cursor = cursor;
+      }
+      if (source !== undefined) {
+        listInput.source = source;
+      }
+      if (app !== undefined) {
+        listInput.app = app;
       }
 
       const result = await listNotifications(listInput, getServices().notificationRepository);

@@ -220,6 +220,14 @@ export class FakeNotificationRepository implements NotificationRepository {
       .filter((n) => n.userId === userId)
       .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
 
+    // Apply filters
+    if (options.filter?.source !== undefined) {
+      notifications = notifications.filter((n) => n.source === options.filter?.source);
+    }
+    if (options.filter?.app !== undefined) {
+      notifications = notifications.filter((n) => n.app === options.filter?.app);
+    }
+
     // Handle cursor
     if (options.cursor !== undefined) {
       const cursorData = JSON.parse(Buffer.from(options.cursor, 'base64').toString('utf-8')) as {

@@ -126,10 +126,17 @@ export class FirestoreNotificationRepository implements NotificationRepository {
   ): Promise<Result<PaginatedNotifications, RepositoryError>> {
     try {
       const db = getFirestore();
-      let query = db
-        .collection(COLLECTION_NAME)
-        .where('userId', '==', userId)
-        .orderBy('receivedAt', 'desc');
+      let query = db.collection(COLLECTION_NAME).where('userId', '==', userId);
+
+      // Apply filters if provided
+      if (options.filter?.source !== undefined) {
+        query = query.where('source', '==', options.filter.source);
+      }
+      if (options.filter?.app !== undefined) {
+        query = query.where('app', '==', options.filter.app);
+      }
+
+      query = query.orderBy('receivedAt', 'desc');
 
       // Apply cursor if provided - uses receivedAt for pagination
       const cursorData = decodeCursor(options.cursor);

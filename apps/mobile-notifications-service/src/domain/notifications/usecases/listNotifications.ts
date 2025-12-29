@@ -19,6 +19,8 @@ export interface ListNotificationsInput {
   userId: string;
   limit?: number;
   cursor?: string;
+  source?: string;
+  app?: string;
 }
 
 /**
@@ -33,6 +35,17 @@ export async function listNotifications(
   const options: PaginationOptions = { limit };
   if (input.cursor !== undefined) {
     options.cursor = input.cursor;
+  }
+
+  // Add filter if source or app is provided
+  if (input.source !== undefined || input.app !== undefined) {
+    options.filter = {};
+    if (input.source !== undefined) {
+      options.filter.source = input.source;
+    }
+    if (input.app !== undefined) {
+      options.filter.app = input.app;
+    }
   }
 
   const result = await repo.findByUserIdPaginated(input.userId, options);
