@@ -7,15 +7,10 @@ import type {
   LlmResearchProvider,
   LlmSynthesisProvider,
 } from '../../domain/research/index.js';
+import type { DecryptedApiKeys } from '../user/index.js';
 import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
-
-export interface DecryptedApiKeys {
-  google?: string;
-  openai?: string;
-  anthropic?: string;
-}
 
 export function createLlmProviders(
   keys: DecryptedApiKeys
