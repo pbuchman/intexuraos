@@ -3,8 +3,9 @@
  * Detect affected services based on git diff.
  *
  * Rules:
- * - packages/common/** affects all services
+ * - packages/** affects all backend services (bundled by esbuild)
  * - apps/<service>/** affects that service (owns domain + infra)
+ * - scripts/** affects all services (build scripts)
  *
  * Comparison strategy:
  * - Compares with the last SUCCESSFUL Cloud Build commit (not just HEAD~1)
@@ -29,86 +30,46 @@ const BRANCH_NAME = process.env.BRANCH_NAME || 'development';
 // Service dependencies - each app owns its domain and infra
 // terraform/ changes affect all services (infrastructure changes require redeploy)
 // cloudbuild/ changes affect all services (build/deploy logic changes require redeploy)
+// scripts/ changes affect all services (build scripts are shared)
+// packages/* changes affect services that use them (bundled by esbuild)
+
+const COMMON_DEPS = [
+  'terraform/',
+  'cloudbuild/',
+  'scripts/',
+  'package.json',
+  'package-lock.json',
+  'tsconfig.json',
+  'tsconfig.base.json',
+];
+
+// All packages - changes to any package trigger rebuilds of dependent services
+const ALL_PACKAGES = [
+  'packages/common-core/',
+  'packages/common-http/',
+  'packages/http-contracts/',
+  'packages/http-server/',
+  'packages/infra-firestore/',
+  'packages/infra-notion/',
+  'packages/infra-whatsapp/',
+  'packages/infra-gemini/',
+  'packages/infra-claude/',
+  'packages/infra-gpt/',
+];
+
 const SERVICE_DEPS = {
-  'user-service': [
-    'apps/user-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
-  'promptvault-service': [
-    'apps/promptvault-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
-  'notion-service': [
-    'apps/notion-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
-  'whatsapp-service': [
-    'apps/whatsapp-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
+  'user-service': ['apps/user-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  'promptvault-service': ['apps/promptvault-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  'notion-service': ['apps/notion-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  'whatsapp-service': ['apps/whatsapp-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
   'mobile-notifications-service': [
     'apps/mobile-notifications-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
+    ...ALL_PACKAGES,
+    ...COMMON_DEPS,
   ],
-  'api-docs-hub': [
-    'apps/api-docs-hub/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
-  'llm-orchestrator-service': [
-    'apps/llm-orchestrator-service/',
-    'packages/common/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
-  web: [
-    'apps/web/',
-    'terraform/',
-    'cloudbuild/',
-    'package.json',
-    'package-lock.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-  ],
+  'api-docs-hub': ['apps/api-docs-hub/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  'llm-orchestrator-service': ['apps/llm-orchestrator-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  web: ['apps/web/', ...COMMON_DEPS],
 };
 
 /**
@@ -300,7 +261,7 @@ function getChangedFiles(diffRange) {
   } catch (error) {
     console.error('Error getting changed files:', error.message);
     // If git diff fails, assume all services are affected
-    return ['packages/common/'];
+    return ['packages/common-core/'];
   }
 }
 

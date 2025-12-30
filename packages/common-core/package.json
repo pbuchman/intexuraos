@@ -7,16 +7,9 @@
     "node": ">=22.0.0"
   },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -b",
-    "clean": "rm -rf dist .tsbuildinfo"
+    "typecheck": "tsc --noEmit"
   }
 }
