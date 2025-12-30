@@ -1,18 +1,8 @@
 {
-  "files": [],
-  "references": [
-    { "path": "packages/common-core" },
-    { "path": "packages/common-http" },
-    { "path": "packages/infra-firestore" },
-    { "path": "packages/infra-notion" },
-    { "path": "packages/http-contracts" },
-    { "path": "packages/http-server" },
-    { "path": "apps/user-service" },
-    { "path": "apps/promptvault-service" },
-    { "path": "apps/whatsapp-service" },
-    { "path": "apps/notion-service" },
-    { "path": "apps/api-docs-hub" },
-    { "path": "apps/web" },
-    { "path": "apps/mobile-notifications-service" }
-  ]
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "scripts/**/*.mjs"],
+  "exclude": ["**/node_modules", "**/dist", "**/__tests__", "apps/web"]
 }

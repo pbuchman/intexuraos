@@ -130,3 +130,6 @@ export {
   type ExtractLinkPreviewsDeps,
   type ExtractLinkPreviewsLogger,
 } from './usecases/extractLinkPreviews.js';
+
+// Utilities
+export { normalizePhoneNumber } from './utils/index.js';

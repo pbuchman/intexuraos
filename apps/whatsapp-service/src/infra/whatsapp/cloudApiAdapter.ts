@@ -1,55 +1,54 @@
 /**
  * Adapter for WhatsApp Cloud API port.
- * Wraps existing whatsappClient functions as a port implementation.
+ * Uses @intexuraos/infra-whatsapp for WhatsApp Graph API operations.
  */
 import { ok, err, type Result } from '@intexuraos/common-core';
+import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
 import type {
   WhatsAppCloudApiPort,
   MediaUrlInfo,
   SendMessageResult,
   InboxError,
 } from '../../domain/inbox/index.js';
-import {
-  getMediaUrl as getMediaUrlFn,
-  downloadMedia as downloadMediaFn,
-  sendWhatsAppMessage,
-} from '../../whatsappClient.js';
 
 /**
  * WhatsApp Cloud API adapter implementation.
+ * Creates WhatsApp clients as needed for different operations.
  */
 export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
-  constructor(private readonly accessToken: string) {}
+  private readonly mediaClient: WhatsAppClient;
 
-  async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>> {
-    const result = await getMediaUrlFn(mediaId, this.accessToken);
-
-    if (!result.success || result.data === undefined) {
-      return err({
-        code: 'INTERNAL_ERROR',
-        message: result.error ?? 'Failed to get media URL',
-      });
-    }
-
-    return ok({
-      url: result.data.url,
-      mimeType: result.data.mime_type,
-      sha256: result.data.sha256,
-      fileSize: result.data.file_size,
+  constructor(private readonly accessToken: string) {
+    this.mediaClient = createWhatsAppClient({
+      accessToken,
+      phoneNumberId: '', // Not used for media operations
     });
   }
 
-  async downloadMedia(url: string): Promise<Result<Buffer, InboxError>> {
-    const result = await downloadMediaFn(url, this.accessToken);
+  async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>> {
+    const result = await this.mediaClient.getMediaUrl(mediaId);
 
-    if (!result.success || result.buffer === undefined) {
+    if (!result.ok) {
       return err({
         code: 'INTERNAL_ERROR',
-        message: result.error ?? 'Failed to download media',
+        message: result.error.message,
       });
     }
 
-    return ok(result.buffer);
+    return ok(result.value);
+  }
+
+  async downloadMedia(url: string): Promise<Result<Buffer, InboxError>> {
+    const result = await this.mediaClient.downloadMedia(url);
+
+    if (!result.ok) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: result.error.message,
+      });
+    }
+
+    return ok(result.value);
   }
 
   async sendMessage(
@@ -58,21 +57,27 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     message: string,
     replyToMessageId?: string
   ): Promise<Result<SendMessageResult, InboxError>> {
-    const result = await sendWhatsAppMessage(
+    const client = createWhatsAppClient({
+      accessToken: this.accessToken,
       phoneNumberId,
-      recipientPhone,
-      message,
-      this.accessToken,
-      replyToMessageId
-    );
+    });
 
-    if (!result.success || result.messageId === undefined) {
+    const params: { to: string; message: string; replyToMessageId?: string } = {
+      to: recipientPhone,
+      message,
+    };
+    if (replyToMessageId !== undefined) {
+      params.replyToMessageId = replyToMessageId;
+    }
+    const result = await client.sendTextMessage(params);
+
+    if (!result.ok) {
       return err({
         code: 'INTERNAL_ERROR',
-        message: result.error ?? 'Failed to send message',
+        message: result.error.message,
       });
     }
 
-    return ok({ messageId: result.messageId });
+    return ok({ messageId: result.value.messageId });
   }
 }

@@ -24,9 +24,6 @@ import {
   type PromptVaultError,
 } from './infra/notion/index.js';
 
-// Store the logger for use by routes
-let notionLogger: NotionLogger | undefined;
-
 /**
  * Connection repository adapter matching old interface.
  */
@@ -101,10 +98,10 @@ function createConnectionRepository(): ConnectionRepository {
   };
 }
 
-function createNotionApiAdapter(): NotionApiAdapter {
+function createNotionApiAdapter(logger: NotionLogger | undefined): NotionApiAdapter {
   return {
     validateToken: async (token): Promise<Result<boolean, NotionError>> =>
-      await validateNotionToken(token, notionLogger),
+      await validateNotionToken(token, logger),
     getPageWithPreview: async (
       token,
       pageId
@@ -117,7 +114,7 @@ function createNotionApiAdapter(): NotionApiAdapter {
         NotionError
       >
     > => {
-      const result = await getPageWithPreview(token, pageId, notionLogger);
+      const result = await getPageWithPreview(token, pageId, logger);
       if (!result.ok) return result;
       const { id, title, url, blocks } = result.value;
       return { ok: true as const, value: { page: { id, title, url }, blocks } };
@@ -125,16 +122,16 @@ function createNotionApiAdapter(): NotionApiAdapter {
   };
 }
 
-function createPromptRepository(): PromptRepository {
+function createPromptRepository(logger: NotionLogger | undefined): PromptRepository {
   return {
     createPrompt: async (userId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await createPromptFn(userId, input.title, input.content, notionLogger),
+      await createPromptFn(userId, input.title, input.content, logger),
     listPrompts: async (userId): Promise<Result<Prompt[], PromptVaultError>> =>
-      await listPromptsFn(userId, notionLogger),
+      await listPromptsFn(userId, logger),
     getPrompt: async (userId, promptId): Promise<Result<Prompt, PromptVaultError>> =>
-      await getPromptFn(userId, promptId, notionLogger),
+      await getPromptFn(userId, promptId, logger),
     updatePrompt: async (userId, promptId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await updatePromptFn(userId, promptId, input, notionLogger),
+      await updatePromptFn(userId, promptId, input, logger),
   };
 }
 
@@ -143,36 +140,26 @@ function createPromptRepository(): PromptRepository {
  * Call this early in server startup.
  */
 export function getServices(logger?: NotionLogger): ServiceContainer {
-  if (logger !== undefined) {
-    notionLogger = logger;
-  }
-
   container ??= {
-    logger: notionLogger,
+    logger,
     connectionRepository: createConnectionRepository(),
-    notionApi: createNotionApiAdapter(),
-    promptRepository: createPromptRepository(),
+    notionApi: createNotionApiAdapter(logger),
+    promptRepository: createPromptRepository(logger),
   };
 
   return container;
 }
 
 /**
- * Get the configured Notion logger.
- */
-export function getNotionLogger(): NotionLogger | undefined {
-  return notionLogger;
-}
-
-/**
  * Set custom services (for testing).
  */
 export function setServices(services: Partial<ServiceContainer>): void {
+  const logger = services.logger;
   container = {
-    logger: services.logger ?? notionLogger,
+    logger,
     connectionRepository: services.connectionRepository ?? createConnectionRepository(),
-    notionApi: services.notionApi ?? createNotionApiAdapter(),
-    promptRepository: services.promptRepository ?? createPromptRepository(),
+    notionApi: services.notionApi ?? createNotionApiAdapter(logger),
+    promptRepository: services.promptRepository ?? createPromptRepository(logger),
   };
 }
 
@@ -180,10 +167,5 @@ export function setServices(services: Partial<ServiceContainer>): void {
  * Reset services (for testing).
  */
 export function resetServices(): void {
-  notionLogger = undefined;
   container = null;
 }
-
-// Re-export infra functions for direct use
-export * from './infra/firestore/index.js';
-export * from './infra/notion/index.js';

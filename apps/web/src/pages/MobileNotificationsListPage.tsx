@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout, Button, Card } from '@/components';
 import { useAuth } from '@/context';
@@ -23,9 +23,6 @@ interface ActiveFilters {
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
-
-/** Debounce delay for title search in milliseconds */
-const TITLE_SEARCH_DEBOUNCE_MS = 500;
 
 /**
  * Format relative time (e.g., "2h ago", "5m ago")
@@ -193,9 +190,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
   // Multi-dimension filter state
   const [filters, setFilters] = useState<ActiveFilters>({ app: '', source: '', title: '' });
-  // Separate state for title input (immediate update for UX, debounced for API)
+  // Separate state for title input (immediate update for UX, applied on blur)
   const [titleInput, setTitleInput] = useState('');
-  const titleDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Dropdown options from backend
   const [appOptions, setAppOptions] = useState<string[]>([]);
@@ -225,23 +221,6 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     };
     void loadFilterOptions();
   }, [getAccessToken]);
-
-  // Debounce title input - only update filters.title after user stops typing
-  useEffect(() => {
-    if (titleDebounceTimer.current !== null) {
-      clearTimeout(titleDebounceTimer.current);
-    }
-
-    titleDebounceTimer.current = setTimeout(() => {
-      setFilters((prev) => ({ ...prev, title: titleInput }));
-    }, TITLE_SEARCH_DEBOUNCE_MS);
-
-    return (): void => {
-      if (titleDebounceTimer.current !== null) {
-        clearTimeout(titleDebounceTimer.current);
-      }
-    };
-  }, [titleInput]);
 
   const fetchNotifications = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -466,8 +445,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-          <div className="flex items-start justify-between">
-            <span>{error}</span>
+          <div className="flex items-start justify-between gap-2">
+            <span className="min-w-0 break-words">{error}</span>
             <button
               onClick={(): void => {
                 setError(null);
@@ -534,6 +513,14 @@ export function MobileNotificationsListPage(): React.JSX.Element {
               value={titleInput}
               onChange={(e): void => {
                 setTitleInput(e.target.value);
+              }}
+              onBlur={(): void => {
+                setFilters((prev) => ({ ...prev, title: titleInput }));
+              }}
+              onKeyDown={(e): void => {
+                if (e.key === 'Enter') {
+                  setFilters((prev) => ({ ...prev, title: titleInput }));
+                }
               }}
               placeholder="Search in title..."
               className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"

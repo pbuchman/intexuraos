@@ -6,20 +6,11 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -b",
-    "clean": "rm -rf dist .tsbuildinfo",
-    "start": "DOTENV_CONFIG_PATH=.env node -r dotenv/config dist/index.js",
-    "dev": "DOTENV_CONFIG_PATH=.env node --watch -r dotenv/config dist/index.js"
+    "build": "node ../../scripts/build-service.mjs whatsapp-service",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
@@ -29,13 +20,15 @@
     "@google-cloud/storage": "^7.14.0",
     "@intexuraos/common-core": "*",
     "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
+    "@intexuraos/infra-firestore": "*",
+    "@intexuraos/infra-whatsapp": "*",
     "@speechmatics/batch-client": "^5.1.0",
     "cheerio": "^1.0.0",
     "fastify": "^5.1.0",
     "libphonenumber-js": "^1.12.33",
+    "pino": "^10.1.0",
     "sharp": "^0.33.5",
     "zod": "^3.24.1"
   }

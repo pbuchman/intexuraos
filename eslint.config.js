@@ -47,6 +47,11 @@ export default tseslint.config(
         { type: 'common-http', pattern: ['packages/common-http/src/**'], mode: 'folder' },
         { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
+        { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
+        { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
+        { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
+        { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
+        { type: 'infra-llm-audit', pattern: ['packages/infra-llm-audit/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -68,6 +73,19 @@ export default tseslint.config(
             { from: 'infra-firestore', allow: ['infra-firestore', 'common-core'] },
             // infra-notion can import from common-core and infra-firestore
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
+            // infra-whatsapp can import from common-core
+            { from: 'infra-whatsapp', allow: ['infra-whatsapp', 'common-core'] },
+            // infra-gemini can import from common-core and infra-llm-audit
+            { from: 'infra-gemini', allow: ['infra-gemini', 'common-core', 'infra-llm-audit'] },
+            // infra-claude can import from common-core and infra-llm-audit
+            { from: 'infra-claude', allow: ['infra-claude', 'common-core', 'infra-llm-audit'] },
+            // infra-gpt can import from common-core and infra-llm-audit
+            { from: 'infra-gpt', allow: ['infra-gpt', 'common-core', 'infra-llm-audit'] },
+            // infra-llm-audit can import from common-core and infra-firestore
+            {
+              from: 'infra-llm-audit',
+              allow: ['infra-llm-audit', 'common-core', 'infra-firestore'],
+            },
             // http-server can import from decomposed packages
             {
               from: 'http-server',
@@ -87,6 +105,11 @@ export default tseslint.config(
                 'common-http',
                 'infra-firestore',
                 'infra-notion',
+                'infra-whatsapp',
+                'infra-gemini',
+                'infra-claude',
+                'infra-gpt',
+                'infra-llm-audit',
                 'http-contracts',
                 'http-server',
                 'apps',
@@ -135,6 +158,156 @@ export default tseslint.config(
             // Pattern-based cross-app isolation:
             // Block all *-service apps, web app, and api-docs-hub automatically
             // New apps following naming convention are blocked without config changes
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Apps must use @intexuraos/infra-firestore singleton, not direct Firestore import
+  {
+    files: ['apps/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // CRITICAL #1: Routes layer must not import infra packages directly (bypasses domain/DI)
+  // Routes should get dependencies via getServices(), not instantiate infra directly
+  {
+    files: ['apps/*/src/routes/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: '@intexuraos/infra-gemini',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-gpt',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-claude',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-whatsapp',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access WhatsApp client via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-notion',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access Notion client via dependency injection.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // CRITICAL #2: Infra layer must not import from routes layer (inverted dependency)
+  // Dependency direction: Routes → Domain → Infra (never Infra → Routes)
+  {
+    files: ['apps/*/src/infra/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+          ],
+          patterns: [
+            {
+              group: [
+                '*/routes/*',
+                '*/routes/**',
+                '../routes/*',
+                '../routes/**',
+                '../../routes/*',
+                '../../routes/**',
+              ],
+              message:
+                'Infra layer must not import from routes layer. Move shared code to domain or a common utility.',
+            },
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
             {
               group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',

@@ -15,6 +15,10 @@ import {
   X,
   Settings,
   Filter,
+  Sparkles,
+  Plus,
+  List,
+  Key,
 } from 'lucide-react';
 import { useAuth } from '@/context';
 import { getUserSettings } from '@/services/authApi';
@@ -32,6 +36,12 @@ const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
   { to: '/settings/notion', label: 'Notion', icon: FileText },
+  { to: '/settings/api-keys', label: 'API Keys', icon: Key },
+];
+
+const orchestratorItems: NavItem[] = [
+  { to: '/research/new', label: 'New Research', icon: Plus },
+  { to: '/research', label: 'Previous Researches', icon: List },
 ];
 
 const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
@@ -76,6 +86,9 @@ export function Sidebar(): React.JSX.Element {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isOrchestratorOpen, setIsOrchestratorOpen] = useState(() =>
+    window.location.hash.includes('/research')
+  );
   const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
   const location = useLocation();
 
@@ -90,6 +103,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/notifications')) {
       setIsNotificationsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand orchestrator when on research page
+  useEffect(() => {
+    if (location.pathname.startsWith('/research')) {
+      setIsOrchestratorOpen(true);
     }
   }, [location.pathname]);
 
@@ -181,7 +201,7 @@ export function Sidebar(): React.JSX.Element {
           <X className="h-5 w-5" />
         </button>
 
-        <nav className="mt-8 flex-1 space-y-1 p-3 md:mt-0">
+        <nav className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
           {/* Top nav items */}
           {topNavItems.map((item) => (
             <NavLink
@@ -200,6 +220,55 @@ export function Sidebar(): React.JSX.Element {
               {!isCollapsed ? <span>{item.label}</span> : null}
             </NavLink>
           ))}
+
+          {/* LLM Orchestrator section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsOrchestratorOpen(!isOrchestratorOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/research')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">LLM Research</span>
+                  {isOrchestratorOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Orchestrator sub-items */}
+            {isOrchestratorOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                {orchestratorItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/research'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {/* Settings section (collapsible) */}
           <div className="pt-2">
@@ -256,11 +325,7 @@ export function Sidebar(): React.JSX.Element {
               onClick={(): void => {
                 setIsNotificationsOpen(!isNotificationsOpen);
               }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/notifications')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
             >
               <BellRing className="h-5 w-5 shrink-0" />
               {!isCollapsed ? (

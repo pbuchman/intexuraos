@@ -67,29 +67,33 @@ export function initServices(config: ServiceConfig): void {
 }
 
 /**
- * Get or create the service container.
- * Requires initServices() to be called first in production.
+ * Get the service container.
+ * Throws if initServices() was not called first.
  */
 export function getServices(): ServiceContainer {
-  container ??= {
+  if (container !== null) {
+    return container;
+  }
+
+  if (serviceConfig === null) {
+    throw new Error('Service container not initialized. Call initServices() first.');
+  }
+
+  container = {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
-    mediaStorage: new GcsMediaStorageAdapter(serviceConfig?.mediaBucket ?? 'test-bucket'),
+    mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(
-      serviceConfig?.gcpProjectId ?? 'test-project',
-      serviceConfig?.mediaCleanupTopic ?? 'test-media-cleanup'
+      serviceConfig.gcpProjectId,
+      serviceConfig.mediaCleanupTopic
     ),
     messageSender: new WhatsAppCloudApiSender(
-      serviceConfig?.whatsappAccessToken ?? 'test-token',
-      serviceConfig?.whatsappPhoneNumberId ?? 'test-phone-id'
+      serviceConfig.whatsappAccessToken,
+      serviceConfig.whatsappPhoneNumberId
     ),
-    transcriptionService: new SpeechmaticsTranscriptionAdapter(
-      serviceConfig?.speechmaticsApiKey ?? 'test-api-key'
-    ),
-    whatsappCloudApi: new WhatsAppCloudApiAdapter(
-      serviceConfig?.whatsappAccessToken ?? 'test-token'
-    ),
+    transcriptionService: new SpeechmaticsTranscriptionAdapter(serviceConfig.speechmaticsApiKey),
+    whatsappCloudApi: new WhatsAppCloudApiAdapter(serviceConfig.whatsappAccessToken),
     thumbnailGenerator: new ThumbnailGeneratorAdapter(),
     linkPreviewFetcher: new OpenGraphFetcher(),
   };
@@ -109,6 +113,3 @@ export function setServices(services: ServiceContainer): void {
 export function resetServices(): void {
   container = null;
 }
-
-// Re-export infra functions for direct use
-export * from './infra/firestore/index.js';

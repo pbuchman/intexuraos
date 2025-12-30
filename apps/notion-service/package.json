@@ -6,20 +6,11 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -b",
-    "clean": "rm -rf dist .tsbuildinfo",
-    "start": "DOTENV_CONFIG_PATH=.env node -r dotenv/config dist/index.js",
-    "dev": "DOTENV_CONFIG_PATH=.env node --watch -r dotenv/config dist/index.js"
+    "build": "node ../../scripts/build-service.mjs notion-service",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
     "@intexuraos/common-core": "*",

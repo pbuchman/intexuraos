@@ -4,7 +4,7 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { InboxError } from './webhookEventRepository.js';
-import { normalizePhoneNumber } from '../../routes/shared.js';
+import { normalizePhoneNumber } from '../../domain/inbox/index.js';
 
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];

@@ -234,6 +234,8 @@ describe('Frontend Auth Routes', () => {
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null,
+          encryptor: null,
+          llmValidator: null,
         });
 
         app = await buildServer();
@@ -450,6 +452,7 @@ describe('Frontend Auth Routes', () => {
             authTokenRepository: fakeTokenRepo,
             userSettingsRepository: new FakeUserSettingsRepository(),
             auth0Client: null,
+            encryptor: null,
           });
 
           app = await buildServer();

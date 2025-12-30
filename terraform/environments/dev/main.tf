@@ -85,6 +85,12 @@ variable "web_app_domain" {
   default     = "intexuraos.pbuchman.com"
 }
 
+variable "audit_llms" {
+  description = "Enable LLM API call audit logging to Firestore"
+  type        = bool
+  default     = true
+}
+
 # -----------------------------------------------------------------------------
 # Locals
 # -----------------------------------------------------------------------------
@@ -129,6 +135,13 @@ locals {
     api_docs_hub = {
       name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
+    llm_orchestrator_service = {
+      name      = "intexuraos-llm-orchestrator-service"
+      app_path  = "apps/llm-orchestrator-service"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -267,6 +280,8 @@ module "secret_manager" {
     "INTEXURAOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
     # Token encryption key
     "INTEXURAOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
+    # LLM API keys encryption
+    "INTEXURAOS_ENCRYPTION_KEY" = "AES-256 encryption key for LLM API keys (base64-encoded 32-byte key)"
     # WhatsApp Business Cloud API secrets
     "INTEXURAOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
     "INTEXURAOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
@@ -275,12 +290,15 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
     # Speechmatics API secrets
     "INTEXURAOS_SPEECHMATICS_API_KEY" = "Speechmatics Batch API key for speech transcription"
+    # Internal service-to-service auth token
+    "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Web frontend service URLs (public, non-sensitive)
     "INTEXURAOS_USER_SERVICE_URL"                 = "User service Cloud Run URL for web frontend"
     "INTEXURAOS_PROMPTVAULT_SERVICE_URL"          = "PromptVault service Cloud Run URL for web frontend"
     "INTEXURAOS_WHATSAPP_SERVICE_URL"             = "WhatsApp service Cloud Run URL for web frontend"
     "INTEXURAOS_NOTION_SERVICE_URL"               = "Notion service Cloud Run URL for web frontend"
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
+    "INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL"     = "LLM Orchestrator service Cloud Run URL for web frontend"
   }
 
   depends_on = [google_project_service.apis]
@@ -358,6 +376,8 @@ module "user_service" {
     AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
     AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
+    INTERNAL_AUTH_TOKEN             = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   depends_on = [
@@ -520,6 +540,7 @@ module "api_docs_hub" {
     NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
+    LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL     = "${module.llm_orchestrator_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -530,6 +551,45 @@ module "api_docs_hub" {
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
+    module.llm_orchestrator_service,
+  ]
+}
+
+# LLM Orchestrator Service - Multi-LLM research with synthesis
+module "llm_orchestrator_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.llm_orchestrator_service.name
+  service_account = module.iam.service_accounts["llm_orchestrator_service"]
+  port            = local.services.llm_orchestrator_service.port
+  min_scale       = local.services.llm_orchestrator_service.min_scale
+  max_scale       = local.services.llm_orchestrator_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator-service:latest"
+
+  secrets = {
+    AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    USER_SERVICE_URL                = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
+    INTERNAL_AUTH_TOKEN             = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    WHATSAPP_ACCESS_TOKEN           = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
+    WHATSAPP_PHONE_NUMBER_ID        = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
+  }
+
+  env_vars = {
+    INTEXURAOS_AUDIT_LLMS = var.audit_llms ? "true" : "false"
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
   ]
 }
 
@@ -597,6 +657,11 @@ output "mobile_notifications_service_url" {
 output "api_docs_hub_url" {
   description = "API Docs Hub URL"
   value       = module.api_docs_hub.service_url
+}
+
+output "llm_orchestrator_service_url" {
+  description = "LLM Orchestrator Service URL"
+  value       = module.llm_orchestrator_service.service_url
 }
 
 

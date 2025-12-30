@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # IntexuraOS — Claude Instructions
 
 **All rules below are verified by `npm run ci`. If CI passes, rules are satisfied.**
@@ -14,6 +20,8 @@ terraform validate                # If terraform changed
 
 **Do not claim complete until verification passes.**
 
+**NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
+
 ---
 
 ## Architecture
@@ -26,21 +34,30 @@ apps/
     routes/     → HTTP transport layer
     services.ts → Dependency injection container
 packages/
-  common/         → Shared utilities only (Result types, JWT, redaction)
-  http-contracts/ → OpenAPI schemas, Fastify JSON schemas
+  common-core/    → Result types, error utilities (leaf package)
+  common-http/    → HTTP response helpers, JWT utilities (leaf package)
+  http-contracts/ → OpenAPI schemas, Fastify JSON schemas (leaf package)
   http-server/    → Health checks, validation error handler
+  infra-firestore/→ Firestore client wrapper
+  infra-notion/   → Notion client wrapper
+  infra-whatsapp/ → WhatsApp API client
+  infra-claude/   → Anthropic Claude API client
+  infra-gemini/   → Google Gemini API client
+  infra-gpt/      → OpenAI GPT API client
 terraform/        → Infrastructure as code
 docs/             → All documentation
 ```
 
 ### Import Rules (enforced by ESLint boundaries)
 
-| From             | Can Import                                |
-| ---------------- | ----------------------------------------- |
-| `http-contracts` | nothing (leaf package)                    |
-| `common`         | nothing (leaf package)                    |
-| `http-server`    | `common` only                             |
-| `apps/*`         | `common`, `http-contracts`, `http-server` |
+| From             | Can Import                                             |
+| ---------------- | ------------------------------------------------------ |
+| `common-core`    | nothing (leaf package)                                 |
+| `common-http`    | nothing (leaf package)                                 |
+| `http-contracts` | nothing (leaf package)                                 |
+| `http-server`    | `common-core`, `common-http`                           |
+| `infra-*`        | `common-core`, `common-http`                           |
+| `apps/*`         | `common-*`, `http-contracts`, `http-server`, `infra-*` |
 
 **Forbidden:**
 
@@ -81,6 +98,22 @@ const tokenRepo = new FirestoreAuthTokenRepository();
 const tokenRepo = getServices().authTokenRepository;
 ```
 
+### Firestore Access
+
+Use the singleton from `@intexuraos/infra-firestore`, never instantiate directly:
+
+```ts-example
+// ❌ Direct instantiation — creates separate instance
+import { Firestore } from '@google-cloud/firestore';
+const firestore = new Firestore();
+
+// ✅ Singleton — shared instance, testable via setFirestore()
+import { getFirestore } from '@intexuraos/infra-firestore';
+const db = getFirestore();
+```
+
+Repositories should call `getFirestore()` within methods, not accept Firestore as constructor parameter.
+
 ### Secrets
 
 - Use `INTEXURAOS_*` prefix for environment variables
@@ -107,11 +140,18 @@ const tokenRepo = getServices().authTokenRepository;
 
 ### Package Structure
 
-| Package          | Purpose                                    | Dependencies |
-| ---------------- | ------------------------------------------ | ------------ |
-| `common`         | Result types, JWT, redaction, HTTP helpers | none (leaf)  |
-| `http-contracts` | OpenAPI schemas, Fastify JSON schemas      | none (leaf)  |
-| `http-server`    | Health checks, validation error handler    | `common`     |
+| Package           | Purpose                                 | Dependencies       |
+| ----------------- | --------------------------------------- | ------------------ |
+| `common-core`     | Result types, error utilities           | none (leaf)        |
+| `common-http`     | HTTP response helpers, JWT utilities    | none (leaf)        |
+| `http-contracts`  | OpenAPI schemas, Fastify JSON schemas   | none (leaf)        |
+| `http-server`     | Health checks, validation error handler | `common-core/http` |
+| `infra-firestore` | Firestore client wrapper                | `common-core/http` |
+| `infra-notion`    | Notion API client wrapper               | `common-core/http` |
+| `infra-whatsapp`  | WhatsApp Business API client            | `common-core/http` |
+| `infra-claude`    | Anthropic Claude API client             | `common-core/http` |
+| `infra-gemini`    | Google Gemini API client                | `common-core/http` |
+| `infra-gpt`       | OpenAI GPT API client                   | `common-core/http` |
 
 ### Common Package Rules
 
@@ -121,25 +161,35 @@ const tokenRepo = getServices().authTokenRepository;
 | No external service deps | Code review             |
 | Imports nothing          | ESLint boundaries       |
 
-**`packages/common` contains:**
+**`packages/common-core` contains:**
 
-- Result types and utilities
-- HTTP response helpers
+- Result types and utilities (`Result<T, E>`)
+- Error message extraction utilities
 - Redaction utilities
-- JWT/auth utilities
-- Firestore/Notion client wrappers (shared utilities only)
 
-**Forbidden in common:**
+**`packages/common-http` contains:**
+
+- HTTP response helpers
+- JWT/auth utilities
+
+**Forbidden in common packages:**
 
 - Business logic / domain rules
 - App-specific code
-- External service implementations (only client wrappers)
+- External service implementations
 
 ### Package Naming
 
-- `@intexuraos/common`
+- `@intexuraos/common-core`
+- `@intexuraos/common-http`
 - `@intexuraos/http-contracts`
 - `@intexuraos/http-server`
+- `@intexuraos/infra-firestore`
+- `@intexuraos/infra-notion`
+- `@intexuraos/infra-whatsapp`
+- `@intexuraos/infra-claude`
+- `@intexuraos/infra-gemini`
+- `@intexuraos/infra-gpt`
 
 ---
 
@@ -294,18 +344,21 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 
 ---
 
-## Protected Files (Require Explicit Permission)
+## Protected Files — ABSOLUTE PROHIBITION
 
 | File               | Protected Section     | Reason                                 |
 | ------------------ | --------------------- | -------------------------------------- |
 | `vitest.config.ts` | `coverage.thresholds` | Coverage thresholds are project policy |
 | `vitest.config.ts` | `coverage.exclude`    | Exclusions require justification       |
 
-**You must:**
+**ABSOLUTE RULE — NO EXCEPTIONS:**
 
-1. Never modify these sections autonomously
-2. Ask for explicit permission before proposing changes
-3. Document justification when requesting permission
+1. **NEVER** modify `vitest.config.ts` coverage exclusions or thresholds
+2. **NEVER** ask for permission to modify them — the answer is always NO
+3. **ALWAYS** write tests to achieve coverage instead
+4. If coverage fails, write more tests — do not touch exclusions
+
+This rule exists because excluding code from coverage is technical debt that compounds over time.
 
 ---
 
@@ -362,18 +415,13 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 
 **RULE: When fixing a new code smell not listed here, YOU MUST add it to this section.**
 
+### Error Handling
+
 **Silent catch** — always document why errors are ignored:
 
 ```ts-example
 // ❌ try { await op(); } catch {}
 // ✅ try { await op(); } catch { /* Best-effort cleanup */ }
-```
-
-**Redundant variable** — return directly:
-
-```ts-example
-// ❌ const result = await fetch(url); return result;
-// ✅ return await fetch(url);
 ```
 
 **Inline error extraction** — use utility:
@@ -390,6 +438,56 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 // ✅ Separate try-catch from conditional throw
 ```
 
+### Dependency Injection
+
+**Re-exports from services.ts** — services.ts should only export DI container:
+
+```ts-example
+// ❌ export * from './infra/firestore/index.js';  // Bypasses DI
+// ✅ Only export getServices, setServices, resetServices, initServices
+```
+
+**Module-level mutable state** — pass dependencies explicitly:
+
+```ts-example
+// ❌ let logger: Logger | undefined;  // Mutated at runtime
+//    getServices() captures via closure
+// ✅ Pass logger into factory functions: createAdapter(logger)
+```
+
+**Test fallbacks in production** — throw if not initialized:
+
+```ts-example
+// ❌ return container ?? { fakeRepo: new FakeRepo() };
+// ✅ if (!container) throw new Error('Call initServices() first');
+```
+
+### Architecture
+
+**Domain logic in infra layer** — keep domain pure:
+
+```ts-example
+// ❌ packages/infra-*/src/client.ts contains maskApiKey()
+// ✅ Move to domain layer or common-core
+```
+
+**Infra re-exporting domain types** — respect layer boundaries:
+
+```ts-example
+// ❌ // infra/firestore/messageRepository.ts
+//    export type { WhatsAppMessage } from '../../domain/index.js';
+// ✅ Import domain types where needed, don't re-export from infra
+```
+
+### Code Quality
+
+**Redundant variable** — return directly:
+
+```ts-example
+// ❌ const result = await fetch(url); return result;
+// ✅ return await fetch(url);
+```
+
 **Redundant defensive check** — trust TypeScript's type narrowing:
 
 ```ts-example
@@ -404,6 +502,17 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 // ✅ Canonical location, reference elsewhere
 ```
 
+### Known Technical Debt (Documented)
+
+**Duplicated OpenAPI schemas** — each server.ts has inline schemas:
+
+```ts-example
+// Issue: coreComponentSchemas from http-contracts can't be spread
+//        due to Fastify's strict swagger types
+// Status: Keep inline until Fastify types improve or custom wrapper created
+// Files: apps/*/src/server.ts buildOpenApiOptions()
+```
+
 ---
 
 ## Testing
@@ -414,6 +523,64 @@ The web app is deployed as static assets to GCS and served via HTTP(S) Load Bala
 - All Firestore operations mocked via fake repositories
 - All external HTTP calls mocked via `nock`
 - Just run `npm run test` — everything is self-contained
+
+### Test File TypeScript Configuration
+
+**Test files (`src/**tests**/**`) are EXCLUDED from TypeScript compilation (`tsc`).\*\*
+
+This is intentional — tests are:
+
+- Run by Vitest which uses **esbuild** for transpilation (not `tsc`)
+- Ignored by ESLint (in `eslint.config.js` ignores)
+- Not part of the production build
+
+**Why this matters:**
+
+1. `npm run typecheck` does NOT compile test files
+2. `npm run build` does NOT compile test files
+3. Vitest handles test transpilation internally
+
+**IDE shows errors in test files (expected behavior):**
+
+```
+TS2307: Cannot find module '@intexuraos/common-core' or its corresponding type declarations.
+```
+
+**This is a FALSE POSITIVE.** The error appears because:
+
+- Test files are in `exclude` in `tsconfig.json`
+- IDE's TypeScript Language Server cannot resolve workspace package imports
+- But Vitest resolves them correctly at runtime
+
+**DO NOT attempt to "fix" these IDE errors by:**
+
+- ❌ Removing `src/__tests__` from `exclude` in `tsconfig.json`
+- ❌ Adding test dependencies to production dependencies
+- ❌ Creating separate tsconfig for tests
+
+**If you remove `__tests__` from exclude, `npm run build` will FAIL with:**
+
+- Missing type declarations (e.g., `Cannot find module 'nock'`)
+- Implicit `any` errors in test code
+- Other strict mode violations in test files
+
+**Verification:** Tests work correctly despite IDE errors:
+
+```bash
+npm run test                    # All tests pass
+npm run typecheck               # No errors (tests excluded)
+npm run build                   # No errors (tests excluded)
+```
+
+### Common Commands
+
+```bash
+npm run test                           # Run all tests
+npm run test:watch                     # Watch mode
+npm run test:coverage                  # With coverage report
+npx vitest path/to/file.test.ts        # Run single test file
+npx vitest -t "test name pattern"      # Run tests matching pattern
+```
 
 ### Test Setup Pattern
 
@@ -445,7 +612,9 @@ describe('MyRoute', () => {
 
 ### Coverage Thresholds
 
-Current values in `vitest.config.ts`: lines 90%, branches 80%, functions 90%, statements 90%.
+Current values in `vitest.config.ts`: lines 95%, branches 95%, functions 95%, statements 95%.
+
+**NEVER modify coverage thresholds or exclusions. Write tests to meet thresholds.**
 
 ---
 
@@ -550,4 +719,5 @@ Must track:
 1. Run `npm run ci` — must pass
 2. If terraform changed: `terraform fmt -check -recursive && terraform validate`
 3. If CI fails → fix → repeat
-4. Only when all pass → task complete
+4. **If coverage fails → write tests. NEVER modify vitest.config.ts exclusions.**
+5. Only when all pass → task complete

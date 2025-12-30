@@ -1,0 +1,318 @@
+import OpenAI from 'openai';
+import {
+  ok,
+  err,
+  type Result,
+  getErrorMessage,
+  buildResearchPrompt,
+} from '@intexuraos/common-core';
+import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
+import type { GptConfig, ResearchResult, SynthesisInput, GptError } from './types.js';
+
+const DEFAULT_MODEL = 'gpt-4.1';
+const VALIDATION_MODEL = 'gpt-4.1-mini';
+const MAX_TOKENS = 8192;
+
+export interface GptClient {
+  research(prompt: string): Promise<Result<ResearchResult, GptError>>;
+  generateTitle(prompt: string): Promise<Result<string, GptError>>;
+  synthesize(
+    originalPrompt: string,
+    reports: SynthesisInput[],
+    inputContexts?: { content: string }[]
+  ): Promise<Result<string, GptError>>;
+  validateKey(): Promise<Result<boolean, GptError>>;
+}
+
+function createRequestContext(
+  method: string,
+  model: string,
+  prompt: string
+): { requestId: string; startTime: Date; auditContext: AuditContext } {
+  const requestId = crypto.randomUUID();
+  const startTime = new Date();
+
+  // Console logging
+  // eslint-disable-next-line no-console
+  console.info(
+    `[GPT:${method}] Request`,
+    JSON.stringify({
+      requestId,
+      model,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 200),
+    })
+  );
+
+  // Create audit context for Firestore logging
+  const auditContext = createAuditContext({
+    provider: 'openai',
+    model,
+    method,
+    prompt,
+    startedAt: startTime,
+  });
+
+  return { requestId, startTime, auditContext };
+}
+
+async function logSuccess(
+  method: string,
+  requestId: string,
+  startTime: Date,
+  response: string,
+  auditContext: AuditContext
+): Promise<void> {
+  // Console logging
+  // eslint-disable-next-line no-console
+  console.info(
+    `[GPT:${method}] Response`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime.getTime(),
+      responseLength: response.length,
+      responsePreview: response.slice(0, 200),
+    })
+  );
+
+  // Firestore audit logging
+  await auditContext.success({ response });
+}
+
+async function logError(
+  method: string,
+  requestId: string,
+  startTime: Date,
+  error: unknown,
+  auditContext: AuditContext
+): Promise<void> {
+  const errorMessage = getErrorMessage(error, String(error));
+
+  // Console logging
+  // eslint-disable-next-line no-console
+  console.error(
+    `[GPT:${method}] Error`,
+    JSON.stringify({
+      requestId,
+      durationMs: Date.now() - startTime.getTime(),
+      error: errorMessage,
+    })
+  );
+
+  // Firestore audit logging
+  await auditContext.error({ error: errorMessage });
+}
+
+export function createGptClient(config: GptConfig): GptClient {
+  const client = new OpenAI({ apiKey: config.apiKey });
+  const modelName = config.model ?? DEFAULT_MODEL;
+
+  return {
+    async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+      const researchPrompt = buildResearchPrompt(prompt);
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'research',
+        modelName,
+        researchPrompt
+      );
+
+      try {
+        const response = await client.responses.create({
+          model: modelName,
+          instructions:
+            'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
+          input: researchPrompt,
+          tools: [
+            {
+              type: 'web_search_preview',
+              search_context_size: 'high',
+            },
+          ],
+        });
+
+        const content = response.output_text;
+
+        const sources = extractSourcesFromResponse(response);
+
+        await logSuccess('research', requestId, startTime, content, auditContext);
+        return ok({ content, sources });
+      } catch (error) {
+        await logError('research', requestId, startTime, error, auditContext);
+        return err(mapGptError(error));
+      }
+    },
+
+    async generateTitle(prompt: string): Promise<Result<string, GptError>> {
+      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'generateTitle',
+        modelName,
+        titlePrompt
+      );
+
+      try {
+        const response = await client.chat.completions.create({
+          model: modelName,
+          max_tokens: 100,
+          messages: [{ role: 'user', content: titlePrompt }],
+        });
+
+        const text = (response.choices[0]?.message.content ?? '').trim();
+        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
+        return ok(text);
+      } catch (error) {
+        await logError('generateTitle', requestId, startTime, error, auditContext);
+        return err(mapGptError(error));
+      }
+    },
+
+    async synthesize(
+      originalPrompt: string,
+      reports: SynthesisInput[],
+      inputContexts?: { content: string }[]
+    ): Promise<Result<string, GptError>> {
+      const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'synthesize',
+        modelName,
+        synthesisPrompt
+      );
+
+      try {
+        const response = await client.chat.completions.create({
+          model: modelName,
+          max_tokens: MAX_TOKENS,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a research analyst synthesizing multiple reports into one comprehensive document.',
+            },
+            {
+              role: 'user',
+              content: synthesisPrompt,
+            },
+          ],
+        });
+
+        const text = response.choices[0]?.message.content ?? '';
+        await logSuccess('synthesize', requestId, startTime, text, auditContext);
+        return ok(text);
+      } catch (error) {
+        await logError('synthesize', requestId, startTime, error, auditContext);
+        return err(mapGptError(error));
+      }
+    },
+
+    async validateKey(): Promise<Result<boolean, GptError>> {
+      const validatePrompt = 'Say "ok"';
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'validateKey',
+        VALIDATION_MODEL,
+        validatePrompt
+      );
+
+      try {
+        const response = await client.chat.completions.create({
+          model: VALIDATION_MODEL,
+          max_tokens: 10,
+          messages: [{ role: 'user', content: validatePrompt }],
+        });
+
+        const content = response.choices[0]?.message.content ?? '';
+        await logSuccess('validateKey', requestId, startTime, content, auditContext);
+        return ok(true);
+      } catch (error) {
+        await logError('validateKey', requestId, startTime, error, auditContext);
+        return err(mapGptError(error));
+      }
+    },
+  };
+}
+
+function buildSynthesisPrompt(
+  originalPrompt: string,
+  reports: SynthesisInput[],
+  inputContexts?: { content: string }[]
+): string {
+  const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
+
+  let inputContextsSection = '';
+  if (inputContexts !== undefined && inputContexts.length > 0) {
+    const formattedContexts = inputContexts
+      .map((ctx, idx) => `### User Context ${String(idx + 1)}\n\n${ctx.content}`)
+      .join('\n\n---\n\n');
+    inputContextsSection = `## User-Provided Context
+
+The user has provided the following reference materials to consider in the synthesis:
+
+${formattedContexts}
+
+---
+
+`;
+  }
+
+  return `Below are research reports from multiple AI models responding to the same prompt. Synthesize them into a comprehensive, well-organized report.
+
+## Original Research Prompt
+
+${originalPrompt}
+
+${inputContextsSection}## Individual Reports
+
+${formattedReports}
+
+## Your Task
+
+Create a unified synthesis that:
+1. Combines the best insights from all reports${inputContexts !== undefined && inputContexts.length > 0 ? ' and user-provided context' : ''}
+2. Notes any conflicting information
+3. Provides a balanced conclusion
+4. Lists key sources from across all reports
+
+Write in clear, professional prose.`;
+}
+
+function mapGptError(error: unknown): GptError {
+  if (error instanceof OpenAI.APIError) {
+    const message = error.message;
+
+    if (error.status === 401) {
+      return { code: 'INVALID_KEY', message };
+    }
+    if (error.status === 429) {
+      return { code: 'RATE_LIMITED', message };
+    }
+    if (error.code === 'context_length_exceeded') {
+      return { code: 'CONTEXT_LENGTH', message };
+    }
+    if (message.includes('timeout')) {
+      return { code: 'TIMEOUT', message };
+    }
+
+    return { code: 'API_ERROR', message };
+  }
+
+  const message = getErrorMessage(error);
+  return { code: 'API_ERROR', message };
+}
+
+function extractSourcesFromResponse(response: OpenAI.Responses.Response): string[] {
+  const sources: string[] = [];
+
+  for (const item of response.output) {
+    if (item.type === 'web_search_call' && 'results' in item) {
+      const results = item.results as { url?: string }[] | undefined;
+      if (results !== undefined) {
+        for (const result of results) {
+          if (result.url !== undefined) {
+            sources.push(result.url);
+          }
+        }
+      }
+    }
+  }
+
+  return [...new Set(sources)];
+}

@@ -1,4 +1,5 @@
 import pino from 'pino';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import {
@@ -83,8 +84,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(
-    `Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`
-  );
+  process.stderr.write(`Failed to start server: ${getErrorMessage(error, String(error))}\n`);
   process.exit(1);
 });

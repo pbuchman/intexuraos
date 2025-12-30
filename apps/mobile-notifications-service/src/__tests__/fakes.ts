@@ -16,7 +16,7 @@ import type {
   PaginationOptions,
   PaginatedNotifications,
   DistinctFilterField,
-} from '../domain/notifications';
+} from '../domain/notifications/index.js';
 
 /**
  * Fake SignatureConnection repository for testing.
@@ -75,7 +75,7 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
     }
 
-    for (const conn of this.connections.values()) {
+    for (const conn of Array.from(this.connections.values())) {
       if (conn.signatureHash === hash) {
         return Promise.resolve(ok(conn));
       }
@@ -107,7 +107,7 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
     }
 
     let count = 0;
-    for (const [id, conn] of this.connections.entries()) {
+    for (const [id, conn] of Array.from(this.connections.entries())) {
       if (conn.userId === userId) {
         this.connections.delete(id);
         count++;
@@ -122,7 +122,7 @@ export class FakeSignatureConnectionRepository implements SignatureConnectionRep
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated exists failure' }));
     }
 
-    for (const conn of this.connections.values()) {
+    for (const conn of Array.from(this.connections.values())) {
       if (conn.userId === userId) {
         return Promise.resolve(ok(true));
       }
@@ -273,7 +273,7 @@ export class FakeNotificationRepository implements NotificationRepository {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
     }
 
-    for (const notif of this.notifications.values()) {
+    for (const notif of Array.from(this.notifications.values())) {
       if (notif.notificationId === notificationId && notif.userId === userId) {
         return Promise.resolve(ok(true));
       }
@@ -319,7 +319,7 @@ export class FakeNotificationRepository implements NotificationRepository {
     }
 
     const values = new Set<string>();
-    for (const notif of this.notifications.values()) {
+    for (const notif of Array.from(this.notifications.values())) {
       if (notif.userId === userId) {
         const value = notif[field];
         if (typeof value === 'string' && value.length > 0) {

@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       VitePWA({
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         includeAssets: ['favicon.png', 'logo.png'],
         manifest: {
           name: 'IntexuraOS',
@@ -80,29 +80,20 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // Skip waiting to activate new service worker immediately
+          skipWaiting: true,
+          clientsClaim: true,
           // Cache strategies for SPA
           runtimeCaching: [
             {
-              // HTML - network first for fresh content
-              urlPattern: /^https:\/\/.*\.html$/,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'html-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24, // 1 day
-                },
-              },
-            },
-            {
-              // JS/CSS - cache first with versioning (hash in filename)
+              // JS/CSS - stale while revalidate for faster updates
               urlPattern: /\.(?:js|css)$/,
-              handler: 'CacheFirst',
+              handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'static-resources',
                 expiration: {
                   maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                  maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
                 },
               },
             },

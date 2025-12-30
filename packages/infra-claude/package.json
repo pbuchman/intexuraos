@@ -1,0 +1,20 @@
+{
+  "name": "@intexuraos/infra-claude",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*",
+    "@intexuraos/infra-llm-audit": "*",
+    "@anthropic-ai/sdk": "^0.71.2"
+  }
+}

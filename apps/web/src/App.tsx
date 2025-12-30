@@ -13,6 +13,10 @@ import {
   WhatsAppNotesPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
+  ApiKeysSettingsPage,
+  LlmOrchestratorPage,
+  ResearchListPage,
+  ResearchDetailPage,
 } from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -111,6 +115,39 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <MobileNotificationsConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/api-keys"
+        element={
+          <ProtectedRoute>
+            <ApiKeysSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* LLM Orchestrator routes */}
+      <Route
+        path="/research/new"
+        element={
+          <ProtectedRoute>
+            <LlmOrchestratorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/research/:id"
+        element={
+          <ProtectedRoute>
+            <ResearchDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/research"
+        element={
+          <ProtectedRoute>
+            <ResearchListPage />
           </ProtectedRoute>
         }
       />

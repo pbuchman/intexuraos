@@ -12,7 +12,7 @@ Derived from the Latin _intexere_ (to weave together) and _textura_ (structure),
 ![Firestore](https://img.shields.io/badge/Firestore-Native-22B8CF?logo=firebase&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.5+-22B8CF?logo=terraform&logoColor=white)
 ![Auth0](https://img.shields.io/badge/Auth0-OAuth2-22B8CF?logo=auth0&logoColor=white)
-![Coverage 90%+](https://img.shields.io/badge/Coverage-90%25+-22B8CF)
+![Coverage 95%+](https://img.shields.io/badge/Coverage-95%25+-22B8CF)
 
 ---
 
@@ -39,109 +39,20 @@ IntexuraOS is the execution layer for a personal operating system where **Notion
 - ✅ **Result-based error handling** — No thrown exceptions; explicit `Result<T, E>` types everywhere
 - ✅ **No Dummy Success** — Every operation succeeds with verifiable results or fails explicitly
 - ✅ **Idempotent operations** — Safe to retry; no duplicate records or corrupted state
-- ✅ **89%+ test coverage** — Enforced by CI with branch/function thresholds
+- ✅ **95% test coverage** — Enforced by CI with branch/function thresholds
 - ✅ **Deterministic builds** — Same inputs produce same outputs; reproducible deployments
 
 ---
 
 ## WhatsApp Voice Notes → Transcription
 
-One of IntexuraOS's core features is automatic transcription of WhatsApp voice notes. Send a voice message to your WhatsApp bot, and receive the transcribed text as a reply within seconds.
+Send a voice message to your WhatsApp bot, receive transcribed text as a reply within seconds.
 
-### How It Works
+**Flow:** WhatsApp → whatsapp-service → GCS → Speechmatics → Reply with transcript
 
-```
-┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
-│   WhatsApp   │      │ whatsapp-service │      │   Speechmatics  │
-│  (User App)  │      │   (Webhook +     │      │   (Batch API)   │
-│              │      │  Transcription)  │      │                 │
-└──────┬───────┘      └────────┬─────────┘      └────────┬────────┘
-       │                       │                         │
-       │ 1. Voice message      │                         │
-       │──────────────────────>│                         │
-       │                       │                         │
-       │                       │ 2. Download audio       │
-       │                       │    from Meta API        │
-       │                       │                         │
-       │                       │ 3. Store in GCS         │
-       │                       │    (whatsapp-media      │
-       │                       │     bucket)             │
-       │                       │                         │
-       │ 4. Confirmation       │                         │
-       │<──────────────────────│                         │
-       │    "Processing..."    │                         │
-       │                       │                         │
-       │                       │ 5. Submit job           │
-       │                       │    (async background)   │
-       │                       │────────────────────────>│
-       │                       │                         │
-       │                       │ 6. Poll until done      │
-       │                       │────────────────────────>│
-       │                       │                         │
-       │                       │ 7. Fetch transcript     │
-       │                       │<────────────────────────│
-       │                       │                         │
-       │ 8. Reply with         │                         │
-       │    transcribed text   │                         │
-       │<──────────────────────│                         │
-       │                       │                         │
-```
+Transcription is handled inline by whatsapp-service using fire-and-forget async. This minimizes infrastructure complexity and cold start latency.
 
-### Architecture
-
-Transcription is handled **inline** by whatsapp-service using a fire-and-forget async function. This approach:
-
-- Minimizes infrastructure complexity (no separate service)
-- Reduces cold start latency (transcription starts immediately)
-- Simplifies deployment and monitoring
-
-**Trade-off:** Container termination may interrupt long transcriptions. For reliability, set `min_scale=1` on whatsapp-service in production.
-
-See [docs/architecture/transcription.md](docs/architecture/transcription.md) for detailed architecture documentation.
-
-### Configuration
-
-Environment variables required for transcription:
-
-| Variable                           | Service          | Description                   |
-| ---------------------------------- | ---------------- | ----------------------------- |
-| `INTEXURAOS_SPEECHMATICS_API_KEY`  | whatsapp-service | Speechmatics API key (secret) |
-| `INTEXURAOS_WHATSAPP_MEDIA_BUCKET` | whatsapp-service | GCS bucket for media storage  |
-
-### Transcription States
-
-```
-pending ──────> processing ──────> completed
-    │               │                  │
-    │               │                  └── transcription stored, user notified
-    │               │
-    │               └──> failed (Speechmatics error)
-    │
-    └──> failed (signed URL / network error)
-```
-
-| `INTEXURAOS_TRANSCRIPTION_COMPLETED_SUBSCRIPTION` | whatsapp-service | Subscription for completion events |
-
-### Monitoring
-
-Key log messages to watch in whatsapp-service:
-
-```
-# Webhook handling
-"Audio message saved successfully" { messageId, gcsPath }
-
-# Transcription flow
-"transcription_start" { messageId, userId, gcsPath }
-"transcription_submit" { messageId }
-"transcription_poll" { messageId, jobId, attempt }
-"transcription_done" { messageId, jobId }
-"transcription_completed" { messageId, transcriptLength }
-
-# Error conditions
-"transcription_submit_error" { messageId, error }
-"transcription_rejected" { messageId, error }
-"transcription_timeout" { messageId, attempts }
-```
+📖 See [docs/architecture/transcription.md](docs/architecture/transcription.md) for detailed architecture, configuration, states, and monitoring.
 
 ---
 
@@ -187,7 +98,8 @@ This project is developed with LLMs as **senior reviewers, architects, and autom
 
 ### Continuity Ledger Pattern
 
-For complex multi-step tasks, we use a **continuity ledger** — a compaction-safe markdown file (`CONTINUITY.md`) that logs every decision, reasoning step, and state transition. This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.prompt.md](.github/prompts/continuity.prompt.md) for the orchestration protocol.
+For complex multi-step tasks, we use a **continuity ledger** — a compaction-safe markdown file (`CONTINUITY.md`) that logs every decision, reasoning step, and state transition.
+This enables deterministic resume after interruption, full audit trail of LLM reasoning, and idempotent execution across sessions. See [continuity.md](.claude/commands/continuity.md) for the orchestration protocol or [sample feature](./continuity/archive/014-llm-orchestrator/CONTINUITY.md) developed with this pattern.
 
 ---
 
@@ -252,45 +164,12 @@ For detailed contracts, see [Package Contracts](docs/architecture/package-contra
 
 IntexuraOS supports two OAuth2 flows:
 
-### 1. ChatGPT Actions (Production)
+- **Authorization Code** — For ChatGPT custom GPT actions (production)
+- **Device Authorization Flow** — For Swagger UI and CLI tools (testing)
 
-Authorization Code flow for custom GPTs:
+Tokens: Access tokens (1h), refresh tokens (30d max, encrypted with AES-256-GCM, stored server-side).
 
-1. User activates GPT action → ChatGPT redirects to `/auth/oauth/authorize`
-2. IntexuraOS redirects to Auth0 Universal Login
-3. User authenticates → Auth0 returns authorization code
-4. ChatGPT exchanges code for tokens via `/auth/oauth/token`
-5. Access token included in all subsequent API calls
-
-### 2. Device Authorization Flow (Testing/CLI)
-
-For Swagger UI and CLI tools:
-
-```bash
-# 1. Start device flow
-curl -X POST https://your-service/auth/device/start \
-  -H "Content-Type: application/json" \
-  -d '{"scope": "openid profile email offline_access"}'
-
-# 2. User visits verification_uri and enters user_code
-
-# 3. Poll for token
-curl -X POST https://your-service/auth/device/poll \
-  -H "Content-Type: application/json" \
-  -d '{"device_code": "XXXX-XXXX"}'
-```
-
-**Token Lifetimes:**
-
-| Token         | Lifetime | Notes                                   |
-| ------------- | -------- | --------------------------------------- |
-| Access token  | 1 hour   | Short-lived; refresh when expired       |
-| Refresh token | 15d idle | Stored server-side, encrypted at rest   |
-| Refresh token | 30d max  | Absolute maximum regardless of activity |
-
-**Refresh tokens** are encrypted with AES-256-GCM and stored in Firestore. Clients only receive access tokens.
-
-For full setup, see [Auth0 Setup Guide](docs/setup/06-auth0.md).
+📖 See [Auth0 Setup Guide](docs/setup/06-auth0.md) for full configuration and flow details.
 
 ---
 
@@ -336,127 +215,34 @@ Pass `cursor` query param to fetch next page.
 
 ## Error Handling
 
-### Response Format
-
-All errors use a consistent envelope:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Validation failed: email is required",
-    "details": { "field": "email" }
-  },
-  "diagnostics": {
-    "requestId": "550e8400-e29b-41d4-a716-446655440000",
-    "durationMs": 12
-  }
-}
-```
-
-### Error Codes
-
-| Code               | HTTP | Description                       |
-| ------------------ | ---- | --------------------------------- |
-| `INVALID_REQUEST`  | 400  | Malformed or invalid request      |
-| `UNAUTHORIZED`     | 401  | Missing or invalid authentication |
-| `FORBIDDEN`        | 403  | Authenticated but not authorized  |
-| `NOT_FOUND`        | 404  | Resource does not exist           |
-| `CONFLICT`         | 409  | Resource state conflict           |
-| `DOWNSTREAM_ERROR` | 502  | External service failure          |
-| `INTERNAL_ERROR`   | 500  | Unexpected server error           |
-| `MISCONFIGURED`    | 503  | Service misconfiguration          |
-
-### Retry Guidance
+All responses use consistent envelopes with `success`, `error`, and `diagnostics` fields. Error codes include `INVALID_REQUEST` (400), `UNAUTHORIZED` (401), `NOT_FOUND` (404), `DOWNSTREAM_ERROR` (502), etc.
 
 - **5xx errors:** Safe to retry with exponential backoff
-- **502 DOWNSTREAM_ERROR:** Retry after 1-5 seconds
-- **409 CONFLICT:** Check state before retrying
 - **4xx errors:** Do not retry; fix request
+
+📖 See [docs/architecture/api-contracts.md](docs/architecture/api-contracts.md) for response formats, error codes, and retry guidance.
 
 ---
 
 ## Data Management
 
-### Storage
+**Storage:** Notion (prompts, notes), Firestore (tokens, mappings, webhooks). All tokens encrypted at rest with AES-256-GCM.
 
-| Data                 | Storage               | Retention       |
-| -------------------- | --------------------- | --------------- |
-| Prompts, Notes       | Notion databases      | User-controlled |
-| Refresh tokens       | Firestore (encrypted) | 30 days max     |
-| User-Notion mappings | Firestore             | Until revoked   |
-| Webhook payloads     | Firestore             | 90 days         |
+**External APIs:** Notion (3 req/sec), Auth0 (JWKS validation), WhatsApp Business Cloud API (webhooks + REST).
 
-### Schema
-
-Domain models defined in `packages/domain/*/src/models/`:
-
-- `InboxNote` — Captured items from WhatsApp/email
-- `InboxAction` — Derived tasks from inbox notes
-- `Prompt` — Template with metadata and version
-
-See [Notion Inbox Schema](docs/notion-inbox.md) for Notion property mappings.
-
-### PII Handling
-
-- Phone numbers stored for WhatsApp user mapping
-- All secrets redacted in logs (first 4 + last 4 chars only)
-- Tokens encrypted at rest with AES-256-GCM
-
----
-
-## External Data Sources
-
-### Notion API
-
-- **Integration:** OAuth2 (user-level) or Internal Integration
-- **Usage:** Read/write databases for prompts, inbox, actions
-- **Rate limits:** 3 requests/second average (Notion-imposed)
-
-### Auth0
-
-- **Integration:** Device Authorization Flow, JWKS validation
-- **Usage:** User authentication, token refresh
-- **Rate limits:** Varies by plan; free tier has burst limits
-
-### WhatsApp Business Cloud API
-
-- **Integration:** Webhook receiver + REST API
-- **Usage:** Receive messages → Notion inbox; send notifications
-- **Rate limits:** Tier-based (see Meta docs)
+📖 See [Notion Inbox Schema](docs/notion-inbox.md) for database property mappings.
 
 ---
 
 ## Security
 
-### Endpoint Permissions
+- **Public endpoints:** `/health`, `/docs`, `/openapi.json`, `/auth/device/*`, `/auth/oauth/*`
+- **Protected endpoints:** All others require Bearer JWT in `Authorization` header
+- **Secrets:** Stored in GCP Secret Manager with `INTEXURAOS_*` prefix
 
-| Endpoint Pattern         | Auth Required | Notes                   |
-| ------------------------ | ------------- | ----------------------- |
-| `/health`                | No            | System endpoint         |
-| `/docs`, `/openapi.json` | No            | Documentation           |
-| `/auth/device/*`         | No            | Pre-authentication flow |
-| `/auth/oauth/*`          | No            | OAuth callbacks         |
-| `/*` (other)             | Yes           | Bearer JWT required     |
+📖 See [docs/operations/secrets.md](docs/operations/secrets.md) for secret inventory and management.
 
-### Secrets Management
-
-Secrets stored in **GCP Secret Manager** with `INTEXURAOS_*` prefix:
-
-| Secret                            | Purpose                          |
-| --------------------------------- | -------------------------------- |
-| `INTEXURAOS_AUTH0_DOMAIN`         | Auth0 tenant domain              |
-| `INTEXURAOS_AUTH0_CLIENT_ID`      | Native app client ID             |
-| `INTEXURAOS_AUTH_JWKS_URL`        | JWKS endpoint for JWT validation |
-| `INTEXURAOS_AUTH_ISSUER`          | Expected JWT issuer              |
-| `INTEXURAOS_AUTH_AUDIENCE`        | Expected JWT audience            |
-| `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 key for refresh tokens   |
-| `INTEXURAOS_WHATSAPP_*`           | WhatsApp API credentials         |
-
-### Vulnerability Reports
-
-Report security issues to the repository owner. Do not open public issues for security vulnerabilities.
+**Vulnerability Reports:** Contact repository owner directly. Do not open public issues.
 
 ---
 
@@ -518,41 +304,17 @@ LOG_LEVEL=debug
 
 ## Testing
 
-### Run Tests
+Tests use **in-memory fake repositories** via dependency injection. No external services required.
 
 ```bash
-npm run test              # Single run
-npm run test:watch        # Watch mode
+npm run test              # Run all tests
 npm run test:coverage     # With coverage report
+npm run ci                # Full CI pipeline
 ```
 
-### Coverage Requirements
+**Coverage thresholds:** 95% lines/branches/functions/statements (enforced by CI).
 
-| Metric     | Threshold |
-| ---------- | --------- |
-| Lines      | 65%       |
-| Branches   | 70%       |
-| Functions  | 45%       |
-| Statements | 65%       |
-
-(Temporarily lowered; TODO: restore to 89/85/90/89 after adding infra tests)
-
-### Mocking Strategy
-
-- **Firestore:** Emulator for integration tests
-- **Auth0:** Fake client in `apps/user-service/src/__tests__/fakes.ts`
-- **Notion:** Fake adapter in `apps/*/src/__tests__/fakes.ts`
-- **External HTTP:** No real calls in unit tests
-
-### Testing
-
-Tests use **in-memory fake repositories** via dependency injection. No external services required:
-
-```bash
-npm run test          # Run all tests
-npm run test:coverage # Run with coverage report
-npm run ci            # Full CI pipeline (lint, typecheck, test, build)
-```
+📖 See [docs/development/testing.md](docs/development/testing.md) for mocking strategy, test patterns, and setup examples.
 
 ---
 
@@ -600,39 +362,11 @@ gcloud run services update-traffic user-service \
 
 ## Observability
 
-### Health Checks
+- **Health checks:** All services expose `GET /health` with status (`ok`/`degraded`/`down`) and dependency checks
+- **Logging:** JSON structured, levels `debug`/`info`/`warn`/`error`, request ID via `X-Request-Id`, automatic token redaction
+- **Metrics:** Cloud Run built-in (request count, latency, error rate, CPU/memory)
 
-All services expose `GET /health`:
-
-```json
-{
-  "status": "ok",
-  "serviceName": "user-service",
-  "version": "0.0.1",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "checks": [
-    { "name": "secrets", "status": "ok", "latencyMs": 15 },
-    { "name": "firestore", "status": "ok", "latencyMs": 42 }
-  ]
-}
-```
-
-Status values: `ok` | `degraded` | `down`
-
-### Logging
-
-- **Format:** JSON (structured)
-- **Levels:** `debug`, `info`, `warn`, `error`
-- **Request ID:** Included in all log entries via `X-Request-Id`
-- **Token redaction:** Automatic for sensitive fields
-
-### Metrics
-
-Cloud Run provides built-in metrics:
-
-- Request count, latency, error rate
-- Container instance count
-- Memory/CPU utilization
+📖 See [docs/architecture/api-contracts.md](docs/architecture/api-contracts.md) for health check response format.
 
 ---
 
@@ -689,9 +423,8 @@ AI-assisted development is configured via:
 Key rules:
 
 - `npm run ci` must pass before task completion
-- Use `show_content` for non-trivial output
 - Follow import hierarchy (enforced by boundaries)
-- 89%+ coverage required
+- 95% coverage required
 
 ---
 
@@ -703,7 +436,12 @@ docs/
 ├── architecture/
 │   ├── api-contracts.md               # Response formats, error codes
 │   ├── package-contracts.md           # Layer rules, dependencies
-│   └── static-assets-hosting.md       # CDN configuration
+│   ├── transcription.md               # WhatsApp voice transcription
+│   └── web-app-hosting.md             # GCS + Load Balancer hosting
+├── development/
+│   └── testing.md                     # Test patterns, mocking, coverage
+├── operations/
+│   └── secrets.md                     # Secret Manager, env vars
 ├── setup/
 │   ├── 01-gcp-project.md              # GCP project setup
 │   ├── 02-terraform-bootstrap.md      # Infrastructure bootstrap
@@ -711,8 +449,7 @@ docs/
 │   ├── 04-cloud-run-services.md       # Service deployment
 │   ├── 05-local-dev-with-gcp-deps.md  # Local development
 │   ├── 06-auth0.md                    # Authentication setup
-│   ├── 07-whatsapp-business-cloud-api.md  # WhatsApp integration
-│   └── mobile-notifications-xiaomi.md # Tasker/AutoNotification setup
+│   └── 07-whatsapp-business-cloud-api.md  # WhatsApp integration
 ├── notion-inbox.md                    # Notion database schema
 └── assets/branding/                   # Logo and icon assets
 ```
