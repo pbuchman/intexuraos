@@ -21,8 +21,6 @@ export {
 } from './userMappingRepository.js';
 
 export {
-  type WhatsAppMessage,
-  type WhatsAppMessageMetadata,
   saveMessage,
   getMessagesByUser,
   getMessage,

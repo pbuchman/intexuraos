@@ -7,13 +7,9 @@ import { randomUUID } from 'node:crypto';
 import type { InboxError } from './webhookEventRepository.js';
 import type {
   WhatsAppMessage,
-  WhatsAppMessageMetadata,
   TranscriptionState,
   LinkPreviewState,
 } from '../../domain/inbox/index.js';
-
-// Re-export for convenience
-export type { WhatsAppMessage, WhatsAppMessageMetadata };
 
 const COLLECTION_NAME = 'whatsapp_messages';
 
