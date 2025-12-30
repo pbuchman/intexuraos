@@ -15,9 +15,6 @@ import {
 } from './infra/firestore/index.js';
 import { validateNotionToken, getPageWithPreview } from './infra/notion/index.js';
 
-// Store the logger for use by routes
-let notionLogger: NotionLogger | undefined;
-
 /**
  * Connection repository adapter matching old interface.
  */
@@ -76,10 +73,10 @@ function createConnectionRepository(): ConnectionRepository {
   };
 }
 
-function createNotionApiAdapter(): NotionApiAdapter {
+function createNotionApiAdapter(logger: NotionLogger | undefined): NotionApiAdapter {
   return {
     validateToken: async (token): Promise<Result<boolean, NotionError>> =>
-      await validateNotionToken(token, notionLogger),
+      await validateNotionToken(token, logger),
     getPageWithPreview: async (
       token,
       pageId
@@ -92,7 +89,7 @@ function createNotionApiAdapter(): NotionApiAdapter {
         NotionError
       >
     > => {
-      const result = await getPageWithPreview(token, pageId, notionLogger);
+      const result = await getPageWithPreview(token, pageId, logger);
       if (!result.ok) return result;
       const { id, title, url, blocks } = result.value;
       return { ok: true as const, value: { page: { id, title, url }, blocks } };
@@ -105,34 +102,24 @@ function createNotionApiAdapter(): NotionApiAdapter {
  * Call this early in server startup.
  */
 export function getServices(logger?: NotionLogger): ServiceContainer {
-  if (logger !== undefined) {
-    notionLogger = logger;
-  }
-
   container ??= {
-    logger: notionLogger,
+    logger,
     connectionRepository: createConnectionRepository(),
-    notionApi: createNotionApiAdapter(),
+    notionApi: createNotionApiAdapter(logger),
   };
 
   return container;
 }
 
 /**
- * Get the configured Notion logger.
- */
-export function getNotionLogger(): NotionLogger | undefined {
-  return notionLogger;
-}
-
-/**
  * Set custom services (for testing).
  */
 export function setServices(services: Partial<ServiceContainer>): void {
+  const logger = services.logger;
   container = {
-    logger: services.logger ?? notionLogger,
+    logger,
     connectionRepository: services.connectionRepository ?? createConnectionRepository(),
-    notionApi: services.notionApi ?? createNotionApiAdapter(),
+    notionApi: services.notionApi ?? createNotionApiAdapter(logger),
   };
 }
 
@@ -140,6 +127,5 @@ export function setServices(services: Partial<ServiceContainer>): void {
  * Reset services (for testing).
  */
 export function resetServices(): void {
-  notionLogger = undefined;
   container = null;
 }
