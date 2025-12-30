@@ -1,10 +1,16 @@
 import OpenAI from 'openai';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import {
+  ok,
+  err,
+  type Result,
+  getErrorMessage,
+  buildResearchPrompt,
+} from '@intexuraos/common-core';
 import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GptConfig, ResearchResult, SynthesisInput, GptError } from './types.js';
 
-const DEFAULT_MODEL = 'gpt-4o';
-const VALIDATION_MODEL = 'gpt-4o-mini';
+const DEFAULT_MODEL = 'gpt-4.1';
+const VALIDATION_MODEL = 'gpt-4.1-mini';
 const MAX_TOKENS = 8192;
 
 export interface GptClient {
@@ -99,34 +105,33 @@ export function createGptClient(config: GptConfig): GptClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+      const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt
+        researchPrompt
       );
 
       try {
-        const response = await client.chat.completions.create({
+        const response = await client.responses.create({
           model: modelName,
-          max_tokens: MAX_TOKENS,
-          messages: [
+          instructions:
+            'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
+          input: researchPrompt,
+          tools: [
             {
-              role: 'system',
-              content:
-                'You are a research analyst. Provide comprehensive, well-organized research on the given topic. Include relevant facts, analysis, and conclusions.',
-            },
-            {
-              role: 'user',
-              content: prompt,
+              type: 'web_search_preview',
+              search_context_size: 'high',
             },
           ],
         });
 
-        const firstChoice = response.choices[0];
-        const content = firstChoice?.message.content ?? '';
+        const content = response.output_text;
+
+        const sources = extractSourcesFromResponse(response);
 
         await logSuccess('research', requestId, startTime, content, auditContext);
-        return ok({ content });
+        return ok({ content, sources });
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
@@ -266,4 +271,23 @@ function mapGptError(error: unknown): GptError {
 
   const message = getErrorMessage(error);
   return { code: 'API_ERROR', message };
+}
+
+function extractSourcesFromResponse(response: OpenAI.Responses.Response): string[] {
+  const sources: string[] = [];
+
+  for (const item of response.output) {
+    if (item.type === 'web_search_call' && 'results' in item) {
+      const results = item.results as { url?: string }[] | undefined;
+      if (results !== undefined) {
+        for (const result of results) {
+          if (result.url !== undefined) {
+            sources.push(result.url);
+          }
+        }
+      }
+    }
+  }
+
+  return [...new Set(sources)];
 }

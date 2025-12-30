@@ -15,6 +15,6 @@
   "dependencies": {
     "@intexuraos/common-core": "*",
     "@intexuraos/infra-llm-audit": "*",
-    "@anthropic-ai/sdk": "^0.32.0"
+    "@anthropic-ai/sdk": "^0.71.2"
   }
 }

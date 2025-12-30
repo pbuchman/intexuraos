@@ -1,5 +1,11 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { GoogleGenerativeAI, type GenerateContentResult } from '@google/generative-ai';
+import {
+  ok,
+  err,
+  type Result,
+  getErrorMessage,
+  buildResearchPrompt,
+} from '@intexuraos/common-core';
 import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
 
@@ -101,20 +107,25 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
+      const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt
+        researchPrompt
       );
 
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          tools: [{ googleSearchRetrieval: {} }],
+        });
+        const result = await model.generateContent(researchPrompt);
         const response = result.response;
         const text = response.text();
+        const sources = extractSourcesFromGeminiResponse(result);
 
         await logSuccess('research', requestId, startTime, text, auditContext);
-        return ok({ content: text });
+        return ok({ content: text, sources });
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
@@ -203,6 +214,24 @@ function mapGeminiError(error: unknown): GeminiError {
   }
 
   return { code: 'API_ERROR', message };
+}
+
+function extractSourcesFromGeminiResponse(result: GenerateContentResult): string[] {
+  const sources: string[] = [];
+  const candidate = result.response.candidates?.[0];
+
+  if (candidate?.groundingMetadata !== undefined) {
+    const groundingChunks = candidate.groundingMetadata.groundingChuncks;
+    if (Array.isArray(groundingChunks)) {
+      for (const chunk of groundingChunks) {
+        if (chunk.web?.uri !== undefined) {
+          sources.push(chunk.web.uri);
+        }
+      }
+    }
+  }
+
+  return [...new Set(sources)];
 }
 
 function buildSynthesisPrompt(originalPrompt: string, reports: SynthesisInput[]): string {

@@ -1,5 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import {
+  ok,
+  err,
+  type Result,
+  getErrorMessage,
+  buildResearchPrompt,
+} from '@intexuraos/common-core';
 import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { ClaudeConfig, ResearchResult, SynthesisInput, ClaudeError } from './types.js';
 
@@ -102,17 +108,24 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
+      const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt
+        researchPrompt
       );
 
       try {
         const response = await client.messages.create({
           model: modelName,
           max_tokens: MAX_TOKENS,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: 'user', content: researchPrompt }],
+          tools: [
+            {
+              type: 'web_search_20250305' as const,
+              name: 'web_search' as const,
+            },
+          ],
         });
 
         const textBlocks = response.content.filter(
@@ -120,9 +133,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         );
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
+        const sources = extractSourcesFromClaudeResponse(response);
 
         await logSuccess('research', requestId, startTime, content, auditContext);
-        return ok({ content });
+        return ok({ content, sources });
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
@@ -267,4 +281,27 @@ function mapClaudeError(error: unknown): ClaudeError {
 
   const message = getErrorMessage(error);
   return { code: 'API_ERROR', message };
+}
+
+function extractSourcesFromClaudeResponse(response: Anthropic.Message): string[] {
+  const sources: string[] = [];
+  const urlPattern = /https?:\/\/[^\s"'<>)\]]+/g;
+
+  for (const block of response.content) {
+    if (block.type === 'text') {
+      const matches = block.text.match(urlPattern);
+      if (matches !== null) {
+        sources.push(...matches);
+      }
+    }
+    if (block.type === 'web_search_tool_result') {
+      if (Array.isArray(block.content)) {
+        for (const result of block.content) {
+          sources.push(result.url);
+        }
+      }
+    }
+  }
+
+  return [...new Set(sources)];
 }
