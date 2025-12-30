@@ -2,7 +2,7 @@
 import * as esbuild from 'esbuild';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -13,20 +13,47 @@ if (!service) {
   process.exit(1);
 }
 
-// Read service's package.json to get its dependencies
-const servicePkgPath = resolve(rootDir, `apps/${service}/package.json`);
-const servicePkg = JSON.parse(readFileSync(servicePkgPath, 'utf8'));
+/**
+ * Recursively collect all npm dependencies from workspace packages.
+ * @intexuraos/* packages are bundled, their npm deps must be external.
+ */
+function collectExternalDeps(pkgName, visited = new Set()) {
+  if (visited.has(pkgName)) return new Set();
+  visited.add(pkgName);
 
-// All npm dependencies should be external (not bundled)
-// Only @intexuraos/* workspace packages are bundled (they export TypeScript source)
-const allDeps = [
-  ...Object.keys(servicePkg.dependencies || {}),
-  ...Object.keys(servicePkg.devDependencies || {}),
-];
+  if (!pkgName.startsWith('@intexuraos/')) {
+    return new Set(); // npm package - not our concern
+  }
 
-// Filter out @intexuraos/* packages - those MUST be bundled
-// Keep all other npm packages as external
-const externalPackages = allDeps.filter((dep) => !dep.startsWith('@intexuraos/'));
+  // Determine package path - check apps first, then packages
+  const shortName = pkgName.replace('@intexuraos/', '');
+  const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
+  const pkgPath = existsSync(appPath)
+    ? appPath
+    : resolve(rootDir, `packages/${shortName}/package.json`);
+
+  if (!existsSync(pkgPath)) return new Set();
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const externals = new Set();
+
+  for (const dep of Object.keys(deps)) {
+    if (dep.startsWith('@intexuraos/')) {
+      // Recurse into workspace package
+      const subExternals = collectExternalDeps(dep, visited);
+      subExternals.forEach((e) => externals.add(e));
+    } else {
+      // npm package - must be external
+      externals.add(dep);
+    }
+  }
+
+  return externals;
+}
+
+// Collect all external npm deps (including transitive from workspace packages)
+const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
 
 await esbuild.build({
   entryPoints: [resolve(rootDir, `apps/${service}/src/index.ts`)],
@@ -37,10 +64,12 @@ await esbuild.build({
   outfile: resolve(rootDir, `apps/${service}/dist/index.js`),
   external: externalPackages,
   sourcemap: true,
-  // Ensure we can resolve workspace packages that export source
   mainFields: ['module', 'main'],
   conditions: ['import', 'node'],
   absWorkingDir: rootDir,
 });
 
 console.log(`Built ${service}`);
+console.log(
+  `External packages (${String(externalPackages.length)}): ${externalPackages.join(', ')}`
+);
