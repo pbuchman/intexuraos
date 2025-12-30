@@ -6,25 +6,12 @@ import type { LlmProvider } from '@/services/llmKeysApi.types';
 interface ProviderConfig {
   id: LlmProvider;
   name: string;
-  description: string;
 }
 
 const PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'google',
-    name: 'Google (Gemini)',
-    description: 'Required for research synthesis. Enables Gemini 3 Pro with web search grounding.',
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI (GPT)',
-    description: 'Optional. Adds GPT-5.2 Pro to research options.',
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic (Claude)',
-    description: 'Optional. Adds Claude Opus 4.5 with web search to research options.',
-  },
+  { id: 'google', name: 'Google (Gemini)' },
+  { id: 'openai', name: 'OpenAI (GPT)' },
+  { id: 'anthropic', name: 'Anthropic (Claude)' },
 ];
 
 /**
@@ -61,7 +48,7 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
 }
 
 export function ApiKeysSettingsPage(): React.JSX.Element {
-  const { keys, loading, error, setKey, deleteKey } = useLlmKeys();
+  const { keys, loading, error, setKey, deleteKey, testKey } = useLlmKeys();
 
   if (loading) {
     return (
@@ -78,7 +65,7 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-slate-900">API Keys</h2>
         <p className="text-slate-600">
-          Configure your LLM API keys. Keys are encrypted before storage.
+          Configure your LLM API keys. Keys are encrypted and validated before storage.
         </p>
       </div>
 
@@ -88,9 +75,9 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      <div className="max-w-2xl space-y-6">
+      <div className="space-y-4">
         {PROVIDERS.map((provider) => (
-          <ApiKeyCard
+          <ApiKeyRow
             key={provider.id}
             provider={provider}
             currentValue={keys?.[provider.id] ?? null}
@@ -100,6 +87,9 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
             onDelete={async (): Promise<void> => {
               await deleteKey(provider.id);
             }}
+            onTest={async (): Promise<string> => {
+              return await testKey(provider.id);
+            }}
           />
         ))}
       </div>
@@ -107,24 +97,31 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   );
 }
 
-interface ApiKeyCardProps {
+interface ApiKeyRowProps {
   provider: ProviderConfig;
   currentValue: string | null;
   onSave: (apiKey: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onTest: () => Promise<string>;
 }
 
-function ApiKeyCard({
+function ApiKeyRow({
   provider,
   currentValue,
   onSave,
   onDelete,
-}: ApiKeyCardProps): React.JSX.Element {
+  onTest,
+}: ApiKeyRowProps): React.JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResponse, setTestResponse] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  const isConfigured = currentValue !== null;
 
   const handleSave = async (): Promise<void> => {
     const formatError = validateApiKeyFormat(provider.id, inputValue);
@@ -150,57 +147,107 @@ function ApiKeyCard({
   const handleDelete = async (): Promise<void> => {
     await onDelete();
     setShowDeleteConfirm(false);
+    setTestResponse(null);
+    setTestError(null);
   };
 
-  const isConfigured = currentValue !== null;
-  const variant = isConfigured ? 'success' : 'default';
+  const handleTest = async (): Promise<void> => {
+    setIsTesting(true);
+    setTestResponse(null);
+    setTestError(null);
+
+    try {
+      const response = await onTest();
+      setTestResponse(response);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : 'Test failed');
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   return (
-    <Card title={provider.name} variant={variant}>
-      <p className="mb-4 text-sm text-slate-600">{provider.description}</p>
-
-      <div className="flex items-center justify-between mb-4">
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            isConfigured ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          {isConfigured ? 'Configured' : 'Not configured'}
-        </span>
-      </div>
-
-      {isConfigured && !isEditing ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <code className="rounded bg-slate-100 px-2 py-1 font-mono text-sm text-slate-700">
+    <Card>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-slate-900">{provider.name}</span>
+          {isConfigured ? (
+            <code className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
               {currentValue}
             </code>
+          ) : (
+            <span className="text-sm text-slate-400">Not configured</span>
+          )}
+        </div>
+
+        {!isEditing && !showDeleteConfirm ? (
+          <div className="flex gap-2">
+            {isConfigured ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleTest();
+                  }}
+                  disabled={isTesting}
+                  isLoading={isTesting}
+                >
+                  Test
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={(): void => {
+                    setIsEditing(true);
+                  }}
+                >
+                  Update
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(true);
+                  }}
+                >
+                  Delete
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={(): void => {
+                  setIsEditing(true);
+                }}
+              >
+                Configure
+              </Button>
+            )}
           </div>
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={(): void => {
-                setIsEditing(true);
-              }}
-            >
-              Update
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              onClick={(): void => {
-                setShowDeleteConfirm(true);
-              }}
-            >
-              Delete
-            </Button>
-          </div>
+        ) : null}
+      </div>
+
+      {testResponse !== null ? (
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
+          <p className="text-sm font-medium text-green-800 mb-1">LLM Response:</p>
+          <p className="text-sm text-green-700">{testResponse}</p>
         </div>
       ) : null}
 
-      {isEditing || !isConfigured ? (
-        <div className="space-y-3">
+      {testError !== null ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-700">{testError}</p>
+        </div>
+      ) : null}
+
+      {isEditing ? (
+        <div className="mt-4 space-y-3">
           <Input
             label="API Key"
             type="password"
@@ -216,7 +263,7 @@ function ApiKeyCard({
             <p className="text-sm text-red-600">{validationError}</p>
           ) : null}
           {isSaving ? <p className="text-sm text-blue-600">Validating API key...</p> : null}
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Button
               type="button"
               onClick={(): void => {
@@ -227,31 +274,30 @@ function ApiKeyCard({
             >
               {isSaving ? 'Validating...' : 'Save'}
             </Button>
-            {isEditing ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={(): void => {
-                  setIsEditing(false);
-                  setInputValue('');
-                  setValidationError(null);
-                }}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={(): void => {
+                setIsEditing(false);
+                setInputValue('');
+                setValidationError(null);
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
           </div>
         </div>
       ) : null}
 
       {showDeleteConfirm ? (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Are you sure you want to delete this API key?</p>
-          <div className="flex gap-3">
+          <p className="mb-3 text-sm text-red-800">Delete this API key?</p>
+          <div className="flex gap-2">
             <Button
               type="button"
               variant="danger"
+              size="sm"
               onClick={(): void => {
                 void handleDelete();
               }}
@@ -261,6 +307,7 @@ function ApiKeyCard({
             <Button
               type="button"
               variant="secondary"
+              size="sm"
               onClick={(): void => {
                 setShowDeleteConfirm(false);
               }}

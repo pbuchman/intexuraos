@@ -36,6 +36,7 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     title: 'Test Research',
     prompt: 'Test prompt',
     selectedLlms: ['google'],
+    synthesisLlm: 'google',
     status: 'pending',
     llmResults: [
       {
@@ -96,6 +97,7 @@ describe('Research Routes - Unauthenticated', () => {
       payload: {
         prompt: 'Test prompt',
         selectedLlms: ['google'],
+        synthesisLlm: 'google',
       },
     });
 
@@ -194,6 +196,7 @@ describe('Research Routes - Authenticated', () => {
       payload: {
         prompt: 'Test prompt',
         selectedLlms: ['google'],
+        synthesisLlm: 'google',
       },
     });
 
@@ -214,6 +217,7 @@ describe('Research Routes - Authenticated', () => {
       payload: {
         prompt: 'Test prompt',
         selectedLlms: ['google'],
+        synthesisLlm: 'google',
       },
     });
 

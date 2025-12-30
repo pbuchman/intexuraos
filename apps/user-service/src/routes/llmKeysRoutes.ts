@@ -72,6 +72,43 @@ function maskApiKey(key: string): string {
   return `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
+/**
+ * Make a test request to an LLM provider.
+ * Returns the response content or an error message.
+ */
+async function makeTestRequest(
+  provider: LlmProvider,
+  apiKey: string,
+  prompt: string
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  switch (provider) {
+    case 'google': {
+      const client = createGeminiClient({ apiKey });
+      const result = await client.research(prompt);
+      if (!result.ok) {
+        return { ok: false, error: result.error.message };
+      }
+      return { ok: true, value: result.value.content };
+    }
+    case 'openai': {
+      const client = createGptClient({ apiKey });
+      const result = await client.research(prompt);
+      if (!result.ok) {
+        return { ok: false, error: result.error.message };
+      }
+      return { ok: true, value: result.value.content };
+    }
+    case 'anthropic': {
+      const client = createClaudeClient({ apiKey });
+      const result = await client.research(prompt);
+      if (!result.ok) {
+        return { ok: false, error: result.error.message };
+      }
+      return { ok: true, value: result.value.content };
+    }
+  }
+}
+
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys
   fastify.get(
@@ -306,6 +343,112 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         provider: body.provider,
         masked: maskApiKey(body.apiKey),
       });
+    }
+  );
+
+  // POST /users/:uid/settings/llm-keys/:provider/test
+  fastify.post(
+    '/users/:uid/settings/llm-keys/:provider/test',
+    {
+      schema: {
+        operationId: 'testLlmApiKey',
+        summary: 'Test an LLM API key',
+        description: 'Make a test request to the LLM provider with a sample prompt.',
+        tags: ['settings'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+            provider: {
+              type: 'string',
+              enum: ['google', 'openai', 'anthropic'],
+              description: 'LLM provider name',
+            },
+          },
+          required: ['uid', 'provider'],
+        },
+        response: {
+          200: {
+            description: 'Test completed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  response: { type: 'string' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'API key not configured',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (!user) {
+        return;
+      }
+
+      const params = request.params as { uid: string; provider: LlmProvider };
+
+      if (params.uid !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Cannot test other user settings');
+      }
+
+      const { userSettingsRepository, encryptor } = getServices();
+
+      if (encryptor === null) {
+        return await reply.fail('MISCONFIGURED', 'Encryption is not configured');
+      }
+
+      const result = await userSettingsRepository.getSettings(params.uid);
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      const settings = result.value;
+      const encryptedKey = settings?.llmApiKeys?.[params.provider];
+
+      if (encryptedKey === undefined) {
+        return await reply.fail('NOT_FOUND', 'API key not configured for this provider');
+      }
+
+      const decrypted = encryptor.decrypt(encryptedKey);
+      if (!decrypted.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to decrypt API key');
+      }
+
+      const testPrompt = 'Say "Hello! Your API key is working correctly." in exactly those words.';
+      const testResult = await makeTestRequest(params.provider, decrypted.value, testPrompt);
+
+      if (!testResult.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', testResult.error);
+      }
+
+      return await reply.ok({ response: testResult.value });
     }
   );
 

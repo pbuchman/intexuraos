@@ -6,7 +6,7 @@ import { researchSchema, llmProviderSchema } from './common.js';
 
 export const createResearchBodySchema = {
   type: 'object',
-  required: ['prompt', 'selectedLlms'],
+  required: ['prompt', 'selectedLlms', 'synthesisLlm'],
   properties: {
     prompt: {
       type: 'string',
@@ -19,6 +19,7 @@ export const createResearchBodySchema = {
       minItems: 1,
       maxItems: 3,
     },
+    synthesisLlm: llmProviderSchema,
   },
 } as const;
 

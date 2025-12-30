@@ -30,6 +30,7 @@ import {
 interface CreateResearchBody {
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
 }
 
 interface ListResearchesQuery {
@@ -67,7 +68,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { researchRepo, generateId, processResearchAsync } = getServices();
 
       const result = await submitResearch(
-        { userId: user.userId, prompt: body.prompt, selectedLlms: body.selectedLlms },
+        {
+          userId: user.userId,
+          prompt: body.prompt,
+          selectedLlms: body.selectedLlms,
+          synthesisLlm: body.synthesisLlm,
+        },
         { researchRepo, generateId }
       );
 

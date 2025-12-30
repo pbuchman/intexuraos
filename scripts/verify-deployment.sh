@@ -31,6 +31,23 @@ warning() { echo -e "${YELLOW}⚠${NC} $*"; }
 error() { echo -e "${RED}✗${NC} $*"; }
 header() { echo -e "\n${BOLD}━━━ $* ━━━${NC}"; }
 
+# Format ISO date (UTC) to human readable local time
+format_date() {
+  local iso_date="$1"
+  # macOS: convert UTC to local time
+  if TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "${iso_date%%.*}" "+%s" &>/dev/null; then
+    local epoch
+    epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "${iso_date%%.*}" "+%s")
+    date -r "$epoch" "+%b %d %H:%M"
+    return
+  fi
+  # Linux: date -d handles timezone conversion
+  date -d "$iso_date" "+%b %d %H:%M" 2>/dev/null || echo "$iso_date"
+}
+
+# Global PR number (set by get_git_state)
+PR_NUMBER=""
+
 # 1. Check gcloud authentication
 check_gcloud_auth() {
   header "Checking gcloud authentication"
@@ -57,7 +74,7 @@ check_gh_auth() {
     echo "Install: brew install gh"
     exit 1
   fi
-  if ! gh auth status &>/dev/null; then
+  if ! gh auth token &>/dev/null; then
     error "Not authenticated to GitHub CLI"
     echo "Run: gh auth login"
     exit 1
@@ -65,7 +82,31 @@ check_gh_auth() {
   success "GitHub CLI authenticated"
 }
 
-# 3. Get current git state
+# 3. Check Terraform configuration
+check_terraform() {
+  header "Checking Terraform"
+
+  if ! command -v terraform &>/dev/null; then
+    error "Terraform not installed"
+    echo "Install: brew install terraform"
+    exit 1
+  fi
+
+  local tf_dir="terraform/environments/dev"
+  if [[ ! -d "$tf_dir" ]]; then
+    error "Terraform directory not found: $tf_dir"
+    exit 1
+  fi
+
+  if ! terraform -chdir="$tf_dir" validate &>/dev/null; then
+    error "Terraform validation failed"
+    terraform -chdir="$tf_dir" validate
+    exit 1
+  fi
+  success "Terraform configuration valid"
+}
+
+# 4. Get current git state
 get_git_state() {
   header "Current Git State"
   local branch commit msg
@@ -80,43 +121,52 @@ get_git_state() {
   if [[ "$branch" != "development" ]]; then
     warning "Not on development branch (current: $branch)"
   fi
+
+  # Check for open PR
+  local pr_info
+  pr_info=$(gh pr list --head "$branch" --json number,url -q '.[0] | "\(.number)\t\(.url)"' 2>/dev/null || echo "")
+  if [[ -n "$pr_info" ]]; then
+    PR_NUMBER=$(echo "$pr_info" | cut -f1)
+    local pr_url
+    pr_url=$(echo "$pr_info" | cut -f2)
+    success "PR #$PR_NUMBER open - $pr_url"
+  else
+    warning "No PR open from this branch"
+  fi
 }
 
-# 4. Check GitHub Actions CI
+# 5. Check GitHub Actions CI
 check_github_ci() {
   header "GitHub Actions CI Status"
 
-  local repo_owner repo_name
-  repo_owner=$(gh repo view --json owner -q '.owner.login' 2>/dev/null || echo "")
-  repo_name=$(gh repo view --json name -q '.name' 2>/dev/null || echo "")
-
-  if [[ -z "$repo_owner" || -z "$repo_name" ]]; then
-    warning "Could not determine repository info"
+  if [[ -z "$PR_NUMBER" ]]; then
+    warning "No PR to check CI status for"
     return
   fi
 
-  local ci_runs
-  ci_runs=$(gh run list --repo "$repo_owner/$repo_name" --branch development --limit 3 \
-    --json status,conclusion,name,headSha,createdAt 2>/dev/null || echo "[]")
+  local checks
+  checks=$(gh pr checks "$PR_NUMBER" --json name,state,bucket 2>/dev/null || echo "[]")
 
-  if [[ "$ci_runs" == "[]" ]]; then
-    warning "No CI runs found for development branch"
+  if [[ "$checks" == "[]" ]]; then
+    warning "No CI checks found for PR #$PR_NUMBER"
     return
   fi
 
-  echo "$ci_runs" | jq -r '.[] | "\(.status)\t\(.conclusion // "running")\t\(.name)\t\(.headSha[0:7])\t\(.createdAt)"' | \
-  while IFS=$'\t' read -r status conclusion name sha created; do
-    if [[ "$conclusion" == "success" ]]; then
-      success "$name ($sha) - $conclusion"
-    elif [[ "$status" == "in_progress" ]]; then
-      warning "$name ($sha) - in progress"
+  echo "$checks" | jq -r '.[] | "\(.state)\t\(.bucket)\t\(.name)"' | \
+  while IFS=$'\t' read -r state bucket name; do
+    if [[ "$state" == "SUCCESS" ]]; then
+      success "$name"
+    elif [[ "$state" == "PENDING" ]]; then
+      warning "$name - pending"
+    elif [[ "$state" == "SKIPPED" ]]; then
+      echo "  $name - skipped"
     else
-      error "$name ($sha) - ${conclusion:-$status}"
+      error "$name - $state"
     fi
   done
 }
 
-# 5. Check Cloud Build status
+# 6. Check Cloud Build status
 check_cloud_build() {
   header "Cloud Build Status"
 
@@ -129,17 +179,23 @@ check_cloud_build() {
     return
   fi
 
-  echo "$builds" | jq -r '.[] | "\(.status)\t\(.substitutions.COMMIT_SHA // "unknown")[0:7]\t\(.duration // "?")\t\(.createTime)"' | \
-  while IFS=$'\t' read -r status sha duration created; do
+  echo "$builds" | jq -r '.[] | "\(.status)\t\(.substitutions.COMMIT_SHA // "unknown")\t\(.id)\t\(.createTime)"' | \
+  while IFS=$'\t' read -r status sha build_id created; do
     local short_sha="${sha:0:7}"
-    local short_time
-    short_time=$(echo "$created" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
+    local commit_msg formatted_date build_url
+    commit_msg=$(git log -1 --format=%s "$sha" 2>/dev/null || echo "")
+    formatted_date=$(format_date "$created")
+    build_url="https://console.cloud.google.com/cloud-build/builds;region=$REGION/$build_id?project=$PROJECT"
+
     if [[ "$status" == "SUCCESS" ]]; then
-      success "Build $short_sha - $status ($duration) at $short_time"
+      success "$short_sha - $commit_msg ($formatted_date)"
+      echo "    $build_url"
     elif [[ "$status" == "WORKING" || "$status" == "QUEUED" ]]; then
-      warning "Build $short_sha - $status (in progress)"
+      warning "$short_sha - in progress ($formatted_date)"
+      echo "    $build_url"
     else
-      error "Build $short_sha - $status"
+      error "$short_sha - FAILURE - $commit_msg ($formatted_date)"
+      echo "    $build_url"
     fi
   done
 }
@@ -172,12 +228,12 @@ wait_for_cloud_build() {
   return 1
 }
 
-# 7. Check Cloud Run services health
+# 8. Check Cloud Run services health
 check_services_health() {
   header "Cloud Run Services Health"
 
   for svc in "${SERVICES[@]}"; do
-    local ready revision last_deployed
+    local ready revision last_deployed formatted_date
     ready=$(gcloud run services describe "$svc" --project="$PROJECT" --region="$REGION" \
       --format="value(status.conditions[0].status)" 2>/dev/null || echo "Unknown")
 
@@ -186,84 +242,19 @@ check_services_health() {
 
     if [[ -n "$revision" ]]; then
       last_deployed=$(gcloud run revisions describe "$revision" --project="$PROJECT" --region="$REGION" \
-        --format="value(metadata.creationTimestamp)" 2>/dev/null || echo "Unknown")
+        --format="value(metadata.creationTimestamp)" 2>/dev/null || echo "")
+      formatted_date=$(format_date "$last_deployed")
     else
-      last_deployed="Unknown"
+      formatted_date="Unknown"
     fi
 
     local short_name="${svc#intexuraos-}"
     if [[ "$ready" == "True" ]]; then
-      success "$short_name - Ready (deployed: $last_deployed)"
+      success "$short_name ($formatted_date)"
     else
       error "$short_name - $ready"
     fi
   done
-}
-
-# 8. Show recent deployment info
-show_deployment_info() {
-  header "Recent Deployments"
-
-  for svc in "${SERVICES[@]}"; do
-    local revision
-    revision=$(gcloud run services describe "$svc" --project="$PROJECT" --region="$REGION" \
-      --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "")
-
-    if [[ -n "$revision" ]]; then
-      local created image image_sha
-      created=$(gcloud run revisions describe "$revision" --project="$PROJECT" --region="$REGION" \
-        --format="value(metadata.creationTimestamp)" 2>/dev/null || echo "")
-      image=$(gcloud run revisions describe "$revision" --project="$PROJECT" --region="$REGION" \
-        --format="value(spec.containers[0].image)" 2>/dev/null || echo "")
-
-      # Extract commit SHA from image tag (format: ...:<sha>)
-      image_sha=$(echo "$image" | grep -oE ':[a-f0-9]+$' | tr -d ':' | head -c7)
-
-      local short_name="${svc#intexuraos-}"
-      if [[ -n "$image_sha" ]]; then
-        local commit_msg
-        commit_msg=$(git log -1 --format=%s "$image_sha" 2>/dev/null || echo "unknown commit")
-        echo "$short_name: $image_sha - $commit_msg"
-        echo "  Deployed: $created"
-      else
-        echo "$short_name: deployed at $created"
-      fi
-    fi
-  done
-}
-
-# 9. Show recent logs
-show_recent_logs() {
-  header "Recent Error Logs (last 5 min)"
-
-  # Calculate timestamp for 5 minutes ago (macOS compatible)
-  local since_time
-  if date -v-5M '+%Y-%m-%dT%H:%M:%SZ' &>/dev/null; then
-    # macOS
-    since_time=$(date -u -v-5M '+%Y-%m-%dT%H:%M:%SZ')
-  else
-    # Linux
-    since_time=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
-  fi
-
-  local found_errors=false
-  for svc in "${SERVICES[@]}"; do
-    local errors
-    errors=$(gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$svc AND severity>=ERROR AND timestamp>=\"$since_time\"" \
-      --project="$PROJECT" --limit=3 --format="value(textPayload)" 2>/dev/null || echo "")
-
-    if [[ -n "$errors" ]]; then
-      found_errors=true
-      local short_name="${svc#intexuraos-}"
-      error "Errors in $short_name:"
-      echo "$errors" | head -5
-      echo ""
-    fi
-  done
-
-  if [[ "$found_errors" == "false" ]]; then
-    success "No errors found in the last 5 minutes"
-  fi
 }
 
 # Main
@@ -274,6 +265,7 @@ main() {
 
   check_gcloud_auth
   check_gh_auth
+  check_terraform
   get_git_state
   check_github_ci
   check_cloud_build
@@ -288,8 +280,6 @@ main() {
   fi
 
   check_services_health
-  show_deployment_info
-  show_recent_logs
 
   header "Verification Complete"
 }

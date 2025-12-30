@@ -53,6 +53,22 @@ export async function deleteLlmKey(
   );
 }
 
+/**
+ * Test an LLM API key with a sample prompt.
+ */
+export async function testLlmKey(
+  accessToken: string,
+  userId: string,
+  provider: LlmProvider
+): Promise<{ response: string }> {
+  return await apiRequest<{ response: string }>(
+    config.authServiceUrl,
+    `/users/${userId}/settings/llm-keys/${provider}/test`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
 export type {
   LlmProvider,
   LlmKeysResponse,

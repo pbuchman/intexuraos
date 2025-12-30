@@ -19,6 +19,7 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     title: '',
     prompt: 'Test prompt',
     selectedLlms: ['google'],
+    synthesisLlm: 'google',
     status: 'pending',
     llmResults: [
       {
@@ -45,6 +46,7 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test research prompt',
         selectedLlms: ['google', 'anthropic'],
+        synthesisLlm: 'google',
       },
       {
         researchRepo: fakeRepo,
@@ -69,6 +71,7 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test prompt',
         selectedLlms: ['google', 'openai', 'anthropic'],
+        synthesisLlm: 'google',
       },
       {
         researchRepo: fakeRepo,
@@ -94,6 +97,7 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test prompt',
         selectedLlms: ['google'],
+        synthesisLlm: 'google',
       },
       {
         researchRepo: fakeRepo,

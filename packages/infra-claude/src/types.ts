@@ -1,11 +1,16 @@
 export interface ClaudeConfig {
   apiKey: string;
-  model?: string; // default: 'claude-sonnet-4-20250514'
+  model?: string; // default: 'claude-opus-4-5'
 }
 
 export interface ResearchResult {
   content: string;
   sources?: string[];
+}
+
+export interface SynthesisInput {
+  model: string;
+  content: string;
 }
 
 export interface ClaudeError {
