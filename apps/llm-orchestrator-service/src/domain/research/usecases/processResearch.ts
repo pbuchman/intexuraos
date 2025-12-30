@@ -146,7 +146,7 @@ function getModelName(provider: LlmProvider): string {
     case 'google':
       return 'Gemini 3 Pro';
     case 'openai':
-      return 'GPT-5.2 Pro';
+      return 'GPT-4.1';
     case 'anthropic':
       return 'Claude Opus 4.5';
   }

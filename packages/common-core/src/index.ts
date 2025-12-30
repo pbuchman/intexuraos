@@ -16,3 +16,6 @@ export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
 
 // Encryption utilities
 export { type EncryptedValue, type Encryptor, createEncryptor } from './encryption.js';
+
+// Prompt utilities for LLM operations
+export { buildResearchPrompt } from './prompts/index.js';

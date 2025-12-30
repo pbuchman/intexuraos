@@ -42,7 +42,7 @@ function getDefaultModel(provider: LlmProvider): string {
     case 'google':
       return 'gemini-3-pro-preview';
     case 'openai':
-      return 'gpt-4o';
+      return 'gpt-4.1';
     case 'anthropic':
       return 'claude-opus-4-5';
   }
