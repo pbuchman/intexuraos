@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
 
@@ -78,7 +78,7 @@ async function logError(
   error: unknown,
   auditContext: AuditContext
 ): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorMessage = getErrorMessage(error, String(error));
 
   // Console logging
   // eslint-disable-next-line no-console
@@ -190,7 +190,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 }
 
 function mapGeminiError(error: unknown): GeminiError {
-  const message = error instanceof Error ? error.message : 'Unknown error';
+  const message = getErrorMessage(error);
 
   if (message.includes('API_KEY')) {
     return { code: 'INVALID_KEY', message };
