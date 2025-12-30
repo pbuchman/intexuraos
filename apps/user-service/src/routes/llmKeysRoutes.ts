@@ -317,6 +317,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   response: { type: 'string' },
+                  testedAt: { type: 'string' },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
