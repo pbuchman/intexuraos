@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 
 /**
  * Configuration for the user service client.
@@ -79,7 +79,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         return ok(result);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message = getErrorMessage(error);
         return err({
           code: 'NETWORK_ERROR',
           message,

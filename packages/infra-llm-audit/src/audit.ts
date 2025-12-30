@@ -7,7 +7,7 @@
 
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type {
   LlmAuditLog,
   CreateAuditLogParams,
@@ -150,7 +150,7 @@ async function saveAuditLog(log: LlmAuditLog): Promise<Result<void>> {
     await firestore.collection(COLLECTION_NAME).doc(log.id).set(cleanLog);
     return ok(undefined);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = getErrorMessage(error);
     // eslint-disable-next-line no-console
     console.error(`Failed to save LLM audit log: ${message}`);
     return err(new Error(message));

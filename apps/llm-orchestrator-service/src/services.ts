@@ -11,6 +11,7 @@ import {
   type UserServiceClient,
   type DecryptedApiKeys,
 } from './infra/user/index.js';
+import { getErrorMessage } from '@intexuraos/common-core';
 import {
   processResearch,
   type ResearchRepository,
@@ -137,7 +138,7 @@ export function initializeServices(): void {
         });
       } catch (error) {
         /* Fire-and-forget: log error but don't throw */
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message = getErrorMessage(error);
         // eslint-disable-next-line no-console
         console.error('Error processing research:', message);
       }
