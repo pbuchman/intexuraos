@@ -4,7 +4,7 @@
  */
 import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
 import type { AuthTokenRepository, Auth0Client } from './domain/identity/index.js';
-import type { UserSettingsRepository } from './domain/settings/index.js';
+import type { UserSettingsRepository, LlmValidator } from './domain/settings/index.js';
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,
@@ -13,6 +13,7 @@ import {
   Auth0ClientImpl,
   loadAuth0Config as loadAuth0ConfigFromInfra,
 } from './infra/auth0/index.js';
+import { LlmValidatorImpl } from './infra/llm/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -22,6 +23,7 @@ export interface ServiceContainer {
   userSettingsRepository: UserSettingsRepository;
   auth0Client: Auth0Client | null;
   encryptor: Encryptor | null;
+  llmValidator: LlmValidator | null;
 }
 
 let container: ServiceContainer | null = null;
@@ -47,11 +49,14 @@ function loadEncryptor(): Encryptor | null {
 export function getServices(): ServiceContainer {
   if (container === null) {
     const auth0Config = loadAuth0ConfigFromInfra();
+    // LlmValidator is null in test environment to skip actual API calls
+    const isTestEnv = process.env['NODE_ENV'] === 'test';
     container = {
       authTokenRepository: new FirestoreAuthTokenRepository(),
       userSettingsRepository: new FirestoreUserSettingsRepository(),
       auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
       encryptor: loadEncryptor(),
+      llmValidator: isTestEnv ? null : new LlmValidatorImpl(),
     };
   }
   return container;

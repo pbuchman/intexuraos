@@ -9,59 +9,8 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import type { EncryptedValue } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { createGptClient } from '@intexuraos/infra-gpt';
-import { createClaudeClient } from '@intexuraos/infra-claude';
 import { getServices } from '../services.js';
 import type { LlmProvider, LlmTestResult } from '../domain/settings/index.js';
-
-/**
- * Validate API key by making a test request to the provider.
- * Returns error message if invalid, null if valid.
- * Skipped in test environment (NODE_ENV=test).
- */
-async function validateApiKeyWithProvider(
-  provider: LlmProvider,
-  apiKey: string
-): Promise<string | null> {
-  // Skip validation in test environment
-  if (process.env['NODE_ENV'] === 'test') {
-    return null;
-  }
-
-  switch (provider) {
-    case 'google': {
-      const client = createGeminiClient({ apiKey });
-      const result = await client.validateKey();
-      if (!result.ok) {
-        return result.error.code === 'INVALID_KEY'
-          ? 'Invalid Google API key'
-          : `Google API error: ${result.error.message}`;
-      }
-      return null;
-    }
-    case 'openai': {
-      const client = createGptClient({ apiKey });
-      const result = await client.validateKey();
-      if (!result.ok) {
-        return result.error.code === 'INVALID_KEY'
-          ? 'Invalid OpenAI API key'
-          : `OpenAI API error: ${result.error.message}`;
-      }
-      return null;
-    }
-    case 'anthropic': {
-      const client = createClaudeClient({ apiKey });
-      const result = await client.validateKey();
-      if (!result.ok) {
-        return result.error.code === 'INVALID_KEY'
-          ? 'Invalid Anthropic API key'
-          : `Anthropic API error: ${result.error.message}`;
-      }
-      return null;
-    }
-  }
-}
 
 /**
  * Mask an API key for display.
@@ -70,43 +19,6 @@ async function validateApiKeyWithProvider(
 function maskApiKey(key: string): string {
   if (key.length <= 8) return '****';
   return `${key.slice(0, 4)}...${key.slice(-4)}`;
-}
-
-/**
- * Make a test request to an LLM provider.
- * Returns the response content or an error message.
- */
-async function makeTestRequest(
-  provider: LlmProvider,
-  apiKey: string,
-  prompt: string
-): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
-  switch (provider) {
-    case 'google': {
-      const client = createGeminiClient({ apiKey });
-      const result = await client.research(prompt);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      return { ok: true, value: result.value.content };
-    }
-    case 'openai': {
-      const client = createGptClient({ apiKey });
-      const result = await client.research(prompt);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      return { ok: true, value: result.value.content };
-    }
-    case 'anthropic': {
-      const client = createClaudeClient({ apiKey });
-      const result = await client.research(prompt);
-      if (!result.ok) {
-        return { ok: false, error: result.error.message };
-      }
-      return { ok: true, value: result.value.content };
-    }
-  }
 }
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -347,13 +259,15 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
       }
 
-      // Validate API key with actual provider
-      const validationError = await validateApiKeyWithProvider(body.provider, body.apiKey);
-      if (validationError !== null) {
-        return await reply.fail('INVALID_REQUEST', validationError);
-      }
+      const { userSettingsRepository, encryptor, llmValidator } = getServices();
 
-      const { userSettingsRepository, encryptor } = getServices();
+      // Validate API key with actual provider (skipped if llmValidator is null, e.g., in tests)
+      if (llmValidator !== null) {
+        const validationResult = await llmValidator.validateKey(body.provider, body.apiKey);
+        if (!validationResult.ok) {
+          return await reply.fail('INVALID_REQUEST', validationResult.error.message);
+        }
+      }
 
       if (encryptor === null) {
         return await reply.fail('MISCONFIGURED', 'Encryption is not configured');
@@ -453,10 +367,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Cannot test other user settings');
       }
 
-      const { userSettingsRepository, encryptor } = getServices();
+      const { userSettingsRepository, encryptor, llmValidator } = getServices();
 
       if (encryptor === null) {
         return await reply.fail('MISCONFIGURED', 'Encryption is not configured');
+      }
+
+      if (llmValidator === null) {
+        return await reply.fail('MISCONFIGURED', 'LLM validation is not configured');
       }
 
       const result = await userSettingsRepository.getSettings(params.uid);
@@ -478,20 +396,27 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const testPrompt =
         'Respond with your name and model version in a short greeting. Example format: "Hello! I am GPT-4o."';
-      const testResult = await makeTestRequest(params.provider, decrypted.value, testPrompt);
+      const testResult = await llmValidator.testRequest(
+        params.provider,
+        decrypted.value,
+        testPrompt
+      );
 
       if (!testResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', testResult.error);
+        return await reply.fail('DOWNSTREAM_ERROR', testResult.error.message);
       }
 
       // Save the test result with timestamp
       const llmTestResult: LlmTestResult = {
-        response: testResult.value,
+        response: testResult.value.content,
         testedAt: new Date().toISOString(),
       };
       await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
 
-      return await reply.ok({ response: testResult.value, testedAt: llmTestResult.testedAt });
+      return await reply.ok({
+        response: testResult.value.content,
+        testedAt: llmTestResult.testedAt,
+      });
     }
   );
 

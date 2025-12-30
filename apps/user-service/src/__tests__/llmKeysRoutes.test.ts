@@ -4,25 +4,19 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeUserSettingsRepository, FakeEncryptor } from './fakes.js';
-
-// Mock the infra packages for validation testing
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(),
-}));
-vi.mock('@intexuraos/infra-gpt', () => ({
-  createGptClient: vi.fn(),
-}));
-vi.mock('@intexuraos/infra-claude', () => ({
-  createClaudeClient: vi.fn(),
-}));
+import {
+  FakeAuthTokenRepository,
+  FakeUserSettingsRepository,
+  FakeEncryptor,
+  FakeLlmValidator,
+} from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';
@@ -38,6 +32,7 @@ describe('LLM Keys Routes', () => {
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
   let fakeEncryptor: FakeEncryptor;
+  let fakeLlmValidator: FakeLlmValidator;
 
   async function createToken(claims: Record<string, unknown>): Promise<string> {
     const builder = new jose.SignJWT(claims)
@@ -90,11 +85,13 @@ describe('LLM Keys Routes', () => {
     fakeAuthTokenRepo = new FakeAuthTokenRepository();
     fakeSettingsRepo = new FakeUserSettingsRepository();
     fakeEncryptor = new FakeEncryptor();
+    fakeLlmValidator = new FakeLlmValidator();
     setServices({
       authTokenRepository: fakeAuthTokenRepo,
       userSettingsRepository: fakeSettingsRepo,
       auth0Client: null,
       encryptor: fakeEncryptor,
+      llmValidator: fakeLlmValidator,
     });
   });
 
@@ -367,6 +364,7 @@ describe('LLM Keys Routes', () => {
         userSettingsRepository: fakeSettingsRepo,
         auth0Client: null,
         encryptor: null,
+        llmValidator: null,
       });
 
       app = await buildServer();
@@ -451,6 +449,39 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 400 when API key validation fails', { timeout: 20000 }, async () => {
+      fakeLlmValidator.setFailNextValidation(true, {
+        code: 'INVALID_KEY',
+        message: 'Invalid API key provided',
+      });
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-validation-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {
+          provider: 'openai',
+          apiKey: 'sk-invalid1234567890',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('Invalid API key provided');
     });
 
     it('returns 400 when apiKey is too short', { timeout: 20000 }, async () => {
@@ -990,6 +1021,7 @@ describe('LLM Keys Routes', () => {
         userSettingsRepository: fakeSettingsRepo,
         auth0Client: null,
         encryptor: null,
+        llmValidator: null,
       });
 
       app = await buildServer();
@@ -1011,6 +1043,50 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns 503 when LLM validator not configured', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-no-validator';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      // Set llmValidator to null but keep encryptor
+      setServices({
+        authTokenRepository: fakeAuthTokenRepo,
+        userSettingsRepository: fakeSettingsRepo,
+        auth0Client: null,
+        encryptor: fakeEncryptor,
+        llmValidator: null,
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('LLM validation');
     });
 
     it('returns 500 when decryption fails', { timeout: 20000 }, async () => {
@@ -1047,6 +1123,84 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns test response on success', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-success';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      fakeLlmValidator.setTestResponse('Hello! I am Gemini Pro.');
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string; testedAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! I am Gemini Pro.');
+      expect(body.data.testedAt).toBeDefined();
+
+      // Verify test result was saved
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmTestResults?.google).toBeDefined();
+      expect(stored?.llmTestResults?.google?.response).toBe('Hello! I am Gemini Pro.');
+    });
+
+    it('returns 502 when test request fails', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      fakeLlmValidator.setFailNextTest(true);
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
     it('tests Google API key successfully', { timeout: 20000 }, async () => {

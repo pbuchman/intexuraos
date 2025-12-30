@@ -71,6 +71,7 @@ describe('Internal Routes', () => {
       userSettingsRepository: fakeSettingsRepo,
       auth0Client: null,
       encryptor: fakeEncryptor,
+      llmValidator: null,
     });
   });
 

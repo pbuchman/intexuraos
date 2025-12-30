@@ -22,6 +22,7 @@ export type { SettingsError, SettingsErrorCode } from './models/SettingsError.js
 
 // Ports
 export type { UserSettingsRepository } from './ports/UserSettingsRepository.js';
+export type { LlmValidator, LlmValidationError, LlmTestResponse } from './ports/LlmValidator.js';
 
 // Usecases
 export {

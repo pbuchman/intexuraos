@@ -212,6 +212,119 @@ export default tseslint.config(
       ],
     },
   },
+  // CRITICAL #1: Routes layer must not import infra packages directly (bypasses domain/DI)
+  // Routes should get dependencies via getServices(), not instantiate infra directly
+  {
+    files: ['apps/*/src/routes/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: '@intexuraos/infra-gemini',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-gpt',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-claude',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-whatsapp',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access WhatsApp client via dependency injection.',
+            },
+            {
+              name: '@intexuraos/infra-notion',
+              message:
+                'Routes must not import infra packages directly. Use getServices() to access Notion client via dependency injection.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // CRITICAL #2: Infra layer must not import from routes layer (inverted dependency)
+  // Dependency direction: Routes → Domain → Infra (never Infra → Routes)
+  {
+    files: ['apps/*/src/infra/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+          ],
+          patterns: [
+            {
+              group: [
+                '*/routes/*',
+                '*/routes/**',
+                '../routes/*',
+                '../routes/**',
+                '../../routes/*',
+                '../../routes/**',
+              ],
+              message:
+                'Infra layer must not import from routes layer. Move shared code to domain or a common utility.',
+            },
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ['*.config.ts', '*.config.js'],
     rules: {

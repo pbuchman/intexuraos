@@ -235,6 +235,7 @@ describe('Frontend Auth Routes', () => {
           userSettingsRepository: new FakeUserSettingsRepository(),
           auth0Client: null,
           encryptor: null,
+          llmValidator: null,
         });
 
         app = await buildServer();

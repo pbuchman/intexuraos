@@ -82,6 +82,7 @@ describe('Settings Routes', () => {
       userSettingsRepository: fakeSettingsRepo,
       auth0Client: null,
       encryptor: null,
+      llmValidator: null,
     });
   });
 

@@ -19,6 +19,9 @@ import type {
   SettingsError,
   LlmProvider,
   LlmTestResult,
+  LlmValidator,
+  LlmValidationError,
+  LlmTestResponse,
 } from '../domain/settings/index.js';
 
 /**
@@ -390,5 +393,50 @@ export class FakeEncryptor implements Encryptor {
       return err(new Error('Simulated decryption failure'));
     }
     return ok(Buffer.from(encrypted.ciphertext, 'base64').toString('utf8'));
+  }
+}
+
+/**
+ * Fake LLM Validator for testing.
+ */
+export class FakeLlmValidator implements LlmValidator {
+  private shouldFailValidation = false;
+  private shouldFailTest = false;
+  private validationError: LlmValidationError | null = null;
+  private testResponse = 'Hello! I am a test model.';
+
+  setFailNextValidation(fail: boolean, error?: LlmValidationError): void {
+    this.shouldFailValidation = fail;
+    this.validationError = error ?? { code: 'INVALID_KEY', message: 'Invalid API key' };
+  }
+
+  setFailNextTest(fail: boolean): void {
+    this.shouldFailTest = fail;
+  }
+
+  setTestResponse(response: string): void {
+    this.testResponse = response;
+  }
+
+  validateKey(_provider: LlmProvider, _apiKey: string): Promise<Result<void, LlmValidationError>> {
+    if (this.shouldFailValidation) {
+      this.shouldFailValidation = false;
+      return Promise.resolve(
+        err(this.validationError ?? { code: 'INVALID_KEY', message: 'Invalid API key' })
+      );
+    }
+    return Promise.resolve(ok(undefined));
+  }
+
+  testRequest(
+    _provider: LlmProvider,
+    _apiKey: string,
+    _prompt: string
+  ): Promise<Result<LlmTestResponse, LlmValidationError>> {
+    if (this.shouldFailTest) {
+      this.shouldFailTest = false;
+      return Promise.resolve(err({ code: 'API_ERROR', message: 'Test request failed' }));
+    }
+    return Promise.resolve(ok({ content: this.testResponse }));
   }
 }
