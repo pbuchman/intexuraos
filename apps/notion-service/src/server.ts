@@ -110,17 +110,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
           },
           ConnectRequest: {
             type: 'object',
-            required: ['notionToken', 'promptVaultPageId'],
+            required: ['notionToken'],
             properties: {
               notionToken: {
                 type: 'string',
                 minLength: 1,
                 description: 'Notion integration token (never returned in responses)',
-              },
-              promptVaultPageId: {
-                type: 'string',
-                minLength: 1,
-                description: 'Notion page ID for the Prompt Vault',
               },
             },
           },
@@ -128,7 +123,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
             type: 'object',
             properties: {
               connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string' },
               createdAt: { type: 'string', format: 'date-time' },
               updatedAt: { type: 'string', format: 'date-time' },
             },
@@ -138,7 +132,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
             properties: {
               configured: { type: 'boolean' },
               connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string', nullable: true },
               createdAt: { type: 'string', format: 'date-time', nullable: true },
               updatedAt: { type: 'string', format: 'date-time', nullable: true },
             },
@@ -147,7 +140,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
             type: 'object',
             properties: {
               connected: { type: 'boolean' },
-              promptVaultPageId: { type: 'string' },
               updatedAt: { type: 'string', format: 'date-time' },
             },
           },
@@ -246,17 +238,12 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.addSchema({
     $id: 'ConnectRequest',
     type: 'object',
-    required: ['notionToken', 'promptVaultPageId'],
+    required: ['notionToken'],
     properties: {
       notionToken: {
         type: 'string',
         minLength: 1,
         description: 'Notion integration token (never returned in responses)',
-      },
-      promptVaultPageId: {
-        type: 'string',
-        minLength: 1,
-        description: 'Notion page ID for the Prompt Vault',
       },
     },
   });
@@ -266,9 +253,6 @@ export async function buildServer(): Promise<FastifyInstance> {
     type: 'object',
     properties: {
       connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string' },
-      pageTitle: { type: 'string', description: 'Title of the validated Notion page' },
-      pageUrl: { type: 'string', description: 'URL of the validated Notion page' },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
     },
@@ -280,7 +264,6 @@ export async function buildServer(): Promise<FastifyInstance> {
     properties: {
       configured: { type: 'boolean' },
       connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string', nullable: true },
       createdAt: { type: 'string', format: 'date-time', nullable: true },
       updatedAt: { type: 'string', format: 'date-time', nullable: true },
     },
@@ -291,7 +274,6 @@ export async function buildServer(): Promise<FastifyInstance> {
     type: 'object',
     properties: {
       connected: { type: 'boolean' },
-      promptVaultPageId: { type: 'string' },
       updatedAt: { type: 'string', format: 'date-time' },
     },
   });

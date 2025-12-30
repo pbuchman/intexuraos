@@ -61,7 +61,59 @@ N/A - read-only task
 
 ## Findings
 
-(To be filled during execution)
+### promptVaultPageId Usage Summary
+
+**Total occurrences**: ~70+ across codebase
+
+**Files with promptVaultPageId (source code, non-test):**
+
+**notion-service:**
+- `src/domain/integration/ports/ConnectionRepository.ts` - interface definition
+- `src/domain/integration/usecases/connectNotion.ts` - usecase accepts and validates
+- `src/domain/integration/usecases/getNotionStatus.ts` - returns in status
+- `src/domain/integration/usecases/disconnectNotion.ts` - returns in response
+- `src/services.ts` - DI wiring
+- `src/server.ts` - OpenAPI schema
+
+**promptvault-service:**
+- `src/domain/promptvault/ports/NotionPorts.ts` - port interface
+- `src/infra/notion/promptApi.ts` - uses getNotionConnection() to get pageId
+- `src/routes/promptRoutes.ts` - manual connection checks
+- `src/services.ts` - DI wiring
+- `src/infra/firestore/index.ts` - re-exports from @intexuraos/infra-notion
+
+**shared package:**
+- `packages/infra-notion/src/notionConnection.ts` - repository with promptVaultPageId field
+
+### Import Analysis
+
+**Files importing from @intexuraos/infra-notion:**
+1. `apps/notion-service/src/infra/firestore/index.ts` - re-exports connection functions
+2. `apps/notion-service/src/infra/notion/index.ts` - re-exports Notion API client
+3. `apps/notion-service/src/services.ts` - imports NotionLogger type
+4. `apps/notion-service/src/server.ts` - imports NotionLogger type
+5. `apps/promptvault-service/src/infra/firestore/index.ts` - re-exports connection functions
+6. `apps/promptvault-service/src/infra/notion/index.ts` - re-exports Notion API functions
+7. `apps/promptvault-service/src/infra/notion/promptApi.ts` - imports Notion client + connection functions
+8. `apps/promptvault-service/src/services.ts` - imports NotionLogger type
+9. `apps/promptvault-service/src/server.ts` - imports NotionLogger type
+
+### Key Observation
+
+promptVaultPageId is deeply integrated into:
+1. **notion-service**: Accepts it in connectNotion, stores it, returns it in status
+2. **promptvault-service**: Reads it from Firestore via getNotionConnection()
+3. **shared package**: Defined in NotionConnectionPublic interface
+
+### Impact Assessment
+
+**High impact changes needed:**
+- Remove promptVaultPageId from NotionConnectionPublic interface
+- Update connectNotion() usecase (remove parameter)
+- Update integrationRoutes.ts (remove from request body)
+- Create new promptvault_settings repository
+- Update all notion-service tests
+- Update all promptvault-service code to use new repository
 
 ---
 

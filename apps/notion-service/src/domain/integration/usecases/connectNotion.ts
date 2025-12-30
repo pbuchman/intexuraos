@@ -15,14 +15,12 @@ import type { ConnectionRepository, NotionApi, NotionError } from '../ports/inde
 export interface ConnectNotionInput {
   userId: string;
   notionToken: string;
-  promptVaultPageId: string;
 }
 
 /**
  * Error codes specific to this use case.
  */
 export type ConnectNotionErrorCode =
-  | 'PAGE_NOT_ACCESSIBLE'
   | 'INVALID_TOKEN'
   | 'DOWNSTREAM_ERROR'
   | 'VALIDATION_ERROR';
@@ -31,7 +29,6 @@ export interface ConnectNotionError {
   code: ConnectNotionErrorCode;
   message: string;
   details?: {
-    pageId?: string;
     notionError?: string;
   };
 }
@@ -41,43 +38,43 @@ export interface ConnectNotionError {
  */
 export interface ConnectNotionResult {
   connected: boolean;
-  promptVaultPageId: string;
   createdAt: string;
   updatedAt: string;
-  pageTitle: string;
-  pageUrl: string;
 }
 
 /**
  * Execute the ConnectNotion use case.
  *
  * Steps:
- * 1. Validate page access using Notion API
+ * 1. Validate token using Notion API
  * 2. Map Notion errors to domain errors
  * 3. Save connection to repository
- * 4. Return combined result with page details
+ * 4. Return result
  */
 export async function connectNotion(
   connectionRepository: ConnectionRepository,
   notionApi: NotionApi,
   input: ConnectNotionInput
 ): Promise<Result<ConnectNotionResult, ConnectNotionError>> {
-  const { userId, notionToken, promptVaultPageId } = input;
+  const { userId, notionToken } = input;
 
-  // Step 1: Validate page access BEFORE saving connection
-  const pageValidation = await notionApi.getPageWithPreview(notionToken, promptVaultPageId);
+  // Step 1: Validate token BEFORE saving connection
+  const tokenValidation = await notionApi.validateToken(notionToken);
 
-  if (!pageValidation.ok) {
+  if (!tokenValidation.ok) {
     // Step 2: Map Notion error codes to domain errors
-    return mapNotionErrorToConnectError(pageValidation.error, promptVaultPageId);
+    return mapNotionErrorToConnectError(tokenValidation.error);
   }
 
-  // Step 3: Page is accessible - save the connection
-  const saveResult = await connectionRepository.saveConnection(
-    userId,
-    promptVaultPageId,
-    notionToken
-  );
+  if (!tokenValidation.value) {
+    return err({
+      code: 'INVALID_TOKEN',
+      message: 'Invalid Notion token. Please check your integration token.',
+    });
+  }
+
+  // Step 3: Token is valid - save the connection
+  const saveResult = await connectionRepository.saveConnection(userId, notionToken);
 
   if (!saveResult.ok) {
     return err({
@@ -86,45 +83,25 @@ export async function connectNotion(
     });
   }
 
-  // Step 4: Return combined result
+  // Step 4: Return result
   const config = saveResult.value;
   return ok({
     connected: config.connected,
-    promptVaultPageId: config.promptVaultPageId,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt,
-    pageTitle: pageValidation.value.page.title,
-    pageUrl: pageValidation.value.page.url,
   });
 }
 
 /**
  * Map Notion API errors to domain-specific ConnectNotion errors.
  */
-function mapNotionErrorToConnectError(
-  notionError: NotionError,
-  pageId: string
-): Result<never, ConnectNotionError> {
+function mapNotionErrorToConnectError(notionError: NotionError): Result<never, ConnectNotionError> {
   const { code, message } = notionError;
-
-  if (code === 'NOT_FOUND') {
-    return err({
-      code: 'PAGE_NOT_ACCESSIBLE',
-      message:
-        `Could not access page with ID "${pageId}". ` +
-        'Make sure the page exists and is shared with your Notion integration. ' +
-        'You can share a page by clicking "..." menu → "Add connections" → select your integration.',
-      details: {
-        pageId,
-        notionError: message,
-      },
-    });
-  }
 
   if (code === 'UNAUTHORIZED') {
     return err({
       code: 'INVALID_TOKEN',
-      message: 'Invalid Notion token. Please reconnect your Notion integration.',
+      message: 'Invalid Notion token. Please check your integration token.',
       details: {
         notionError: message,
       },

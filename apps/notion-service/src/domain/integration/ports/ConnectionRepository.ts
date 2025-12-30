@@ -10,7 +10,6 @@ import type { Result } from '@intexuraos/common-core';
  * Token is never exposed in this type.
  */
 export interface NotionConnectionPublic {
-  promptVaultPageId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -57,7 +56,6 @@ export interface ConnectionRepository {
    */
   saveConnection(
     userId: string,
-    promptVaultPageId: string,
     notionToken: string
   ): Promise<Result<NotionConnectionPublic, NotionError>>;
 

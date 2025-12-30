@@ -11,6 +11,11 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:emulators": "node scripts/dev.mjs --emulators-only",
+    "emulators:start": "docker compose -f docker/docker-compose.local.yaml up -d",
+    "emulators:stop": "docker compose -f docker/docker-compose.local.yaml down",
+    "emulators:logs": "docker compose -f docker/docker-compose.local.yaml logs -f",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

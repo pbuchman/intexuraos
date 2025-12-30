@@ -27,11 +27,10 @@ describe('notionConnectionRepository', () => {
 
   describe('saveNotionConnection', () => {
     it('saves new connection and returns public data', async () => {
-      const result = await saveNotionConnection('user-123', 'page-abc', 'secret-token');
+      const result = await saveNotionConnection('user-123', 'secret-token');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.promptVaultPageId).toBe('page-abc');
         expect(result.value.connected).toBe(true);
         expect(result.value.createdAt).toBeDefined();
         expect(result.value.updatedAt).toBeDefined();
@@ -39,19 +38,18 @@ describe('notionConnectionRepository', () => {
     });
 
     it('preserves createdAt on update', async () => {
-      await saveNotionConnection('user-123', 'page-1', 'token-1');
+      await saveNotionConnection('user-123', 'token-1');
       const first = await getNotionConnection('user-123');
       const firstCreatedAt = first.ok && first.value ? first.value.createdAt : undefined;
 
       await new Promise((r) => setTimeout(r, 10));
-      await saveNotionConnection('user-123', 'page-2', 'token-2');
+      await saveNotionConnection('user-123', 'token-2');
 
       const second = await getNotionConnection('user-123');
 
       expect(second.ok).toBe(true);
       if (second.ok && second.value) {
         expect(second.value.createdAt).toBe(firstCreatedAt);
-        expect(second.value.promptVaultPageId).toBe('page-2');
       }
     });
   });
@@ -67,13 +65,12 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns connection for existing user', async () => {
-      await saveNotionConnection('user-123', 'page-abc', 'token');
+      await saveNotionConnection('user-123', 'token');
 
       const result = await getNotionConnection('user-123');
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value) {
-        expect(result.value.promptVaultPageId).toBe('page-abc');
         expect(result.value.connected).toBe(true);
       }
     });
@@ -90,7 +87,7 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns token for connected user', async () => {
-      await saveNotionConnection('user-123', 'page', 'my-secret-token');
+      await saveNotionConnection('user-123', 'my-secret-token');
 
       const result = await getNotionToken('user-123');
 
@@ -101,7 +98,7 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns null for disconnected user', async () => {
-      await saveNotionConnection('user-123', 'page', 'token');
+      await saveNotionConnection('user-123', 'token');
       await disconnectNotion('user-123');
 
       const result = await getNotionToken('user-123');
@@ -124,7 +121,7 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns true for connected user', async () => {
-      await saveNotionConnection('user-123', 'page', 'token');
+      await saveNotionConnection('user-123', 'token');
 
       const result = await isNotionConnected('user-123');
 
@@ -135,7 +132,7 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns false for disconnected user', async () => {
-      await saveNotionConnection('user-123', 'page', 'token');
+      await saveNotionConnection('user-123', 'token');
       await disconnectNotion('user-123');
 
       const result = await isNotionConnected('user-123');
@@ -149,7 +146,7 @@ describe('notionConnectionRepository', () => {
 
   describe('disconnectNotion', () => {
     it('sets connected to false', async () => {
-      await saveNotionConnection('user-123', 'page', 'token');
+      await saveNotionConnection('user-123', 'token');
 
       const result = await disconnectNotion('user-123');
 
@@ -164,7 +161,7 @@ describe('notionConnectionRepository', () => {
     it('returns error when saveNotionConnection fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('DB unavailable') });
 
-      const result = await saveNotionConnection('user', 'page', 'token');
+      const result = await saveNotionConnection('user', 'token');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -207,7 +204,7 @@ describe('notionConnectionRepository', () => {
     });
 
     it('returns error when disconnectNotion fails', async () => {
-      await saveNotionConnection('user-123', 'page', 'token');
+      await saveNotionConnection('user-123', 'token');
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
       const result = await disconnectNotion('user-123');

@@ -24,7 +24,6 @@ export interface DisconnectNotionError {
  */
 export interface DisconnectNotionResult {
   connected: boolean;
-  promptVaultPageId: string;
   updatedAt: string;
 }
 
@@ -47,7 +46,6 @@ export async function disconnectNotion(
   const config = result.value;
   return ok({
     connected: config.connected,
-    promptVaultPageId: config.promptVaultPageId,
     updatedAt: config.updatedAt,
   });
 }

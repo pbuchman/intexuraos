@@ -11,7 +11,6 @@ import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 
 export interface NotionConnectionPublic {
-  promptVaultPageId: string;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -25,12 +24,11 @@ export interface NotionError {
 /**
  * Fake Notion connection repository for testing.
  */
-export class FakeNotionConnectionRepository {
+export class FakeConnectionRepository {
   private connections = new Map<
     string,
     {
       token: string;
-      promptVaultPageId: string;
       connected: boolean;
       createdAt: string;
       updatedAt: string;
@@ -54,7 +52,6 @@ export class FakeNotionConnectionRepository {
 
   saveConnection(
     userId: string,
-    promptVaultPageId: string,
     notionToken: string
   ): Promise<Result<NotionConnectionPublic, NotionError>> {
     if (this.shouldFailSave) {
@@ -65,14 +62,12 @@ export class FakeNotionConnectionRepository {
     const existing = this.connections.get(userId);
     this.connections.set(userId, {
       token: notionToken,
-      promptVaultPageId,
       connected: true,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
     return Promise.resolve(
       ok({
-        promptVaultPageId,
         connected: true,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -89,7 +84,6 @@ export class FakeNotionConnectionRepository {
     if (conn === undefined) return Promise.resolve(ok(null));
     return Promise.resolve(
       ok({
-        promptVaultPageId: conn.promptVaultPageId,
         connected: conn.connected,
         createdAt: conn.createdAt,
         updatedAt: conn.updatedAt,
@@ -123,7 +117,6 @@ export class FakeNotionConnectionRepository {
     conn.updatedAt = new Date().toISOString();
     return Promise.resolve(
       ok({
-        promptVaultPageId: conn.promptVaultPageId,
         connected: conn.connected,
         createdAt: conn.createdAt,
         updatedAt: conn.updatedAt,
@@ -136,21 +129,38 @@ export class FakeNotionConnectionRepository {
   }
 
   // Test helpers
-  setConnection(userId: string, token: string, promptVaultPageId: string, connected = true): void {
-    const now = new Date().toISOString();
+  setConnection(userId: string, config: NotionConnectionPublic): void {
+    const token = this.connections.get(userId)?.token ?? '';
     this.connections.set(userId, {
       token,
-      promptVaultPageId,
-      connected,
-      createdAt: now,
-      updatedAt: now,
+      connected: config.connected,
+      createdAt: config.createdAt,
+      updatedAt: config.updatedAt,
     });
+  }
+
+  setToken(userId: string, token: string | null): void {
+    const existing = this.connections.get(userId);
+    if (existing !== undefined) {
+      existing.token = token ?? '';
+    } else if (token !== null) {
+      const now = new Date().toISOString();
+      this.connections.set(userId, {
+        token,
+        connected: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
   }
 
   clear(): void {
     this.connections.clear();
   }
 }
+
+// Backwards compatibility alias
+export const FakeNotionConnectionRepository = FakeConnectionRepository;
 
 /**
  * Mock Notion API adapter for testing.
@@ -163,6 +173,16 @@ export class MockNotionApiAdapter {
   private shouldFailWithError: NotionError | null = null;
 
   validateToken(token: string): Promise<Result<boolean, NotionError>> {
+    // Check for forced error first
+    if (this.shouldFailWithError !== null) {
+      const error = this.shouldFailWithError;
+      this.shouldFailWithError = null;
+      return Promise.resolve(err(error));
+    }
+    // Check for unauthorized token
+    if (this.unauthorizedTokens.has(token)) {
+      return Promise.resolve(err({ code: 'UNAUTHORIZED', message: 'Invalid token' }));
+    }
     if (this.invalidTokens.has(token)) {
       return Promise.resolve(ok(false));
     }

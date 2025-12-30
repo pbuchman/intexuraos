@@ -41,12 +41,17 @@ Rozdzielić własność kolekcji Firestore między serwisami zgodnie z zasadą "
 - ✅ Continuity structure created (015-firestore-ownership-separation/)
 - ✅ INSTRUCTIONS.md created
 - ✅ CONTINUITY.md created (this file)
+- ✅ Task files created (0-0 through 2-2)
+- ✅ 0-0-verify-current-state COMPLETE
+  - Found ~70+ occurrences of promptVaultPageId
+  - Identified 9 files importing from @intexuraos/infra-notion
+  - Documented baseline for verification
 
 ### Now
-- Creating task files (0-0 through 2-X)
+- Executing 1-0-notion-service-changes
 
 ### Next
-- Execute tier 0: verify current state
+- Execute 1-1-promptvault-service-changes
 - Execute tier 1: implement changes in notion-service
 - Execute tier 1: implement changes in promptvault-service
 - Execute tier 1: clean up infra-notion package
@@ -76,3 +81,13 @@ Rozdzielić własność kolekcji Firestore między serwisami zgodnie z zasadą "
 
 **2025-12-31 00:00** - Project initialization
 Created continuity structure for task 015-firestore-ownership-separation. Plan was already approved in plan mode with all key architectural decisions documented. Breaking down into tiered tasks following continuity pattern.
+
+**2025-12-31 00:10** - Task 0-0 complete
+Verified current state. Found ~70 occurrences of promptVaultPageId across 15+ files. Key insight: promptVaultPageId is deeply integrated into both notion-service (stores it) and promptvault-service (reads it). This confirms the need for separation as per architectural decision.
+
+**2025-12-31 00:15** - Starting task 1-0
+Moving to notion-service changes. This will be the largest task as it involves:
+- Moving and modifying repository (remove promptVaultPageId)
+- Creating internal API endpoint
+- Updating domain usecases and routes
+- Comprehensive test updates
