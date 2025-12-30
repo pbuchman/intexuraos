@@ -83,11 +83,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const llmApiKeys = settings?.llmApiKeys;
 
       // Decrypt keys for service-to-service use
-      const getDecryptedKey = (provider: LlmProvider): string | undefined => {
+      // Returns null (not undefined) to ensure JSON serialization preserves the key
+      const getDecryptedKey = (provider: LlmProvider): string | null => {
         const encryptedKey = llmApiKeys?.[provider];
-        if (encryptedKey === undefined || encryptor === null) return undefined;
+        if (encryptedKey === undefined || encryptor === null) return null;
         const decrypted = encryptor.decrypt(encryptedKey);
-        if (!decrypted.ok) return undefined;
+        if (!decrypted.ok) return null;
         return decrypted.value;
       };
 

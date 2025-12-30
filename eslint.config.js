@@ -51,6 +51,7 @@ export default tseslint.config(
         { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
+        { type: 'infra-llm-audit', pattern: ['packages/infra-llm-audit/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -74,12 +75,14 @@ export default tseslint.config(
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
             // infra-whatsapp can import from common-core
             { from: 'infra-whatsapp', allow: ['infra-whatsapp', 'common-core'] },
-            // infra-gemini can import from common-core
-            { from: 'infra-gemini', allow: ['infra-gemini', 'common-core'] },
-            // infra-claude can import from common-core
-            { from: 'infra-claude', allow: ['infra-claude', 'common-core'] },
-            // infra-gpt can import from common-core
-            { from: 'infra-gpt', allow: ['infra-gpt', 'common-core'] },
+            // infra-gemini can import from common-core and infra-llm-audit
+            { from: 'infra-gemini', allow: ['infra-gemini', 'common-core', 'infra-llm-audit'] },
+            // infra-claude can import from common-core and infra-llm-audit
+            { from: 'infra-claude', allow: ['infra-claude', 'common-core', 'infra-llm-audit'] },
+            // infra-gpt can import from common-core and infra-llm-audit
+            { from: 'infra-gpt', allow: ['infra-gpt', 'common-core', 'infra-llm-audit'] },
+            // infra-llm-audit can import from common-core
+            { from: 'infra-llm-audit', allow: ['infra-llm-audit', 'common-core'] },
             // http-server can import from decomposed packages
             {
               from: 'http-server',
@@ -103,6 +106,7 @@ export default tseslint.config(
                 'infra-gemini',
                 'infra-claude',
                 'infra-gpt',
+                'infra-llm-audit',
                 'http-contracts',
                 'http-server',
                 'apps',

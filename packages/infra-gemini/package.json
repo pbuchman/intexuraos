@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
+    "@intexuraos/infra-llm-audit": "*",
     "@google/generative-ai": "^0.21.0"
   }
 }

@@ -127,9 +127,10 @@ describe('Internal Routes', () => {
         openai: string | null;
         anthropic: string | null;
       };
-      expect(body.google).toBeUndefined();
-      expect(body.openai).toBeUndefined();
-      expect(body.anthropic).toBeUndefined();
+      // Returns null (not undefined) to ensure JSON serialization preserves the key
+      expect(body.google).toBeNull();
+      expect(body.openai).toBeNull();
+      expect(body.anthropic).toBeNull();
     });
 
     it('returns decrypted keys for configured providers', async () => {
@@ -163,13 +164,13 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google?: string;
-        openai?: string;
-        anthropic?: string;
+        google: string | null;
+        openai: string | null;
+        anthropic: string | null;
       };
       // Returns decrypted keys for service-to-service use
       expect(body.google).toBe(googleKey);
-      expect(body.openai).toBeUndefined();
+      expect(body.openai).toBeNull();
       expect(body.anthropic).toBe(anthropicKey);
     });
 
@@ -241,12 +242,12 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        google?: string;
-        openai?: string;
-        anthropic?: string;
+        google: string | null;
+        openai: string | null;
+        anthropic: string | null;
       };
-      // Google key should be undefined due to decryption failure
-      expect(body.google).toBeUndefined();
+      // Google key should be null due to decryption failure
+      expect(body.google).toBeNull();
     });
   });
 });

@@ -64,17 +64,34 @@ async function getUserApiKeys(userId: string): Promise<DecryptedApiKeys> {
     });
 
     if (!response.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`Failed to fetch API keys for user ${userId}: HTTP ${String(response.status)}`);
       return {};
     }
 
     const data = (await response.json()) as {
-      google?: string;
-      openai?: string;
-      anthropic?: string;
+      google?: string | null;
+      openai?: string | null;
+      anthropic?: string | null;
     };
 
-    return data;
-  } catch {
+    // Convert null values to undefined (null is used by JSON to distinguish from missing)
+    const result: DecryptedApiKeys = {};
+    if (data.google !== null && data.google !== undefined) {
+      result.google = data.google;
+    }
+    if (data.openai !== null && data.openai !== undefined) {
+      result.openai = data.openai;
+    }
+    if (data.anthropic !== null && data.anthropic !== undefined) {
+      result.anthropic = data.anthropic;
+    }
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    // eslint-disable-next-line no-console
+    console.error(`Error fetching API keys for user ${userId}: ${message}`);
     return {};
   }
 }

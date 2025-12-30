@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ok, err, type Result } from '@intexuraos/common-core';
+import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
 
 const DEFAULT_MODEL = 'gemini-3-pro-preview';
@@ -15,51 +16,83 @@ export interface GeminiClient {
   validateKey(): Promise<Result<boolean, GeminiError>>;
 }
 
-function logRequest(
+function createRequestContext(
   method: string,
   model: string,
-  promptLength: number,
-  promptPreview: string
-): { requestId: string; startTime: number } {
+  prompt: string
+): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = crypto.randomUUID();
-  const startTime = Date.now();
+  const startTime = new Date();
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Gemini:${method}] Request`,
-    JSON.stringify({ requestId, model, promptLength, promptPreview })
+    JSON.stringify({
+      requestId,
+      model,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 200),
+    })
   );
-  return { requestId, startTime };
+
+  // Create audit context for Firestore logging
+  const auditContext = createAuditContext({
+    provider: 'google',
+    model,
+    method,
+    prompt,
+    startedAt: startTime,
+  });
+
+  return { requestId, startTime, auditContext };
 }
 
-function logResponse(
+async function logSuccess(
   method: string,
   requestId: string,
-  startTime: number,
-  responseLength: number,
-  responsePreview: string
-): void {
+  startTime: Date,
+  response: string,
+  auditContext: AuditContext
+): Promise<void> {
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Gemini:${method}] Response`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      responseLength,
-      responsePreview,
+      durationMs: Date.now() - startTime.getTime(),
+      responseLength: response.length,
+      responsePreview: response.slice(0, 200),
     })
   );
+
+  // Firestore audit logging
+  await auditContext.success({ response });
 }
 
-function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+async function logError(
+  method: string,
+  requestId: string,
+  startTime: Date,
+  error: unknown,
+  auditContext: AuditContext
+): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[Gemini:${method}] Error`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startTime.getTime(),
+      error: errorMessage,
     })
   );
+
+  // Firestore audit logging
+  await auditContext.error({ error: errorMessage });
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
@@ -68,11 +101,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt.length,
-        prompt.slice(0, 200)
+        prompt
       );
 
       try {
@@ -81,21 +113,20 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const response = result.response;
         const text = response.text();
 
-        logResponse('research', requestId, startTime, text.length, text.slice(0, 200));
+        await logSuccess('research', requestId, startTime, text, auditContext);
         return ok({ content: text });
       } catch (error) {
-        logError('research', requestId, startTime, error);
+        await logError('research', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
 
     async generateTitle(prompt: string): Promise<Result<string, GeminiError>> {
       const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'generateTitle',
         modelName,
-        titlePrompt.length,
-        prompt.slice(0, 100)
+        titlePrompt
       );
 
       try {
@@ -103,10 +134,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const result = await model.generateContent(titlePrompt);
         const text = result.response.text().trim();
 
-        logResponse('generateTitle', requestId, startTime, text.length, text);
+        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('generateTitle', requestId, startTime, error);
+        await logError('generateTitle', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
@@ -116,11 +147,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       reports: SynthesisInput[]
     ): Promise<Result<string, GeminiError>> {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
         modelName,
-        synthesisPrompt.length,
-        originalPrompt.slice(0, 100)
+        synthesisPrompt
       );
 
       try {
@@ -128,26 +158,31 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const result = await model.generateContent(synthesisPrompt);
         const text = result.response.text();
 
-        logResponse('synthesize', requestId, startTime, text.length, text.slice(0, 200));
+        await logSuccess('synthesize', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('synthesize', requestId, startTime, error);
+        await logError('synthesize', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
 
     async validateKey(): Promise<Result<boolean, GeminiError>> {
-      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 4, 'test');
+      const validatePrompt = 'Say "ok"';
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'validateKey',
+        VALIDATION_MODEL,
+        validatePrompt
+      );
 
       try {
         const model = genAI.getGenerativeModel({ model: VALIDATION_MODEL });
-        const result = await model.generateContent('Say "ok"');
-        result.response.text();
+        const result = await model.generateContent(validatePrompt);
+        const text = result.response.text();
 
-        logResponse('validateKey', requestId, startTime, 2, 'ok');
+        await logSuccess('validateKey', requestId, startTime, text, auditContext);
         return ok(true);
       } catch (error) {
-        logError('validateKey', requestId, startTime, error);
+        await logError('validateKey', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
