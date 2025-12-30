@@ -37,3 +37,6 @@ export {
   type UpdateUserSettingsDeps,
   updateUserSettings,
 } from './usecases/index.js';
+
+// Utils
+export { maskApiKey } from './utils/maskApiKey.js';

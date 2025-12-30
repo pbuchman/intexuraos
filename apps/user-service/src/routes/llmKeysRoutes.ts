@@ -10,16 +10,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { requireAuth } from '@intexuraos/common-http';
 import type { EncryptedValue } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import type { LlmProvider, LlmTestResult } from '../domain/settings/index.js';
-
-/**
- * Mask an API key for display.
- * Shows first 4 and last 4 characters.
- */
-function maskApiKey(key: string): string {
-  if (key.length <= 8) return '****';
-  return `${key.slice(0, 4)}...${key.slice(-4)}`;
-}
+import { maskApiKey, type LlmProvider, type LlmTestResult } from '../domain/settings/index.js';
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys
