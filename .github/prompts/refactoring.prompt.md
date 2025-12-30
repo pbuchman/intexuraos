@@ -1,11 +1,11 @@
 # Code Smell Detection and Fix
 
-> **Canonical location:** `.claude/prompts/refactoring.prompt.md`
+> **Canonical location:** `.claude/commands/refactoring.md`
 >
 > This file is a reference pointer. The full prompt is maintained in the Claude folder
 > to keep prompts consistent across tools (Copilot, Claude Code, etc.).
 
-See `.claude/prompts/refactoring.prompt.md` for the complete prompt.
+See `.claude/commands/refactoring.md` for the complete prompt.
 
 ## Quick Reference
 
