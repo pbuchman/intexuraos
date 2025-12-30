@@ -14,6 +14,6 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@google-cloud/firestore": "^7.10.0"
+    "@intexuraos/infra-firestore": "*"
   }
 }

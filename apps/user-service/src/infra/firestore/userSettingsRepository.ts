@@ -10,8 +10,7 @@ import {
   type EncryptedValue,
   getErrorMessage,
 } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
-import { FieldValue } from '@google-cloud/firestore';
+import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 import type {
   UserSettingsRepository,
   UserSettings,

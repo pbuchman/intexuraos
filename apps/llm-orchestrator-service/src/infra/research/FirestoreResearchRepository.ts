@@ -3,7 +3,7 @@
  * Handles persistence of Research documents.
  */
 
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type {
   Research,
@@ -14,15 +14,16 @@ import type {
 } from '../../domain/research/index.js';
 
 export class FirestoreResearchRepository implements ResearchRepository {
-  private readonly collection;
+  private readonly collectionName: string;
 
-  constructor(firestore: Firestore, collectionName = 'researches') {
-    this.collection = firestore.collection(collectionName);
+  constructor(collectionName = 'researches') {
+    this.collectionName = collectionName;
   }
 
   async save(research: Research): Promise<Result<Research, RepositoryError>> {
     try {
-      await this.collection.doc(research.id).set(research);
+      const db = getFirestore();
+      await db.collection(this.collectionName).doc(research.id).set(research);
       return ok(research);
     } catch (error) {
       return err({
@@ -34,7 +35,8 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
   async findById(id: string): Promise<Result<Research | null, RepositoryError>> {
     try {
-      const doc = await this.collection.doc(id).get();
+      const db = getFirestore();
+      const doc = await db.collection(this.collectionName).doc(id).get();
       if (!doc.exists) {
         return ok(null);
       }
@@ -52,13 +54,16 @@ export class FirestoreResearchRepository implements ResearchRepository {
     options?: { limit?: number; cursor?: string }
   ): Promise<Result<{ items: Research[]; nextCursor?: string }, RepositoryError>> {
     try {
-      let query = this.collection
+      const db = getFirestore();
+      const collection = db.collection(this.collectionName);
+
+      let query = collection
         .where('userId', '==', userId)
         .orderBy('startedAt', 'desc')
         .limit(options?.limit ?? 50);
 
       if (options?.cursor !== undefined && options.cursor !== '') {
-        const cursorDoc = await this.collection.doc(options.cursor).get();
+        const cursorDoc = await collection.doc(options.cursor).get();
         if (cursorDoc.exists) {
           query = query.startAfter(cursorDoc);
         }
@@ -84,7 +89,8 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
   async update(id: string, updates: Partial<Research>): Promise<Result<Research, RepositoryError>> {
     try {
-      await this.collection.doc(id).update(updates);
+      const db = getFirestore();
+      await db.collection(this.collectionName).doc(id).update(updates);
       const updated = await this.findById(id);
       if (!updated.ok) {
         return updated;
@@ -107,7 +113,8 @@ export class FirestoreResearchRepository implements ResearchRepository {
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>> {
     try {
-      const docRef = this.collection.doc(researchId);
+      const db = getFirestore();
+      const docRef = db.collection(this.collectionName).doc(researchId);
       const doc = await docRef.get();
 
       if (!doc.exists) {
@@ -131,7 +138,8 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
   async delete(id: string): Promise<Result<void, RepositoryError>> {
     try {
-      await this.collection.doc(id).delete();
+      const db = getFirestore();
+      await db.collection(this.collectionName).doc(id).delete();
       return ok(undefined);
     } catch (error) {
       return err({

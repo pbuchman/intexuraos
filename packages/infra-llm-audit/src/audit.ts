@@ -5,7 +5,7 @@
  * Controlled by INTEXURAOS_AUDIT_LLMS environment variable (defaults to true).
  */
 
-import { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type {
@@ -16,8 +16,6 @@ import type {
 } from './types.js';
 
 const COLLECTION_NAME = 'llm_api_logs';
-
-let firestoreInstance: Firestore | null = null;
 
 /**
  * Check if audit logging is enabled.
@@ -31,21 +29,6 @@ export function isAuditEnabled(): boolean {
   }
   // Only explicitly disable if set to 'false', '0', or 'no'
   return !['false', '0', 'no'].includes(envValue.toLowerCase());
-}
-
-/**
- * Set the Firestore instance for audit logging.
- * Must be called before any audit operations.
- */
-export function setAuditFirestore(firestore: Firestore): void {
-  firestoreInstance = firestore;
-}
-
-/**
- * Get the Firestore instance.
- */
-function getFirestore(): Firestore | null {
-  return firestoreInstance;
 }
 
 /**
@@ -78,9 +61,6 @@ export class AuditContext {
 
     if (!isAuditEnabled()) return;
 
-    const firestore = getFirestore();
-    if (firestore === null) return;
-
     const completedAt = new Date();
     const durationMs = completedAt.getTime() - this.params.startedAt.getTime();
 
@@ -109,7 +89,7 @@ export class AuditContext {
       log.researchId = this.params.researchId;
     }
 
-    await saveAuditLog(firestore, log);
+    await saveAuditLog(log);
   }
 
   /**
@@ -120,9 +100,6 @@ export class AuditContext {
     this.completed = true;
 
     if (!isAuditEnabled()) return;
-
-    const firestore = getFirestore();
-    if (firestore === null) return;
 
     const completedAt = new Date();
     const durationMs = completedAt.getTime() - this.params.startedAt.getTime();
@@ -151,15 +128,17 @@ export class AuditContext {
       log.researchId = this.params.researchId;
     }
 
-    await saveAuditLog(firestore, log);
+    await saveAuditLog(log);
   }
 }
 
 /**
  * Save an audit log entry to Firestore.
  */
-async function saveAuditLog(firestore: Firestore, log: LlmAuditLog): Promise<Result<void>> {
+async function saveAuditLog(log: LlmAuditLog): Promise<Result<void>> {
   try {
+    const firestore = getFirestore();
+
     // Remove undefined fields before saving
     const cleanLog: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(log)) {
@@ -176,11 +155,4 @@ async function saveAuditLog(firestore: Firestore, log: LlmAuditLog): Promise<Res
     console.error(`Failed to save LLM audit log: ${message}`);
     return err(new Error(message));
   }
-}
-
-/**
- * Reset audit state (for testing).
- */
-export function resetAuditFirestore(): void {
-  firestoreInstance = null;
 }

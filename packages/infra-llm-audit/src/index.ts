@@ -21,10 +21,4 @@ export type {
 } from './types.js';
 
 // Audit functions
-export {
-  isAuditEnabled,
-  setAuditFirestore,
-  resetAuditFirestore,
-  createAuditContext,
-  AuditContext,
-} from './audit.js';
+export { isAuditEnabled, createAuditContext, AuditContext } from './audit.js';

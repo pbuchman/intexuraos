@@ -81,8 +81,11 @@ export default tseslint.config(
             { from: 'infra-claude', allow: ['infra-claude', 'common-core', 'infra-llm-audit'] },
             // infra-gpt can import from common-core and infra-llm-audit
             { from: 'infra-gpt', allow: ['infra-gpt', 'common-core', 'infra-llm-audit'] },
-            // infra-llm-audit can import from common-core
-            { from: 'infra-llm-audit', allow: ['infra-llm-audit', 'common-core'] },
+            // infra-llm-audit can import from common-core and infra-firestore
+            {
+              from: 'infra-llm-audit',
+              allow: ['infra-llm-audit', 'common-core', 'infra-firestore'],
+            },
             // http-server can import from decomposed packages
             {
               from: 'http-server',
@@ -155,6 +158,43 @@ export default tseslint.config(
             // Pattern-based cross-app isolation:
             // Block all *-service apps, web app, and api-docs-hub automatically
             // New apps following naming convention are blocked without config changes
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Apps must use @intexuraos/infra-firestore singleton, not direct Firestore import
+  {
+    files: ['apps/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
             {
               group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',

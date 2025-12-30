@@ -85,6 +85,12 @@ variable "web_app_domain" {
   default     = "intexuraos.pbuchman.com"
 }
 
+variable "audit_llms" {
+  description = "Enable LLM API call audit logging to Firestore"
+  type        = bool
+  default     = true
+}
+
 # -----------------------------------------------------------------------------
 # Locals
 # -----------------------------------------------------------------------------
@@ -570,6 +576,10 @@ module "llm_orchestrator_service" {
     INTEXURAOS_USER_SERVICE_URL         = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
+  }
+
+  env_vars = {
+    INTEXURAOS_AUDIT_LLMS = var.audit_llms ? "true" : "false"
   }
 
   depends_on = [

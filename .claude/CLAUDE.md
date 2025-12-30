@@ -98,6 +98,22 @@ const tokenRepo = new FirestoreAuthTokenRepository();
 const tokenRepo = getServices().authTokenRepository;
 ```
 
+### Firestore Access
+
+Use the singleton from `@intexuraos/infra-firestore`, never instantiate directly:
+
+```ts-example
+// ❌ Direct instantiation — creates separate instance
+import { Firestore } from '@google-cloud/firestore';
+const firestore = new Firestore();
+
+// ✅ Singleton — shared instance, testable via setFirestore()
+import { getFirestore } from '@intexuraos/infra-firestore';
+const db = getFirestore();
+```
+
+Repositories should call `getFirestore()` within methods, not accept Firestore as constructor parameter.
+
 ### Secrets
 
 - Use `INTEXURAOS_*` prefix for environment variables

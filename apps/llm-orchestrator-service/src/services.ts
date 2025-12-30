@@ -3,7 +3,6 @@
  * Provides dependency injection for domain adapters.
  */
 
-import { Firestore } from '@google-cloud/firestore';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { createLlmProviders, createSynthesizer, type DecryptedApiKeys } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
@@ -152,8 +151,7 @@ function createNotificationSender(): NotificationSender {
  * Initialize the service container with all dependencies.
  */
 export function initializeServices(): void {
-  const firestore = new Firestore();
-  const researchRepo = new FirestoreResearchRepository(firestore);
+  const researchRepo = new FirestoreResearchRepository();
   const notificationSender = createNotificationSender();
 
   /**
