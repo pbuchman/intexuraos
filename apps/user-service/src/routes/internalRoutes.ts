@@ -16,10 +16,15 @@ import type { LlmProvider } from '../domain/settings/index.js';
 function validateInternalAuth(request: FastifyRequest): boolean {
   const internalAuthToken = process.env['INTERNAL_AUTH_TOKEN'] ?? '';
   if (internalAuthToken === '') {
+    request.log.warn('Internal auth failed: INTERNAL_AUTH_TOKEN not configured');
     return false;
   }
   const authHeader = request.headers['x-internal-auth'];
-  return authHeader === internalAuthToken;
+  if (authHeader !== internalAuthToken) {
+    request.log.warn('Internal auth failed: token mismatch');
+    return false;
+  }
+  return true;
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
