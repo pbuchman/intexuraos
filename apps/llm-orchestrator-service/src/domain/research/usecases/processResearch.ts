@@ -104,10 +104,18 @@ export async function processResearch(
 
   // Synthesize results
   if (successfulResults.length > 0) {
+    const externalReportsForSynthesis = research.externalReports?.map((report) => {
+      const mapped: { content: string; model?: string } = { content: report.content };
+      if (report.model !== undefined) {
+        mapped.model = report.model;
+      }
+      return mapped;
+    });
+
     const synthesisResult = await deps.synthesizer.synthesize(
       research.prompt,
       successfulResults.map((r) => ({ model: r.model, content: r.content })),
-      research.inputContexts?.map((ctx) => ({ content: ctx.content }))
+      externalReportsForSynthesis
     );
 
     if (!synthesisResult.ok) {

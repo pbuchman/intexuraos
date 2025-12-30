@@ -22,12 +22,13 @@ export interface LlmResult {
 }
 
 /**
- * User-provided context to include in research.
- * Max 60k chars per context, max 5 contexts total.
+ * External LLM report provided by user (e.g., from Perplexity, GPT-4 web).
+ * Max 60k chars per report, max 5 reports total.
  */
-export interface InputContext {
+export interface ExternalReport {
   id: string;
   content: string;
+  model?: string;
   addedAt: string;
 }
 
@@ -40,7 +41,7 @@ export interface Research {
   synthesisLlm: LlmProvider;
   status: ResearchStatus;
   llmResults: LlmResult[];
-  inputContexts?: InputContext[];
+  externalReports?: ExternalReport[];
   synthesizedResult?: string;
   synthesisError?: string;
   startedAt: string;
@@ -65,7 +66,7 @@ export function createResearch(params: {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
-  inputContexts?: { content: string }[];
+  externalReports?: { content: string; model?: string }[];
 }): Research {
   const now = new Date().toISOString();
   const research: Research = {
@@ -84,13 +85,18 @@ export function createResearch(params: {
     startedAt: now,
   };
 
-  // Add input contexts if provided
-  if (params.inputContexts !== undefined && params.inputContexts.length > 0) {
-    research.inputContexts = params.inputContexts.map((ctx, idx) => ({
-      id: `${params.id}-ctx-${String(idx)}`,
-      content: ctx.content,
-      addedAt: now,
-    }));
+  if (params.externalReports !== undefined && params.externalReports.length > 0) {
+    research.externalReports = params.externalReports.map((report, idx) => {
+      const externalReport: ExternalReport = {
+        id: `${params.id}-ext-${String(idx)}`,
+        content: report.content,
+        addedAt: now,
+      };
+      if (report.model !== undefined) {
+        externalReport.model = report.model;
+      }
+      return externalReport;
+    });
   }
 
   return research;
