@@ -415,18 +415,13 @@ This rule exists because excluding code from coverage is technical debt that com
 
 **RULE: When fixing a new code smell not listed here, YOU MUST add it to this section.**
 
+### Error Handling
+
 **Silent catch** — always document why errors are ignored:
 
 ```ts-example
 // ❌ try { await op(); } catch {}
 // ✅ try { await op(); } catch { /* Best-effort cleanup */ }
-```
-
-**Redundant variable** — return directly:
-
-```ts-example
-// ❌ const result = await fetch(url); return result;
-// ✅ return await fetch(url);
 ```
 
 **Inline error extraction** — use utility:
@@ -443,6 +438,56 @@ This rule exists because excluding code from coverage is technical debt that com
 // ✅ Separate try-catch from conditional throw
 ```
 
+### Dependency Injection
+
+**Re-exports from services.ts** — services.ts should only export DI container:
+
+```ts-example
+// ❌ export * from './infra/firestore/index.js';  // Bypasses DI
+// ✅ Only export getServices, setServices, resetServices, initServices
+```
+
+**Module-level mutable state** — pass dependencies explicitly:
+
+```ts-example
+// ❌ let logger: Logger | undefined;  // Mutated at runtime
+//    getServices() captures via closure
+// ✅ Pass logger into factory functions: createAdapter(logger)
+```
+
+**Test fallbacks in production** — throw if not initialized:
+
+```ts-example
+// ❌ return container ?? { fakeRepo: new FakeRepo() };
+// ✅ if (!container) throw new Error('Call initServices() first');
+```
+
+### Architecture
+
+**Domain logic in infra layer** — keep domain pure:
+
+```ts-example
+// ❌ packages/infra-*/src/client.ts contains maskApiKey()
+// ✅ Move to domain layer or common-core
+```
+
+**Infra re-exporting domain types** — respect layer boundaries:
+
+```ts-example
+// ❌ // infra/firestore/messageRepository.ts
+//    export type { WhatsAppMessage } from '../../domain/index.js';
+// ✅ Import domain types where needed, don't re-export from infra
+```
+
+### Code Quality
+
+**Redundant variable** — return directly:
+
+```ts-example
+// ❌ const result = await fetch(url); return result;
+// ✅ return await fetch(url);
+```
+
 **Redundant defensive check** — trust TypeScript's type narrowing:
 
 ```ts-example
@@ -455,6 +500,17 @@ This rule exists because excluding code from coverage is technical debt that com
 ```ts-example
 // ❌ Same doc block in multiple files
 // ✅ Canonical location, reference elsewhere
+```
+
+### Known Technical Debt (Documented)
+
+**Duplicated OpenAPI schemas** — each server.ts has inline schemas:
+
+```ts-example
+// Issue: coreComponentSchemas from http-contracts can't be spread
+//        due to Fastify's strict swagger types
+// Status: Keep inline until Fastify types improve or custom wrapper created
+// Files: apps/*/src/server.ts buildOpenApiOptions()
 ```
 
 ---

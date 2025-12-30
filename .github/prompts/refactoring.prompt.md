@@ -1,170 +1,23 @@
-You are a **TypeScript Static Analysis Bot** performing a **code smell detection and fix pass**.  
-Your role is to enforce **architecture hygiene**, **code consistency**, and **explicit error handling** across the repository.
+# Code Smell Detection and Fix
 
----
+> **Canonical location:** `.claude/prompts/refactoring.prompt.md`
+>
+> This file is a reference pointer. The full prompt is maintained in the Claude folder
+> to keep prompts consistent across tools (Copilot, Claude Code, etc.).
 
-## Goal
+See `.claude/prompts/refactoring.prompt.md` for the complete prompt.
 
-Detect code smells in the codebase, prioritize by impact, and fix the single most important one.
+## Quick Reference
 
----
+**Goal:** Detect code smells, prioritize by impact, fix the single most important one.
 
-## Prerequisites
+**Prerequisites:** Read `.claude/CLAUDE.md` first for known patterns and architecture rules.
 
-**Read `.github/copilot-instructions.md` first.** It contains:
+**Phases:**
 
-- **Code Smells (Fix & Document)** section — known bad patterns to scan for
-- Architecture and import hierarchy rules
-- TypeScript patterns to enforce
+1. Scan for smells (P0-P9 priority levels)
+2. Print prioritized list (top 10)
+3. Justify and fix top smell
+4. Output report
 
-This prompt adds detection strategy. Do not duplicate rules from copilot-instructions.
-
----
-
-## Phase 1: Scan for Code Smells
-
-Scan the codebase for these smell categories (in priority order):
-
-| Priority | Smell Category             | Detection Method                                             |
-| -------- | -------------------------- | ------------------------------------------------------------ |
-| P0       | **Known smells**           | Patterns listed in copilot-instructions "Code Smells"        |
-| P1       | **Duplicated logic**       | Same function in 2+ apps → extract to `@intexuraos/common`   |
-| P2       | **Large files**            | Files >300 lines or >5 routes → split by resource/concern    |
-| P3       | **Schema/boilerplate dup** | Repetitive response schemas, error mappings → create helpers |
-| P4       | **Dead/unreachable code**  | Unused exports, unreachable branches, commented-out code     |
-| P5       | **Boundary violations**    | Domain importing infra, common importing domain              |
-| P6       | **Complex conditionals**   | Nested ternaries, long if-else chains, magic numbers         |
-| P7       | **Missing error handling** | Unhandled promise rejections, empty catch blocks             |
-| P8       | **Inconsistent patterns**  | Mixed styles for same concern across files                   |
-
-### Common Duplication Patterns to Watch For
-
-- **Validation error handlers** — check if each app has its own `handleValidationError` or similar
-- **Error code mappers** — functions that map domain errors to HTTP codes, often duplicated
-- **Response schema boilerplate** — same JSON schema structure repeated per endpoint (success/error envelopes)
-- **Config loaders** — similar environment variable loading patterns across services
-
-### Large File Indicators
-
-- Route files with many endpoints should be split by resource (e.g., `/prompts`, `/integrations`, `/webhooks`)
-- Test files mirroring large source files are acceptable
-- Domain use case files >400 lines may need extraction
-
-**Scan commands:**
-
-```bash
-npm run lint                    # ESLint catches many smells
-npm run verify:boundaries       # Boundary violations
-npm run test:coverage           # Low coverage may indicate dead code
-```
-
-**Manual grep patterns:**
-
-```bash
-# Large files (>300 lines) — candidates for splitting
-find packages/ apps/ -name "*.ts" -exec wc -l {} + | sort -rn | head -20
-
-# Duplicated utilities across apps (check for same function name in multiple apps)
-grep -rn "^function " apps/ --include="*.ts" | grep -v "__tests__" | cut -d: -f3 | sort | uniq -c | sort -rn | head -10
-
-# Duplicated logic detection
-grep -rn "catch {}" packages/ apps/           # Empty catch
-grep -rn "@ts-ignore" packages/ apps/         # Suppressed errors
-grep -rn "// TODO" packages/ apps/            # Deferred work
-grep -rn "as any" packages/ apps/             # Type escapes
-```
-
----
-
-## Phase 2: Prioritize and Print Findings
-
-**MANDATORY:** Print a prioritized list of up to 10 code smells found:
-
-```markdown
-## Prioritized Code Smell Queue (Top 10)
-
-| Rank | Priority | File:Line      | Smell                       | Impact | Fix Effort |
-| ---- | -------- | -------------- | --------------------------- | ------ | ---------- |
-| 1    | P0       | src/foo.ts:123 | Silent catch without reason | High   | 5 min      |
-| 2    | P1       | src/bar.ts:456 | Unused export               | Medium | 2 min      |
-| 3    | P2       | src/baz.ts:78  | Duplicated validation logic | Medium | 15 min     |
-| ...  | ...      | ...            | ...                         | ...    | ...        |
-```
-
-**Prioritization criteria:**
-
-1. **Impact**: How much does it hurt maintainability/correctness?
-2. **Effort**: How long to fix properly?
-3. **Risk**: Could the fix introduce bugs?
-
----
-
-## Phase 3: Justify and Fix the Top Smell
-
-**MANDATORY:** Before fixing, clearly state why the chosen item is most important:
-
-```markdown
-## Selected Fix: #1 — Silent catch without reason
-
-**Why this is the top priority:**
-
-- [Reason 1: e.g., "Hides errors that could cause silent data corruption"]
-- [Reason 2: e.g., "Violates explicit error handling policy in copilot-instructions"]
-- [Reason 3: e.g., "Quick fix with zero regression risk"]
-
-**Why not #2 or #3:**
-
-- #2 (Unused export): Lower impact — just dead code, no runtime effect
-- #3 (Duplicated logic): Higher effort, needs more careful refactoring
-```
-
-**Then:**
-
-1. Make the fix.
-2. Run `npm run ci` — must pass.
-3. If this is a **new smell pattern** not in copilot-instructions:
-   - Add it to the "Code Smells (Fix & Document)" section.
-   - Include ❌ bad example and ✅ good example.
-
----
-
-## Phase 4: Output
-
-Use `show_content` tool with this structure:
-
-```markdown
-## Code Smell Report
-
-### Scan Summary
-
-- Files scanned: X
-- Smells found: Y
-
-### Prioritized Queue (Top 10)
-
-[table from Phase 2 — MANDATORY, must show ~10 items if available]
-
-### Selected Fix Justification
-
-[justification from Phase 3 — MANDATORY, explain why #1 was chosen over others]
-
-### Fixed
-
-- **Smell**: [name]
-- **Location**: [file:line]
-- **Fix**: [brief description]
-- **New pattern added**: Yes/No (if yes, link to copilot-instructions update)
-
-### Remaining Queue
-
-[list remaining items from the queue for future passes]
-```
-
----
-
-## Rules
-
-- Fix **one smell per pass** — keeps changes reviewable.
-- **Always update copilot-instructions** when fixing a new pattern type.
-- **Never claim done** until `npm run ci` passes.
-- If no smells found, report clean scan.
+**Key Rule:** Fix one smell per pass, update CLAUDE.md for new patterns.

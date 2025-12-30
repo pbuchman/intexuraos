@@ -110,60 +110,103 @@ Adjust COPY statements based on which packages the service depends on.
 ### 4. Create src/index.ts
 
 ```typescript
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import fastifySwagger from '@fastify/swagger';
-import fastifySwaggerUi from '@fastify/swagger-ui';
-import { registerHealthRoutes } from '@intexuraos/http-server';
-import { registerRoutes } from './routes/index.js';
+import { getErrorMessage } from '@intexuraos/common-core';
+import { buildServer } from './server.js';
+import { loadConfig } from './config.js';
+import { initServices } from './services.js';
 
-const app = Fastify({ logger: true });
+async function main(): Promise<void> {
+  const config = loadConfig();
 
-await app.register(cors, { origin: true });
+  // Initialize services with config BEFORE building server
+  initServices({
+    // Pass config values to services
+  });
 
-await app.register(fastifySwagger, {
-  openapi: {
-    info: {
-      title: '<Service Name> API',
-      version: '1.0.0',
-    },
-  },
+  const app = await buildServer(config);
+
+  const close = (): void => {
+    app.close().then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  };
+
+  process.on('SIGTERM', close);
+  process.on('SIGINT', close);
+
+  await app.listen({ port: config.port, host: '0.0.0.0' });
+}
+
+main().catch((error: unknown) => {
+  process.stderr.write(`Failed to start server: ${getErrorMessage(error, String(error))}\n`);
+  process.exit(1);
 });
-
-await app.register(fastifySwaggerUi, { routePrefix: '/docs' });
-
-registerHealthRoutes(app);
-registerRoutes(app);
-
-const port = Number(process.env['PORT']) || 8080;
-await app.listen({ port, host: '0.0.0.0' });
 ```
+
+Note: Create separate `server.ts` and `config.ts` files. See existing services for patterns.
 
 ### 5. Create src/services.ts
 
+**IMPORTANT:** Follow the DI pattern correctly to avoid code smells.
+
 ```typescript
-export interface Services {
+/**
+ * Service wiring for <service-name>.
+ * Provides dependency injection for domain adapters.
+ */
+
+export interface ServiceContainer {
   // Define service dependencies here
+  // exampleRepo: ExampleRepository;
 }
 
-let services: Services | null = null;
+// Configuration required to initialize services
+export interface ServiceConfig {
+  // Add config fields as needed
+  // exampleApiKey: string;
+}
 
-export function getServices(): Services {
-  if (services === null) {
-    services = {
-      // Initialize production dependencies
-    };
+let container: ServiceContainer | null = null;
+
+/**
+ * Initialize services with config. Call this early in server startup.
+ * MUST be called before getServices().
+ */
+export function initServices(config: ServiceConfig): void {
+  container = {
+    // Initialize production dependencies using config
+    // exampleRepo: new ExampleRepositoryAdapter(config.exampleApiKey),
+  };
+}
+
+/**
+ * Get the service container. Throws if initServices() wasn't called.
+ * DO NOT add fallbacks here - that creates test code in production.
+ */
+export function getServices(): ServiceContainer {
+  if (container === null) {
+    throw new Error('Service container not initialized. Call initServices() first.');
   }
-  return services;
+  return container;
 }
 
-export function setServices(s: Services): void {
-  services = s;
+/**
+ * Replace services for testing. Only use in tests.
+ */
+export function setServices(s: ServiceContainer): void {
+  container = s;
 }
 
+/**
+ * Reset services. Call in afterEach() in tests.
+ */
 export function resetServices(): void {
-  services = null;
+  container = null;
 }
+
+// DO NOT add: export * from './infra/...'
+// Services.ts should only export DI functions, not re-export infra.
 ```
 
 ### 6. Add Terraform Module
@@ -287,3 +330,36 @@ cd terraform && terraform fmt -recursive && terraform validate
 | Cloud Storage | `@google-cloud/storage`       |
 | HTTP client   | `@intexuraos/common-http`     |
 | Auth/JWT      | `@intexuraos/common-core`     |
+
+---
+
+## Code Smells to Avoid
+
+See `.claude/CLAUDE.md` "Code Smells" section for the full list. Key patterns for new services:
+
+| Smell             | What to Avoid                                        | What to Do                     |
+| ----------------- | ---------------------------------------------------- | ------------------------------ |
+| **DI fallbacks**  | `return container ?? { fakeRepo }`                   | Throw if not initialized       |
+| **Re-exports**    | `export * from './infra/...'` in services.ts         | Only export DI functions       |
+| **Inline errors** | `error instanceof Error ? error.message : 'Unknown'` | Use `getErrorMessage()`        |
+| **Module state**  | `let logger: Logger \| undefined;`                   | Pass deps to factory functions |
+
+### Test Setup Pattern
+
+```typescript
+// In test files
+import { setServices, resetServices } from '../services.js';
+import { FakeRepository } from './fakes.js';
+
+describe('MyRoute', () => {
+  beforeEach(() => {
+    setServices({
+      exampleRepo: new FakeRepository(),
+    });
+  });
+
+  afterEach(() => {
+    resetServices();
+  });
+});
+```
