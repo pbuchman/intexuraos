@@ -62,11 +62,14 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
       phoneNumberId,
     });
 
-    const result = await client.sendTextMessage({
+    const params: { to: string; message: string; replyToMessageId?: string } = {
       to: recipientPhone,
       message,
-      replyToMessageId,
-    });
+    };
+    if (replyToMessageId !== undefined) {
+      params.replyToMessageId = replyToMessageId;
+    }
+    const result = await client.sendTextMessage(params);
 
     if (!result.ok) {
       return err({
