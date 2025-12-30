@@ -1,7 +1,21 @@
 import { useState } from 'react';
 import { Layout, Button, Card, Input } from '@/components';
 import { useLlmKeys } from '@/hooks';
-import type { LlmProvider } from '@/services/llmKeysApi.types';
+import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
+
+/**
+ * Format a date as human-readable string.
+ */
+function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 interface ProviderConfig {
   id: LlmProvider;
@@ -81,13 +95,14 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
             key={provider.id}
             provider={provider}
             currentValue={keys?.[provider.id] ?? null}
+            savedTestResult={keys?.testResults[provider.id] ?? null}
             onSave={async (apiKey): Promise<void> => {
               await setKey(provider.id, apiKey);
             }}
             onDelete={async (): Promise<void> => {
               await deleteKey(provider.id);
             }}
-            onTest={async (): Promise<string> => {
+            onTest={async (): Promise<{ response: string; testedAt: string }> => {
               return await testKey(provider.id);
             }}
           />
@@ -100,14 +115,16 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
 interface ApiKeyRowProps {
   provider: ProviderConfig;
   currentValue: string | null;
+  savedTestResult: LlmTestResult | null;
   onSave: (apiKey: string) => Promise<void>;
   onDelete: () => Promise<void>;
-  onTest: () => Promise<string>;
+  onTest: () => Promise<{ response: string; testedAt: string }>;
 }
 
 function ApiKeyRow({
   provider,
   currentValue,
+  savedTestResult,
   onSave,
   onDelete,
   onTest,
@@ -118,7 +135,6 @@ function ApiKeyRow({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [testResponse, setTestResponse] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
   const isConfigured = currentValue !== null;
@@ -147,18 +163,15 @@ function ApiKeyRow({
   const handleDelete = async (): Promise<void> => {
     await onDelete();
     setShowDeleteConfirm(false);
-    setTestResponse(null);
     setTestError(null);
   };
 
   const handleTest = async (): Promise<void> => {
     setIsTesting(true);
-    setTestResponse(null);
     setTestError(null);
 
     try {
-      const response = await onTest();
-      setTestResponse(response);
+      await onTest();
     } catch (err) {
       setTestError(err instanceof Error ? err.message : 'Test failed');
     } finally {
@@ -233,10 +246,12 @@ function ApiKeyRow({
         ) : null}
       </div>
 
-      {testResponse !== null ? (
+      {savedTestResult !== null ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-sm font-medium text-green-800 mb-1">LLM Response:</p>
-          <p className="text-sm text-green-700">{testResponse}</p>
+          <p className="text-sm font-medium text-green-800 mb-1">
+            LLM Response ({formatDate(savedTestResult.testedAt)}):
+          </p>
+          <p className="text-sm text-green-700">{savedTestResult.response}</p>
         </div>
       ) : null}
 

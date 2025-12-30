@@ -18,6 +18,7 @@ import type {
   UserSettings,
   SettingsError,
   LlmProvider,
+  LlmTestResult,
 } from '../domain/settings/index.js';
 
 /**
@@ -312,6 +313,32 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       this.settings.set(userId, existing);
     }
 
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateLlmTestResult(
+    userId: string,
+    provider: LlmProvider,
+    testResult: LlmTestResult
+  ): Promise<Result<void, SettingsError>> {
+    let existing = this.settings.get(userId);
+    if (existing === undefined) {
+      const now = new Date().toISOString();
+      existing = {
+        userId,
+        notifications: { filters: [] },
+        llmTestResults: {},
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    const llmTestResults = existing.llmTestResults ?? {};
+    llmTestResults[provider] = testResult;
+    existing.llmTestResults = llmTestResults;
+    existing.updatedAt = new Date().toISOString();
+
+    this.settings.set(userId, existing);
     return Promise.resolve(ok(undefined));
   }
 

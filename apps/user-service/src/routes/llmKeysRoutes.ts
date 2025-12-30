@@ -13,7 +13,7 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { getServices } from '../services.js';
-import type { LlmProvider } from '../domain/settings/index.js';
+import type { LlmProvider, LlmTestResult } from '../domain/settings/index.js';
 
 /**
  * Validate API key by making a test request to the provider.
@@ -139,6 +139,35 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   google: { type: 'string', nullable: true },
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
+                  testResults: {
+                    type: 'object',
+                    properties: {
+                      google: {
+                        type: 'object',
+                        nullable: true,
+                        properties: {
+                          response: { type: 'string' },
+                          testedAt: { type: 'string' },
+                        },
+                      },
+                      openai: {
+                        type: 'object',
+                        nullable: true,
+                        properties: {
+                          response: { type: 'string' },
+                          testedAt: { type: 'string' },
+                        },
+                      },
+                      anthropic: {
+                        type: 'object',
+                        nullable: true,
+                        properties: {
+                          response: { type: 'string' },
+                          testedAt: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -189,6 +218,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const settings = result.value;
       const llmApiKeys = settings?.llmApiKeys;
+      const llmTestResults = settings?.llmTestResults;
       const { encryptor } = getServices();
 
       // Decrypt and mask keys for display
@@ -203,6 +233,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         google: getMaskedKey(llmApiKeys?.google),
         openai: getMaskedKey(llmApiKeys?.openai),
         anthropic: getMaskedKey(llmApiKeys?.anthropic),
+        testResults: {
+          google: llmTestResults?.google ?? null,
+          openai: llmTestResults?.openai ?? null,
+          anthropic: llmTestResults?.anthropic ?? null,
+        },
       });
     }
   );
@@ -448,7 +483,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('DOWNSTREAM_ERROR', testResult.error);
       }
 
-      return await reply.ok({ response: testResult.value });
+      // Save the test result with timestamp
+      const llmTestResult: LlmTestResult = {
+        response: testResult.value,
+        testedAt: new Date().toISOString(),
+      };
+      await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
+
+      return await reply.ok({ response: testResult.value, testedAt: llmTestResult.testedAt });
     }
   );
 

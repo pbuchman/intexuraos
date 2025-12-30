@@ -51,6 +51,13 @@ PR_NUMBER=""
 # 1. Check gcloud authentication
 check_gcloud_auth() {
   header "Checking gcloud authentication"
+
+  if ! command -v gcloud &>/dev/null; then
+    error "gcloud CLI not installed"
+    echo "Install: https://cloud.google.com/sdk/docs/install"
+    exit 1
+  fi
+
   if ! gcloud auth print-identity-token &>/dev/null; then
     error "Not authenticated to gcloud"
     echo "Run: gcloud auth login"
@@ -156,8 +163,8 @@ check_github_ci() {
   while IFS=$'\t' read -r state bucket name; do
     if [[ "$state" == "SUCCESS" ]]; then
       success "$name"
-    elif [[ "$state" == "PENDING" ]]; then
-      warning "$name - pending"
+    elif [[ "$state" == "PENDING" || "$state" == "QUEUED" || "$state" == "IN_PROGRESS" ]]; then
+      warning "$name - ${state,,}"
     elif [[ "$state" == "SKIPPED" ]]; then
       echo "  $name - skipped"
     else

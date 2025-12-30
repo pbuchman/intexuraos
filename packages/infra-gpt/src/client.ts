@@ -2,8 +2,8 @@ import OpenAI from 'openai';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type { GptConfig, ResearchResult, SynthesisInput, GptError } from './types.js';
 
-const DEFAULT_MODEL = 'gpt-5.2-pro';
-const VALIDATION_MODEL = 'gpt-5-nano';
+const DEFAULT_MODEL = 'gpt-4o';
+const VALIDATION_MODEL = 'gpt-4o-mini';
 const MAX_TOKENS = 8192;
 
 export interface GptClient {

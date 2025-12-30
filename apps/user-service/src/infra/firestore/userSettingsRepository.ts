@@ -17,6 +17,7 @@ import type {
   UserSettings,
   SettingsError,
   LlmProvider,
+  LlmTestResult,
 } from '../../domain/settings/index.js';
 
 const COLLECTION_NAME = 'user_settings';
@@ -33,6 +34,11 @@ interface UserSettingsDoc {
     google?: EncryptedValue;
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
+  };
+  llmTestResults?: {
+    google?: LlmTestResult;
+    openai?: LlmTestResult;
+    anthropic?: LlmTestResult;
   };
   createdAt: string;
   updatedAt: string;
@@ -61,6 +67,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       };
       if (data.llmApiKeys !== undefined) {
         settings.llmApiKeys = data.llmApiKeys;
+      }
+      if (data.llmTestResults !== undefined) {
+        settings.llmTestResults = data.llmTestResults;
       }
       return ok(settings);
     } catch (error) {
@@ -150,6 +159,41 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to delete LLM API key: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateLlmTestResult(
+    userId: string,
+    provider: LlmProvider,
+    testResult: LlmTestResult
+  ): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        const now = new Date().toISOString();
+        await docRef.set({
+          userId,
+          notifications: { filters: [] },
+          llmTestResults: { [provider]: testResult },
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.update({
+          [`llmTestResults.${provider}`]: testResult,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update LLM test result: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

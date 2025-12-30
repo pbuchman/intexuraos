@@ -60,8 +60,8 @@ export async function testLlmKey(
   accessToken: string,
   userId: string,
   provider: LlmProvider
-): Promise<{ response: string }> {
-  return await apiRequest<{ response: string }>(
+): Promise<{ response: string; testedAt: string }> {
+  return await apiRequest<{ response: string; testedAt: string }>(
     config.authServiceUrl,
     `/users/${userId}/settings/llm-keys/${provider}/test`,
     accessToken,
@@ -72,6 +72,7 @@ export async function testLlmKey(
 export type {
   LlmProvider,
   LlmKeysResponse,
+  LlmTestResult,
   SetLlmKeyRequest,
   SetLlmKeyResponse,
 } from './llmKeysApi.types.js';

@@ -4,7 +4,7 @@
  */
 
 import type { Result, EncryptedValue } from '@intexuraos/common-core';
-import type { UserSettings, LlmProvider } from '../models/UserSettings.js';
+import type { UserSettings, LlmProvider, LlmTestResult } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 
 /**
@@ -37,4 +37,13 @@ export interface UserSettingsRepository {
    * Delete a single LLM API key for a user.
    */
   deleteLlmApiKey(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Update the test result for an LLM provider.
+   */
+  updateLlmTestResult(
+    userId: string,
+    provider: LlmProvider,
+    testResult: LlmTestResult
+  ): Promise<Result<void, SettingsError>>;
 }
