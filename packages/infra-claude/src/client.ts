@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ok, err, type Result } from '@intexuraos/common-core';
+import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { ClaudeConfig, ResearchResult, SynthesisInput, ClaudeError } from './types.js';
 
 const DEFAULT_MODEL = 'claude-opus-4-5';
@@ -16,51 +17,83 @@ export interface ClaudeClient {
   validateKey(): Promise<Result<boolean, ClaudeError>>;
 }
 
-function logRequest(
+function createRequestContext(
   method: string,
   model: string,
-  promptLength: number,
-  promptPreview: string
-): { requestId: string; startTime: number } {
+  prompt: string
+): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = crypto.randomUUID();
-  const startTime = Date.now();
+  const startTime = new Date();
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Claude:${method}] Request`,
-    JSON.stringify({ requestId, model, promptLength, promptPreview })
+    JSON.stringify({
+      requestId,
+      model,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 200),
+    })
   );
-  return { requestId, startTime };
+
+  // Create audit context for Firestore logging
+  const auditContext = createAuditContext({
+    provider: 'anthropic',
+    model,
+    method,
+    prompt,
+    startedAt: startTime,
+  });
+
+  return { requestId, startTime, auditContext };
 }
 
-function logResponse(
+async function logSuccess(
   method: string,
   requestId: string,
-  startTime: number,
-  responseLength: number,
-  responsePreview: string
-): void {
+  startTime: Date,
+  response: string,
+  auditContext: AuditContext
+): Promise<void> {
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Claude:${method}] Response`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      responseLength,
-      responsePreview,
+      durationMs: Date.now() - startTime.getTime(),
+      responseLength: response.length,
+      responsePreview: response.slice(0, 200),
     })
   );
+
+  // Firestore audit logging
+  await auditContext.success({ response });
 }
 
-function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+async function logError(
+  method: string,
+  requestId: string,
+  startTime: Date,
+  error: unknown,
+  auditContext: AuditContext
+): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[Claude:${method}] Error`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startTime.getTime(),
+      error: errorMessage,
     })
   );
+
+  // Firestore audit logging
+  await auditContext.error({ error: errorMessage });
 }
 
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
@@ -69,11 +102,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt.length,
-        prompt.slice(0, 200)
+        prompt
       );
 
       try {
@@ -89,21 +121,20 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
 
-        logResponse('research', requestId, startTime, content.length, content.slice(0, 200));
+        await logSuccess('research', requestId, startTime, content, auditContext);
         return ok({ content });
       } catch (error) {
-        logError('research', requestId, startTime, error);
+        await logError('research', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },
 
     async generateTitle(prompt: string): Promise<Result<string, ClaudeError>> {
       const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'generateTitle',
         modelName,
-        titlePrompt.length,
-        prompt.slice(0, 100)
+        titlePrompt
       );
 
       try {
@@ -121,10 +152,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           .join('')
           .trim();
 
-        logResponse('generateTitle', requestId, startTime, text.length, text);
+        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('generateTitle', requestId, startTime, error);
+        await logError('generateTitle', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },
@@ -134,11 +165,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       reports: SynthesisInput[]
     ): Promise<Result<string, ClaudeError>> {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
         modelName,
-        synthesisPrompt.length,
-        originalPrompt.slice(0, 100)
+        synthesisPrompt
       );
 
       try {
@@ -153,22 +183,27 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         );
         const text = textBlocks.map((b) => b.text).join('\n\n');
 
-        logResponse('synthesize', requestId, startTime, text.length, text.slice(0, 200));
+        await logSuccess('synthesize', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('synthesize', requestId, startTime, error);
+        await logError('synthesize', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },
 
     async validateKey(): Promise<Result<boolean, ClaudeError>> {
-      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 9, 'Say "ok"');
+      const validatePrompt = 'Say "ok"';
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'validateKey',
+        VALIDATION_MODEL,
+        validatePrompt
+      );
 
       try {
         const response = await client.messages.create({
           model: VALIDATION_MODEL,
           max_tokens: 10,
-          messages: [{ role: 'user', content: 'Say "ok"' }],
+          messages: [{ role: 'user', content: validatePrompt }],
         });
 
         const textBlocks = response.content.filter(
@@ -176,10 +211,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         );
         const content = textBlocks.map((b) => b.text).join('');
 
-        logResponse('validateKey', requestId, startTime, content.length, content);
+        await logSuccess('validateKey', requestId, startTime, content, auditContext);
         return ok(true);
       } catch (error) {
-        logError('validateKey', requestId, startTime, error);
+        await logError('validateKey', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },

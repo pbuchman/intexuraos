@@ -476,7 +476,8 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to decrypt API key');
       }
 
-      const testPrompt = 'Say "Hello! Your API key is working correctly." in exactly those words.';
+      const testPrompt =
+        'Respond with your name and model version in a short greeting. Example format: "Hello! I am GPT-4o."';
       const testResult = await makeTestRequest(params.provider, decrypted.value, testPrompt);
 
       if (!testResult.ok) {

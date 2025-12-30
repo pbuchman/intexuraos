@@ -4,8 +4,6 @@ set -euo pipefail
 # Configuration
 PROJECT="intexuraos-dev-pbuchman"
 REGION="europe-central2"
-TIMEOUT_MINUTES=5
-POLL_INTERVAL=15
 
 SERVICES=(
   "intexuraos-user-service"
@@ -207,32 +205,30 @@ check_cloud_build() {
   done
 }
 
-# 6. Wait for Cloud Build completion
-wait_for_cloud_build() {
-  header "Waiting for Cloud Build"
+# 6. Stream Cloud Build logs until completion
+stream_cloud_build() {
+  local build_id="$1"
 
-  local start_time=$SECONDS
-  local timeout=$((TIMEOUT_MINUTES * 60))
+  header "Streaming Cloud Build Logs"
+  echo "Build: https://console.cloud.google.com/cloud-build/builds;region=$REGION/$build_id?project=$PROJECT"
+  echo ""
 
-  while (( SECONDS - start_time < timeout )); do
-    local latest_status
-    latest_status=$(gcloud builds list --project="$PROJECT" --region="$REGION" --limit=1 \
-      --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+  # Stream logs until build completes (requires beta for Cloud Logging)
+  gcloud beta builds log "$build_id" --project="$PROJECT" --region="$REGION" --stream 2>&1
 
-    if [[ "$latest_status" == "SUCCESS" ]]; then
-      success "Cloud Build completed successfully"
-      return 0
-    elif [[ "$latest_status" == "FAILURE" || "$latest_status" == "CANCELLED" ]]; then
-      error "Cloud Build failed: $latest_status"
-      return 1
-    fi
+  # Check final status
+  local final_status
+  final_status=$(gcloud builds describe "$build_id" --project="$PROJECT" --region="$REGION" \
+    --format="value(status)" 2>/dev/null || echo "UNKNOWN")
 
-    log "Build status: $latest_status - waiting ${POLL_INTERVAL}s..."
-    sleep "$POLL_INTERVAL"
-  done
-
-  error "Timeout waiting for Cloud Build"
-  return 1
+  echo ""
+  if [[ "$final_status" == "SUCCESS" ]]; then
+    success "Cloud Build completed successfully"
+    return 0
+  else
+    error "Cloud Build failed: $final_status"
+    return 1
+  fi
 }
 
 # 8. Check Cloud Run services health
@@ -277,13 +273,17 @@ main() {
   check_github_ci
   check_cloud_build
 
-  # If latest build is in progress, wait for it
-  local latest_status
-  latest_status=$(gcloud builds list --project="$PROJECT" --region="$REGION" --limit=1 \
-    --format="value(status)" 2>/dev/null || echo "")
+  # If latest build is in progress, stream its logs until completion
+  local latest_build
+  latest_build=$(gcloud builds list --project="$PROJECT" --region="$REGION" --limit=1 \
+    --format="value(id,status)" 2>/dev/null || echo "")
 
-  if [[ "$latest_status" == "WORKING" || "$latest_status" == "QUEUED" ]]; then
-    wait_for_cloud_build
+  local build_id build_status
+  build_id=$(echo "$latest_build" | cut -f1)
+  build_status=$(echo "$latest_build" | cut -f2)
+
+  if [[ "$build_status" == "WORKING" || "$build_status" == "QUEUED" ]]; then
+    stream_cloud_build "$build_id"
   fi
 
   check_services_health

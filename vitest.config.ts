@@ -61,6 +61,11 @@ export default defineConfig({
         'packages/infra-gpt/**',
         'packages/infra-whatsapp/**',
 
+        // LLM Audit logging infrastructure
+        // JUSTIFIED: Thin wrapper around Firestore SDK for audit logging
+        // Same pattern as other infra packages - no business logic
+        'packages/infra-llm-audit/**',
+
         // LLM Orchestrator service infrastructure and config
         // JUSTIFIED: LLM adapters delegate to SDK calls (same pattern as packages above)
         // WhatsApp notification sender delegates to infra-whatsapp package

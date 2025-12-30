@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { ok, err, type Result } from '@intexuraos/common-core';
+import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GptConfig, ResearchResult, SynthesisInput, GptError } from './types.js';
 
 const DEFAULT_MODEL = 'gpt-4o';
@@ -13,51 +14,83 @@ export interface GptClient {
   validateKey(): Promise<Result<boolean, GptError>>;
 }
 
-function logRequest(
+function createRequestContext(
   method: string,
   model: string,
-  promptLength: number,
-  promptPreview: string
-): { requestId: string; startTime: number } {
+  prompt: string
+): { requestId: string; startTime: Date; auditContext: AuditContext } {
   const requestId = crypto.randomUUID();
-  const startTime = Date.now();
+  const startTime = new Date();
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[GPT:${method}] Request`,
-    JSON.stringify({ requestId, model, promptLength, promptPreview })
+    JSON.stringify({
+      requestId,
+      model,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 200),
+    })
   );
-  return { requestId, startTime };
+
+  // Create audit context for Firestore logging
+  const auditContext = createAuditContext({
+    provider: 'openai',
+    model,
+    method,
+    prompt,
+    startedAt: startTime,
+  });
+
+  return { requestId, startTime, auditContext };
 }
 
-function logResponse(
+async function logSuccess(
   method: string,
   requestId: string,
-  startTime: number,
-  responseLength: number,
-  responsePreview: string
-): void {
+  startTime: Date,
+  response: string,
+  auditContext: AuditContext
+): Promise<void> {
+  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[GPT:${method}] Response`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      responseLength,
-      responsePreview,
+      durationMs: Date.now() - startTime.getTime(),
+      responseLength: response.length,
+      responsePreview: response.slice(0, 200),
     })
   );
+
+  // Firestore audit logging
+  await auditContext.success({ response });
 }
 
-function logError(method: string, requestId: string, startTime: number, error: unknown): void {
+async function logError(
+  method: string,
+  requestId: string,
+  startTime: Date,
+  error: unknown,
+  auditContext: AuditContext
+): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[GPT:${method}] Error`,
     JSON.stringify({
       requestId,
-      durationMs: Date.now() - startTime,
-      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startTime.getTime(),
+      error: errorMessage,
     })
   );
+
+  // Firestore audit logging
+  await auditContext.error({ error: errorMessage });
 }
 
 export function createGptClient(config: GptConfig): GptClient {
@@ -66,11 +99,10 @@ export function createGptClient(config: GptConfig): GptClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'research',
         modelName,
-        prompt.length,
-        prompt.slice(0, 200)
+        prompt
       );
 
       try {
@@ -93,21 +125,20 @@ export function createGptClient(config: GptConfig): GptClient {
         const firstChoice = response.choices[0];
         const content = firstChoice?.message.content ?? '';
 
-        logResponse('research', requestId, startTime, content.length, content.slice(0, 200));
+        await logSuccess('research', requestId, startTime, content, auditContext);
         return ok({ content });
       } catch (error) {
-        logError('research', requestId, startTime, error);
+        await logError('research', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
 
     async generateTitle(prompt: string): Promise<Result<string, GptError>> {
       const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'generateTitle',
         modelName,
-        titlePrompt.length,
-        prompt.slice(0, 100)
+        titlePrompt
       );
 
       try {
@@ -118,10 +149,10 @@ export function createGptClient(config: GptConfig): GptClient {
         });
 
         const text = (response.choices[0]?.message.content ?? '').trim();
-        logResponse('generateTitle', requestId, startTime, text.length, text);
+        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('generateTitle', requestId, startTime, error);
+        await logError('generateTitle', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
@@ -131,11 +162,10 @@ export function createGptClient(config: GptConfig): GptClient {
       reports: SynthesisInput[]
     ): Promise<Result<string, GptError>> {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
-      const { requestId, startTime } = logRequest(
+      const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
         modelName,
-        synthesisPrompt.length,
-        originalPrompt.slice(0, 100)
+        synthesisPrompt
       );
 
       try {
@@ -156,29 +186,34 @@ export function createGptClient(config: GptConfig): GptClient {
         });
 
         const text = response.choices[0]?.message.content ?? '';
-        logResponse('synthesize', requestId, startTime, text.length, text.slice(0, 200));
+        await logSuccess('synthesize', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        logError('synthesize', requestId, startTime, error);
+        await logError('synthesize', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
 
     async validateKey(): Promise<Result<boolean, GptError>> {
-      const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 9, 'Say "ok"');
+      const validatePrompt = 'Say "ok"';
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'validateKey',
+        VALIDATION_MODEL,
+        validatePrompt
+      );
 
       try {
         const response = await client.chat.completions.create({
           model: VALIDATION_MODEL,
           max_tokens: 10,
-          messages: [{ role: 'user', content: 'Say "ok"' }],
+          messages: [{ role: 'user', content: validatePrompt }],
         });
 
         const content = response.choices[0]?.message.content ?? '';
-        logResponse('validateKey', requestId, startTime, content.length, content);
+        await logSuccess('validateKey', requestId, startTime, content, auditContext);
         return ok(true);
       } catch (error) {
-        logError('validateKey', requestId, startTime, error);
+        await logError('validateKey', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
