@@ -2,6 +2,7 @@
 import * as esbuild from 'esbuild';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -12,16 +13,20 @@ if (!service) {
   process.exit(1);
 }
 
-// Packages that must remain external (native modules, etc.)
-// These are NOT bundled and must be installed at runtime
-const externalPackages = [
-  // Google Cloud - has native bindings
-  '@google-cloud/*',
-  // Sharp - native image processing
-  'sharp',
-  // Speechmatics - may have native deps
-  '@speechmatics/*',
+// Read service's package.json to get its dependencies
+const servicePkgPath = resolve(rootDir, `apps/${service}/package.json`);
+const servicePkg = JSON.parse(readFileSync(servicePkgPath, 'utf8'));
+
+// All npm dependencies should be external (not bundled)
+// Only @intexuraos/* workspace packages are bundled (they export TypeScript source)
+const allDeps = [
+  ...Object.keys(servicePkg.dependencies || {}),
+  ...Object.keys(servicePkg.devDependencies || {}),
 ];
+
+// Filter out @intexuraos/* packages - those MUST be bundled
+// Keep all other npm packages as external
+const externalPackages = allDeps.filter((dep) => !dep.startsWith('@intexuraos/'));
 
 await esbuild.build({
   entryPoints: [resolve(rootDir, `apps/${service}/src/index.ts`)],
