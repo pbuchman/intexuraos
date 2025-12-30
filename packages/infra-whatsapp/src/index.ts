@@ -1,2 +1,8 @@
-export { createWhatsAppSender, type WhatsAppSender } from './sender.js';
-export type { WhatsAppConfig, SendMessageParams, WhatsAppError } from './types.js';
+export { createWhatsAppClient, type WhatsAppClient } from './client.js';
+export type {
+  WhatsAppConfig,
+  SendMessageParams,
+  SendMessageResult,
+  MediaUrlInfo,
+  WhatsAppError,
+} from './types.js';
