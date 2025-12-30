@@ -28,6 +28,16 @@ export const llmResultSchema = {
   required: ['provider', 'model', 'status'],
 } as const;
 
+export const inputContextSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    content: { type: 'string' },
+    addedAt: { type: 'string' },
+  },
+  required: ['id', 'content', 'addedAt'],
+} as const;
+
 export const researchSchema = {
   type: 'object',
   properties: {
@@ -44,6 +54,11 @@ export const researchSchema = {
     llmResults: {
       type: 'array',
       items: llmResultSchema,
+    },
+    inputContexts: {
+      type: 'array',
+      items: inputContextSchema,
+      nullable: true,
     },
     synthesizedResult: { type: 'string', nullable: true },
     synthesisError: { type: 'string', nullable: true },

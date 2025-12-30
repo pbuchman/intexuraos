@@ -31,6 +31,7 @@ interface CreateResearchBody {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm?: LlmProvider;
+  inputContexts?: { content: string }[];
 }
 
 interface ListResearchesQuery {
@@ -67,15 +68,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const body = request.body as CreateResearchBody;
       const { researchRepo, generateId, processResearchAsync } = getServices();
 
-      const result = await submitResearch(
-        {
-          userId: user.userId,
-          prompt: body.prompt,
-          selectedLlms: body.selectedLlms,
-          synthesisLlm: body.synthesisLlm ?? 'anthropic',
-        },
-        { researchRepo, generateId }
-      );
+      const submitParams: Parameters<typeof submitResearch>[0] = {
+        userId: user.userId,
+        prompt: body.prompt,
+        selectedLlms: body.selectedLlms,
+        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+      };
+      if (body.inputContexts !== undefined) {
+        submitParams.inputContexts = body.inputContexts;
+      }
+      const result = await submitResearch(submitParams, { researchRepo, generateId });
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);

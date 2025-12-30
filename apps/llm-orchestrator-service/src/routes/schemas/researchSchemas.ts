@@ -20,6 +20,21 @@ export const createResearchBodySchema = {
       maxItems: 3,
     },
     synthesisLlm: llmProviderSchema,
+    inputContexts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: {
+            type: 'string',
+            maxLength: 60000,
+          },
+        },
+      },
+      maxItems: 5,
+      nullable: true,
+    },
   },
 } as const;
 

@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus, Trash2 } from 'lucide-react';
 import { Layout, Button, Card } from '@/components';
 import { useLlmKeys, useResearches } from '@/hooks';
 import type { LlmProvider } from '@/services/llmOrchestratorApi.types';
+
+const MAX_INPUT_CONTEXTS = 5;
+const MAX_CONTEXT_LENGTH = 60000;
 
 interface ProviderOption {
   id: LlmProvider;
@@ -24,8 +28,23 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [selectedLlms, setSelectedLlms] = useState<LlmProvider[]>([]);
   const [synthesisLlm, setSynthesisLlm] = useState<LlmProvider | null>(null);
+  const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const addInputContext = (): void => {
+    if (inputContexts.length < MAX_INPUT_CONTEXTS) {
+      setInputContexts((prev) => [...prev, '']);
+    }
+  };
+
+  const removeInputContext = (index: number): void => {
+    setInputContexts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateInputContext = (index: number, value: string): void => {
+    setInputContexts((prev) => prev.map((ctx, i) => (i === index ? value : ctx)));
+  };
 
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
@@ -73,7 +92,21 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setError(null);
 
     try {
-      const research = await createResearch({ prompt, selectedLlms, synthesisLlm });
+      // Filter out empty contexts
+      const validContexts = inputContexts
+        .filter((ctx) => ctx.trim().length > 0)
+        .map((content) => ({ content }));
+
+      const request: Parameters<typeof createResearch>[0] = {
+        prompt,
+        selectedLlms,
+        synthesisLlm,
+      };
+      if (validContexts.length > 0) {
+        request.inputContexts = validContexts;
+      }
+
+      const research = await createResearch(request);
       void navigate(`/research/${research.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create research');
@@ -197,6 +230,62 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             </div>
           </Card>
         </div>
+
+        <Card title="Input Context (Optional)">
+          <p className="text-sm text-slate-500 mb-4">
+            Add your own reference materials to include in the research synthesis
+          </p>
+          <div className="space-y-4">
+            {inputContexts.map((ctx, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-slate-600">
+                    Context {String(idx + 1)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(): void => {
+                      removeInputContext(idx);
+                    }}
+                    disabled={submitting}
+                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                    title="Remove context"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <textarea
+                  value={ctx}
+                  onChange={(e): void => {
+                    updateInputContext(idx, e.target.value);
+                  }}
+                  placeholder="Paste your reference content here..."
+                  className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px]"
+                  maxLength={MAX_CONTEXT_LENGTH}
+                  disabled={submitting}
+                />
+                <div className="text-xs text-slate-400 text-right">
+                  {ctx.length.toLocaleString()}/{MAX_CONTEXT_LENGTH.toLocaleString()}
+                </div>
+              </div>
+            ))}
+            {inputContexts.length < MAX_INPUT_CONTEXTS ? (
+              <button
+                type="button"
+                onClick={addInputContext}
+                disabled={submitting}
+                className="w-full py-2 px-4 rounded-lg border-2 border-dashed border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Input Context
+              </button>
+            ) : (
+              <p className="text-sm text-slate-400 text-center">
+                Maximum {String(MAX_INPUT_CONTEXTS)} contexts allowed
+              </p>
+            )}
+          </div>
+        </Card>
 
         <div className="flex gap-3">
           <Button

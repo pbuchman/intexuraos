@@ -12,6 +12,7 @@ export interface SubmitResearchParams {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
+  inputContexts?: { content: string }[];
 }
 
 export interface SubmitResearchDeps {
@@ -23,13 +24,17 @@ export async function submitResearch(
   params: SubmitResearchParams,
   deps: SubmitResearchDeps
 ): Promise<Result<Research, RepositoryError>> {
-  const research = createResearch({
+  const createParams: Parameters<typeof createResearch>[0] = {
     id: deps.generateId(),
     userId: params.userId,
     prompt: params.prompt,
     selectedLlms: params.selectedLlms,
     synthesisLlm: params.synthesisLlm,
-  });
+  };
+  if (params.inputContexts !== undefined) {
+    createParams.inputContexts = params.inputContexts;
+  }
+  const research = createResearch(createParams);
 
   return await deps.researchRepo.save(research);
 }

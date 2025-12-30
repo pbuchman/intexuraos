@@ -21,6 +21,15 @@ export interface LlmResult {
 }
 
 /**
+ * User-provided context included in research.
+ */
+export interface InputContext {
+  id: string;
+  content: string;
+  addedAt: string;
+}
+
+/**
  * Research document representing a multi-LLM research session.
  */
 export interface Research {
@@ -32,6 +41,7 @@ export interface Research {
   synthesisLlm: LlmProvider;
   status: ResearchStatus;
   llmResults: LlmResult[];
+  inputContexts?: InputContext[];
   synthesizedResult?: string;
   synthesisError?: string;
   startedAt: string;
@@ -46,6 +56,7 @@ export interface CreateResearchRequest {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
+  inputContexts?: { content: string }[];
 }
 
 /**

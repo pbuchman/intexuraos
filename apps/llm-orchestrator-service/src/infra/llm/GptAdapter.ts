@@ -33,9 +33,10 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
 
   async synthesize(
     originalPrompt: string,
-    reports: { model: string; content: string }[]
+    reports: { model: string; content: string }[],
+    inputContexts?: { content: string }[]
   ): Promise<Result<string, LlmError>> {
-    const result = await this.client.synthesize(originalPrompt, reports);
+    const result = await this.client.synthesize(originalPrompt, reports, inputContexts);
 
     if (!result.ok) {
       return {

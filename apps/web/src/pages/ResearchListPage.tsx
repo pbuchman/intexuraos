@@ -4,6 +4,22 @@ import { Layout, Button, Card } from '@/components';
 import { useResearches } from '@/hooks';
 import type { Research, ResearchStatus } from '@/services/llmOrchestratorApi.types';
 
+/**
+ * Strip markdown formatting from text for clean display.
+ * Handles bold, italic, headers, code markers, and surrounding quotes.
+ */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*/g, '') // Remove bold markers
+    .replace(/__/g, '') // Remove bold (underscore)
+    .replace(/(?<!\*)\*(?!\*)/g, '') // Remove italic markers (single asterisk)
+    .replace(/(?<!_)_(?!_)/g, '') // Remove italic (single underscore)
+    .replace(/^#+\s*/gm, '') // Remove headers
+    .replace(/`/g, '') // Remove code markers
+    .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+    .trim();
+}
+
 interface StatusStyle {
   bg: string;
   text: string;
@@ -111,7 +127,7 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
       <div className="flex items-start justify-between">
         <Link to={`/research/${research.id}`} className="flex-1">
           <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
-            {research.title !== '' ? research.title : 'Untitled Research'}
+            {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
           </h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
         </Link>

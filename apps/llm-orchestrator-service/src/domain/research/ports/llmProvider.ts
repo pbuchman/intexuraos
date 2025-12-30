@@ -22,7 +22,8 @@ export interface LlmResearchProvider {
 export interface LlmSynthesisProvider {
   synthesize(
     originalPrompt: string,
-    reports: { model: string; content: string }[]
+    reports: { model: string; content: string }[],
+    inputContexts?: { content: string }[]
   ): Promise<Result<string, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<string, LlmError>>;

@@ -15,42 +15,51 @@ export function useResearch(id: string): {
   research: Research | null;
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
 } {
   const { getAccessToken } = useAuth();
   const [research, setResearch] = useState<Research | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (id === '') {
-      setLoading(false);
-      return;
-    }
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    setLoading(true);
-    setError(null);
+      if (id === '') {
+        setLoading(false);
+        return;
+      }
 
-    try {
-      const token = await getAccessToken();
-      const data = await getResearchApi(token, id);
-      setResearch(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load research');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await getResearchApi(token, id);
+        setResearch(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load research');
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    [id, getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Poll for updates while processing
+  // Poll for updates while processing (without showing loading state)
   useEffect(() => {
     if (research?.status === 'pending' || research?.status === 'processing') {
       const interval = setInterval(() => {
-        void refresh();
+        void refresh(false);
       }, 3000);
       return (): void => {
         clearInterval(interval);

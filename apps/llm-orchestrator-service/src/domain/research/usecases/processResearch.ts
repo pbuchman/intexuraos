@@ -106,7 +106,8 @@ export async function processResearch(
   if (successfulResults.length > 0) {
     const synthesisResult = await deps.synthesizer.synthesize(
       research.prompt,
-      successfulResults.map((r) => ({ model: r.model, content: r.content }))
+      successfulResults.map((r) => ({ model: r.model, content: r.content })),
+      research.inputContexts?.map((ctx) => ({ content: ctx.content }))
     );
 
     if (!synthesisResult.ok) {

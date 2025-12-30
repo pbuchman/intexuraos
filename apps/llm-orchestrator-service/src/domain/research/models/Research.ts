@@ -21,6 +21,16 @@ export interface LlmResult {
   durationMs?: number;
 }
 
+/**
+ * User-provided context to include in research.
+ * Max 60k chars per context, max 5 contexts total.
+ */
+export interface InputContext {
+  id: string;
+  content: string;
+  addedAt: string;
+}
+
 export interface Research {
   id: string;
   userId: string;
@@ -30,6 +40,7 @@ export interface Research {
   synthesisLlm: LlmProvider;
   status: ResearchStatus;
   llmResults: LlmResult[];
+  inputContexts?: InputContext[];
   synthesizedResult?: string;
   synthesisError?: string;
   startedAt: string;
@@ -54,8 +65,10 @@ export function createResearch(params: {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
+  inputContexts?: { content: string }[];
 }): Research {
-  return {
+  const now = new Date().toISOString();
+  const research: Research = {
     id: params.id,
     userId: params.userId,
     title: '',
@@ -68,6 +81,17 @@ export function createResearch(params: {
       model: getDefaultModel(provider),
       status: 'pending' as const,
     })),
-    startedAt: new Date().toISOString(),
+    startedAt: now,
   };
+
+  // Add input contexts if provided
+  if (params.inputContexts !== undefined && params.inputContexts.length > 0) {
+    research.inputContexts = params.inputContexts.map((ctx, idx) => ({
+      id: `${params.id}-ctx-${String(idx)}`,
+      content: ctx.content,
+      addedAt: now,
+    }));
+  }
+
+  return research;
 }
