@@ -3,8 +3,8 @@
  */
 
 import {
-  createWhatsAppSender,
-  type WhatsAppSender,
+  createWhatsAppClient,
+  type WhatsAppClient,
   type WhatsAppConfig,
 } from '@intexuraos/infra-whatsapp';
 import { ok, err, type Result } from '@intexuraos/common-core';
@@ -15,11 +15,11 @@ export interface UserPhoneLookup {
 }
 
 export class WhatsAppNotificationSender implements NotificationSender {
-  private readonly sender: WhatsAppSender;
+  private readonly client: WhatsAppClient;
   private readonly userPhoneLookup: UserPhoneLookup;
 
   constructor(config: WhatsAppConfig, userPhoneLookup: UserPhoneLookup) {
-    this.sender = createWhatsAppSender(config);
+    this.client = createWhatsAppClient(config);
     this.userPhoneLookup = userPhoneLookup;
   }
 
@@ -38,7 +38,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
     }
 
     const message = this.formatMessage(title, researchId);
-    const result = await this.sender.sendTextMessage({
+    const result = await this.client.sendTextMessage({
       to: phone,
       message,
     });
