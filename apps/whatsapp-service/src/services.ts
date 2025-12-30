@@ -109,6 +109,3 @@ export function setServices(services: ServiceContainer): void {
 export function resetServices(): void {
   container = null;
 }
-
-// Re-export infra functions for direct use
-export * from './infra/firestore/index.js';

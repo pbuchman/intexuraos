@@ -183,7 +183,3 @@ export function resetServices(): void {
   notionLogger = undefined;
   container = null;
 }
-
-// Re-export infra functions for direct use
-export * from './infra/firestore/index.js';
-export * from './infra/notion/index.js';
