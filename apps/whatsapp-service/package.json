@@ -20,13 +20,14 @@
     "@google-cloud/storage": "^7.14.0",
     "@intexuraos/common-core": "*",
     "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
+    "@intexuraos/infra-firestore": "*",
     "@speechmatics/batch-client": "^5.1.0",
     "cheerio": "^1.0.0",
     "fastify": "^5.1.0",
     "libphonenumber-js": "^1.12.33",
+    "pino": "^10.1.0",
     "sharp": "^0.33.5",
     "zod": "^3.24.1"
   }
