@@ -11,6 +11,7 @@ export interface SubmitResearchParams {
   userId: string;
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
 }
 
 export interface SubmitResearchDeps {
@@ -27,6 +28,7 @@ export async function submitResearch(
     userId: params.userId,
     prompt: params.prompt,
     selectedLlms: params.selectedLlms,
+    synthesisLlm: params.synthesisLlm,
   });
 
   return await deps.researchRepo.save(research);

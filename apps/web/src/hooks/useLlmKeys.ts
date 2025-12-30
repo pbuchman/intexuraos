@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context';
-import { getLlmKeys, setLlmKey, deleteLlmKey } from '@/services/llmKeysApi';
+import { getLlmKeys, setLlmKey, deleteLlmKey, testLlmKey } from '@/services/llmKeysApi';
 import type { LlmProvider, LlmKeysResponse } from '@/services/llmKeysApi.types';
 
 interface UseLlmKeysResult {
@@ -9,6 +9,7 @@ interface UseLlmKeysResult {
   error: string | null;
   setKey: (provider: LlmProvider, apiKey: string) => Promise<void>;
   deleteKey: (provider: LlmProvider) => Promise<void>;
+  testKey: (provider: LlmProvider) => Promise<string>;
   refresh: () => Promise<void>;
 }
 
@@ -77,5 +78,25 @@ export function useLlmKeys(): UseLlmKeysResult {
     [user?.sub, getAccessToken, refresh]
   );
 
-  return { keys, loading, error, setKey, deleteKey, refresh };
+  const testKey = useCallback(
+    async (provider: LlmProvider): Promise<string> => {
+      const userId = user?.sub;
+      if (userId === undefined) {
+        throw new Error('User not authenticated');
+      }
+
+      try {
+        const token = await getAccessToken();
+        const result = await testLlmKey(token, userId, provider);
+        return result.response;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to test API key';
+        setError(message);
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken]
+  );
+
+  return { keys, loading, error, setKey, deleteKey, testKey, refresh };
 }

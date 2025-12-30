@@ -1,16 +1,17 @@
 /**
- * Claude adapter implementing LlmResearchProvider.
+ * Claude adapter implementing LlmResearchProvider and LlmSynthesisProvider.
  */
 
 import { createClaudeClient, type ClaudeClient } from '@intexuraos/infra-claude';
 import type { Result } from '@intexuraos/common-core';
 import type {
   LlmResearchProvider,
+  LlmSynthesisProvider,
   LlmResearchResult,
   LlmError,
 } from '../../domain/research/index.js';
 
-export class ClaudeAdapter implements LlmResearchProvider {
+export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: ClaudeClient;
 
   constructor(apiKey: string) {
@@ -19,6 +20,35 @@ export class ClaudeAdapter implements LlmResearchProvider {
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: mapToLlmError(result.error),
+      };
+    }
+
+    return result;
+  }
+
+  async synthesize(
+    originalPrompt: string,
+    reports: { model: string; content: string }[]
+  ): Promise<Result<string, LlmError>> {
+    const result = await this.client.synthesize(originalPrompt, reports);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: mapToLlmError(result.error),
+      };
+    }
+
+    return result;
+  }
+
+  async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
+    const result = await this.client.generateTitle(prompt);
 
     if (!result.ok) {
       return {

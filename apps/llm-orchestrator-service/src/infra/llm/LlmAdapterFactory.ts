@@ -35,6 +35,13 @@ export function createLlmProviders(
   return providers as Record<LlmProvider, LlmResearchProvider>;
 }
 
-export function createSynthesizer(googleApiKey: string): LlmSynthesisProvider {
-  return new GeminiAdapter(googleApiKey);
+export function createSynthesizer(provider: LlmProvider, apiKey: string): LlmSynthesisProvider {
+  switch (provider) {
+    case 'google':
+      return new GeminiAdapter(apiKey);
+    case 'anthropic':
+      return new ClaudeAdapter(apiKey);
+    case 'openai':
+      return new GptAdapter(apiKey);
+  }
 }

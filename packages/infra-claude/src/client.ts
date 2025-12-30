@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ok, err, type Result } from '@intexuraos/common-core';
-import type { ClaudeConfig, ResearchResult, ClaudeError } from './types.js';
+import type { ClaudeConfig, ResearchResult, SynthesisInput, ClaudeError } from './types.js';
 
 const DEFAULT_MODEL = 'claude-opus-4-5';
 const VALIDATION_MODEL = 'claude-haiku-4-5';
@@ -8,6 +8,11 @@ const MAX_TOKENS = 8192;
 
 export interface ClaudeClient {
   research(prompt: string): Promise<Result<ResearchResult, ClaudeError>>;
+  generateTitle(prompt: string): Promise<Result<string, ClaudeError>>;
+  synthesize(
+    originalPrompt: string,
+    reports: SynthesisInput[]
+  ): Promise<Result<string, ClaudeError>>;
   validateKey(): Promise<Result<boolean, ClaudeError>>;
 }
 
@@ -92,6 +97,70 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       }
     },
 
+    async generateTitle(prompt: string): Promise<Result<string, ClaudeError>> {
+      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+      const { requestId, startTime } = logRequest(
+        'generateTitle',
+        modelName,
+        titlePrompt.length,
+        prompt.slice(0, 100)
+      );
+
+      try {
+        const response = await client.messages.create({
+          model: modelName,
+          max_tokens: 100,
+          messages: [{ role: 'user', content: titlePrompt }],
+        });
+
+        const textBlocks = response.content.filter(
+          (block): block is Anthropic.TextBlock => block.type === 'text'
+        );
+        const text = textBlocks
+          .map((b) => b.text)
+          .join('')
+          .trim();
+
+        logResponse('generateTitle', requestId, startTime, text.length, text);
+        return ok(text);
+      } catch (error) {
+        logError('generateTitle', requestId, startTime, error);
+        return err(mapClaudeError(error));
+      }
+    },
+
+    async synthesize(
+      originalPrompt: string,
+      reports: SynthesisInput[]
+    ): Promise<Result<string, ClaudeError>> {
+      const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports);
+      const { requestId, startTime } = logRequest(
+        'synthesize',
+        modelName,
+        synthesisPrompt.length,
+        originalPrompt.slice(0, 100)
+      );
+
+      try {
+        const response = await client.messages.create({
+          model: modelName,
+          max_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: synthesisPrompt }],
+        });
+
+        const textBlocks = response.content.filter(
+          (block): block is Anthropic.TextBlock => block.type === 'text'
+        );
+        const text = textBlocks.map((b) => b.text).join('\n\n');
+
+        logResponse('synthesize', requestId, startTime, text.length, text.slice(0, 200));
+        return ok(text);
+      } catch (error) {
+        logError('synthesize', requestId, startTime, error);
+        return err(mapClaudeError(error));
+      }
+    },
+
     async validateKey(): Promise<Result<boolean, ClaudeError>> {
       const { requestId, startTime } = logRequest('validateKey', VALIDATION_MODEL, 9, 'Say "ok"');
 
@@ -115,6 +184,30 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       }
     },
   };
+}
+
+function buildSynthesisPrompt(originalPrompt: string, reports: SynthesisInput[]): string {
+  const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
+
+  return `You are a research analyst. Below are research reports from multiple AI models responding to the same prompt. Synthesize them into a comprehensive, well-organized report.
+
+## Original Research Prompt
+
+${originalPrompt}
+
+## Individual Reports
+
+${formattedReports}
+
+## Your Task
+
+Create a unified synthesis that:
+1. Combines the best insights from all reports
+2. Notes any conflicting information
+3. Provides a balanced conclusion
+4. Lists key sources from across all reports
+
+Write in clear, professional prose.`;
 }
 
 function mapClaudeError(error: unknown): ClaudeError {

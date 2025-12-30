@@ -39,6 +39,7 @@ export const researchSchema = {
       type: 'array',
       items: llmProviderSchema,
     },
+    synthesisLlm: llmProviderSchema,
     status: researchStatusSchema,
     llmResults: {
       type: 'array',
@@ -56,6 +57,7 @@ export const researchSchema = {
     'title',
     'prompt',
     'selectedLlms',
+    'synthesisLlm',
     'status',
     'llmResults',
     'startedAt',

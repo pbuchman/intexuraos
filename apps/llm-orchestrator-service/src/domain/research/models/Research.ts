@@ -27,6 +27,7 @@ export interface Research {
   title: string;
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
   status: ResearchStatus;
   llmResults: LlmResult[];
   synthesizedResult?: string;
@@ -52,6 +53,7 @@ export function createResearch(params: {
   userId: string;
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
 }): Research {
   return {
     id: params.id,
@@ -59,6 +61,7 @@ export function createResearch(params: {
     title: '',
     prompt: params.prompt,
     selectedLlms: params.selectedLlms,
+    synthesisLlm: params.synthesisLlm,
     status: 'pending',
     llmResults: params.selectedLlms.map((provider) => ({
       provider,

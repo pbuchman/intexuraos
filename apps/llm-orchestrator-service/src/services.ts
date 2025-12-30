@@ -145,7 +145,7 @@ export function initializeServices(): void {
   const processResearchAsync = (researchId: string): void => {
     void (async (): Promise<void> => {
       try {
-        // Get research to find user ID
+        // Get research to find user ID and synthesis LLM selection
         const research = await researchRepo.findById(researchId);
         if (!research.ok || research.value === null) {
           return;
@@ -154,19 +154,20 @@ export function initializeServices(): void {
         // Get user's API keys
         const apiKeys = await getUserApiKeys(research.value.userId);
 
-        // Synthesizer always uses Google (Gemini)
-        const googleKey = apiKeys.google;
-        if (googleKey === undefined) {
+        // Get the API key for the selected synthesis LLM
+        const synthesisProvider = research.value.synthesisLlm;
+        const synthesisKey = apiKeys[synthesisProvider];
+        if (synthesisKey === undefined) {
           await researchRepo.update(researchId, {
             status: 'failed',
-            synthesisError: 'Google API key required for synthesis',
+            synthesisError: `API key required for synthesis with ${synthesisProvider}`,
           });
           return;
         }
 
         // Create LLM providers with user's keys
         const llmProviders = createLlmProviders(apiKeys);
-        const synthesizer = createSynthesizer(googleKey);
+        const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
 
         // Process research
         await processResearch(researchId, {

@@ -29,6 +29,7 @@ export interface Research {
   title: string;
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
   status: ResearchStatus;
   llmResults: LlmResult[];
   synthesizedResult?: string;
@@ -44,6 +45,7 @@ export interface Research {
 export interface CreateResearchRequest {
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
 }
 
 /**

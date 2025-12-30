@@ -905,4 +905,433 @@ describe('LLM Keys Routes', () => {
       expect(body.error.message).toBe('Anthropic API error: Quota exceeded');
     });
   });
+
+  describe('POST /users/:uid/settings/llm-keys/:provider/test', () => {
+    it('returns 401 when no auth token', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/users/user-123/settings/llm-keys/google/test',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 403 when testing another user keys', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: 'auth0|user-123',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/users/auth0|other-user/settings/llm-keys/google/test',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 404 when API key not configured', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-no-key-test';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-no-encrypt';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      // Set encryptor to null
+      setServices({
+        authTokenRepository: fakeAuthTokenRepo,
+        userSettingsRepository: fakeSettingsRepo,
+        auth0Client: null,
+        encryptor: null,
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns 500 when decryption fails', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-decrypt-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      fakeEncryptor.setFailNextDecrypt(true);
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('tests Google API key successfully', { timeout: 20000 }, async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      vi.mocked(createGeminiClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: true,
+          value: { content: 'Hello! Your API key is working correctly.' },
+        }),
+      } as unknown as ReturnType<typeof createGeminiClient>);
+
+      const userId = 'auth0|user-test-google-success';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! Your API key is working correctly.');
+    });
+
+    it('returns 502 when Google test request fails', { timeout: 20000 }, async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      vi.mocked(createGeminiClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'API_ERROR', message: 'Service unavailable' },
+        }),
+      } as unknown as ReturnType<typeof createGeminiClient>);
+
+      const userId = 'auth0|user-test-google-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('tests OpenAI API key successfully', { timeout: 20000 }, async () => {
+      const { createGptClient } = await import('@intexuraos/infra-gpt');
+      vi.mocked(createGptClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: true,
+          value: { content: 'Hello! Your API key is working correctly.' },
+        }),
+      } as unknown as ReturnType<typeof createGptClient>);
+
+      const userId = 'auth0|user-test-openai-success';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! Your API key is working correctly.');
+    });
+
+    it('returns 502 when OpenAI test request fails', { timeout: 20000 }, async () => {
+      const { createGptClient } = await import('@intexuraos/infra-gpt');
+      vi.mocked(createGptClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'RATE_LIMITED', message: 'Rate limited' },
+        }),
+      } as unknown as ReturnType<typeof createGptClient>);
+
+      const userId = 'auth0|user-test-openai-fail';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('tests Anthropic API key successfully', { timeout: 20000 }, async () => {
+      const { createClaudeClient } = await import('@intexuraos/infra-claude');
+      vi.mocked(createClaudeClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: true,
+          value: { content: 'Hello! Your API key is working correctly.' },
+        }),
+      } as unknown as ReturnType<typeof createClaudeClient>);
+
+      const userId = 'auth0|user-test-anthropic-success';
+      const anthropicKey = 'sk-ant-api1234567890abcd';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          anthropic: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/anthropic/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! Your API key is working correctly.');
+    });
+
+    it('returns 502 when Anthropic test request fails', { timeout: 20000 }, async () => {
+      const { createClaudeClient } = await import('@intexuraos/infra-claude');
+      vi.mocked(createClaudeClient).mockReturnValue({
+        research: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'OVERLOADED', message: 'Service overloaded' },
+        }),
+      } as unknown as ReturnType<typeof createClaudeClient>);
+
+      const userId = 'auth0|user-test-anthropic-fail';
+      const anthropicKey = 'sk-ant-api1234567890abcd';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          anthropic: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/anthropic/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns 500 when repository fails', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-test-repo-fail';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
 });
