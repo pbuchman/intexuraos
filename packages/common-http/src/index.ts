@@ -52,3 +52,6 @@ export {
   tryAuth,
   fastifyAuthPlugin,
 } from './auth/fastifyAuthPlugin.js';
+
+// Internal service-to-service auth
+export { type InternalAuthResult, validateInternalAuth } from './auth/internalAuth.js';

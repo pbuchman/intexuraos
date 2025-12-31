@@ -7,7 +7,14 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
-import type { GeminiConfig, GeminiError, ResearchResult, SynthesisInput } from './types.js';
+import type {
+  ClassificationResult,
+  ClassifyOptions,
+  GeminiConfig,
+  GeminiError,
+  ResearchResult,
+  SynthesisInput,
+} from './types.js';
 
 const DEFAULT_MODEL = 'gemini-2.0-flash';
 const VALIDATION_MODEL = 'gemini-2.0-flash';
@@ -22,6 +29,9 @@ export interface GeminiClient {
     externalReports?: { content: string; model?: string }[]
   ): Promise<Result<string, GeminiError>>;
   validateKey(): Promise<Result<boolean, GeminiError>>;
+  classify<T extends string>(
+    options: ClassifyOptions<T>
+  ): Promise<Result<ClassificationResult<T>, GeminiError>>;
 }
 
 function createRequestContext(
@@ -234,6 +244,34 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         return err(mapGeminiError(error));
       }
     },
+
+    async classify<T extends string>(
+      options: ClassifyOptions<T>
+    ): Promise<Result<ClassificationResult<T>, GeminiError>> {
+      const { text, systemPrompt, validTypes, defaultType } = options;
+      const prompt = `${systemPrompt}\n\nUser message to classify:\n"${text}"`;
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'classify',
+        modelName,
+        prompt
+      );
+
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+        });
+
+        const responseText = response.text ?? '';
+        await logSuccess('classify', requestId, startTime, responseText, auditContext);
+
+        const result = parseClassificationResponse(responseText, validTypes, defaultType);
+        return ok(result);
+      } catch (error) {
+        await logError('classify', requestId, startTime, error, auditContext);
+        return err(mapGeminiError(error));
+      }
+    },
   };
 }
 
@@ -251,6 +289,36 @@ function mapGeminiError(error: unknown): GeminiError {
   }
 
   return { code: 'API_ERROR', message };
+}
+
+interface RawClassificationResponse {
+  type: string;
+  confidence: number;
+  title?: string;
+}
+
+function parseClassificationResponse<T extends string>(
+  text: string,
+  validTypes: readonly T[],
+  defaultType: T
+): ClassificationResult<T> {
+  const jsonMatch = /\{[\s\S]*\}/.exec(text);
+  if (jsonMatch === null) {
+    return { type: defaultType, confidence: 0, title: 'Unclassified' };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as RawClassificationResponse;
+
+    const type = validTypes.includes(parsed.type as T) ? (parsed.type as T) : defaultType;
+    const confidence = Math.max(0, Math.min(1, parsed.confidence));
+    const title = (parsed.title ?? 'Untitled').slice(0, 100);
+
+    return { type, confidence, title };
+  } catch {
+    /* JSON parse failed - return default classification */
+    return { type: defaultType, confidence: 0, title: 'Unclassified' };
+  }
 }
 
 function extractSourcesFromResponse(response: GenerateContentResponse): string[] {

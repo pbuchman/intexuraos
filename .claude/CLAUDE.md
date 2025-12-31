@@ -66,6 +66,39 @@ docs/             → All documentation
 - Apps importing from other apps
 - Deep imports into package internals (`@intexuraos/*/src/*`)
 
+### Intra-App Import Rules (enforced by ESLint)
+
+Within each app, imports must respect layer boundaries:
+
+| From             | Must NOT Import        | Reason                                     |
+| ---------------- | ---------------------- | ------------------------------------------ |
+| `routes/*`       | `../infra/firestore/*` | Use `getServices()` to access repositories |
+| `infra/notion/*` | `../firestore/*`       | Accept repositories as function parameters |
+| `infra/llm/*`    | `../firestore/*`       | Accept repositories as function parameters |
+
+**Anti-Pattern (FORBIDDEN):**
+
+```ts-example
+// In routes/promptRoutes.ts - WRONG
+import { getPromptVaultPageId } from '../infra/firestore/promptVaultSettingsRepository.js';
+
+// In infra/notion/promptApi.ts - WRONG
+import { getPromptVaultPageId } from '../firestore/promptVaultSettingsRepository.js';
+```
+
+**Correct Pattern:**
+
+```ts-example
+// In services.ts - create and wire dependencies
+const promptVaultSettings = createPromptVaultSettingsRepository();
+
+// In routes - access via getServices()
+const { promptVaultSettings } = getServices();
+
+// In infra functions - accept as parameter
+async function getUserContext(userId: string, promptVaultSettings: PromptVaultSettingsPort) { ... }
+```
+
 ### Service-to-Service Communication
 
 Apps communicate via HTTP-based internal endpoints following the pattern:

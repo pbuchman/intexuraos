@@ -1,8 +1,17 @@
+import type { Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { Command } from '../domain/models/command.js';
 import type { Action } from '../domain/models/action.js';
 import type { CommandRepository } from '../domain/ports/commandRepository.js';
 import type { ActionRepository } from '../domain/ports/actionRepository.js';
-import type { Classifier, ClassificationResult } from '../domain/ports/classifier.js';
+import type {
+  Classifier,
+  ClassificationResult,
+  ClassifierFactory,
+} from '../domain/ports/classifier.js';
+import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
+import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
+import type { Services } from '../services.js';
 
 export class FakeCommandRepository implements CommandRepository {
   private commands: Map<string, Command> = new Map();
@@ -103,4 +112,46 @@ export class FakeClassifier implements Classifier {
     }
     return this.result;
   }
+}
+
+export class FakeUserServiceClient implements UserServiceClient {
+  private apiKeys: Map<string, UserApiKeys> = new Map();
+  private failNext = false;
+
+  setApiKeys(userId: string, keys: UserApiKeys): void {
+    this.apiKeys.set(userId, keys);
+  }
+
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
+  }
+
+  async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
+    }
+    return ok(this.apiKeys.get(userId) ?? {});
+  }
+}
+
+export function createFakeServices(deps: {
+  commandRepository: FakeCommandRepository;
+  actionRepository: FakeActionRepository;
+  classifier: FakeClassifier;
+  userServiceClient: FakeUserServiceClient;
+}): Services {
+  const classifierFactory: ClassifierFactory = () => deps.classifier;
+  return {
+    commandRepository: deps.commandRepository,
+    actionRepository: deps.actionRepository,
+    classifierFactory,
+    userServiceClient: deps.userServiceClient,
+    processCommandUseCase: createProcessCommandUseCase({
+      commandRepository: deps.commandRepository,
+      actionRepository: deps.actionRepository,
+      classifierFactory,
+      userServiceClient: deps.userServiceClient,
+    }),
+  };
 }

@@ -1,21 +1,7 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import { validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import type { CommandSourceType } from '../domain/models/command.js';
-
-function validateInternalAuth(request: FastifyRequest): boolean {
-  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
-  if (internalAuthToken === '') {
-    request.log.warn('Internal auth failed: INTEXURAOS_INTERNAL_AUTH_TOKEN not configured');
-    return false;
-  }
-  const authHeader = request.headers['x-internal-auth'];
-  if (authHeader !== internalAuthToken) {
-    request.log.warn('Internal auth failed: token mismatch');
-    return false;
-  }
-  return true;
-}
 
 interface PubSubMessage {
   message: {
@@ -90,7 +76,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request)) {
+      if (!validateInternalAuth(request).valid) {
         reply.status(401);
         return { error: 'Unauthorized' };
       }
@@ -107,14 +93,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Invalid message format' };
       }
 
-      const services = getServices();
-      const useCase = createProcessCommandUseCase({
-        commandRepository: services.commandRepository,
-        actionRepository: services.actionRepository,
-        classifier: services.classifier,
-      });
+      const { processCommandUseCase } = getServices();
 
-      const result = await useCase.execute({
+      const result = await processCommandUseCase.execute({
         userId: eventData.userId,
         sourceType: eventData.sourceType,
         externalId: eventData.externalId,

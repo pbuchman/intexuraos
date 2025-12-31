@@ -179,7 +179,7 @@ export default tseslint.config(
       ],
     },
   },
-  // Apps must use @intexuraos/infra-firestore singleton, not direct Firestore import
+  // Apps must use @intexuraos/infra-* wrappers, not direct SDK imports
   {
     files: ['apps/*/src/**/*.ts'],
     rules: {
@@ -191,6 +191,22 @@ export default tseslint.config(
               name: '@google-cloud/firestore',
               message:
                 'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: '@google/genai',
+              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+            },
+            {
+              name: 'openai',
+              message: 'Use @intexuraos/infra-gpt instead of importing OpenAI directly.',
+            },
+            {
+              name: '@anthropic-ai/sdk',
+              message: 'Use @intexuraos/infra-claude instead of importing Anthropic directly.',
+            },
+            {
+              name: '@notionhq/client',
+              message: 'Use @intexuraos/infra-notion instead of importing Notion directly.',
             },
           ],
           patterns: [
@@ -282,6 +298,16 @@ export default tseslint.config(
               group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: [
+                '../infra/firestore/*',
+                '../infra/firestore/**',
+                '../../infra/firestore/*',
+                '../../infra/firestore/**',
+              ],
+              message:
+                'Routes must not import from infra/firestore directly. Access repositories via getServices() for proper DI.',
+            },
           ],
         },
       ],
@@ -301,6 +327,22 @@ export default tseslint.config(
               message:
                 'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
             },
+            {
+              name: '@google/genai',
+              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+            },
+            {
+              name: 'openai',
+              message: 'Use @intexuraos/infra-gpt instead of importing OpenAI directly.',
+            },
+            {
+              name: '@anthropic-ai/sdk',
+              message: 'Use @intexuraos/infra-claude instead of importing Anthropic directly.',
+            },
+            {
+              name: '@notionhq/client',
+              message: 'Use @intexuraos/infra-notion instead of importing Notion directly.',
+            },
           ],
           patterns: [
             {
@@ -314,6 +356,16 @@ export default tseslint.config(
               ],
               message:
                 'Infra layer must not import from routes layer. Move shared code to domain or a common utility.',
+            },
+            {
+              group: [
+                '../firestore/*',
+                '../firestore/**',
+                '../../firestore/*',
+                '../../firestore/**',
+              ],
+              message:
+                'Infra adapters should receive repositories via function parameters, not import directly from other infra folders. Use dependency injection.',
             },
             {
               group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],

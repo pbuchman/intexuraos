@@ -7,11 +7,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
 import {
   FakeNotionConnectionRepository,
   FakeNotionServiceClient,
+  FakePromptVaultSettingsRepository,
   MockNotionApiAdapter,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
@@ -92,7 +91,7 @@ export interface TestContext {
   connectionRepository: FakeNotionConnectionRepository;
   notionServiceClient: FakeNotionServiceClient;
   notionApi: MockNotionApiAdapter;
-  fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  promptVaultSettings: FakePromptVaultSettingsRepository;
 }
 
 /**
@@ -107,7 +106,7 @@ export function setupTestContext(): TestContext {
     connectionRepository: null as unknown as FakeNotionConnectionRepository,
     notionServiceClient: null as unknown as FakeNotionServiceClient,
     notionApi: null as unknown as MockNotionApiAdapter,
-    fakeFirestore: null as unknown as ReturnType<typeof createFakeFirestore>,
+    promptVaultSettings: null as unknown as FakePromptVaultSettingsRepository,
   };
 
   beforeAll(async () => {
@@ -119,15 +118,14 @@ export function setupTestContext(): TestContext {
   });
 
   beforeEach(async () => {
-    context.fakeFirestore = createFakeFirestore();
-    setFirestore(context.fakeFirestore as unknown as Firestore);
-
     context.connectionRepository = new FakeNotionConnectionRepository();
     context.notionServiceClient = new FakeNotionServiceClient();
     context.notionApi = new MockNotionApiAdapter();
+    context.promptVaultSettings = new FakePromptVaultSettingsRepository();
 
     setServices({
       notionServiceClient: context.notionServiceClient,
+      promptVaultSettings: context.promptVaultSettings,
     });
 
     clearJwksCache();
@@ -137,7 +135,6 @@ export function setupTestContext(): TestContext {
   afterEach(async () => {
     await context.app.close();
     resetServices();
-    resetFirestore();
   });
 
   return context;

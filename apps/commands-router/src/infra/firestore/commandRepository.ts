@@ -17,6 +17,7 @@ interface CommandDoc {
     classifiedAt: string;
   };
   actionId?: string;
+  failureReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +47,10 @@ function toCommand(id: string, doc: CommandDoc): Command {
     command.actionId = doc.actionId;
   }
 
+  if (doc.failureReason !== undefined) {
+    command.failureReason = doc.failureReason;
+  }
+
   return command;
 }
 
@@ -67,6 +72,10 @@ function toDoc(command: Command): CommandDoc {
 
   if (command.actionId !== undefined) {
     doc.actionId = command.actionId;
+  }
+
+  if (command.failureReason !== undefined) {
+    doc.failureReason = command.failureReason;
   }
 
   return doc;

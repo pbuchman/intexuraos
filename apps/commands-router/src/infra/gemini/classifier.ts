@@ -1,11 +1,8 @@
-import { GoogleGenAI } from '@google/genai';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { createGeminiClient, type ClassifyOptions } from '@intexuraos/infra-gemini';
 import type { CommandType } from '../../domain/models/command.js';
 import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
 
-const MODEL = 'gemini-2.0-flash';
-
-const VALID_TYPES: CommandType[] = [
+const VALID_TYPES: readonly CommandType[] = [
   'todo',
   'research',
   'note',
@@ -13,7 +10,7 @@ const VALID_TYPES: CommandType[] = [
   'calendar',
   'reminder',
   'unclassified',
-];
+] as const;
 
 const CLASSIFICATION_PROMPT = `You are a command classifier. Analyze the user's message and classify it into one of these categories:
 
@@ -40,53 +37,29 @@ The confidence should reflect how certain you are about the classification:
 
 The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").`;
 
-interface GeminiResponse {
-  type: string;
-  confidence: number;
-  title?: string;
-}
-
-function parseResponse(text: string): ClassificationResult {
-  const jsonMatch = /\{[\s\S]*\}/.exec(text);
-  if (jsonMatch === null) {
-    return { type: 'unclassified', confidence: 0, title: 'Unclassified command' };
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as GeminiResponse;
-
-  const type = VALID_TYPES.includes(parsed.type as CommandType)
-    ? (parsed.type as CommandType)
-    : 'unclassified';
-
-  const confidence = Math.max(0, Math.min(1, parsed.confidence));
-  const title = (parsed.title ?? 'Untitled').slice(0, 100);
-
-  return { type, confidence, title };
-}
-
 export interface GeminiClassifierConfig {
   apiKey: string;
 }
 
 export function createGeminiClassifier(config: GeminiClassifierConfig): Classifier {
-  const ai = new GoogleGenAI({ apiKey: config.apiKey });
+  const client = createGeminiClient({ apiKey: config.apiKey });
 
   return {
     async classify(text: string): Promise<ClassificationResult> {
-      const prompt = `${CLASSIFICATION_PROMPT}\n\nUser message to classify:\n"${text}"`;
+      const options: ClassifyOptions<CommandType> = {
+        text,
+        systemPrompt: CLASSIFICATION_PROMPT,
+        validTypes: VALID_TYPES,
+        defaultType: 'unclassified',
+      };
 
-      try {
-        const response = await ai.models.generateContent({
-          model: MODEL,
-          contents: prompt,
-        });
+      const result = await client.classify(options);
 
-        const responseText = response.text ?? '';
-        return parseResponse(responseText);
-      } catch (error) {
-        const message = getErrorMessage(error, 'Unknown Gemini error');
-        throw new Error(`Classification failed: ${message}`);
+      if (!result.ok) {
+        throw new Error(`Classification failed: ${result.error.message}`);
       }
+
+      return result.value;
     },
   };
 }

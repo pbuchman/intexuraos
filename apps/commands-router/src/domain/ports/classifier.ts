@@ -9,3 +9,5 @@ export interface ClassificationResult {
 export interface Classifier {
   classify(text: string): Promise<ClassificationResult>;
 }
+
+export type ClassifierFactory = (apiKey: string) => Classifier;

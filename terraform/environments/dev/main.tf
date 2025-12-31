@@ -668,21 +668,22 @@ module "commands_router" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-router:latest"
 
   secrets = {
-    AUTH_JWKS_URL             = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER               = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE             = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTERNAL_AUTH_TOKEN       = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_GEMINI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_GEMINI_API_KEY"]
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
     GOOGLE_CLOUD_PROJECT = var.project_id
+    USER_SERVICE_URL     = module.user_service.service_url
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.user_service,
   ]
 }
 

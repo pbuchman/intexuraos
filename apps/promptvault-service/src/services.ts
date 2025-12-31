@@ -16,6 +16,11 @@ import {
   type PromptVaultError,
   updatePrompt as updatePromptFn,
 } from './infra/notion/index.js';
+import type { PromptVaultSettingsPort } from './domain/promptvault/ports/index.js';
+import {
+  getPromptVaultPageId,
+  savePromptVaultPageId,
+} from './infra/firestore/promptVaultSettingsRepository.js';
 
 /**
  * Prompt repository adapter matching old interface.
@@ -41,23 +46,46 @@ export interface ServiceContainer {
   logger: NotionLogger | undefined;
   notionServiceClient: NotionServiceClient;
   promptRepository: PromptRepository;
+  promptVaultSettings: PromptVaultSettingsPort;
 }
 
 let container: ServiceContainer | null = null;
 
 function createPromptRepository(
   notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort,
   logger: NotionLogger | undefined
 ): PromptRepository {
   return {
     createPrompt: async (userId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await createPromptFn(userId, input.title, input.content, notionServiceClient, logger),
+      await createPromptFn(
+        userId,
+        input.title,
+        input.content,
+        notionServiceClient,
+        promptVaultSettings,
+        logger
+      ),
     listPrompts: async (userId): Promise<Result<Prompt[], PromptVaultError>> =>
-      await listPromptsFn(userId, notionServiceClient, logger),
+      await listPromptsFn(userId, notionServiceClient, promptVaultSettings, logger),
     getPrompt: async (userId, promptId): Promise<Result<Prompt, PromptVaultError>> =>
-      await getPromptFn(userId, promptId, notionServiceClient, logger),
+      await getPromptFn(userId, promptId, notionServiceClient, promptVaultSettings, logger),
     updatePrompt: async (userId, promptId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await updatePromptFn(userId, promptId, input, notionServiceClient, logger),
+      await updatePromptFn(
+        userId,
+        promptId,
+        input,
+        notionServiceClient,
+        promptVaultSettings,
+        logger
+      ),
+  };
+}
+
+function createPromptVaultSettingsAdapter(): PromptVaultSettingsPort {
+  return {
+    getPromptVaultPageId: async (userId) => await getPromptVaultPageId(userId),
+    savePromptVaultPageId: async (userId, pageId) => await savePromptVaultPageId(userId, pageId),
   };
 }
 
@@ -84,10 +112,13 @@ export function getServices(logger?: NotionLogger): ServiceContainer {
     internalAuthToken,
   });
 
+  const promptVaultSettings = createPromptVaultSettingsAdapter();
+
   container = {
     logger,
     notionServiceClient,
-    promptRepository: createPromptRepository(notionServiceClient, logger),
+    promptRepository: createPromptRepository(notionServiceClient, promptVaultSettings, logger),
+    promptVaultSettings,
   };
 
   return container;
@@ -106,11 +137,15 @@ export function setServices(services: Partial<ServiceContainer>): void {
       internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     });
 
+  const promptVaultSettings = services.promptVaultSettings ?? createPromptVaultSettingsAdapter();
+
   container = {
     logger,
     notionServiceClient,
     promptRepository:
-      services.promptRepository ?? createPromptRepository(notionServiceClient, logger),
+      services.promptRepository ??
+      createPromptRepository(notionServiceClient, promptVaultSettings, logger),
+    promptVaultSettings,
   };
 }
 

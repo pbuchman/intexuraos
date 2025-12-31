@@ -1,9 +1,11 @@
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { Command, CommandSourceType } from '../models/command.js';
 import { createCommand, createCommandId } from '../models/command.js';
 import { createAction } from '../models/action.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { Classifier } from '../ports/classifier.js';
+import type { ClassifierFactory } from '../ports/classifier.js';
+import type { UserServiceClient } from '../../infra/user/index.js';
 
 export interface ProcessCommandInput {
   userId: string;
@@ -25,9 +27,10 @@ export interface ProcessCommandUseCase {
 export function createProcessCommandUseCase(deps: {
   commandRepository: CommandRepository;
   actionRepository: ActionRepository;
-  classifier: Classifier;
+  classifierFactory: ClassifierFactory;
+  userServiceClient: UserServiceClient;
 }): ProcessCommandUseCase {
-  const { commandRepository, actionRepository, classifier } = deps;
+  const { commandRepository, actionRepository, classifierFactory, userServiceClient } = deps;
 
   return {
     async execute(input: ProcessCommandInput): Promise<ProcessCommandResult> {
@@ -48,7 +51,18 @@ export function createProcessCommandUseCase(deps: {
 
       await commandRepository.save(command);
 
+      const apiKeysResult = await userServiceClient.getApiKeys(input.userId);
+
+      if (!apiKeysResult.ok || apiKeysResult.value.google === undefined) {
+        command.status = 'pending_classification';
+        await commandRepository.update(command);
+        return { command, isNew: true };
+      }
+
+      const apiKey = apiKeysResult.value.google;
+
       try {
+        const classifier = classifierFactory(apiKey);
         const classification = await classifier.classify(input.text);
 
         if (classification.type !== 'unclassified') {
@@ -79,8 +93,9 @@ export function createProcessCommandUseCase(deps: {
         }
 
         await commandRepository.update(command);
-      } catch {
+      } catch (error) {
         command.status = 'failed';
+        command.failureReason = getErrorMessage(error, 'Unknown classification error');
         await commandRepository.update(command);
       }
 

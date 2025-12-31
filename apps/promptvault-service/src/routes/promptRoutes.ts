@@ -15,7 +15,6 @@ import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.
 import { getServices } from '../services.js';
 import { mapDomainErrorCode } from './shared.js';
 import { getPageWithPreview } from '../infra/notion/index.js';
-import { getPromptVaultPageId } from '../infra/firestore/promptVaultSettingsRepository.js';
 
 export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /prompt-vault/main-page
@@ -76,12 +75,12 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const { notionServiceClient } = getServices();
+      const { notionServiceClient, promptVaultSettings } = getServices();
 
       // Get token and pageId in parallel
       const [tokenContextResult, pageIdResult] = await Promise.all([
         notionServiceClient.getNotionToken(user.userId),
-        getPromptVaultPageId(user.userId),
+        promptVaultSettings.getPromptVaultPageId(user.userId),
       ]);
 
       // Check token context

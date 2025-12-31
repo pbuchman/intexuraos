@@ -5,7 +5,13 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeCommandRepository, FakeActionRepository, FakeClassifier } from './fakes.js';
+import {
+  FakeCommandRepository,
+  FakeActionRepository,
+  FakeClassifier,
+  FakeUserServiceClient,
+  createFakeServices,
+} from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -21,6 +27,7 @@ describe('Commands Router Routes', () => {
   let fakeCommandRepo: FakeCommandRepository;
   let fakeActionRepo: FakeActionRepository;
   let fakeClassifier: FakeClassifier;
+  let fakeUserServiceClient: FakeUserServiceClient;
 
   async function createAccessToken(sub: string): Promise<string> {
     return await new jose.SignJWT({
@@ -73,11 +80,22 @@ describe('Commands Router Routes', () => {
     fakeCommandRepo = new FakeCommandRepository();
     fakeActionRepo = new FakeActionRepository();
     fakeClassifier = new FakeClassifier();
-    setServices({
-      commandRepository: fakeCommandRepo,
-      actionRepository: fakeActionRepo,
-      classifier: fakeClassifier,
-    });
+    fakeUserServiceClient = new FakeUserServiceClient();
+
+    fakeUserServiceClient.setApiKeys('user-1', { google: 'test-gemini-key' });
+    fakeUserServiceClient.setApiKeys('user-123', { google: 'test-gemini-key' });
+    fakeUserServiceClient.setApiKeys('user-456', { google: 'test-gemini-key' });
+    fakeUserServiceClient.setApiKeys('user-789', { google: 'test-gemini-key' });
+    fakeUserServiceClient.setApiKeys('user-fail', { google: 'test-gemini-key' });
+
+    setServices(
+      createFakeServices({
+        commandRepository: fakeCommandRepo,
+        actionRepository: fakeActionRepo,
+        classifier: fakeClassifier,
+        userServiceClient: fakeUserServiceClient,
+      })
+    );
   });
 
   afterEach(async () => {
@@ -377,6 +395,99 @@ describe('Commands Router Routes', () => {
       const commands = await fakeCommandRepo.listByUserId('user-fail');
       expect(commands).toHaveLength(1);
       expect(commands[0]?.status).toBe('failed');
+    });
+
+    it('marks command as pending_classification when user has no Gemini key', async () => {
+      app = await buildServer();
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-no-key',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.nokey',
+        text: 'Buy groceries',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-nokey' } },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; isNew: boolean };
+      expect(body.success).toBe(true);
+      expect(body.isNew).toBe(true);
+
+      const commands = await fakeCommandRepo.listByUserId('user-no-key');
+      expect(commands).toHaveLength(1);
+      expect(commands[0]?.status).toBe('pending_classification');
+    });
+
+    it('marks command as pending_classification when user service fails', async () => {
+      app = await buildServer();
+
+      fakeUserServiceClient.setFailNext(true);
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-123',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.svcfail',
+        text: 'Service will fail',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-svcfail' } },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const commands = await fakeCommandRepo.listByUserId('user-123');
+      const command = commands.find((c) => c.externalId === 'wamid.svcfail');
+      expect(command?.status).toBe('pending_classification');
+    });
+
+    it('classifies command when user has Gemini key configured', async () => {
+      app = await buildServer();
+
+      fakeUserServiceClient.setApiKeys('user-with-key', { google: 'valid-gemini-key' });
+      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Test Task' });
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-with-key',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.withkey',
+        text: 'Buy groceries',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-withkey' } },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const commands = await fakeCommandRepo.listByUserId('user-with-key');
+      expect(commands).toHaveLength(1);
+      expect(commands[0]?.status).toBe('classified');
+
+      const actions = await fakeActionRepo.listByUserId('user-with-key');
+      expect(actions).toHaveLength(1);
+      expect(actions[0]?.title).toBe('Test Task');
     });
   });
 

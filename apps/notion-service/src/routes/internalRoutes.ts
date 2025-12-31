@@ -4,25 +4,8 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-
-/**
- * Validate internal service-to-service authentication.
- * Reads INTEXURAOS_INTERNAL_AUTH_TOKEN at runtime to support test injection.
- */
-function validateInternalAuth(request: FastifyRequest): boolean {
-  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
-  if (internalAuthToken === '') {
-    request.log.warn('Internal auth failed: INTEXURAOS_INTERNAL_AUTH_TOKEN not configured');
-    return false;
-  }
-  const authHeader = request.headers['x-internal-auth'];
-  if (authHeader !== internalAuthToken) {
-    request.log.warn('Internal auth failed: token mismatch');
-    return false;
-  }
-  return true;
-}
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /internal/notion/users/:userId/context
@@ -63,7 +46,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request)) {
+      if (!validateInternalAuth(request).valid) {
         reply.status(401);
         return { error: 'Unauthorized' };
       }

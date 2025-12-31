@@ -3,17 +3,15 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ok, err } from '@intexuraos/common-core';
+import type { GeminiError, ClassificationResult } from '@intexuraos/infra-gemini';
 
-const mockGenerateContent = vi.fn();
+const mockClassify = vi.fn();
 
-class MockGoogleGenAI {
-  models = {
-    generateContent: mockGenerateContent,
-  };
-}
-
-vi.mock('@google/genai', () => ({
-  GoogleGenAI: MockGoogleGenAI,
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: () => ({
+    classify: mockClassify,
+  }),
 }));
 
 const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
@@ -25,124 +23,58 @@ describe('GeminiClassifier', () => {
 
   describe('classify', () => {
     it('classifies todo command correctly', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 0.95, "title": "Buy groceries"}',
-      });
+      const result: ClassificationResult<string> = {
+        type: 'todo',
+        confidence: 0.95,
+        title: 'Buy groceries',
+      };
+      mockClassify.mockResolvedValue(ok(result));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('I need to buy groceries');
+      const classificationResult = await classifier.classify('I need to buy groceries');
 
-      expect(result.type).toBe('todo');
-      expect(result.confidence).toBe(0.95);
-      expect(result.title).toBe('Buy groceries');
+      expect(classificationResult.type).toBe('todo');
+      expect(classificationResult.confidence).toBe(0.95);
+      expect(classificationResult.title).toBe('Buy groceries');
     });
 
     it('classifies research command correctly', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "research", "confidence": 0.88, "title": "AI trends research"}',
-      });
+      const result: ClassificationResult<string> = {
+        type: 'research',
+        confidence: 0.88,
+        title: 'AI trends research',
+      };
+      mockClassify.mockResolvedValue(ok(result));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('What are the latest AI trends?');
+      const classificationResult = await classifier.classify('What are the latest AI trends?');
 
-      expect(result.type).toBe('research');
-      expect(result.confidence).toBe(0.88);
+      expect(classificationResult.type).toBe('research');
+      expect(classificationResult.confidence).toBe(0.88);
     });
 
-    it('handles JSON embedded in text', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Here is my classification:\n{"type": "note", "confidence": 0.9, "title": "Meeting notes"}\nDone.',
-      });
+    it('returns unclassified when classify returns unclassified type', async () => {
+      const result: ClassificationResult<string> = {
+        type: 'unclassified',
+        confidence: 0,
+        title: 'Unclassified',
+      };
+      mockClassify.mockResolvedValue(ok(result));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('Meeting notes from today');
+      const classificationResult = await classifier.classify('random gibberish');
 
-      expect(result.type).toBe('note');
-      expect(result.confidence).toBe(0.9);
-    });
-
-    it('returns unclassified when no JSON found', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'I cannot classify this message.',
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('random gibberish');
-
-      expect(result.type).toBe('unclassified');
-      expect(result.confidence).toBe(0);
-      expect(result.title).toBe('Unclassified command');
-    });
-
-    it('returns unclassified for invalid type', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "invalid_type", "confidence": 0.9, "title": "Test"}',
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test message');
-
-      expect(result.type).toBe('unclassified');
-    });
-
-    it('clamps confidence to valid range', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 1.5, "title": "Test"}',
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test');
-
-      expect(result.confidence).toBe(1);
-    });
-
-    it('clamps negative confidence to 0', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": -0.5, "title": "Test"}',
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test');
-
-      expect(result.confidence).toBe(0);
-    });
-
-    it('uses default title when not provided', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 0.9}',
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test');
-
-      expect(result.title).toBe('Untitled');
-    });
-
-    it('truncates long titles to 100 chars', async () => {
-      const longTitle = 'A'.repeat(150);
-      mockGenerateContent.mockResolvedValue({
-        text: `{"type": "note", "confidence": 0.9, "title": "${longTitle}"}`,
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test');
-
-      expect(result.title.length).toBe(100);
-    });
-
-    it('handles null response text', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
-      const result = await classifier.classify('test');
-
-      expect(result.type).toBe('unclassified');
+      expect(classificationResult.type).toBe('unclassified');
+      expect(classificationResult.confidence).toBe(0);
+      expect(classificationResult.title).toBe('Unclassified');
     });
 
     it('throws on API error', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('API rate limit exceeded'));
+      const error: GeminiError = {
+        code: 'RATE_LIMITED',
+        message: 'API rate limit exceeded',
+      };
+      mockClassify.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
 
@@ -151,12 +83,120 @@ describe('GeminiClassifier', () => {
       );
     });
 
-    it('handles non-Error exceptions', async () => {
-      mockGenerateContent.mockRejectedValue('String error');
+    it('throws on invalid key error', async () => {
+      const error: GeminiError = {
+        code: 'INVALID_KEY',
+        message: 'Invalid API key provided',
+      };
+      mockClassify.mockResolvedValue(err(error));
+
+      const classifier = createGeminiClassifier({ apiKey: 'bad-key' });
+
+      await expect(classifier.classify('test')).rejects.toThrow(
+        'Classification failed: Invalid API key provided'
+      );
+    });
+
+    it('classifies note command correctly', async () => {
+      const result: ClassificationResult<string> = {
+        type: 'note',
+        confidence: 0.9,
+        title: 'Meeting notes',
+      };
+      mockClassify.mockResolvedValue(ok(result));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('Meeting notes from today');
+
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.9);
+    });
+
+    it('passes correct options to classify', async () => {
+      const result: ClassificationResult<string> = {
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Test',
+      };
+      mockClassify.mockResolvedValue(ok(result));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      await classifier.classify('test message');
+
+      expect(mockClassify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'test message',
+          defaultType: 'unclassified',
+        })
+      );
+    });
+
+    it('passes all valid types to classify', async () => {
+      const result: ClassificationResult<string> = {
+        type: 'calendar',
+        confidence: 0.85,
+        title: 'Team meeting',
+      };
+      mockClassify.mockResolvedValue(ok(result));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      await classifier.classify('Team meeting tomorrow at 3pm');
+
+      expect(mockClassify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          validTypes: expect.arrayContaining([
+            'todo',
+            'research',
+            'note',
+            'link',
+            'calendar',
+            'reminder',
+            'unclassified',
+          ]),
+        })
+      );
+    });
+
+    it('handles timeout error', async () => {
+      const error: GeminiError = {
+        code: 'TIMEOUT',
+        message: 'Request timed out',
+      };
+      mockClassify.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
 
-      await expect(classifier.classify('test')).rejects.toThrow('Classification failed:');
+      await expect(classifier.classify('test')).rejects.toThrow(
+        'Classification failed: Request timed out'
+      );
+    });
+
+    it('handles API error', async () => {
+      const error: GeminiError = {
+        code: 'API_ERROR',
+        message: 'Server error',
+      };
+      mockClassify.mockResolvedValue(err(error));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+
+      await expect(classifier.classify('test')).rejects.toThrow(
+        'Classification failed: Server error'
+      );
+    });
+
+    it('handles parse error', async () => {
+      const error: GeminiError = {
+        code: 'PARSE_ERROR',
+        message: 'Failed to parse response',
+      };
+      mockClassify.mockResolvedValue(err(error));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+
+      await expect(classifier.classify('test')).rejects.toThrow(
+        'Classification failed: Failed to parse response'
+      );
     });
   });
 });
