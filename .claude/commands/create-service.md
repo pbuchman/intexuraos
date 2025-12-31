@@ -169,6 +169,25 @@ main().catch((error: unknown) => {
 
 **IMPORTANT:** The `validateRequiredEnv()` call runs at module load time, before `main()`. This ensures the service crashes immediately if required environment variables are missing, rather than starting and failing at runtime.
 
+**CRITICAL RULE:** The `REQUIRED_ENV` array MUST exactly match what you configure in Terraform:
+
+- Every key in Terraform's `secrets = {}` block → add to `REQUIRED_ENV`
+- Every key in Terraform's `env_vars = {}` block → add to `REQUIRED_ENV`
+- **ONLY include variables that are ACTUALLY USED in the codebase**
+- If a variable is configured in Terraform but never used → **remove from Terraform**, not from validation
+
+**Verification:**
+
+```bash
+# What Terraform configures:
+grep -A 20 "module \"<service-name>\"" terraform/environments/dev/main.tf | grep -E "secrets|env_vars" -A 5
+
+# What code actually uses:
+grep -r "process.env\[" apps/<service-name>/src --include="*.ts" --exclude-dir=__tests__
+```
+
+Both outputs must match exactly, or you have a misconfiguration.
+
 Note: Create separate `server.ts` and `config.ts` files. See existing services for patterns.
 
 ### 5. Create src/services.ts
@@ -290,7 +309,67 @@ substitutions:
     }
 ```
 
-### 9. Register in API Docs Hub
+### 9. Create Cloud Build Deployment Script
+
+**CRITICAL:** Create `cloudbuild/scripts/deploy-<service-name>.sh` following this exact pattern:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cloudbuild/scripts/lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
+SERVICE="<service-name>"
+CLOUD_RUN_SERVICE="intexuraos-<service-name>"
+
+require_env_vars REGION ARTIFACT_REGISTRY_URL COMMIT_SHA
+
+tag="$(deployment_tag)"
+image="${ARTIFACT_REGISTRY_URL}/${SERVICE}:${tag}"
+
+log "Deploying ${SERVICE} to Cloud Run"
+log "  Environment: ${ENVIRONMENT:-unset}"
+log "  Region: ${REGION}"
+log "  Image: ${image}"
+
+# Check if service exists (must be created by Terraform first)
+if ! gcloud run services describe "$CLOUD_RUN_SERVICE" --region="$REGION" &>/dev/null; then
+  log "ERROR: Service ${CLOUD_RUN_SERVICE} does not exist"
+  log "Run 'terraform apply' in terraform/environments/dev/ first to create the service with proper configuration"
+  exit 1
+fi
+
+gcloud run deploy "$CLOUD_RUN_SERVICE" \
+  --image="$image" \
+  --region="$REGION" \
+  --platform=managed \
+  --quiet
+
+log "Deployment complete for ${SERVICE}"
+```
+
+**Why this pattern is critical:**
+
+- **Service existence check:** Prevents creating misconfigured services if Terraform hasn't run
+- **No `--allow-unauthenticated` flag:** Auth settings are managed by Terraform, not deployment scripts
+- **Fail-fast:** Exits immediately with clear error if service doesn't exist
+
+**WRONG PATTERN (DO NOT USE):**
+
+```bash
+# ❌ Missing service existence check
+# ❌ Sets --allow-unauthenticated (should be Terraform-managed)
+gcloud run deploy "$CLOUD_RUN_SERVICE" \
+  --image="$image" \
+  --region="$REGION" \
+  --platform=managed \
+  --allow-unauthenticated \
+  --quiet
+```
+
+### 10. Register in API Docs Hub
 
 Edit `apps/api-docs-hub/src/config.ts`:
 
@@ -307,7 +386,7 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
 
 Note: Get the actual Cloud Run URL after first deployment.
 
-### 10. Create Service URL Secret (Post-Deployment)
+### 11. Create Service URL Secret (Post-Deployment)
 
 After first deployment, create a secret for the service URL so other services can call it:
 
@@ -331,7 +410,7 @@ Also add to `.envrc.local.example` for local development:
 export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
 ```
 
-### 11. Add to Root tsconfig.json
+### 12. Add to Root tsconfig.json
 
 Edit `tsconfig.json`:
 
@@ -344,7 +423,7 @@ Edit `tsconfig.json`:
 }
 ```
 
-### 12. Add to Local Dev Setup
+### 13. Add to Local Dev Setup
 
 Edit `scripts/dev.mjs` — add service to SERVICES array:
 
@@ -364,7 +443,7 @@ If service needs additional env vars, add them to `.envrc.local.example`:
 export INTEXURAOS_<SERVICE>_SOME_VAR=local-value
 ```
 
-### 13. Run Verification
+### 14. Run Verification
 
 ```bash
 npm install

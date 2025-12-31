@@ -415,6 +415,69 @@ validateRequiredEnv([
 
 **Deployment:** Services must be created via Terraform FIRST (with all env vars configured) before Cloud Build can deploy updates.
 
+### Validation Best Practices
+
+**Rule:** Validation array MUST match Terraform configuration exactly.
+
+**Verification Process:**
+
+1. Find service Terraform module in `terraform/environments/dev/main.tf`
+2. List all keys in `secrets = {}` block
+3. List all keys in `env_vars = {}` block
+4. Ensure ALL are in `validateRequiredEnv()` array (or Zod schema for whatsapp-service)
+5. **CRITICAL:** Verify each variable is ACTUALLY USED in code (search codebase)
+
+**Example:**
+
+Terraform configuration:
+
+```hcl
+secrets = {
+  AUTH_JWKS_URL         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+  INTERNAL_AUTH_TOKEN   = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+}
+env_vars = {
+  GOOGLE_CLOUD_PROJECT = var.project_id
+  USER_SERVICE_URL     = module.user_service.service_url
+}
+```
+
+Service validation:
+
+```typescript
+validateRequiredEnv([
+  'GOOGLE_CLOUD_PROJECT', // from env_vars
+  'USER_SERVICE_URL', // from env_vars
+  'AUTH_JWKS_URL', // from secrets (uses left-hand key name)
+  'INTERNAL_AUTH_TOKEN', // from secrets (uses left-hand key name)
+]);
+```
+
+**Audit Commands:**
+
+1. **Check what service validates:**
+
+   ```bash
+   grep "validateRequiredEnv\|REQUIRED_ENV" apps/service-name/src/index.ts
+   ```
+
+2. **Check what Terraform configures:**
+
+   ```bash
+   grep -A 20 "module \"service-name\"" terraform/environments/dev/main.tf | grep -E "secrets|env_vars" -A 5
+   ```
+
+3. **Verify variable is used in code:**
+   ```bash
+   grep -r "process.env\['VAR_NAME'\]" apps/service-name/src --include="*.ts" --exclude-dir=__tests__
+   ```
+
+**Warning Signs:**
+
+- Variable in Terraform but never accessed in code → **Remove from Terraform**
+- Variable used in code but not in Terraform → **Add to Terraform**
+- Variable validated at startup but never used → **Remove from validation**
+
 ### New Service Checklist
 
 1. Copy structure from existing service (domain/, infra/, routes/)

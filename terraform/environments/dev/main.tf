@@ -661,19 +661,15 @@ module "llm_orchestrator" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator:latest"
 
   secrets = {
-    AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    USER_SERVICE_URL                = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
-    INTERNAL_AUTH_TOKEN             = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    WHATSAPP_ACCESS_TOKEN           = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
-    WHATSAPP_PHONE_NUMBER_ID        = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
+    AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    USER_SERVICE_URL    = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
+    INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT  = var.project_id
-    INTEXURAOS_AUDIT_LLMS = var.audit_llms ? "true" : "false"
+    GOOGLE_CLOUD_PROJECT = var.project_id
   }
 
   depends_on = [
