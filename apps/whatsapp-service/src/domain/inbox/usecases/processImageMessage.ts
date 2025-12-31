@@ -12,7 +12,10 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
-import type { WhatsAppMessageRepository, WhatsAppWebhookEventRepository, } from '../ports/repositories.js';
+import type {
+  WhatsAppMessageRepository,
+  WhatsAppWebhookEventRepository,
+} from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';

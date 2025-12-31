@@ -3,7 +3,11 @@
  * Used to populate filter dropdowns.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { DistinctFilterField, NotificationRepository, RepositoryError, } from '../ports/index.js';
+import type {
+  DistinctFilterField,
+  NotificationRepository,
+  RepositoryError,
+} from '../ports/index.js';
 
 /**
  * Input for getting distinct filter values.

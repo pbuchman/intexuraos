@@ -5,8 +5,14 @@
 import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
-import { FirestoreAuthTokenRepository, FirestoreUserSettingsRepository, } from './infra/firestore/index.js';
-import { Auth0ClientImpl, loadAuth0Config as loadAuth0ConfigFromInfra, } from './infra/auth0/index.js';
+import {
+  FirestoreAuthTokenRepository,
+  FirestoreUserSettingsRepository,
+} from './infra/firestore/index.js';
+import {
+  Auth0ClientImpl,
+  loadAuth0Config as loadAuth0ConfigFromInfra,
+} from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
 
 /**

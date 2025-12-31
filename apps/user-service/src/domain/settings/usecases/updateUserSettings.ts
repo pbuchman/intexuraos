@@ -7,7 +7,11 @@
 
 import { err, isErr, ok, type Result } from '@intexuraos/common-core';
 import type { UserSettingsRepository } from '../ports/UserSettingsRepository.js';
-import { createDefaultSettings, type NotificationSettings, type UserSettings, } from '../models/UserSettings.js';
+import {
+  createDefaultSettings,
+  type NotificationSettings,
+  type UserSettings,
+} from '../models/UserSettings.js';
 
 /**
  * Input for the update user settings use-case.

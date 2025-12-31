@@ -2,7 +2,11 @@ import pino from 'pino';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
-import { type CleanupWorker, type CleanupWorkerLogger, createCleanupWorker, } from './workers/index.js';
+import {
+  type CleanupWorker,
+  type CleanupWorkerLogger,
+  createCleanupWorker,
+} from './workers/index.js';
 import { getServices, initServices } from './services.js';
 
 /**
