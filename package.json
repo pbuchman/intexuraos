@@ -33,6 +33,12 @@
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:common": "node scripts/verify-common.mjs",
     "verify:firestore": "node scripts/verify-firestore-ownership.mjs",
+    "verify:test-isolation": "node scripts/verify-test-isolation.mjs",
+    "verify:vitest-config": "node scripts/verify-vitest-config.mjs",
+    "verify:endpoints": "node scripts/verify-required-endpoints.mjs",
+    "verify:hash-routing": "node scripts/verify-hash-routing.mjs",
+    "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
+    "install-hooks": "node scripts/install-hooks.mjs",
     "ci": "node scripts/ci.mjs"
   },
   "devDependencies": {

@@ -98,8 +98,7 @@ async function waitForEmulators() {
   const delayMs = 1000;
 
   const endpoints = [
-    { name: 'Firestore', url: 'http://localhost:8101' },
-    { name: 'Pub/Sub', url: 'http://localhost:8102' },
+    { name: 'Firebase (Firestore + Pub/Sub)', url: 'http://localhost:8100' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
     { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
@@ -164,6 +163,7 @@ const COMMON_SERVICE_ENV = {
   AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE ?? '',
   AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
   AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
+  INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
 };
 
 const SERVICE_ENV_MAPPINGS = {
@@ -172,7 +172,6 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'llm-orchestrator': {
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? '',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -181,6 +180,10 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-sub',
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
+    INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
   'research-agent': {
     COMMANDS_ROUTER_URL: 'http://localhost:8117',
