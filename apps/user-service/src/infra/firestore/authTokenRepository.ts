@@ -3,15 +3,15 @@
  * Stores per-user Auth0 tokens with encrypted refresh tokens.
  */
 
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
+  AuthError,
   AuthTokenRepository,
   AuthTokens,
   AuthTokensPublic,
-  AuthError,
 } from '../../domain/identity/index.js';
-import { encryptToken, decryptToken } from './encryption.js';
+import { decryptToken, encryptToken } from './encryption.js';
 
 const COLLECTION_NAME = 'auth_tokens';
 

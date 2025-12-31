@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 
 /**
  * Configuration for the user service client.

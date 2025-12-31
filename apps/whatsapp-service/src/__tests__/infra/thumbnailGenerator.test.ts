@@ -2,7 +2,7 @@
  * Tests for thumbnail generator.
  * Uses real sharp library with sample image buffers.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 
 async function createTestImage(

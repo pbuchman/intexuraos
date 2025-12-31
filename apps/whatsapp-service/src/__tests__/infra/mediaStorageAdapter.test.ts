@@ -2,7 +2,7 @@
  * Tests for GcsMediaStorageAdapter.
  * Uses vi.mock() to mock @google-cloud/storage for unit testing.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GcsMediaStorageAdapter } from '../../infra/gcs/index.js';
 
 const mockSave = vi.fn();

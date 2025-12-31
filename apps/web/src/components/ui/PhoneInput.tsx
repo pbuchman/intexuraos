@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import {
+  AsYouType,
+  type CountryCode,
   getCountries,
   getCountryCallingCode,
   parsePhoneNumberWithError,
-  AsYouType,
-  type CountryCode,
 } from 'libphonenumber-js';
 
 /**

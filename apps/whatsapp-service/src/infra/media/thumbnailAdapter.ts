@@ -3,11 +3,7 @@
  * Wraps the existing generateThumbnail function as a port implementation.
  */
 import type { Result } from '@intexuraos/common-core';
-import type {
-  ThumbnailGeneratorPort,
-  ThumbnailResult,
-  InboxError,
-} from '../../domain/inbox/index.js';
+import type { InboxError, ThumbnailGeneratorPort, ThumbnailResult, } from '../../domain/inbox/index.js';
 import { generateThumbnail } from './thumbnailGenerator.js';
 
 /**

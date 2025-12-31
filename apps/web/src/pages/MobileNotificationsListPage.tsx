@@ -1,16 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Layout, Button, Card } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import {
-  getMobileNotifications,
-  deleteMobileNotification,
-  getFilterValues,
-  ApiError,
-} from '@/services';
+import { ApiError, deleteMobileNotification, getFilterValues, getMobileNotifications, } from '@/services';
 import { getUserSettings, updateUserSettings } from '@/services/authApi';
 import type { MobileNotification, NotificationFilter } from '@/types';
-import { Trash2, Bell, RefreshCw, X, Filter, Save } from 'lucide-react';
+import { Bell, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
 
 /**
  * Active filter state for multi-dimension filtering.

@@ -2,13 +2,13 @@
  * Shared test utilities for mobile-notifications-service tests.
  * Provides JWT token generation and test setup helpers.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { FakeSignatureConnectionRepository, FakeNotificationRepository } from './fakes.js';
-import { setServices, resetServices } from '../services.js';
+import { FakeNotificationRepository, FakeSignatureConnectionRepository } from './fakes.js';
+import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';

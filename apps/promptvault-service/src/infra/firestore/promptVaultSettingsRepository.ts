@@ -2,7 +2,7 @@
  * Firestore repository for Prompt Vault settings.
  * Owned by promptvault-service - manages promptVaultPageId.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 
 export interface PromptVaultError {

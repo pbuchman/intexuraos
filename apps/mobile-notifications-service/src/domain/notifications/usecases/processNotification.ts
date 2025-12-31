@@ -4,12 +4,8 @@
  *
  * Logging: Every decision point is logged for debugging and audit.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
-import type {
-  SignatureConnectionRepository,
-  NotificationRepository,
-  RepositoryError,
-} from '../ports/index.js';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { NotificationRepository, RepositoryError, SignatureConnectionRepository, } from '../ports/index.js';
 import { hashSignature } from './createConnection.js';
 
 /**

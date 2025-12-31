@@ -2,7 +2,7 @@
  * Tests for webhook routes:
  * - POST /notion-webhooks
  */
-import { describe, it, expect, setupTestContext } from './testUtils.js';
+import { describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('POST /notion-webhooks', () => {
   const ctx = setupTestContext();

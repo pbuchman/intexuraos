@@ -3,7 +3,7 @@
  * GET /internal/notion/users/:userId/context - Get Notion connection context (token)
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { getServices } from '../services.js';
 
 /**

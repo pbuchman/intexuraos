@@ -2,13 +2,13 @@
  * Fake implementations for testing.
  */
 
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
-  Research,
-  LlmResult,
   LlmProvider,
-  ResearchRepository,
+  LlmResult,
   RepositoryError,
+  Research,
+  ResearchRepository,
 } from '../domain/research/index.js';
 
 /**

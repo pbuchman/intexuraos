@@ -2,28 +2,24 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
-import {
-  WebhookEventRepositoryAdapter,
-  UserMappingRepositoryAdapter,
-  MessageRepositoryAdapter,
-} from './adapters.js';
+import { MessageRepositoryAdapter, UserMappingRepositoryAdapter, WebhookEventRepositoryAdapter, } from './adapters.js';
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
 import { GcpPubSubPublisher } from './infra/pubsub/index.js';
-import { WhatsAppCloudApiSender, WhatsAppCloudApiAdapter } from './infra/whatsapp/index.js';
+import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
 import { OpenGraphFetcher } from './infra/linkpreview/openGraphFetcher.js';
 import type {
-  WhatsAppWebhookEventRepository,
-  WhatsAppUserMappingRepository,
-  WhatsAppMessageRepository,
-  MediaStoragePort,
   EventPublisherPort,
-  WhatsAppMessageSender,
-  SpeechTranscriptionPort,
-  WhatsAppCloudApiPort,
-  ThumbnailGeneratorPort,
   LinkPreviewFetcherPort,
+  MediaStoragePort,
+  SpeechTranscriptionPort,
+  ThumbnailGeneratorPort,
+  WhatsAppCloudApiPort,
+  WhatsAppMessageRepository,
+  WhatsAppMessageSender,
+  WhatsAppUserMappingRepository,
+  WhatsAppWebhookEventRepository,
 } from './domain/inbox/index.js';
 
 /**

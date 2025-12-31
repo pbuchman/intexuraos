@@ -3,16 +3,16 @@
  * GET /mobile-notifications - List notifications.
  * DELETE /mobile-notifications/:notification_id - Delete notification.
  */
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
-  listNotifications,
   deleteNotification,
-  getDistinctFilterValues,
   type DistinctFilterField,
+  getDistinctFilterValues,
+  listNotifications,
 } from '../domain/notifications/index.js';
-import { listNotificationsResponseSchema, filterValuesResponseSchema } from './schemas.js';
+import { filterValuesResponseSchema, listNotificationsResponseSchema } from './schemas.js';
 
 interface ListQuerystring {
   limit?: number;

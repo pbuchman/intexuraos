@@ -2,17 +2,17 @@
  * Tests for WhatsApp message Firestore repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import {
-  saveMessage,
-  getMessagesByUser,
-  getMessage,
   deleteMessage,
   findById,
-  updateTranscription,
+  getMessage,
+  getMessagesByUser,
+  saveMessage,
   updateLinkPreview,
+  updateTranscription,
 } from '../../infra/firestore/index.js';
 import type { WhatsAppMessage } from '../../domain/inbox/index.js';
 

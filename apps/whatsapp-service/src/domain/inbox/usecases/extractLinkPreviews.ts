@@ -9,7 +9,7 @@
  * Designed to be called fire-and-forget after webhook returns 200.
  * All errors are handled internally and logged.
  */
-import type { LinkPreviewState, LinkPreview } from '../models/LinkPreview.js';
+import type { LinkPreview, LinkPreviewState } from '../models/LinkPreview.js';
 import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { LinkPreviewFetcherPort } from '../ports/linkPreviewFetcher.js';
 import { getErrorMessage } from '@intexuraos/common-core';

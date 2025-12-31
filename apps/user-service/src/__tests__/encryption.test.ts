@@ -2,8 +2,8 @@
  * Tests for token encryption utilities.
  * Tests AES-256-GCM encryption/decryption for auth tokens.
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { encryptToken, decryptToken, generateEncryptionKey } from '../infra/firestore/index.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { decryptToken, encryptToken, generateEncryptionKey } from '../infra/firestore/index.js';
 
 describe('encryption', () => {
   const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];

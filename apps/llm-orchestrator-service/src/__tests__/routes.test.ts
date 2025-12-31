@@ -3,13 +3,13 @@
  * Uses real JWT signing with jose library for proper authentication.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
-import { setServices, resetServices, type ServiceContainer } from '../services.js';
+import { resetServices, type ServiceContainer, setServices } from '../services.js';
 import { FakeResearchRepository } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
 

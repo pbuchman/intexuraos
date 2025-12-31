@@ -2,12 +2,8 @@ import pino from 'pino';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
-import {
-  createCleanupWorker,
-  type CleanupWorker,
-  type CleanupWorkerLogger,
-} from './workers/index.js';
-import { initServices, getServices } from './services.js';
+import { type CleanupWorker, type CleanupWorkerLogger, createCleanupWorker, } from './workers/index.js';
+import { getServices, initServices } from './services.js';
 
 /**
  * Create a logger for workers using pino.

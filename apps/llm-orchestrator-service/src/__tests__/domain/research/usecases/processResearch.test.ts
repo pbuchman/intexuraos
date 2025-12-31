@@ -2,13 +2,13 @@
  * Tests for processResearch usecase.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { err, ok } from '@intexuraos/common-core';
 import {
   processResearch,
   type ProcessResearchDeps,
 } from '../../../../domain/research/usecases/processResearch.js';
-import type { Research, LlmProvider } from '../../../../domain/research/models/index.js';
+import type { LlmProvider, Research } from '../../../../domain/research/models/index.js';
 
 function createMockDeps(): ProcessResearchDeps & {
   mockRepo: {

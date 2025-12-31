@@ -4,14 +4,14 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import {
-  intexuraFastifyPlugin,
   fastifyAuthPlugin,
+  intexuraFastifyPlugin,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import { checkFirestore, buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
+import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
 import { createWhatsappRoutes } from './routes/routes.js';
-import { validateConfigEnv, type Config } from './config.js';
+import { type Config, validateConfigEnv } from './config.js';
 import { initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';

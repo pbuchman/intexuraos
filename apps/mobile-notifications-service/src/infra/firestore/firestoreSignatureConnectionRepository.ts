@@ -2,13 +2,13 @@
  * Firestore implementation of SignatureConnectionRepository.
  * Stores user-signature bindings with hashed signatures.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
-  SignatureConnectionRepository,
-  SignatureConnection,
   CreateSignatureConnectionInput,
   RepositoryError,
+  SignatureConnection,
+  SignatureConnectionRepository,
 } from '../../domain/notifications/index.js';
 
 const COLLECTION_NAME = 'mobile_notification_signatures';

@@ -9,13 +9,10 @@
  * 5. Save message to Firestore
  * 6. Update webhook event status
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
-import type {
-  WhatsAppWebhookEventRepository,
-  WhatsAppMessageRepository,
-} from '../ports/repositories.js';
+import type { WhatsAppMessageRepository, WhatsAppWebhookEventRepository, } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';

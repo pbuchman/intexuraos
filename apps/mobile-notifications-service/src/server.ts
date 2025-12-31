@@ -4,12 +4,12 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import {
-  intexuraFastifyPlugin,
   fastifyAuthPlugin,
+  intexuraFastifyPlugin,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import { checkFirestore, buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
+import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
 import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 

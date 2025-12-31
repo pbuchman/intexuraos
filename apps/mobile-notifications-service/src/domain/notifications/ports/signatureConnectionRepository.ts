@@ -3,7 +3,7 @@
  * Implemented by infra layer (Firestore).
  */
 import type { Result } from '@intexuraos/common-core';
-import type { SignatureConnection, CreateSignatureConnectionInput } from '../models/index.js';
+import type { CreateSignatureConnectionInput, SignatureConnection } from '../models/index.js';
 
 /**
  * Repository error type.

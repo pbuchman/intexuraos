@@ -2,7 +2,7 @@
  * Tests for authenticated routes with proper JWT handling.
  * Tests statusRoutes, connectRoutes, and notificationRoutes.
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import { hashSignature } from '../domain/notifications/index.js';
 
 describe('Authenticated Routes', () => {

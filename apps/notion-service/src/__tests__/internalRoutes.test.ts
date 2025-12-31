@@ -1,9 +1,9 @@
 /**
  * Tests for internal routes (/internal/notion/...)
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildServer } from '../server.js';
-import { setServices, resetServices } from '../services.js';
+import { resetServices, setServices } from '../services.js';
 import { FakeConnectionRepository } from './fakes.js';
 import type { FastifyInstance } from 'fastify';
 

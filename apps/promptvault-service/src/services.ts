@@ -4,17 +4,14 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type { NotionLogger } from '@intexuraos/infra-notion';
-import {
-  createNotionServiceClient,
-  type NotionServiceClient,
-} from './infra/notion/notionServiceClient.js';
+import { createNotionServiceClient, type NotionServiceClient, } from './infra/notion/notionServiceClient.js';
 import {
   createPrompt as createPromptFn,
-  listPrompts as listPromptsFn,
   getPrompt as getPromptFn,
-  updatePrompt as updatePromptFn,
+  listPrompts as listPromptsFn,
   type Prompt,
   type PromptVaultError,
+  updatePrompt as updatePromptFn,
 } from './infra/notion/index.js';
 
 /**

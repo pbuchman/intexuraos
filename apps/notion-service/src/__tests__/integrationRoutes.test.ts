@@ -4,7 +4,7 @@
  * - GET /notion/status
  * - DELETE /notion/disconnect
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('Notion Integration Routes', () => {
   const ctx = setupTestContext();

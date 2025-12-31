@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Layout, Button, Card } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { useResearches } from '@/hooks';
 import type { Research, ResearchStatus } from '@/services/llmOrchestratorApi.types';
 

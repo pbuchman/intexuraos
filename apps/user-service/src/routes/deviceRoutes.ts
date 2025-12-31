@@ -6,15 +6,15 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { isErr, getErrorMessage } from '@intexuraos/common-core';
+import { getErrorMessage, isErr } from '@intexuraos/common-core';
 import { handleValidationError } from '@intexuraos/common-http';
-import type { AuthTokens, AuthTokenRepository } from '../domain/identity/index.js';
+import type { AuthTokenRepository, AuthTokens } from '../domain/identity/index.js';
 import { getServices } from '../services.js';
 import {
-  deviceStartRequestSchema,
   devicePollRequestSchema,
-  isAuth0Error,
+  deviceStartRequestSchema,
   type DeviceStartResponse,
+  isAuth0Error,
   type TokenResponse,
 } from './schemas.js';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';

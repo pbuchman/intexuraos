@@ -6,11 +6,11 @@
  * DELETE /users/:uid/settings/llm-keys/:provider - Remove a key for a provider
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import type { EncryptedValue } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import { maskApiKey, type LlmProvider, type LlmTestResult } from '../domain/settings/index.js';
+import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys

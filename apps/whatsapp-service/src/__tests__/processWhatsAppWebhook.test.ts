@@ -4,14 +4,14 @@
  * These tests exercise the webhook classification logic and processing flow
  * using fake repositories to avoid external dependencies.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ProcessWhatsAppWebhookUseCase } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
 import type { WhatsAppWebhookPayload } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
-import { FakeWhatsAppWebhookEventRepository, FakeWhatsAppUserMappingRepository } from './fakes.js';
-import type { InboxNotesRepository, InboxNote, InboxError } from '../domain/inbox/index.js';
+import { ProcessWhatsAppWebhookUseCase } from '../domain/inbox/usecases/processWhatsAppWebhook.js';
+import { FakeWhatsAppUserMappingRepository, FakeWhatsAppWebhookEventRepository } from './fakes.js';
+import type { InboxError, InboxNote, InboxNotesRepository } from '../domain/inbox/index.js';
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 
 /**
  * Fake inbox notes repository for testing.
