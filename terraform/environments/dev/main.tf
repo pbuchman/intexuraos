@@ -367,22 +367,24 @@ module "pubsub_media_cleanup" {
 
 # Topic for commands ingest (whatsapp -> commands-router)
 module "pubsub_commands_ingest" {
-  source = "../../modules/pubsub"
+  source = "../../modules/pubsub-push"
 
   project_id = var.project_id
   topic_name = "intexuraos-commands-ingest-${var.environment}"
   labels     = local.common_labels
 
+  push_endpoint              = "${module.commands_router.service_url}/internal/router/commands"
+  push_service_account_email = module.iam.service_accounts["commands_router"]
+  push_audience              = module.commands_router.service_url
+
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-  subscriber_service_accounts = {
-    commands_router = module.iam.service_accounts["commands_router"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
+    module.commands_router,
   ]
 }
 

@@ -73,7 +73,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          {
+            reason: authResult.reason,
+            headers: {
+              'x-internal-auth':
+                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+            },
+          },
+          'Pub/Sub auth failed for actions/research endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
@@ -92,13 +103,27 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const parsedType = eventData.type as string;
       if (parsedType !== 'action.created') {
-        request.log.warn({ type: parsedType }, 'Unexpected event type');
+        request.log.warn(
+          {
+            type: parsedType,
+            actionId: eventData.actionId,
+            messageId: body.message.messageId,
+          },
+          'Unexpected event type'
+        );
         reply.status(400);
         return { error: 'Invalid event type' };
       }
 
       if (eventData.actionType !== 'research') {
-        request.log.warn({ actionType: eventData.actionType }, 'Unexpected action type');
+        request.log.warn(
+          {
+            actionType: eventData.actionType,
+            actionId: eventData.actionId,
+            messageId: body.message.messageId,
+          },
+          'Unexpected action type'
+        );
         reply.status(400);
         return { error: 'Invalid action type' };
       }

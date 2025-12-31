@@ -18,10 +18,10 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const terraformDir = join(repoRoot, 'terraform');
 
 const SECRET_PATTERNS = [
-  { regex: /["\']AIza[A-Za-z0-9_-]{35,}["\']/g, name: 'Google API Key' },
-  { regex: /["\']sk-[A-Za-z0-9]{20,}["\']/g, name: 'OpenAI API Key' },
-  { regex: /["\']xoxb-[A-Za-z0-9-]{10,}["\']/g, name: 'Slack Token' },
-  { regex: /["\']AKIA[A-Z0-9]{16}["\']/g, name: 'AWS Access Key' },
+  { regex: /["']AIza[A-Za-z0-9_-]{35,}["']/g, name: 'Google API Key' },
+  { regex: /["']sk-[A-Za-z0-9]{20,}["']/g, name: 'OpenAI API Key' },
+  { regex: /["']xoxb-[A-Za-z0-9-]{10,}["']/g, name: 'Slack Token' },
+  { regex: /["']AKIA[A-Z0-9]{16}["']/g, name: 'AWS Access Key' },
   {
     regex: /(password|secret|token|key)\s*=\s*["'][A-Za-z0-9+/=]{32,}["']/gi,
     name: 'Potential Secret',

@@ -9,6 +9,7 @@ Real-time web dashboard for monitoring Pub/Sub events during local development.
 - 🔍 **Expandable JSON** - Click any event to see full message payload
 - 🎯 **Topic filtering** - Show/hide events by topic
 - 📊 **Event statistics** - Track total event count in real-time
+- 🔌 **Auto-configured push subscriptions** - Automatically sets up push endpoints to service handlers
 
 ## Quick Start
 
@@ -52,34 +53,47 @@ node scripts/pubsub-publish-test.mjs commands-ingest
 │  :8102          │
 └────────┬────────┘
          │
-         ├─────────────────────┐
-         │                     │
-         ▼                     ▼
-  ┌─────────────┐      ┌──────────────┐
-  │  Services   │      │  Pub/Sub UI  │
-  │  (push/pull)│      │  :8105       │
-  └─────────────┘      └──────┬───────┘
-                              │
-                              ▼
+         ├─────────────────────┬──────────────────────┐
+         │ (push)              │ (pull-monitor)       │
+         ▼                     ▼                      │
+  ┌─────────────┐      ┌──────────────┐              │
+  │  Services   │      │  Pub/Sub UI  │◀─────────────┘
+  │  :8113,8118 │      │  :8105       │
+  │  (POST /    │      └──────┬───────┘
+  │  internal/) │             │ (SSE)
+  └─────────────┘             ▼
                        ┌──────────────┐
                        │   Browser    │
-                       │  (SSE client)│
+                       │  Dashboard   │
                        └──────────────┘
 ```
 
-The UI:
+**The UI performs two functions:**
 
-1. Creates pull subscriptions for all topics
-2. Forwards events to browser via Server-Sent Events
-3. Acknowledges messages after broadcasting
+1. **Monitoring (pull subscriptions):**
+   - Creates pull subscriptions (`*-ui-monitor`) for all topics
+   - Forwards events to browser via Server-Sent Events (SSE)
+   - Displays real-time event stream in dashboard
+
+2. **Worker setup (push subscriptions):**
+   - Auto-creates push subscriptions on startup
+   - Configures Pub/Sub to POST events to service endpoints
+   - Services receive events at `/internal/*/pubsub/*` endpoints
+
+**Push endpoints configured:**
+
+- `whatsapp-send-message` → `POST /internal/whatsapp/pubsub/send-message` (:8113)
+- `whatsapp-media-cleanup` → `POST /internal/whatsapp/pubsub/media-cleanup` (:8113)
+- `actions-research` → `POST /internal/actions/research` (:8118)
 
 ## Environment Variables
 
-| Variable               | Default                | Description              |
-| ---------------------- | ---------------------- | ------------------------ |
-| `PUBSUB_EMULATOR_HOST` | `pubsub-emulator:8102` | Pub/Sub emulator address |
-| `PUBSUB_PROJECT_ID`    | `demo-intexuraos`      | GCP project ID           |
-| `PORT`                 | `8105`                 | UI server port           |
+| Variable               | Default                  | Description                         |
+| ---------------------- | ------------------------ | ----------------------------------- |
+| `PUBSUB_EMULATOR_HOST` | `firebase-emulator:8102` | Pub/Sub emulator address            |
+| `PUBSUB_PROJECT_ID`    | `demo-intexuraos`        | GCP project ID                      |
+| `PORT`                 | `8105`                   | UI server port                      |
+| `INTERNAL_AUTH_TOKEN`  | `local-dev-token`        | Token for push endpoint auth header |
 
 ## Development
 

@@ -63,6 +63,12 @@ export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-sub
 
 # =============================================================================
+# SERVICE-TO-SERVICE AUTHENTICATION
+# =============================================================================
+# Used for internal API calls and Pub/Sub push endpoint authentication
+export INTEXURAOS_INTERNAL_AUTH_TOKEN=local-dev-token
+
+# =============================================================================
 # GCP PROJECT (for local emulators)
 # =============================================================================
 # Required by Google Cloud SDKs (Firestore, Pub/Sub, GCS).

@@ -65,6 +65,43 @@
         }
       }
 
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        border-bottom: 1px solid #334155;
+        padding-bottom: -1px;
+      }
+
+      .tab {
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .tab:hover {
+        color: #e2e8f0;
+      }
+
+      .tab.active {
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
       .controls {
         background: #1e293b;
         padding: 15px 20px;
@@ -246,6 +283,105 @@
         opacity: 0.5;
       }
 
+      .publish-container {
+        background: #1e293b;
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        color: #cbd5e1;
+      }
+
+      .form-group input,
+      .form-group select,
+      .form-group textarea {
+        width: 100%;
+        padding: 10px 12px;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        color: #e2e8f0;
+        font-family: inherit;
+        font-size: 14px;
+      }
+
+      .form-group textarea {
+        font-family: 'Monaco', 'Menlo', monospace;
+        min-height: 300px;
+        resize: vertical;
+      }
+
+      .form-group input:focus,
+      .form-group select:focus,
+      .form-group textarea:focus {
+        outline: none;
+        border-color: #3b82f6;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: #3b82f6;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+
+      .btn-secondary {
+        background: #334155;
+        color: #e2e8f0;
+      }
+
+      .btn-secondary:hover {
+        background: #475569;
+      }
+
+      .publish-result {
+        margin-top: 15px;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        display: none;
+      }
+
+      .publish-result.success {
+        background: #10b98133;
+        border: 1px solid #10b981;
+        color: #10b981;
+        display: block;
+      }
+
+      .publish-result.error {
+        background: #ef444433;
+        border: 1px solid #ef4444;
+        color: #ef4444;
+        display: block;
+      }
+
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -274,29 +410,110 @@
           <span>•</span>
           <span id="event-count">0 events</span>
         </div>
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('monitor')">Monitor</button>
+          <button class="tab" onclick="switchTab('publish')">Publish</button>
+        </div>
       </header>
 
-      <div class="controls">
-        <div class="filter-group" id="topic-filters"></div>
-        <button class="clear-btn" onclick="clearEvents()">Clear Events</button>
+      <div id="monitor-tab" class="tab-content active">
+        <div class="controls">
+          <div class="filter-group" id="topic-filters"></div>
+          <button class="clear-btn" onclick="clearEvents()">Clear Events</button>
+        </div>
+
+        <div class="events-container" id="events">
+          <div class="empty-state">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+              />
+            </svg>
+            <div>Waiting for events...</div>
+          </div>
+        </div>
       </div>
 
-      <div class="events-container" id="events">
-        <div class="empty-state">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-            />
-          </svg>
-          <div>Waiting for events...</div>
+      <div id="publish-tab" class="tab-content">
+        <div class="publish-container">
+          <div class="form-group">
+            <label for="topic-select">Topic</label>
+            <select id="topic-select" onchange="updateEventTemplate()">
+              <option value="">Select a topic...</option>
+              <option value="whatsapp-send-message">whatsapp-send-message</option>
+              <option value="whatsapp-media-cleanup">whatsapp-media-cleanup</option>
+              <option value="commands-ingest">commands-ingest</option>
+              <option value="actions-research">actions-research</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="user-id">User ID</label>
+            <input type="text" id="user-id" placeholder="user-123" />
+          </div>
+
+          <div class="form-group">
+            <label for="event-data">Event Data (JSON)</label>
+            <textarea id="event-data" placeholder="Event data will appear here..."></textarea>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-secondary" onclick="generateEventData()">Generate</button>
+            <button class="btn btn-primary" onclick="publishEvent()">Send Event</button>
+          </div>
+
+          <div id="publish-result" class="publish-result"></div>
         </div>
       </div>
     </div>
 
     <script>
+      const EVENT_TEMPLATES = {
+        'whatsapp-send-message': {
+          type: 'whatsapp.message.send',
+          userId: '{userId}',
+          phoneNumber: '+48123456789',
+          message: 'Test message from Pub/Sub UI',
+          correlationId: 'ui-{timestamp}',
+          timestamp: '{timestamp}',
+        },
+        'whatsapp-media-cleanup': {
+          type: 'whatsapp.media.cleanup',
+          userId: '{userId}',
+          messageId: 'msg-{timestamp}',
+          gcsPaths: [
+            'whatsapp/{userId}/msg-{timestamp}/file.jpg',
+            'whatsapp/{userId}/msg-{timestamp}/file_thumb.jpg',
+          ],
+          timestamp: '{timestamp}',
+        },
+        'commands-ingest': {
+          type: 'command.ingest',
+          userId: '{userId}',
+          sourceType: 'whatsapp_text',
+          externalId: 'msg-{timestamp}',
+          text: 'Research latest AI developments',
+          timestamp: '{timestamp}',
+        },
+        'actions-research': {
+          type: 'action.created',
+          actionId: 'action-{timestamp}',
+          userId: '{userId}',
+          commandId: 'cmd-{timestamp}',
+          actionType: 'research',
+          title: 'Research Task',
+          payload: {
+            prompt: 'Research latest AI developments',
+            confidence: 0.95,
+            selectedLlms: ['google', 'anthropic'],
+          },
+          timestamp: '{timestamp}',
+        },
+      };
+
       let eventCount = 0;
       let activeFilters = new Set();
       const topics = [];
@@ -325,6 +542,14 @@
           addEvent(message.event);
         }
       };
+
+      function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+
+        event.target.classList.add('active');
+        document.getElementById(`${tab}-tab`).classList.add('active');
+      }
 
       function addTopicFilter(topic) {
         const container = document.getElementById('topic-filters');
@@ -415,6 +640,109 @@
         eventCount = 0;
         document.getElementById('event-count').textContent = '0 events';
       }
+
+      function loadUserId() {
+        const saved = localStorage.getItem('pubsub-userId');
+        if (saved) {
+          document.getElementById('user-id').value = saved;
+        }
+      }
+
+      function saveUserId() {
+        const userId = document.getElementById('user-id').value;
+        if (userId) {
+          localStorage.setItem('pubsub-userId', userId);
+        }
+      }
+
+      function updateEventTemplate() {
+        const topic = document.getElementById('topic-select').value;
+        if (!topic) {
+          document.getElementById('event-data').value = '';
+          return;
+        }
+
+        generateEventData();
+      }
+
+      function generateEventData() {
+        const topic = document.getElementById('topic-select').value;
+        if (!topic) {
+          showResult('error', 'Please select a topic first');
+          return;
+        }
+
+        const userId = document.getElementById('user-id').value || 'user-123';
+        saveUserId();
+
+        const template = EVENT_TEMPLATES[topic];
+        const timestamp = Date.now();
+
+        const data = JSON.parse(
+          JSON.stringify(template)
+            .replace(/{userId}/g, userId)
+            .replace(/{timestamp}/g, String(timestamp))
+        );
+
+        document.getElementById('event-data').value = JSON.stringify(data, null, 2);
+        hideResult();
+      }
+
+      async function publishEvent() {
+        const topic = document.getElementById('topic-select').value;
+        const dataText = document.getElementById('event-data').value;
+
+        if (!topic) {
+          showResult('error', 'Please select a topic');
+          return;
+        }
+
+        if (!dataText) {
+          showResult('error', 'Please generate or enter event data');
+          return;
+        }
+
+        let data;
+        try {
+          data = JSON.parse(dataText);
+        } catch (err) {
+          showResult('error', 'Invalid JSON: ' + err.message);
+          return;
+        }
+
+        saveUserId();
+
+        try {
+          const response = await fetch('/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, data }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            showResult('success', `✓ Published to ${topic} (Message ID: ${result.messageId})`);
+          } else {
+            showResult('error', `✗ Failed: ${result.error}`);
+          }
+        } catch (err) {
+          showResult('error', `✗ Network error: ${err.message}`);
+        }
+      }
+
+      function showResult(type, message) {
+        const el = document.getElementById('publish-result');
+        el.className = `publish-result ${type}`;
+        el.textContent = message;
+      }
+
+      function hideResult() {
+        const el = document.getElementById('publish-result');
+        el.className = 'publish-result';
+      }
+
+      loadUserId();
     </script>
   </body>
 </html>

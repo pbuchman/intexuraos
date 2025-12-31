@@ -25,14 +25,14 @@ function parseConfig() {
   const content = readFileSync(configPath, 'utf8');
 
   // Extract thresholds
-  const thresholdsMatch = content.match(/thresholds:\s*\{([^}]+)\}/s);
+  const thresholdsMatch = content.match(/thresholds:\s*\{([^}]+)}/s);
   if (!thresholdsMatch) {
     throw new Error('Cannot parse coverage thresholds');
   }
 
   const thresholds = {};
   const thresholdContent = thresholdsMatch[1];
-  for (const [key, value] of Object.entries(REQUIRED_THRESHOLDS)) {
+  for (const key of Object.keys(REQUIRED_THRESHOLDS)) {
     const match = thresholdContent.match(new RegExp(`${key}:\\s*(\\d+)`));
     if (match) {
       thresholds[key] = parseInt(match[1], 10);
@@ -40,7 +40,7 @@ function parseConfig() {
   }
 
   // Count exclusions (non-comment lines in exclude array)
-  const excludeMatch = content.match(/exclude:\s*\[([\s\S]*?)\]/);
+  const excludeMatch = content.match(/exclude:\s*\[([\s\S]*?)]/);
   if (!excludeMatch) {
     throw new Error('Cannot parse coverage exclusions');
   }

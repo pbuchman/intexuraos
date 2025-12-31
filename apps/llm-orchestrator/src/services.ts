@@ -94,7 +94,7 @@ export function initializeServices(): void {
   // Create user service client for fetching API keys and phone numbers
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['USER_SERVICE_URL'] ?? 'http://localhost:8081',
-    internalAuthToken: process.env['INTERNAL_AUTH_TOKEN'] ?? '',
+    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
   });
 
   const notificationSender = createNotificationSender(userServiceClient);

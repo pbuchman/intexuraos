@@ -131,6 +131,98 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 
 **Full documentation:** [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
 
+### Pub/Sub Push Endpoints
+
+**Pattern:** `/internal/{service-prefix}/pubsub/{resource}`
+
+**MANDATORY Logging Requirements:**
+
+All Pub/Sub push endpoint handlers MUST log at these points:
+
+1. **Auth Failures (401):**
+
+   ```typescript
+   const authResult = validateInternalAuth(request);
+   if (!authResult.valid) {
+     request.log.warn(
+       {
+         reason: authResult.reason,
+         headers: {
+           'x-internal-auth': request.headers['x-internal-auth'] ? '[REDACTED]' : '[MISSING]',
+         },
+       },
+       'Pub/Sub auth failed'
+     );
+     // ... return 401
+   }
+   ```
+
+2. **Message Format Errors (400):**
+
+   ```typescript
+   request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
+   ```
+
+3. **Event Type Validation (400):**
+
+   ```typescript
+   request.log.warn(
+     {
+       type: parsedType,
+       messageId: body.message.messageId,
+       // Include entity IDs (userId, actionId, commandId, etc.)
+     },
+     'Unexpected event type'
+   );
+   ```
+
+4. **Entry Point (Before Processing):**
+
+   ```typescript
+   request.log.info(
+     {
+       messageId: body.message.messageId,
+       userId: eventData.userId,
+       // Include relevant entity IDs and context
+     },
+     'Processing {event-name} event'
+   );
+   ```
+
+5. **Processing Errors (500):**
+
+   ```typescript
+   request.log.error(
+     {
+       error: result.error.message,
+       messageId: body.message.messageId,
+       // Include full context for debugging
+     },
+     'Failed to process event'
+   );
+   ```
+
+6. **Success (200):**
+
+   ```typescript
+   request.log.info(
+     {
+       messageId: body.message.messageId,
+       // Include result IDs and summary
+     },
+     'Successfully processed event'
+   );
+   ```
+
+**Rule:** Every rejected message (auth, validation, processing failure) MUST be logged with:
+
+- Message ID
+- Rejection reason
+- Relevant entity IDs for correlation
+- NO secrets/tokens in logs (use [REDACTED])
+
+**Verification:** `npm run ci` includes log coverage checks via tests.
+
 ### Pub/Sub Subscriptions (Cloud Run)
 
 **RULE: Never use pull subscriptions. All Pub/Sub consumers MUST use HTTP push.**

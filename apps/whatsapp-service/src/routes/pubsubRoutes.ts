@@ -84,7 +84,19 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          {
+            reason: authResult.reason,
+            headers: {
+              'x-internal-auth':
+                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+              'content-type': request.headers['content-type'],
+            },
+          },
+          'Pub/Sub auth failed for send-message endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
@@ -208,7 +220,19 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          {
+            reason: authResult.reason,
+            headers: {
+              'x-internal-auth':
+                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+              'content-type': request.headers['content-type'],
+            },
+          },
+          'Pub/Sub auth failed for media-cleanup endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }

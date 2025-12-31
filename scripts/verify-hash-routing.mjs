@@ -27,7 +27,7 @@ if (!existsSync(appTsxPath)) {
 const content = readFileSync(appTsxPath, 'utf8');
 
 const hasHashRouterImport =
-  /import\s*\{[^}]*HashRouter[^}]*\}\s*from\s*['"]react-router-dom['"]/.test(content);
+  /import\s*\{[^}]*HashRouter[^}]*}\s*from\s*['"]react-router-dom['"]/.test(content);
 const hasHashRouterUsage = /<HashRouter[\s>]/.test(content);
 const hasBrowserRouter = /BrowserRouter/.test(content);
 

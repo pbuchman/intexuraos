@@ -53,7 +53,7 @@ services:
       - PUBSUB_EMULATOR_HOST=firebase-emulator:8102
       - PUBSUB_PROJECT_ID=demo-intexuraos
       - PORT=8105
-      - INTERNAL_AUTH_TOKEN=local-dev-token
+      - INTEXURAOS_INTERNAL_AUTH_TOKEN=local-dev-token
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:

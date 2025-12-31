@@ -77,7 +77,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          {
+            reason: authResult.reason,
+            headers: {
+              'x-internal-auth':
+                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+            },
+          },
+          'Pub/Sub auth failed for router/commands endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
@@ -94,6 +105,32 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Invalid message format' };
       }
 
+      const parsedType = eventData.type as string;
+      if (parsedType !== 'command.ingest') {
+        request.log.warn(
+          {
+            type: parsedType,
+            externalId: eventData.externalId,
+            userId: eventData.userId,
+            messageId: body.message.messageId,
+          },
+          'Unexpected event type for commands endpoint'
+        );
+        reply.status(400);
+        return { error: 'Invalid event type' };
+      }
+
+      request.log.info(
+        {
+          userId: eventData.userId,
+          externalId: eventData.externalId,
+          sourceType: eventData.sourceType,
+          messageId: body.message.messageId,
+          textPreview: eventData.text.substring(0, 50),
+        },
+        'Processing command ingest event'
+      );
+
       const { processCommandUseCase } = getServices();
 
       const result = await processCommandUseCase.execute({
@@ -104,7 +141,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         timestamp: eventData.timestamp,
       });
 
-      request.log.info({ commandId: result.command.id, isNew: result.isNew }, 'Command processed');
+      request.log.info(
+        {
+          commandId: result.command.id,
+          isNew: result.isNew,
+          userId: eventData.userId,
+          externalId: eventData.externalId,
+          status: result.command.status,
+        },
+        'Command processed successfully'
+      );
 
       return {
         success: true,

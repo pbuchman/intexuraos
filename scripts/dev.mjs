@@ -42,6 +42,10 @@ const SERVICES = [
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
 
+const DOCKER_LOG_SERVICES = [
+  { name: 'pubsub-ui', container: 'docker-pubsub-ui-1', color: '\x1b[90m' },
+];
+
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
 const BOLD = '\x1b[1m';
@@ -291,7 +295,46 @@ function startWebApp() {
   return child;
 }
 
+function followDockerLogs(service) {
+  const child = spawn('docker', ['logs', '-f', service.container], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const prefix = `[${service.name}]`.padEnd(30);
+
+  const processLine = (stream) => {
+    const rl = createInterface({ input: stream });
+    rl.on('line', (line) => {
+      log(prefix, line, service.color);
+    });
+  };
+
+  processLine(child.stdout);
+  processLine(child.stderr);
+
+  child.on('error', (error) => {
+    log(prefix, `Error: ${error.message}`, '\x1b[31m');
+  });
+
+  child.on('exit', (code, signal) => {
+    if (!shuttingDown) {
+      log(prefix, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
+    }
+    processes.delete(`docker-${service.name}`);
+  });
+
+  processes.set(`docker-${service.name}`, child);
+  log(prefix, 'Following docker logs...', service.color);
+
+  return child;
+}
+
 async function startAllServices() {
+  logOrchestrator('Following docker container logs...');
+  for (const dockerService of DOCKER_LOG_SERVICES) {
+    followDockerLogs(dockerService);
+  }
+
   logOrchestrator('Starting services...');
 
   for (const service of SERVICES) {
@@ -308,6 +351,7 @@ async function startAllServices() {
   console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
   console.log(`  API Docs:         ${BOLD}http://localhost:8115${RESET}`);
   console.log(`  Firebase UI:      http://localhost:8100`);
+  console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
   logOrchestrator('');
   logOrchestrator('Press Ctrl+C to stop all services');
 }

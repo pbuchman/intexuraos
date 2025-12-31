@@ -197,6 +197,10 @@ export default tseslint.config(
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
         },
       ],
@@ -256,6 +260,10 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
@@ -388,6 +396,10 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
