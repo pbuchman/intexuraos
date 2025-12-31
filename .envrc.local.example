@@ -42,6 +42,7 @@ export INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
 export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
 export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
 export INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL=http://localhost:8116
+export INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=http://localhost:8117
 
 # =============================================================================
 # GCS BUCKETS (for local fake-gcs-server)

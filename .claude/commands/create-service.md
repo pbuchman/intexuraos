@@ -97,14 +97,13 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY apps/<service-name>/package*.json ./apps/<service-name>/
-
-# Install production dependencies only
-RUN npm ci --omit=dev -w @intexuraos/<service-name>
+# Copy generated production package.json and install deps
+COPY --from=builder /app/apps/<service-name>/dist/package.json ./
+RUN npm install --omit=dev
 
 # Copy built file
-COPY --from=builder /app/apps/<service-name>/dist ./apps/<service-name>/dist
+COPY --from=builder /app/apps/<service-name>/dist/index.js ./dist/
+COPY --from=builder /app/apps/<service-name>/dist/index.js.map ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -114,8 +113,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["node", "apps/<service-name>/dist/index.js"]
+CMD ["node", "dist/index.js"]
 ```
+
+Note: The build script auto-generates `dist/package.json` with all transitive npm dependencies.
 
 ### 4. Create src/index.ts
 
@@ -306,7 +307,31 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
 
 Note: Get the actual Cloud Run URL after first deployment.
 
-### 10. Add to Root tsconfig.json
+### 10. Create Service URL Secret (Post-Deployment)
+
+After first deployment, create a secret for the service URL so other services can call it:
+
+```bash
+# Get the Cloud Run URL (no trailing slash!)
+SERVICE_URL=$(gcloud run services describe intexuraos-<service-name> \
+  --region=europe-central2 \
+  --format='value(status.url)')
+
+# Create the secret
+echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
+
+# Or update existing secret
+echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
+```
+
+Also add to `.envrc.local.example` for local development:
+
+```bash
+# <Service Name> Service
+export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
+```
+
+### 11. Add to Root tsconfig.json
 
 Edit `tsconfig.json`:
 
@@ -319,7 +344,7 @@ Edit `tsconfig.json`:
 }
 ```
 
-### 11. Add to Local Dev Setup
+### 12. Add to Local Dev Setup
 
 Edit `scripts/dev.mjs` — add service to SERVICES array:
 
@@ -339,7 +364,7 @@ If service needs additional env vars, add them to `.envrc.local.example`:
 export INTEXURAOS_<SERVICE>_SOME_VAR=local-value
 ```
 
-### 12. Run Verification
+### 13. Run Verification
 
 ```bash
 npm install
@@ -359,6 +384,8 @@ cd terraform && terraform fmt -recursive && terraform validate
 - [ ] Service account in IAM module
 - [ ] CloudBuild trigger configured
 - [ ] Registered in api-docs-hub
+- [ ] Service URL secret created (post-deployment)
+- [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
 - [ ] `npm run ci` passes
