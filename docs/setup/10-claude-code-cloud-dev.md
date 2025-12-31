@@ -92,7 +92,7 @@ Claude Code will:
 After Claude Code configures the credentials, verify the setup:
 
 ```bash
-./verify-connections.sh
+./scripts/verify-connections.sh
 ```
 
 Expected output:
@@ -199,8 +199,9 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 intexuraos/
 ├── .env.local                          # Environment variables (gitignored)
 ├── gcp-service-account.json           # Service account key (gitignored)
-├── verify-connections.sh              # Connection verification script
 ├── .gitignore                         # Updated with GCP credential patterns
+├── scripts/
+│   └── verify-connections.sh          # Connection verification script
 └── docs/
     └── setup/
         └── 10-claude-code-cloud-dev.md  # This file
@@ -214,7 +215,7 @@ After completing this setup:
 2. ✅ Key file downloaded and configured
 3. ✅ Environment variables set in `.env.local`
 4. ✅ Files properly gitignored
-5. 🔄 Run `./verify-connections.sh` to confirm
+5. 🔄 Run `./scripts/verify-connections.sh` to confirm
 6. 🔄 Test a service locally with Firestore access
 7. 🔄 Verify Secret Manager access
 
