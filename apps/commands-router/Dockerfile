@@ -28,15 +28,13 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY apps/commands-router/package*.json ./apps/commands-router/
-COPY packages/*/package*.json ./packages/
-
-# Install production dependencies only
-RUN npm ci --omit=dev -w @intexuraos/commands-router
+# Copy generated production package.json and install deps
+COPY --from=builder /app/apps/commands-router/dist/package.json ./
+RUN npm install --omit=dev
 
 # Copy built file
-COPY --from=builder /app/apps/commands-router/dist ./apps/commands-router/dist
+COPY --from=builder /app/apps/commands-router/dist/index.js ./dist/
+COPY --from=builder /app/apps/commands-router/dist/index.js.map ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -46,4 +44,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["node", "apps/commands-router/dist/index.js"]
+CMD ["node", "dist/index.js"]
