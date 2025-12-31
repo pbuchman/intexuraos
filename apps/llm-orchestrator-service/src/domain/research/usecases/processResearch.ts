@@ -18,6 +18,7 @@ export interface ProcessResearchDeps {
   synthesizer: LlmSynthesisProvider;
   titleGenerator?: TitleGenerator;
   notificationSender: NotificationSender;
+  reportLlmSuccess?: (provider: LlmProvider) => void;
 }
 
 interface LlmCallResult {
@@ -45,6 +46,11 @@ export async function processResearch(
   const titleResult = await titleGen.generateTitle(research.prompt);
   if (titleResult.ok) {
     await deps.researchRepo.update(researchId, { title: titleResult.value });
+    // Report success for title generator (Gemini if dedicated titleGenerator, else synthesis provider)
+    if (deps.reportLlmSuccess !== undefined) {
+      const titleProvider = deps.titleGenerator !== undefined ? 'google' : research.synthesisLlm;
+      deps.reportLlmSuccess(titleProvider);
+    }
   }
 
   // Run LLM calls in parallel
@@ -88,6 +94,11 @@ export async function processResearch(
         updateData.sources = result.value.sources;
       }
       await deps.researchRepo.updateLlmResult(researchId, provider, updateData);
+
+      // Report successful research call
+      if (deps.reportLlmSuccess !== undefined) {
+        deps.reportLlmSuccess(provider);
+      }
 
       return {
         provider,
@@ -133,6 +144,10 @@ export async function processResearch(
         synthesizedResult: synthesisResult.value,
         completedAt: new Date().toISOString(),
       });
+      // Report successful synthesis
+      if (deps.reportLlmSuccess !== undefined) {
+        deps.reportLlmSuccess(research.synthesisLlm);
+      }
     }
   } else {
     await deps.researchRepo.update(researchId, {

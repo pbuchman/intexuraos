@@ -105,39 +105,15 @@ resource "google_project_iam_member" "cloud_build_viewer" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
-# -----------------------------------------------------------------------------
-# Webhook Trigger for Development Branch
-# -----------------------------------------------------------------------------
-
-resource "google_cloudbuild_trigger" "webhook_dev" {
-  name        = "intexuraos-${var.environment}-webhook"
-  description = "Webhook-triggered build for ${var.github_branch} branch"
-  location    = var.region
-
-  repository_event_config {
-    repository = google_cloudbuildv2_repository.intexuraos.id
-
-    push {
-      branch = "^${var.github_branch}$"
-    }
-  }
-
-  filename = "cloudbuild/cloudbuild.yaml"
-
-  substitutions = {
-    _REGION                = var.region
-    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
-    _ENVIRONMENT           = var.environment
-    _FORCE_DEPLOY          = "false"
-  }
-
-  service_account = google_service_account.cloud_build.id
-
-  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
+# Cloud Build needs to trigger builds via API (for GitHub Actions integration)
+resource "google_project_iam_member" "cloud_build_builds_editor" {
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 # -----------------------------------------------------------------------------
-# Manual Trigger (Manual invocation only)
+# Manual Trigger (invoked by GitHub Actions after CI passes)
 # -----------------------------------------------------------------------------
 
 resource "google_cloudbuild_trigger" "manual_main" {

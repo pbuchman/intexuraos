@@ -1,33 +1,22 @@
 /**
  * Tests for research routes.
+ * Uses real JWT signing with jose library for proper authentication.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import nock from 'nock';
+import Fastify from 'fastify';
+import * as jose from 'jose';
+import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../services.js';
 import { FakeResearchRepository } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
 
+const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const AUTH_AUDIENCE = 'urn:intexuraos:api';
 const TEST_USER_ID = 'auth0|test-user-123';
 const OTHER_USER_ID = 'auth0|other-user-456';
-const TEST_JWT =
-  'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5In0.' +
-  'eyJpc3MiOiJodHRwczovL3Rlc3QuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfHRlc3QtdXNlci0xMjMiLCJhdWQiOiJ1cm46aW50ZXh1cmFvczphcGkiLCJleHAiOjk5OTk5OTk5OTl9.' +
-  'test-signature';
-
-const mockJwks = {
-  keys: [
-    {
-      kty: 'RSA',
-      kid: 'test-key',
-      use: 'sig',
-      n: 'test-modulus',
-      e: 'AQAB',
-    },
-  ],
-};
 
 function createTestResearch(overrides?: Partial<Research>): Research {
   return {
@@ -54,22 +43,10 @@ describe('Research Routes - Unauthenticated', () => {
   let app: FastifyInstance;
   let fakeRepo: FakeResearchRepository;
 
-  beforeAll(() => {
-    nock.disableNetConnect();
-    nock.enableNetConnect('127.0.0.1');
-  });
-
-  afterAll(() => {
-    nock.enableNetConnect();
-  });
-
   beforeEach(async () => {
     process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
-    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
     fakeRepo = new FakeResearchRepository();
     const services: ServiceContainer = {
@@ -87,7 +64,6 @@ describe('Research Routes - Unauthenticated', () => {
   afterEach(async () => {
     await app.close();
     resetServices();
-    nock.cleanAll();
   });
 
   it('POST /research returns 401 without auth', async () => {
@@ -146,31 +122,67 @@ describe('Research Routes - Unauthenticated', () => {
 
 describe('Research Routes - Authenticated', () => {
   let app: FastifyInstance;
-  let fakeRepo: FakeResearchRepository;
+  let jwksServer: FastifyInstance;
+  let privateKey: jose.KeyLike;
+  let jwksUrl: string;
+  const issuer = `https://${AUTH0_DOMAIN}/`;
 
-  beforeAll(() => {
-    nock.disableNetConnect();
-    nock.enableNetConnect('127.0.0.1');
+  let fakeRepo: FakeResearchRepository;
+  let processResearchCalled: boolean;
+
+  async function createToken(sub: string): Promise<string> {
+    const builder = new jose.SignJWT({ sub })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setIssuer(issuer)
+      .setAudience(AUTH_AUDIENCE)
+      .setExpirationTime('1h');
+
+    return await builder.sign(privateKey);
+  }
+
+  beforeAll(async () => {
+    const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
+    privateKey = privKey;
+
+    const publicKeyJwk = await jose.exportJWK(publicKey);
+    publicKeyJwk.kid = 'test-key-1';
+    publicKeyJwk.alg = 'RS256';
+    publicKeyJwk.use = 'sig';
+
+    jwksServer = Fastify({ logger: false });
+
+    jwksServer.get('/.well-known/jwks.json', async (_req, reply) => {
+      return await reply.send({
+        keys: [publicKeyJwk],
+      });
+    });
+
+    await jwksServer.listen({ port: 0, host: '127.0.0.1' });
+    const address = jwksServer.server.address();
+    if (address !== null && typeof address === 'object') {
+      jwksUrl = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+    }
   });
 
-  afterAll(() => {
-    nock.enableNetConnect();
+  afterAll(async () => {
+    await jwksServer.close();
   });
 
   beforeEach(async () => {
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
-    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['AUTH_JWKS_URL'] = jwksUrl;
+    process.env['AUTH_ISSUER'] = issuer;
+    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+
+    clearJwksCache();
 
     fakeRepo = new FakeResearchRepository();
+    processResearchCalled = false;
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
-        /* noop */
+        processResearchCalled = true;
       },
     };
     setServices(services);
@@ -181,231 +193,294 @@ describe('Research Routes - Authenticated', () => {
   afterEach(async () => {
     await app.close();
     resetServices();
-    nock.cleanAll();
   });
 
-  it('POST /research creates research with valid auth', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+  describe('POST /research', () => {
+    it('creates research with valid auth', async () => {
+      const token = await createToken(TEST_USER_ID);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/research',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-      payload: {
-        prompt: 'Test prompt',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
-      },
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedLlms: ['google'],
+          synthesisLlm: 'google',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('generated-id-123');
+      expect(body.data.userId).toBe(TEST_USER_ID);
+      expect(body.data.prompt).toBe('Test prompt');
+      expect(processResearchCalled).toBe(true);
     });
 
-    // JWT verification may fail in tests, accept either 201 or 401
-    expect([201, 401]).toContain(response.statusCode);
+    it('creates research with external reports', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedLlms: ['google'],
+          synthesisLlm: 'anthropic',
+          externalReports: [{ content: 'External report content', model: 'Custom Model' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.externalReports).toHaveLength(1);
+    });
+
+    it('returns 500 on save failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextSave(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedLlms: ['google'],
+          synthesisLlm: 'google',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
-  it('POST /research returns 500 on save failure', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-    fakeRepo.setFailNextSave(true);
+  describe('GET /research', () => {
+    it('returns empty list when no researches', async () => {
+      const token = await createToken(TEST_USER_ID);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/research',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-      payload: {
-        prompt: 'Test prompt',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
-      },
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { items: Research[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.items).toHaveLength(0);
     });
 
-    // Will return 401 due to JWT verification failing in test, or 500 if save fails
-    expect([500, 401]).toContain(response.statusCode);
+    it('returns user researches', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      fakeRepo.addResearch(createTestResearch({ id: 'research-1' }));
+      fakeRepo.addResearch(createTestResearch({ id: 'research-2' }));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { items: Research[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.items).toHaveLength(2);
+    });
+
+    it('supports limit and cursor params', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      fakeRepo.addResearch(createTestResearch({ id: 'research-1' }));
+      fakeRepo.addResearch(createTestResearch({ id: 'research-2' }));
+      fakeRepo.addResearch(createTestResearch({ id: 'research-3' }));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research?limit=2&cursor=abc',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns 500 on repo failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
-  it('GET /research returns empty list when no researches', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+  describe('GET /research/:id', () => {
+    it('returns research when found', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch();
+      fakeRepo.addResearch(research);
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/research',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
+      const response = await app.inject({
+        method: 'GET',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe(research.id);
     });
 
-    // JWT verification may fail in tests
-    expect([200, 401]).toContain(response.statusCode);
+    it('returns 404 when not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research/nonexistent-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for other users research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 500 on repo failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research/test-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
-  it('GET /research returns user researches', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+  describe('DELETE /research/:id', () => {
+    it('deletes research when owned by user', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch();
+      fakeRepo.addResearch(research);
 
-    fakeRepo.addResearch(createTestResearch({ id: 'research-1' }));
-    fakeRepo.addResearch(createTestResearch({ id: 'research-2' }));
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/research',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: null };
+      expect(body.success).toBe(true);
+      expect(fakeRepo.getAll()).toHaveLength(0);
     });
 
-    // JWT verification may fail in tests
-    expect([200, 401]).toContain(response.statusCode);
-  });
+    it('returns 404 when not found', async () => {
+      const token = await createToken(TEST_USER_ID);
 
-  it('GET /research returns 500 on repo failure', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-    fakeRepo.setFailNextFind(true);
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/research/nonexistent-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/research',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
 
-    // Will return 401 due to JWT verification failing in test, or 500 if find fails
-    expect([500, 401]).toContain(response.statusCode);
-  });
+    it('returns 403 for other users research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
 
-  it('GET /research/:id returns research when found', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
 
-    const research = createTestResearch();
-    fakeRepo.addResearch(research);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: `/research/${research.id}`,
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    // JWT verification may fail in tests
-    expect([200, 401]).toContain(response.statusCode);
-  });
+    it('returns 500 on delete failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch();
+      fakeRepo.addResearch(research);
+      fakeRepo.setFailNextDelete(true);
 
-  it('GET /research/:id returns 404 when not found', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
 
-    const response = await app.inject({
-      method: 'GET',
-      url: '/research/nonexistent-id',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
-
-    // JWT verification may fail in tests, or 404 if not found
-    expect([404, 401]).toContain(response.statusCode);
-  });
-
-  it('GET /research/:id returns 403 for other users research', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const research = createTestResearch({ userId: OTHER_USER_ID });
-    fakeRepo.addResearch(research);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: `/research/${research.id}`,
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // JWT verification may fail in tests, or 403 if forbidden
-    expect([403, 401]).toContain(response.statusCode);
-  });
-
-  it('GET /research/:id returns 500 on repo failure', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-    fakeRepo.setFailNextFind(true);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/research/test-id',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // Will return 401 due to JWT verification failing in test, or 500 if find fails
-    expect([500, 401]).toContain(response.statusCode);
-  });
-
-  it('DELETE /research/:id deletes research when owned by user', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const research = createTestResearch();
-    fakeRepo.addResearch(research);
-
-    const response = await app.inject({
-      method: 'DELETE',
-      url: `/research/${research.id}`,
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // JWT verification may fail in tests
-    expect([200, 401]).toContain(response.statusCode);
-  });
-
-  it('DELETE /research/:id returns 404 when not found', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const response = await app.inject({
-      method: 'DELETE',
-      url: '/research/nonexistent-id',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // JWT verification may fail in tests, or 404 if not found
-    expect([404, 401]).toContain(response.statusCode);
-  });
-
-  it('DELETE /research/:id returns 403 for other users research', async () => {
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const research = createTestResearch({ userId: OTHER_USER_ID });
-    fakeRepo.addResearch(research);
-
-    const response = await app.inject({
-      method: 'DELETE',
-      url: `/research/${research.id}`,
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // JWT verification may fail in tests, or 403 if forbidden
-    expect([403, 401]).toContain(response.statusCode);
   });
 });
 
 describe('System Endpoints', () => {
   let app: FastifyInstance;
-  let fakeRepo: FakeResearchRepository;
 
   beforeEach(async () => {
     process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
-    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
-    fakeRepo = new FakeResearchRepository();
+    const fakeRepo = new FakeResearchRepository();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',

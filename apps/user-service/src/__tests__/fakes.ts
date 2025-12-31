@@ -350,6 +350,33 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     return Promise.resolve(ok(undefined));
   }
 
+  updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>> {
+    let existing = this.settings.get(userId);
+    const now = new Date().toISOString();
+
+    if (existing === undefined) {
+      existing = {
+        userId,
+        notifications: { filters: [] },
+        llmTestResults: { [provider]: { response: '', testedAt: now } },
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      const llmTestResults = existing.llmTestResults ?? {};
+      const existingResult = llmTestResults[provider];
+      llmTestResults[provider] = {
+        response: existingResult?.response ?? '',
+        testedAt: now,
+      };
+      existing.llmTestResults = llmTestResults;
+      existing.updatedAt = now;
+    }
+
+    this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
   /**
    * Clear all settings (for test cleanup).
    */

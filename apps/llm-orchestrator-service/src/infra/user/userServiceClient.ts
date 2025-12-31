@@ -32,11 +32,17 @@ export interface UserServiceError {
 }
 
 /**
+ * LLM provider type.
+ */
+export type LlmProvider = 'google' | 'openai' | 'anthropic';
+
+/**
  * Client interface for user-service internal API.
  */
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>>;
+  reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
 }
 
 /**
@@ -105,6 +111,19 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       } catch {
         // Network error returns null (best effort)
         return ok(null);
+      }
+    },
+
+    async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
+      try {
+        await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys/${provider}/last-used`, {
+          method: 'POST',
+          headers: {
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+        });
+      } catch {
+        /* Best effort - don't block on failure */
       }
     },
   };

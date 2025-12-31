@@ -46,4 +46,10 @@ export interface UserSettingsRepository {
     provider: LlmProvider,
     testResult: LlmTestResult
   ): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Update just the testedAt timestamp for an LLM provider.
+   * Used when any successful API call is made, preserving the existing response.
+   */
+  updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>>;
 }

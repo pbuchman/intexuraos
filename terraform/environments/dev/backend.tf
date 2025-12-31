@@ -1,7 +1,6 @@
 terraform {
   backend "gcs" {
-    # Bucket name is set via -backend-config or terraform init
-    # bucket = "intexuraos-terraform-state-dev"
+    bucket = "intexuraos-dev-pbuchman-terraform-state"
     prefix = "terraform/state"
   }
 }
