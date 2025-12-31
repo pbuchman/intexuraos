@@ -422,6 +422,26 @@ export default tseslint.config(
               message:
                 'Routes must not import from infra/whatsapp directly. Access WhatsApp client via getServices() for proper DI.',
             },
+            {
+              group: [
+                '../infra/llm/*',
+                '../infra/llm/**',
+                '../../infra/llm/*',
+                '../../infra/llm/**',
+              ],
+              message:
+                'Routes must not import from infra/llm directly. Access LLM adapters via getServices() for proper DI.',
+            },
+            {
+              group: [
+                '../infra/notion/*',
+                '../infra/notion/**',
+                '../../infra/notion/*',
+                '../../infra/notion/**',
+              ],
+              message:
+                'Routes must not import from infra/notion directly. Access Notion client via getServices() for proper DI.',
+            },
           ],
         },
       ],
@@ -487,6 +507,16 @@ export default tseslint.config(
                 'Infra adapters should receive WhatsApp client via function parameters, not import directly from other infra folders. Use dependency injection.',
             },
             {
+              group: ['../llm/*', '../llm/**', '../../llm/*', '../../llm/**'],
+              message:
+                'Infra adapters should receive LLM clients via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
+              group: ['../notion/*', '../notion/**', '../../notion/*', '../../notion/**'],
+              message:
+                'Infra adapters should receive Notion client via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
               group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
               message:
                 'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
@@ -509,6 +539,10 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],

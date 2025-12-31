@@ -379,6 +379,42 @@ Repositories should call `getFirestore()` within methods, not accept Firestore a
 - Use `INTEXURAOS_*` prefix for environment variables
 - Access via env vars or Secret Manager
 
+### Environment Variable Validation (MANDATORY)
+
+**FAIL FAST:** Every service MUST validate required environment variables at startup and crash immediately if any are missing.
+
+**Rule:** Validate in service entry point (before starting HTTP server):
+
+```typescript
+function validateRequiredEnv(vars: string[]): void {
+  const missing = vars.filter((v) => process.env[v] === undefined || process.env[v] === '');
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}\n` +
+        `Ensure these are set in Terraform env_vars or .envrc.local for local development.`
+    );
+  }
+}
+
+// In index.ts (BEFORE starting server)
+validateRequiredEnv([
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'AUTH_JWKS_URL',
+  'AUTH_ISSUER',
+  'AUTH_AUDIENCE',
+  // ... all required vars
+]);
+```
+
+**Why:** Missing environment variables must cause immediate startup failure, not runtime errors after deployment. This prevents:
+
+- Services running in degraded state
+- Silent failures in production
+- Runtime crashes during request handling
+- Debugging environment issues post-deployment
+
+**Deployment:** Services must be created via Terraform FIRST (with all env vars configured) before Cloud Build can deploy updates.
+
 ### New Service Checklist
 
 1. Copy structure from existing service (domain/, infra/, routes/)
@@ -395,6 +431,10 @@ Repositories should call `getFirestore()` within methods, not accept Firestore a
 9. Add to ESLint `no-restricted-imports` patterns in `eslint.config.js`
 10. Run `npm run ci`
 11. Run `tf fmt -check -recursive && tf validate`
+12. **CRITICAL:** Run `terraform apply` in `terraform/environments/dev/` to create service with env vars BEFORE pushing code
+13. Add Cloud Build deployment script in `cloudbuild/scripts/deploy-<service>.sh`
+    - Script must check if service exists before deploying (fail if not)
+    - Only updates image, does NOT modify env vars/secrets (managed by Terraform)
 
 ---
 
