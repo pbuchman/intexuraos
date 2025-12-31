@@ -1,16 +1,17 @@
 /**
  * Tests for ExtractLinkPreviewsUseCase.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  ExtractLinkPreviewsUseCase,
   type ExtractLinkPreviewsLogger,
-  type WhatsAppMessage,
+  ExtractLinkPreviewsUseCase,
   type LinkPreview,
   type LinkPreviewError,
+  type WhatsAppMessage,
 } from '../../domain/inbox/index.js';
 import type { Result } from '@intexuraos/common-core';
-import { FakeWhatsAppMessageRepository, FakeLinkPreviewFetcherPort } from '../fakes.js';
+import { FakeLinkPreviewFetcherPort, FakeWhatsAppMessageRepository } from '../fakes.js';
+
 class MockLogger implements ExtractLinkPreviewsLogger {
   infoLogs: { data: Record<string, unknown>; message: string }[] = [];
   errorLogs: { data: Record<string, unknown>; message: string }[] = [];

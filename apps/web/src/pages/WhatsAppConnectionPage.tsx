@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback, type FormEvent } from 'react';
-import { Layout, Button, Card } from '@/components';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { Button, Card, Layout } from '@/components';
 import { PhoneInput } from '@/components/ui';
 import { useAuth } from '@/context';
-import { getWhatsAppStatus, connectWhatsApp, disconnectWhatsApp, ApiError } from '@/services';
+import { ApiError, connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus } from '@/services';
 import type { WhatsAppStatus } from '@/types';
 import { Plus, X } from 'lucide-react';
 

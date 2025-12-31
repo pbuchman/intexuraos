@@ -6,7 +6,7 @@
  * GET /auth/me     - Get current authenticated user info
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, tryAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { loadAuth0Config } from './shared.js';

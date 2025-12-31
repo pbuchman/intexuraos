@@ -10,7 +10,7 @@
  * - Failed messages go to DLQ after max_delivery_attempts (configured in Terraform)
  * - Idempotent: treats "file not found" as success (may have been deleted already)
  */
-import { PubSub, type Message } from '@google-cloud/pubsub';
+import { type Message, PubSub } from '@google-cloud/pubsub';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { MediaCleanupEvent, MediaStoragePort } from '../domain/inbox/index.js';
 

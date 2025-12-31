@@ -8,11 +8,11 @@
  * are completed (see docs/continuity/1-3-promptvault-usecases.md).
  */
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import type {
   NotionServiceClient,
-  NotionTokenContext,
   NotionServiceError,
+  NotionTokenContext,
 } from '../infra/notion/notionServiceClient.js';
 
 export interface NotionConnectionPublic {

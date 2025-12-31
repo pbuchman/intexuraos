@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { MobileNotificationsResponse, MobileNotificationsConnectResponse } from '@/types';
+import type { MobileNotificationsConnectResponse, MobileNotificationsResponse } from '@/types';
 
 /**
  * Generate a new signature for mobile notifications.

@@ -3,7 +3,7 @@
  * Implemented by infra layer (Firestore).
  */
 import type { Result } from '@intexuraos/common-core';
-import type { Notification, CreateNotificationInput } from '../models/index.js';
+import type { CreateNotificationInput, Notification } from '../models/index.js';
 
 /**
  * Repository error type.

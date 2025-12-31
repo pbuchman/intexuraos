@@ -3,8 +3,8 @@
  * These interfaces define what the domain needs from infrastructure.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxNote, InboxAction, InboxError } from '../models/InboxNote.js';
-import type { WhatsAppMessage, TranscriptionState } from '../models/WhatsAppMessage.js';
+import type { InboxAction, InboxError, InboxNote } from '../models/InboxNote.js';
+import type { TranscriptionState, WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type { LinkPreviewState } from '../models/LinkPreview.js';
 
 // Re-export InboxError for use in other ports

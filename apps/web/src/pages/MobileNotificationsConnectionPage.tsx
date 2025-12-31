@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Layout, Button, Card } from '@/components';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { connectMobileNotifications, getMobileNotificationsStatus, ApiError } from '@/services';
-import { Copy, Check, RefreshCw, Smartphone, Bell, ExternalLink } from 'lucide-react';
+import { ApiError, connectMobileNotifications, getMobileNotificationsStatus } from '@/services';
+import { Bell, Check, Copy, ExternalLink, RefreshCw, Smartphone } from 'lucide-react';
 
 export function MobileNotificationsConnectionPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();

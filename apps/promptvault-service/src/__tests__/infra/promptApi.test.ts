@@ -2,13 +2,19 @@
  * Tests for promptApi.ts
  * Tests the Notion API infrastructure layer for PromptVault operations.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
   NotionServiceClient,
-  NotionTokenContext,
   NotionServiceError,
+  NotionTokenContext,
 } from '../../infra/notion/notionServiceClient.js';
+import {
+  createPrompt,
+  getPrompt,
+  listPrompts,
+  updatePrompt,
+} from '../../infra/notion/promptApi.js';
 
 const mockPagesCreate = vi.fn();
 const mockPagesRetrieve = vi.fn();
@@ -49,13 +55,6 @@ vi.mock('@notionhq/client', () => {
 vi.mock('../../infra/firestore/promptVaultSettingsRepository.js', () => ({
   getPromptVaultPageId: (...args: unknown[]): unknown => mockGetPromptVaultPageId(...args),
 }));
-
-import {
-  createPrompt,
-  listPrompts,
-  getPrompt,
-  updatePrompt,
-} from '../../infra/notion/promptApi.js';
 
 function createMockNotionServiceClient(
   overrides: Partial<{

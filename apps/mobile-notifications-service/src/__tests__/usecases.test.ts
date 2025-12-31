@@ -1,16 +1,16 @@
 /**
  * Tests for domain usecases.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   createConnection,
-  processNotification,
-  listNotifications,
   deleteNotification,
-  hashSignature,
   getDistinctFilterValues,
+  hashSignature,
+  listNotifications,
+  processNotification,
 } from '../domain/notifications/index.js';
-import { FakeSignatureConnectionRepository, FakeNotificationRepository } from './fakes.js';
+import { FakeNotificationRepository, FakeSignatureConnectionRepository } from './fakes.js';
 
 describe('createConnection', () => {
   let signatureRepo: FakeSignatureConnectionRepository;

@@ -1,7 +1,7 @@
 /**
  * Tests for maskApiKey utility.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { maskApiKey } from '../../domain/settings/utils/maskApiKey.js';
 
 describe('maskApiKey', () => {

@@ -5,9 +5,9 @@
  * Returns default settings if none exist.
  */
 
-import { ok, err, isErr, type Result } from '@intexuraos/common-core';
+import { err, isErr, ok, type Result } from '@intexuraos/common-core';
 import type { UserSettingsRepository } from '../ports/UserSettingsRepository.js';
-import { type UserSettings, createDefaultSettings } from '../models/UserSettings.js';
+import { createDefaultSettings, type UserSettings } from '../models/UserSettings.js';
 
 /**
  * Input for the get user settings use-case.

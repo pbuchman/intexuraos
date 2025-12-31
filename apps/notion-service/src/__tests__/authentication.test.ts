@@ -1,7 +1,7 @@
 /**
  * Tests for JWT authentication across all endpoints.
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('Authentication', () => {
   const ctx = setupTestContext();

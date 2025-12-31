@@ -4,18 +4,18 @@
  * These fakes implement domain port interfaces with in-memory storage.
  */
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import type {
-  SignatureConnectionRepository,
-  SignatureConnection,
-  CreateSignatureConnectionInput,
-  RepositoryError,
-  NotificationRepository,
-  Notification,
   CreateNotificationInput,
-  PaginationOptions,
-  PaginatedNotifications,
+  CreateSignatureConnectionInput,
   DistinctFilterField,
+  Notification,
+  NotificationRepository,
+  PaginatedNotifications,
+  PaginationOptions,
+  RepositoryError,
+  SignatureConnection,
+  SignatureConnectionRepository,
 } from '../domain/notifications/index.js';
 
 /**

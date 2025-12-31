@@ -2,13 +2,13 @@
  * Tests for WhatsApp webhook event Firestore repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import {
+  getWebhookEvent,
   saveWebhookEvent,
   updateWebhookEventStatus,
-  getWebhookEvent,
 } from '../../infra/firestore/index.js';
 
 describe('webhookEventRepository', () => {

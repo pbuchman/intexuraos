@@ -5,10 +5,10 @@
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Result } from '@intexuraos/common-core';
 import type {
-  LlmResearchProvider,
-  LlmSynthesisProvider,
-  LlmResearchResult,
   LlmError,
+  LlmResearchProvider,
+  LlmResearchResult,
+  LlmSynthesisProvider,
 } from '../../domain/research/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {

@@ -1,22 +1,22 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
-import { IOSInstallBanner, AndroidInstallBanner, UpdateBanner } from '@/components/pwa-banners';
+import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
 import {
+  ApiKeysSettingsPage,
   HomePage,
+  LlmOrchestratorPage,
   LoginPage,
-  SystemHealthPage,
-  NotionConnectionPage,
-  WhatsAppConnectionPage,
-  WhatsAppNotesPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
-  ApiKeysSettingsPage,
-  LlmOrchestratorPage,
-  ResearchListPage,
+  NotionConnectionPage,
   ResearchDetailPage,
+  ResearchListPage,
+  SystemHealthPage,
+  WhatsAppConnectionPage,
+  WhatsAppNotesPage,
 } from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {

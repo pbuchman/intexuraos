@@ -4,13 +4,13 @@
  */
 import { createHmac } from 'node:crypto';
 import {
-  describe,
-  it,
-  expect,
-  setupTestContext,
-  testConfig,
   createSignature,
   createWebhookPayload,
+  describe,
+  expect,
+  it,
+  setupTestContext,
+  testConfig,
 } from './testUtils.js';
 
 describe('POST /whatsapp/webhooks (webhook event receiver)', () => {

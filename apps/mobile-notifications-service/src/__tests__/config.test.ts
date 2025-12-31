@@ -1,7 +1,7 @@
 /**
  * Tests for mobile-notifications-service config.ts.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig, validateConfigEnv } from '../config.js';
 
 describe('config', () => {

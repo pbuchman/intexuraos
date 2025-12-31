@@ -1,12 +1,12 @@
 /**
  * Use case for listing user's notifications with pagination.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
   NotificationRepository,
-  RepositoryError,
   PaginatedNotifications,
   PaginationOptions,
+  RepositoryError,
 } from '../ports/index.js';
 
 const DEFAULT_LIMIT = 50;

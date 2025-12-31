@@ -2,7 +2,7 @@
  * Tests for userServiceClient.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient } from '../../../infra/user/userServiceClient.js';
 

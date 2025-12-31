@@ -2,8 +2,8 @@
  * Tests for Firestore AuthToken repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { FirestoreAuthTokenRepository } from '../../infra/firestore/index.js';
 import type { AuthTokens } from '../../domain/identity/index.js';

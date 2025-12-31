@@ -1,7 +1,7 @@
 /**
  * Tests for config validation.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('config validation', () => {
   let savedVerify: string | undefined;

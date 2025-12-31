@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { WhatsAppStatus, WhatsAppConnectResponse, WhatsAppMessagesResponse } from '@/types';
+import type { WhatsAppConnectResponse, WhatsAppMessagesResponse, WhatsAppStatus } from '@/types';
 
 export async function getWhatsAppStatus(accessToken: string): Promise<WhatsAppStatus | null> {
   return await apiRequest<WhatsAppStatus | null>(

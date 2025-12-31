@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setFirestore } from '@intexuraos/infra-firestore';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { isErr, isOk } from '@intexuraos/common-core';
 import { getPromptVaultPageId, savePromptVaultPageId } from '../promptVaultSettingsRepository.js';
 
 interface DocumentSnapshot {

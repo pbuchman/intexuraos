@@ -1,7 +1,7 @@
 /**
  * Tests for notionErrorCode.ts - isNotionErrorCode function.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { isNotionErrorCode, NOTION_ERROR_CODES } from '../../domain/promptvault/index.js';
 
 describe('isNotionErrorCode', () => {

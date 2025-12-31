@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { Card } from './ui/Card.js';
 
 type StatusType = 'connected' | 'disconnected' | 'error' | 'loading';

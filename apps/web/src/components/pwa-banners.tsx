@@ -1,5 +1,5 @@
 import type React from 'react';
-import { X, Share, PlusSquare } from 'lucide-react';
+import { PlusSquare, Share, X } from 'lucide-react';
 import { usePWA } from '@/context/pwa-context';
 
 /**

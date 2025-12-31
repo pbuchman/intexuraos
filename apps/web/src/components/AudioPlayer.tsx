@@ -2,9 +2,9 @@
  * Audio player component for WhatsApp audio messages.
  * Fetches signed URL and displays HTML5 audio player.
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, Loader2, AlertCircle } from 'lucide-react';
-import { getMessageMediaUrl, ApiError } from '@/services';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, Loader2, Pause, Play } from 'lucide-react';
+import { ApiError, getMessageMediaUrl } from '@/services';
 
 interface AudioPlayerProps {
   messageId: string;

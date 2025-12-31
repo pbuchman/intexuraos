@@ -7,7 +7,7 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { oauthTokenRequestSchema, isAuth0Error, type TokenResponse } from './schemas.js';
+import { isAuth0Error, oauthTokenRequestSchema, type TokenResponse } from './schemas.js';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
 import { loadAuth0Config } from './shared.js';
 

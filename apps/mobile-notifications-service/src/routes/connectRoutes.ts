@@ -2,7 +2,7 @@
  * Connect routes for mobile-notifications-service.
  * POST /mobile-notifications/connect - Create a new signature connection.
  */
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createConnection } from '../domain/notifications/index.js';

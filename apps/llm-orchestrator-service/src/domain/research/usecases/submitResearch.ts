@@ -4,8 +4,8 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { createResearch, type Research, type LlmProvider } from '../models/index.js';
-import type { ResearchRepository, RepositoryError } from '../ports/index.js';
+import { createResearch, type LlmProvider, type Research } from '../models/index.js';
+import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {
   userId: string;

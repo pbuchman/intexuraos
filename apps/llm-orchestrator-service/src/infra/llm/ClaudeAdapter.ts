@@ -2,13 +2,13 @@
  * Claude adapter implementing LlmResearchProvider and LlmSynthesisProvider.
  */
 
-import { createClaudeClient, type ClaudeClient } from '@intexuraos/infra-claude';
+import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
 import type { Result } from '@intexuraos/common-core';
 import type {
-  LlmResearchProvider,
-  LlmSynthesisProvider,
-  LlmResearchResult,
   LlmError,
+  LlmResearchProvider,
+  LlmResearchResult,
+  LlmSynthesisProvider,
 } from '../../domain/research/index.js';
 
 export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider {

@@ -2,9 +2,9 @@
  * Thumbnail component for image messages.
  * Fetches signed URL for thumbnail and displays clickable image.
  */
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Image as ImageIcon, AlertCircle } from 'lucide-react';
-import { getMessageThumbnailUrl, ApiError } from '@/services';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { ApiError, getMessageThumbnailUrl } from '@/services';
 
 interface ImageThumbnailProps {
   messageId: string;

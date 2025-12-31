@@ -2,12 +2,8 @@
  * Use case for getting distinct filter values.
  * Used to populate filter dropdowns.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
-import type {
-  NotificationRepository,
-  RepositoryError,
-  DistinctFilterField,
-} from '../ports/index.js';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { DistinctFilterField, NotificationRepository, RepositoryError, } from '../ports/index.js';
 
 /**
  * Input for getting distinct filter values.

@@ -2,11 +2,11 @@
  * Tests for synthesis prompt configuration.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  buildSynthesisInput,
   SYNTHESIS_PROMPT,
   TITLE_GENERATION_PROMPT,
-  buildSynthesisInput,
 } from '../../../../domain/research/config/synthesisPrompt.js';
 
 describe('synthesisPrompt config', () => {

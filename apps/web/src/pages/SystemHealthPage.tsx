@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
-import { StatusWidget, Layout } from '@/components';
+import { useCallback, useEffect, useState } from 'react';
+import { Layout, StatusWidget } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
 import {
+  getMobileNotificationsStatus,
   getNotionStatus,
   getWhatsAppStatus,
-  getMobileNotificationsStatus,
   type MobileNotificationsStatusResponse,
 } from '@/services';
 import type { NotionStatus, WhatsAppStatus } from '@/types';

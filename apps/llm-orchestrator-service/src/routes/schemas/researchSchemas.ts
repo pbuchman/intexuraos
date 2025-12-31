@@ -2,7 +2,7 @@
  * JSON schemas for research endpoints.
  */
 
-import { researchSchema, llmProviderSchema } from './common.js';
+import { llmProviderSchema, researchSchema } from './common.js';
 
 export const createResearchBodySchema = {
   type: 'object',

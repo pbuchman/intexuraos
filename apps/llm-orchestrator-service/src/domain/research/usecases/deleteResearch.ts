@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { ResearchRepository, RepositoryError } from '../ports/index.js';
+import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export async function deleteResearch(
   id: string,

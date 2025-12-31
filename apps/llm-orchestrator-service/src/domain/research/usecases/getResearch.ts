@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { Research } from '../models/index.js';
-import type { ResearchRepository, RepositoryError } from '../ports/index.js';
+import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export async function getResearch(
   id: string,

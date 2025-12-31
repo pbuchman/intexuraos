@@ -5,13 +5,9 @@
  * Creates settings if they don't exist.
  */
 
-import { ok, err, isErr, type Result } from '@intexuraos/common-core';
+import { err, isErr, ok, type Result } from '@intexuraos/common-core';
 import type { UserSettingsRepository } from '../ports/UserSettingsRepository.js';
-import {
-  type UserSettings,
-  type NotificationSettings,
-  createDefaultSettings,
-} from '../models/UserSettings.js';
+import { createDefaultSettings, type NotificationSettings, type UserSettings, } from '../models/UserSettings.js';
 
 /**
  * Input for the update user settings use-case.

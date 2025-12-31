@@ -2,15 +2,15 @@
  * Tests for research usecases.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Research } from '../domain/research/index.js';
 import {
-  submitResearch,
+  deleteResearch,
   getResearch,
   listResearches,
-  deleteResearch,
+  submitResearch,
 } from '../domain/research/index.js';
 import { FakeResearchRepository } from './fakes.js';
-import type { Research } from '../domain/research/index.js';
 
 function createTestResearch(overrides?: Partial<Research>): Research {
   return {

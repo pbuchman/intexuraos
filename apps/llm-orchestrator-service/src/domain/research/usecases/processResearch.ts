@@ -5,11 +5,11 @@
 
 import type { LlmProvider } from '../models/index.js';
 import type {
-  ResearchRepository,
   LlmResearchProvider,
   LlmSynthesisProvider,
-  TitleGenerator,
   NotificationSender,
+  ResearchRepository,
+  TitleGenerator,
 } from '../ports/index.js';
 
 export interface ProcessResearchDeps {

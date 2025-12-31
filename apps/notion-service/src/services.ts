@@ -3,17 +3,17 @@
  * Provides backward-compatible service container for routes.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { NotionLogger, NotionError } from '@intexuraos/infra-notion';
+import type { NotionError, NotionLogger } from '@intexuraos/infra-notion';
 import {
-  saveNotionConnection,
+  disconnectNotion,
   getNotionConnection,
   getNotionToken,
   isNotionConnected,
-  disconnectNotion,
   type NotionConnectionPublic,
   type NotionError as FirestoreError,
+  saveNotionConnection,
 } from './infra/firestore/index.js';
-import { validateNotionToken, getPageWithPreview } from './infra/notion/index.js';
+import { getPageWithPreview, validateNotionToken } from './infra/notion/index.js';
 
 /**
  * Connection repository adapter matching domain port interface.

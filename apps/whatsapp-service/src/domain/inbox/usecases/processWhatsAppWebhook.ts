@@ -2,22 +2,22 @@
  * Use case for processing WhatsApp webhooks and creating inbox notes.
  * Implements the core business logic for phase 1 ingestion flow.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
-  InboxNote,
-  InboxError,
-  InboxNoteSource,
-  InboxMessageType,
   InboxContentType,
-  InboxProcessor,
+  InboxError,
+  InboxMessageType,
+  InboxNote,
+  InboxNoteSource,
   InboxNoteStatus,
+  InboxProcessor,
 } from '../models/InboxNote.js';
 import type {
+  IgnoredReason,
   InboxNotesRepository,
+  WebhookProcessingStatus,
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
-  WebhookProcessingStatus,
-  IgnoredReason,
 } from '../ports/repositories.js';
 
 /**

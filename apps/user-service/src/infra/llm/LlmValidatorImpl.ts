@@ -1,16 +1,11 @@
 /**
  * Implementation of LlmValidator port using @intexuraos/infra-* packages.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
-import type {
-  LlmValidator,
-  LlmValidationError,
-  LlmTestResponse,
-  LlmProvider,
-} from '../../domain/settings/index.js';
+import type { LlmProvider, LlmTestResponse, LlmValidationError, LlmValidator, } from '../../domain/settings/index.js';
 
 /**
  * Implementation of LlmValidator that delegates to infra packages.

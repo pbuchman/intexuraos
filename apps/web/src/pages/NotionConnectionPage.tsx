@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, type FormEvent } from 'react';
-import { Layout, Button, Input, Card } from '@/components';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { Button, Card, Input, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { getNotionStatus, connectNotion, disconnectNotion, ApiError } from '@/services';
+import { ApiError, connectNotion, disconnectNotion, getNotionStatus } from '@/services';
 import type { NotionStatus } from '@/types';
 
 interface FormState {

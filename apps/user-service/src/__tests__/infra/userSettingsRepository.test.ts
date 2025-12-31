@@ -2,11 +2,11 @@
  * Tests for Firestore UserSettings repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { FirestoreUserSettingsRepository } from '../../infra/firestore/index.js';
-import type { UserSettings, LlmTestResult, EncryptedValue } from '../../domain/settings/index.js';
+import type { EncryptedValue, LlmTestResult, UserSettings } from '../../domain/settings/index.js';
 
 /**
  * Helper to create encrypted value fixture.

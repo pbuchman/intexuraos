@@ -2,7 +2,7 @@
  * Status routes for mobile-notifications-service.
  * GET /mobile-notifications/status - Check if user has configured signature.
  */
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 

@@ -1,7 +1,7 @@
 /**
  * Tests for schema utilities
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { isAuth0Error } from '../routes/schemas.js';
 
 describe('isAuth0Error', () => {

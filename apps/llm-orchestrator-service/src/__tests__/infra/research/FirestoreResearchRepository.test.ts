@@ -2,7 +2,7 @@
  * Tests for FirestoreResearchRepository.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDocSet = vi.fn().mockResolvedValue(undefined);
 const mockDocGet = vi.fn();

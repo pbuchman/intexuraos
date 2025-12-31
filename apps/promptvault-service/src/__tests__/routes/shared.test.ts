@@ -1,7 +1,7 @@
 /**
  * Tests for shared.ts - mapDomainErrorCode function.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mapDomainErrorCode } from '../../routes/shared.js';
 import type { PromptVaultErrorCode } from '../../domain/promptvault/index.js';
 

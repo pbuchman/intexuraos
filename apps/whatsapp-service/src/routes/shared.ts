@@ -1,8 +1,8 @@
 import {
-  parsePhoneNumberWithError,
+  type CountryCode,
   getCountries,
   getCountryCallingCode,
-  type CountryCode,
+  parsePhoneNumberWithError,
 } from 'libphonenumber-js';
 import { normalizePhoneNumber } from '../domain/inbox/index.js';
 

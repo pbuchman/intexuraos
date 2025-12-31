@@ -15,23 +15,23 @@ import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
 import {
-  ProcessImageMessageUseCase,
-  ProcessAudioMessageUseCase,
-  TranscribeAudioUseCase,
   ExtractLinkPreviewsUseCase,
+  ProcessAudioMessageUseCase,
+  ProcessImageMessageUseCase,
+  TranscribeAudioUseCase,
 } from '../domain/inbox/index.js';
 import {
+  extractAudioMedia,
   extractDisplayPhoneNumber,
+  extractImageMedia,
   extractMessageId,
-  extractPhoneNumberId,
-  extractSenderPhoneNumber,
-  extractWabaId,
   extractMessageText,
   extractMessageTimestamp,
-  extractSenderName,
   extractMessageType,
-  extractImageMedia,
-  extractAudioMedia,
+  extractPhoneNumberId,
+  extractSenderName,
+  extractSenderPhoneNumber,
+  extractWabaId,
 } from './shared.js';
 
 /**

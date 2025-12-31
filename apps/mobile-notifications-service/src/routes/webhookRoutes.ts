@@ -9,7 +9,7 @@
  * - Idempotency check: duplicate or new
  * - Save result: success or failure
  */
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { getServices } from '../services.js';
 import { processNotification, type WebhookPayload } from '../domain/notifications/index.js';
 import { webhookRequestSchema, webhookResponseSchema } from './schemas.js';

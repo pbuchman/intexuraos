@@ -1,7 +1,7 @@
 /**
  * Firestore repository for WhatsApp webhook events.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 

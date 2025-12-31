@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { createNotionServiceClient } from '../notionServiceClient.js';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { isErr, isOk } from '@intexuraos/common-core';
 
 describe('NotionServiceClient', () => {
   const baseUrl = 'http://localhost:3000';

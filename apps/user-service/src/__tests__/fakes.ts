@@ -3,25 +3,25 @@
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */
-import type { Result, EncryptedValue, Encryptor } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import type { EncryptedValue, Encryptor, Result } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import type {
+  Auth0Client,
+  AuthError,
   AuthTokenRepository,
   AuthTokens,
   AuthTokensPublic,
-  AuthError,
-  Auth0Client,
   RefreshResult,
 } from '../domain/identity/index.js';
 import type {
-  UserSettingsRepository,
-  UserSettings,
-  SettingsError,
   LlmProvider,
-  LlmTestResult,
-  LlmValidator,
-  LlmValidationError,
   LlmTestResponse,
+  LlmTestResult,
+  LlmValidationError,
+  LlmValidator,
+  SettingsError,
+  UserSettings,
+  UserSettingsRepository,
 } from '../domain/settings/index.js';
 
 /**

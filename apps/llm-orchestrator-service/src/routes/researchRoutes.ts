@@ -7,23 +7,23 @@
  * DELETE /research/:id - Delete research
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import {
-  submitResearch,
+  deleteResearch,
   getResearch,
   listResearches,
-  deleteResearch,
   type LlmProvider,
+  submitResearch,
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
 import {
   createResearchBodySchema,
   createResearchResponseSchema,
+  deleteResearchResponseSchema,
+  getResearchResponseSchema,
   listResearchesQuerySchema,
   listResearchesResponseSchema,
-  getResearchResponseSchema,
-  deleteResearchResponseSchema,
   researchIdParamsSchema,
 } from './schemas/index.js';
 

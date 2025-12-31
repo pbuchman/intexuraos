@@ -2,7 +2,7 @@
  * Tests for Auth0 client implementation.
  * Mocks fetch() to simulate Auth0 API responses.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { Auth0ClientImpl, loadAuth0Config } from '../../infra/auth0/client.js';
 

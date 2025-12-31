@@ -13,9 +13,9 @@ import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
   connectNotion,
-  getNotionStatus,
-  disconnectNotion,
   type ConnectNotionErrorCode,
+  disconnectNotion,
+  getNotionStatus,
 } from '../domain/integration/index.js';
 
 /**

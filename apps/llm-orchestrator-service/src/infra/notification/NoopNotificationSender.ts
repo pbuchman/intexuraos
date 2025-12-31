@@ -3,7 +3,7 @@
  */
 
 import { ok, type Result } from '@intexuraos/common-core';
-import type { NotificationSender, NotificationError } from '../../domain/research/index.js';
+import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
 
 export class NoopNotificationSender implements NotificationSender {
   sendResearchComplete(

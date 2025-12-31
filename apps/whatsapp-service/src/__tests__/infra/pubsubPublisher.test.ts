@@ -2,7 +2,8 @@
  * Tests for GCP Pub/Sub Publisher adapter.
  * Mocks @google-cloud/pubsub SDK.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GcpPubSubPublisher, getLogLevel } from '../../infra/pubsub/index.js';
 
 // Create mock functions that persist
 const mockPublishMessage = vi.fn();
@@ -23,8 +24,6 @@ vi.mock('@google-cloud/pubsub', () => {
     PubSub: MockPubSub,
   };
 });
-
-import { GcpPubSubPublisher, getLogLevel } from '../../infra/pubsub/index.js';
 
 describe('getLogLevel', () => {
   it('returns silent for test environment', () => {
