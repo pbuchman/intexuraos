@@ -30,6 +30,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/api-docs-hub/package*.json ./apps/api-docs-hub/
+COPY packages/*/package*.json ./packages/
 
 # Install production dependencies only
 RUN npm ci --omit=dev -w @intexuraos/api-docs-hub

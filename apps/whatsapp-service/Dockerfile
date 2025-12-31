@@ -30,6 +30,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/whatsapp-service/package*.json ./apps/whatsapp-service/
+COPY packages/*/package*.json ./packages/
 
 # Install production dependencies only
 RUN npm ci --omit=dev -w @intexuraos/whatsapp-service

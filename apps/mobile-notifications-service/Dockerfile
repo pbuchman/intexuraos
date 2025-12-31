@@ -30,6 +30,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/mobile-notifications-service/package*.json ./apps/mobile-notifications-service/
+COPY packages/*/package*.json ./packages/
 
 # Install production dependencies only
 RUN npm ci --omit=dev -w @intexuraos/mobile-notifications-service

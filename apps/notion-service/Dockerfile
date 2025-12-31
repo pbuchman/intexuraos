@@ -30,6 +30,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/notion-service/package*.json ./apps/notion-service/
+COPY packages/*/package*.json ./packages/
 
 # Install production dependencies only
 RUN npm ci --omit=dev -w @intexuraos/notion-service

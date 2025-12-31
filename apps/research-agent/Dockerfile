@@ -30,6 +30,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/research-agent/package*.json ./apps/research-agent/
+COPY packages/*/package*.json ./packages/
 
 # Install production dependencies only
 RUN npm ci --omit=dev -w @intexuraos/research-agent
