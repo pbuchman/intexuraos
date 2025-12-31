@@ -8,6 +8,7 @@ import type { Config } from '../config.js';
 import { createWebhookRoutes } from './webhookRoutes.js';
 import { mappingRoutes } from './mappingRoutes.js';
 import { messageRoutes } from './messageRoutes.js';
+import { pubsubRoutes } from './pubsubRoutes.js';
 
 /**
  * Creates routes plugin with config.
@@ -18,6 +19,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(createWebhookRoutes(config));
     fastify.register(mappingRoutes);
     fastify.register(messageRoutes);
+    fastify.register(pubsubRoutes);
     done();
   };
 }

@@ -139,9 +139,9 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    llm_orchestrator_service = {
-      name      = "intexuraos-llm-orchestrator-service"
-      app_path  = "apps/llm-orchestrator-service"
+    llm_orchestrator = {
+      name      = "intexuraos-llm-orchestrator"
+      app_path  = "apps/llm-orchestrator"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -313,7 +313,7 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_SERVICE_URL"             = "WhatsApp service Cloud Run URL for web frontend"
     "INTEXURAOS_NOTION_SERVICE_URL"               = "Notion service Cloud Run URL for web frontend"
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
-    "INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL"     = "LLM Orchestrator service Cloud Run URL for web frontend"
+    "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
   }
 
@@ -623,7 +623,7 @@ module "api_docs_hub" {
     NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
-    LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL     = "${module.llm_orchestrator_service.service_url}/openapi.json"
+    LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
     COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
     RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
   }
@@ -636,27 +636,27 @@ module "api_docs_hub" {
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
-    module.llm_orchestrator_service,
+    module.llm_orchestrator,
     module.commands_router,
     module.research_agent,
   ]
 }
 
-# LLM Orchestrator Service - Multi-LLM research with synthesis
-module "llm_orchestrator_service" {
+# LLM Orchestrator - Multi-LLM research with synthesis
+module "llm_orchestrator" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.llm_orchestrator_service.name
-  service_account = module.iam.service_accounts["llm_orchestrator_service"]
-  port            = local.services.llm_orchestrator_service.port
-  min_scale       = local.services.llm_orchestrator_service.min_scale
-  max_scale       = local.services.llm_orchestrator_service.max_scale
+  service_name    = local.services.llm_orchestrator.name
+  service_account = module.iam.service_accounts["llm_orchestrator"]
+  port            = local.services.llm_orchestrator.port
+  min_scale       = local.services.llm_orchestrator.min_scale
+  max_scale       = local.services.llm_orchestrator.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator-service:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator:latest"
 
   secrets = {
     AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
@@ -743,7 +743,7 @@ module "research_agent" {
   env_vars = {
     GOOGLE_CLOUD_PROJECT = var.project_id
     COMMANDS_ROUTER_URL  = module.commands_router.service_url
-    LLM_ORCHESTRATOR_URL = module.llm_orchestrator_service.service_url
+    LLM_ORCHESTRATOR_URL = module.llm_orchestrator.service_url
     USER_SERVICE_URL     = module.user_service.service_url
   }
 
@@ -752,7 +752,7 @@ module "research_agent" {
     module.iam,
     module.secret_manager,
     module.commands_router,
-    module.llm_orchestrator_service,
+    module.llm_orchestrator,
     module.user_service,
   ]
 }
@@ -841,9 +841,9 @@ output "api_docs_hub_url" {
   value       = module.api_docs_hub.service_url
 }
 
-output "llm_orchestrator_service_url" {
-  description = "LLM Orchestrator Service URL"
-  value       = module.llm_orchestrator_service.service_url
+output "llm_orchestrator_url" {
+  description = "LLM Orchestrator URL"
+  value       = module.llm_orchestrator.service_url
 }
 
 output "commands_router_url" {

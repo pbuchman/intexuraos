@@ -48,6 +48,7 @@ export default tseslint.config(
         { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
         { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
+        { type: 'infra-pubsub', pattern: ['packages/infra-pubsub/src/**'], mode: 'folder' },
         { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
@@ -76,6 +77,8 @@ export default tseslint.config(
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
             // infra-whatsapp can import from common-core
             { from: 'infra-whatsapp', allow: ['infra-whatsapp', 'common-core'] },
+            // infra-pubsub can import from common-core
+            { from: 'infra-pubsub', allow: ['infra-pubsub', 'common-core'] },
             // llm-contract can import from common-core
             { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
             // infra-gemini can import from common-core, llm-audit, and llm-contract
@@ -118,6 +121,7 @@ export default tseslint.config(
                 'infra-firestore',
                 'infra-notion',
                 'infra-whatsapp',
+                'infra-pubsub',
                 'infra-gemini',
                 'infra-claude',
                 'infra-gpt',
@@ -257,6 +261,43 @@ export default tseslint.config(
       ],
     },
   },
+  // CRITICAL: Prevent Pub/Sub pull subscriptions - incompatible with Cloud Run
+  // Cloud Run scales to zero; pull subscriptions require persistent processes
+  // All Pub/Sub consumers must use HTTP push endpoints
+  {
+    files: ['apps/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='on'][arguments.0.value='message'][arguments.0.type='Literal']",
+          message:
+            'Pull subscriptions (.on("message")) are forbidden. Cloud Run scales to zero and cannot process pull subscriptions. Use HTTP push endpoints instead. See CLAUDE.md for pattern.',
+        },
+      ],
+    },
+  },
+  // Only whatsapp-service may use @intexuraos/infra-whatsapp directly
+  // All other apps must use @intexuraos/infra-pubsub to send messages via Pub/Sub
+  {
+    files: ['apps/*/src/**/*.ts'],
+    ignores: ['apps/whatsapp-service/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@intexuraos/infra-whatsapp',
+              message:
+                'Use @intexuraos/infra-pubsub WhatsApp publisher instead. Only whatsapp-service may use infra-whatsapp directly.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // CRITICAL #1: Routes layer must not import infra packages directly (bypasses domain/DI)
   // Routes should get dependencies via getServices(), not instantiate infra directly
   {
@@ -333,6 +374,16 @@ export default tseslint.config(
               message:
                 'Routes must not import from infra/firestore directly. Access repositories via getServices() for proper DI.',
             },
+            {
+              group: [
+                '../infra/whatsapp/*',
+                '../infra/whatsapp/**',
+                '../../infra/whatsapp/*',
+                '../../infra/whatsapp/**',
+              ],
+              message:
+                'Routes must not import from infra/whatsapp directly. Access WhatsApp client via getServices() for proper DI.',
+            },
           ],
         },
       ],
@@ -391,6 +442,11 @@ export default tseslint.config(
               ],
               message:
                 'Infra adapters should receive repositories via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
+              group: ['../whatsapp/*', '../whatsapp/**', '../../whatsapp/*', '../../whatsapp/**'],
+              message:
+                'Infra adapters should receive WhatsApp client via function parameters, not import directly from other infra folders. Use dependency injection.',
             },
             {
               group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],

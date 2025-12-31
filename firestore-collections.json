@@ -39,7 +39,7 @@
       "description": "Auth0 refresh tokens (AES-256-GCM encrypted)"
     },
     "researches": {
-      "owner": "llm-orchestrator-service",
+      "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"
     },
     "commands": {
