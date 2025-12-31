@@ -4,7 +4,12 @@
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
-import type { InboxError, MediaUrlInfo, SendMessageResult, WhatsAppCloudApiPort, } from '../../domain/inbox/index.js';
+import type {
+  InboxError,
+  MediaUrlInfo,
+  SendMessageResult,
+  WhatsAppCloudApiPort,
+} from '../../domain/inbox/index.js';
 
 /**
  * WhatsApp Cloud API adapter implementation.

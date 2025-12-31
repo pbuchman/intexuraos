@@ -4,7 +4,10 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { NotionConnectionPublic, NotionError, } from '../../domain/integration/ports/ConnectionRepository.js';
+import type {
+  NotionConnectionPublic,
+  NotionError,
+} from '../../domain/integration/ports/ConnectionRepository.js';
 
 /**
  * Internal document structure stored in Firestore.

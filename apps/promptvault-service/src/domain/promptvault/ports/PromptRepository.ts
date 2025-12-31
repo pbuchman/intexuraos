@@ -3,7 +3,13 @@
  * This is the main repository interface for the PromptVault domain.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { CreatePromptInput, Prompt, PromptId, PromptVaultError, UpdatePromptInput, } from '../models/index.js';
+import type {
+  CreatePromptInput,
+  Prompt,
+  PromptId,
+  PromptVaultError,
+  UpdatePromptInput,
+} from '../models/index.js';
 
 /**
  * Repository port for Prompt CRUD operations.

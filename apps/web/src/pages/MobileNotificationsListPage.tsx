@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { ApiError, deleteMobileNotification, getFilterValues, getMobileNotifications, } from '@/services';
+import {
+  ApiError,
+  deleteMobileNotification,
+  getFilterValues,
+  getMobileNotifications,
+} from '@/services';
 import { getUserSettings, updateUserSettings } from '@/services/authApi';
 import type { MobileNotification, NotificationFilter } from '@/types';
 import { Bell, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';

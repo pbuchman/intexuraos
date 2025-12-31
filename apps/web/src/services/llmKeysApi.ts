@@ -1,6 +1,11 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { LlmKeysResponse, LlmProvider, SetLlmKeyRequest, SetLlmKeyResponse, } from './llmKeysApi.types.js';
+import type {
+  LlmKeysResponse,
+  LlmProvider,
+  SetLlmKeyRequest,
+  SetLlmKeyResponse,
+} from './llmKeysApi.types.js';
 
 /**
  * Get user's LLM API keys (masked values).

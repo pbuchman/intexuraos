@@ -5,7 +5,11 @@
 import { PubSub } from '@google-cloud/pubsub';
 import pino, { type LevelWithSilent } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { EventPublisherPort, InboxError, MediaCleanupEvent, } from '../../domain/inbox/index.js';
+import type {
+  EventPublisherPort,
+  InboxError,
+  MediaCleanupEvent,
+} from '../../domain/inbox/index.js';
 
 /**
  * Gets the pino log level based on the current environment.

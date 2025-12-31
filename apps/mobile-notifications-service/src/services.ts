@@ -2,7 +2,10 @@
  * Service wiring for mobile-notifications-service.
  * Provides dependency injection for domain adapters.
  */
-import type { NotificationRepository, SignatureConnectionRepository, } from './domain/notifications/index.js';
+import type {
+  NotificationRepository,
+  SignatureConnectionRepository,
+} from './domain/notifications/index.js';
 import { FirestoreSignatureConnectionRepository } from './infra/firestore/firestoreSignatureConnectionRepository.js';
 import { FirestoreNotificationRepository } from './infra/firestore/firestoreNotificationRepository.js';
 

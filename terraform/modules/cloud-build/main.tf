@@ -113,7 +113,35 @@ resource "google_project_iam_member" "cloud_build_builds_editor" {
 }
 
 # -----------------------------------------------------------------------------
-# Manual Trigger (invoked by GitHub Actions after CI passes)
+# Automatic Trigger (fires on push to development branch)
+# -----------------------------------------------------------------------------
+
+resource "google_cloudbuild_trigger" "push_main" {
+  name        = "intexuraos-${var.environment}-push"
+  description = "Automatic trigger - builds and deploys affected services on push to ${var.github_branch}"
+  location    = var.region
+
+  repository_event_config {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    push {
+      branch = "^${var.github_branch}$"
+    }
+  }
+
+  filename = "cloudbuild/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                = var.region
+    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
+    _ENVIRONMENT           = var.environment
+    _FORCE_DEPLOY          = "false"
+  }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# -----------------------------------------------------------------------------
+# Manual Trigger (for force deploying all services)
 # -----------------------------------------------------------------------------
 
 resource "google_cloudbuild_trigger" "manual_main" {
@@ -121,7 +149,6 @@ resource "google_cloudbuild_trigger" "manual_main" {
   description = "Manual trigger - force deploys all services from ${var.github_branch}"
   location    = var.region
 
-  # Use source_to_build for manual triggers (no automatic event)
   source_to_build {
     repository = google_cloudbuildv2_repository.intexuraos.id
     ref        = "refs/heads/${var.github_branch}"
