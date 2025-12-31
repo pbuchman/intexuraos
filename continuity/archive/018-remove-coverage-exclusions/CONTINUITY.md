@@ -43,11 +43,11 @@ Remove unjustified coverage exclusions from vitest.config.ts by writing tests fo
 
 ### Work Completed
 
-1. **Removed `packages/infra-whatsapp/**` exclusion**
+1. **Removed `packages/infra-whatsapp/**` exclusion\*\*
    - Already had comprehensive tests using nock for HTTP mocking
    - Coverage: 100% across all metrics
 
-2. **Removed `apps/llm-orchestrator-service/src/routes/**` exclusion**
+2. **Removed `apps/llm-orchestrator-service/src/routes/**` exclusion\*\*
    - Fixed routes tests by implementing proper JWT authentication:
      - Used `jose` library to generate real RSA key pairs
      - Created local Fastify JWKS server to serve public key
