@@ -67,53 +67,75 @@ Add service-specific dependencies as needed (e.g., `@google-cloud/pubsub`, `@int
 ### 3. Create Dockerfile
 
 ```dockerfile
+# IntexuraOS <Service Name> Dockerfile
+# Multi-stage build with esbuild bundling.
+
+# Stage 1: Build
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Copy all package.json files
 COPY package*.json ./
-COPY packages/common-core/package.json ./packages/common-core/
-COPY packages/common-http/package.json ./packages/common-http/
-COPY packages/http-contracts/package.json ./packages/http-contracts/
-COPY packages/http-server/package.json ./packages/http-server/
-COPY packages/infra-firestore/package.json ./packages/infra-firestore/
-COPY apps/<service-name>/package.json ./apps/<service-name>/
+COPY apps/<service-name>/package*.json ./apps/<service-name>/
+COPY packages/*/package*.json ./packages/
 
-RUN npm ci --workspace=@intexuraos/<service-name>
+# Install dependencies
+RUN npm ci
 
-COPY packages/common-core ./packages/common-core
-COPY packages/common-http ./packages/common-http
-COPY packages/http-contracts ./packages/http-contracts
-COPY packages/http-server ./packages/http-server
-COPY packages/infra-firestore ./packages/infra-firestore
-COPY apps/<service-name> ./apps/<service-name>
-COPY scripts ./scripts
-COPY tsconfig.json ./
+# Copy source files
+COPY tsconfig*.json ./
+COPY scripts/ ./scripts/
+COPY packages/ ./packages/
+COPY apps/<service-name>/ ./apps/<service-name>/
 
-RUN npm run build --workspace=@intexuraos/<service-name>
+# Build service (esbuild bundles everything into one file)
+RUN npm run build -w @intexuraos/<service-name>
 
+# Stage 2: Production
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/apps/<service-name>/dist ./dist
-COPY --from=builder /app/apps/<service-name>/package.json ./
+COPY package*.json ./
+COPY apps/<service-name>/package*.json ./apps/<service-name>/
+
+# Install production dependencies only
+RUN npm ci --omit=dev -w @intexuraos/<service-name>
+
+# Copy built file
+COPY --from=builder /app/apps/<service-name>/dist ./apps/<service-name>/dist
 
 ENV NODE_ENV=production
+ENV PORT=8080
+
 EXPOSE 8080
 
-CMD ["node", "dist/index.js"]
-```
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-Adjust COPY statements based on which packages the service depends on.
+CMD ["node", "apps/<service-name>/dist/index.js"]
+```
 
 ### 4. Create src/index.ts
 
 ```typescript
+import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
+
+// Fail-fast startup validation - crashes immediately if required vars are missing
+const REQUIRED_ENV = [
+  'GOOGLE_CLOUD_PROJECT', // Required for Firestore (remove if not using Firestore)
+  'AUTH_JWKS_URL',
+  'AUTH_ISSUER',
+  'AUTH_AUDIENCE',
+  // Add service-specific required vars here
+];
+
+validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -143,6 +165,8 @@ main().catch((error: unknown) => {
   process.exit(1);
 });
 ```
+
+**IMPORTANT:** The `validateRequiredEnv()` call runs at module load time, before `main()`. This ensures the service crashes immediately if required environment variables are missing, rather than starting and failing at runtime.
 
 Note: Create separate `server.ts` and `config.ts` files. See existing services for patterns.
 

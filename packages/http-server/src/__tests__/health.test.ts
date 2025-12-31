@@ -8,6 +8,7 @@ import {
   checkNotionSdk,
   checkSecrets,
   computeOverallStatus,
+  validateRequiredEnv,
   type HealthCheck,
 } from '../health.js';
 
@@ -71,6 +72,58 @@ describe('Health Utilities', () => {
 
       expect(result.status).toBe('ok');
       expect(result.details).toBeNull();
+    });
+  });
+
+  describe('validateRequiredEnv', () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('does not throw when all required vars are present', () => {
+      process.env['VAR_A'] = 'value-a';
+      process.env['VAR_B'] = 'value-b';
+
+      expect(() => validateRequiredEnv(['VAR_A', 'VAR_B'])).not.toThrow();
+    });
+
+    it('throws when a required var is missing', () => {
+      process.env['VAR_A'] = 'value-a';
+
+      expect(() => validateRequiredEnv(['VAR_A', 'VAR_B'])).toThrow(
+        'Missing required environment variables: VAR_B'
+      );
+    });
+
+    it('throws when a required var is empty string', () => {
+      process.env['VAR_A'] = 'value-a';
+      process.env['VAR_B'] = '';
+
+      expect(() => validateRequiredEnv(['VAR_A', 'VAR_B'])).toThrow(
+        'Missing required environment variables: VAR_B'
+      );
+    });
+
+    it('throws listing all missing vars', () => {
+      expect(() => validateRequiredEnv(['VAR_A', 'VAR_B', 'VAR_C'])).toThrow(
+        'Missing required environment variables: VAR_A, VAR_B, VAR_C'
+      );
+    });
+
+    it('includes help message in error', () => {
+      expect(() => validateRequiredEnv(['MISSING_VAR'])).toThrow(
+        'Ensure these are set in Terraform env_vars or .envrc.local for local development.'
+      );
+    });
+
+    it('does not throw for empty required array', () => {
+      expect(() => validateRequiredEnv([])).not.toThrow();
     });
   });
 

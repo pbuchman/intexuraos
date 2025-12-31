@@ -235,14 +235,18 @@ Repositories should call `getFirestore()` within methods, not accept Firestore a
 
 1. Copy structure from existing service (domain/, infra/, routes/)
 2. Create Dockerfile with correct workspace deps
-3. Run `npx prettier --write .`
-4. Add Terraform module in `terraform/environments/dev/main.tf`
-5. Add service account to IAM module
-6. Add OpenAPI URL to `apps/api-docs-hub/src/config.ts`
-7. Add project reference to root `tsconfig.json`
-8. Add to ESLint `no-restricted-imports` patterns in `eslint.config.js`
-9. Run `npm run ci`
-10. Run `tf fmt -check -recursive && tf validate`
+3. Add startup validation in index.ts with `validateRequiredEnv()` from `@intexuraos/http-server`
+   - Include `GOOGLE_CLOUD_PROJECT` if service uses Firestore
+   - Include all required secrets (AUTH\_\*, service-specific vars)
+4. Run `npx prettier --write .`
+5. Add Terraform module in `terraform/environments/dev/main.tf`
+   - Include `GOOGLE_CLOUD_PROJECT = var.project_id` in `env_vars` if service uses Firestore
+6. Add service account to IAM module
+7. Add OpenAPI URL to `apps/api-docs-hub/src/config.ts`
+8. Add project reference to root `tsconfig.json`
+9. Add to ESLint `no-restricted-imports` patterns in `eslint.config.js`
+10. Run `npm run ci`
+11. Run `tf fmt -check -recursive && tf validate`
 
 ---
 
