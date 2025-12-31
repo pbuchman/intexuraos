@@ -67,10 +67,6 @@ export default defineConfig({
         // No business logic, just service instantiation and caching
         '**/services.ts',
 
-        // HTTP logger utility
-        // JUSTIFIED: Logging wrapper with no business logic, tested implicitly via route tests
-        '**/http/logger.ts',
-
         // Route barrel files (re-exports only)
         // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/routes/routes.ts',

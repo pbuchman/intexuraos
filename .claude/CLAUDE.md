@@ -846,6 +846,35 @@ This rule exists because excluding code from coverage is technical debt that com
 // ✅ Import domain types where needed, don't re-export from infra
 ```
 
+### Request Logging
+
+**Inline request logging with manual redaction** — use centralized utility:
+
+```ts-example
+// ❌ Manual header redaction (error-prone, duplicated)
+try {
+  const headersObj = { ...(request.headers as Record<string, unknown>) };
+  if (headersObj['x-internal-auth'] !== undefined) {
+    headersObj['x-internal-auth'] = '[REDACTED]';
+  }
+  if (headersObj['authorization'] !== undefined) {
+    headersObj['authorization'] = '[REDACTED]';
+  }
+  request.log.info({ headers: headersObj, bodyPreview: '...' }, 'Message');
+} catch { /* Best-effort logging */ }
+
+// ✅ Centralized utility with automatic redaction
+import { logIncomingRequest } from '@intexuraos/common-http';
+
+logIncomingRequest(request, {
+  message: 'Received request to /internal/endpoint',
+  bodyPreviewLength: 200,
+  includeParams: true,
+});
+```
+
+**Why:** Manual redaction creates duplication and risks missing sensitive fields. The utility ensures consistent handling across all services using SENSITIVE_FIELDS from common-core.
+
 ### Code Quality
 
 **Redundant variable** — return directly:
