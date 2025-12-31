@@ -9,17 +9,10 @@
 # - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
-  # Step 1: Install dependencies (needed for web build and affected detection)
-  - name: 'node:22-slim'
-    id: 'npm-ci'
-    entrypoint: 'npm'
-    args: ['ci']
-
-  # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
-  # Compares with last SUCCESSFUL build to avoid skipping changes from failed builds
+  # Step 1: Detect affected services (runs immediately, no dependencies)
   - name: 'node:22'
     id: 'detect-affected'
-    waitFor: ['npm-ci']
+    waitFor: ['-']
     entrypoint: 'node'
     args: ['cloudbuild/scripts/detect-affected.mjs']
     env:
@@ -27,6 +20,13 @@ steps:
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'REGION=${_REGION}'
+
+  # Step 2: Install dependencies (only needed for web build, runs in parallel)
+  - name: 'node:22-slim'
+    id: 'npm-ci'
+    waitFor: ['-']
+    entrypoint: 'npm'
+    args: ['ci']
 
   # ===== SERVICE DEPLOYS (images pre-built in GitHub Actions) =====
   # All deploy steps run in parallel, waiting only for detect-affected
@@ -234,6 +234,6 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_MEDIUM
+  machineType: E2_HIGHCPU_8
 
-timeout: 900s
+timeout: 600s
