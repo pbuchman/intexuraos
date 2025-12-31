@@ -6,33 +6,12 @@ import {
   ok,
   type Result,
 } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
-import type {
-  ClassificationResult,
-  ClassifyOptions,
-  GeminiConfig,
-  GeminiError,
-  ResearchResult,
-  SynthesisInput,
-} from './types.js';
+import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import type { LLMClient } from '@intexuraos/llm-contract';
+import type { GeminiConfig, GeminiError, ResearchResult, SynthesisInput } from './types.js';
+import { GEMINI_DEFAULTS } from './types.js';
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
-const VALIDATION_MODEL = 'gemini-2.0-flash';
-
-export interface GeminiClient {
-  research(prompt: string): Promise<Result<ResearchResult, GeminiError>>;
-  generate(prompt: string): Promise<Result<string, GeminiError>>;
-  generateTitle(prompt: string): Promise<Result<string, GeminiError>>;
-  synthesize(
-    originalPrompt: string,
-    reports: SynthesisInput[],
-    externalReports?: { content: string; model?: string }[]
-  ): Promise<Result<string, GeminiError>>;
-  validateKey(): Promise<Result<boolean, GeminiError>>;
-  classify<T extends string>(
-    options: ClassifyOptions<T>
-  ): Promise<Result<ClassificationResult<T>, GeminiError>>;
-}
+export type GeminiClient = LLMClient;
 
 function createRequestContext(
   method: string,
@@ -42,7 +21,6 @@ function createRequestContext(
   const requestId = crypto.randomUUID();
   const startTime = new Date();
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Gemini:${method}] Request`,
@@ -54,7 +32,6 @@ function createRequestContext(
     })
   );
 
-  // Create audit context for Firestore logging
   const auditContext = createAuditContext({
     provider: 'google',
     model,
@@ -73,7 +50,6 @@ async function logSuccess(
   response: string,
   auditContext: AuditContext
 ): Promise<void> {
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Gemini:${method}] Response`,
@@ -85,7 +61,6 @@ async function logSuccess(
     })
   );
 
-  // Firestore audit logging
   await auditContext.success({ response });
 }
 
@@ -98,7 +73,6 @@ async function logError(
 ): Promise<void> {
   const errorMessage = getErrorMessage(error, String(error));
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[Gemini:${method}] Error`,
@@ -109,26 +83,27 @@ async function logError(
     })
   );
 
-  // Firestore audit logging
   await auditContext.error({ error: errorMessage });
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const modelName = config.model ?? DEFAULT_MODEL;
+  const defaultModel = config.defaultModel ?? GEMINI_DEFAULTS.defaultModel;
+  const validationModel = config.validationModel ?? GEMINI_DEFAULTS.validationModel;
+  const researchModel = config.researchModel ?? GEMINI_DEFAULTS.researchModel;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        modelName,
+        researchModel,
         researchPrompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: modelName,
+          model: researchModel,
           contents: researchPrompt,
           config: {
             tools: [{ googleSearch: {} }],
@@ -149,13 +124,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     async generate(prompt: string): Promise<Result<string, GeminiError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
         'generate',
-        modelName,
+        defaultModel,
         prompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: modelName,
+          model: defaultModel,
           contents: prompt,
         });
 
@@ -169,30 +144,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       }
     },
 
-    async generateTitle(prompt: string): Promise<Result<string, GeminiError>> {
-      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'generateTitle',
-        modelName,
-        titlePrompt
-      );
-
-      try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: titlePrompt,
-        });
-
-        const text = (response.text ?? '').trim();
-
-        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('generateTitle', requestId, startTime, error, auditContext);
-        return err(mapGeminiError(error));
-      }
-    },
-
     async synthesize(
       originalPrompt: string,
       reports: SynthesisInput[],
@@ -201,13 +152,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, externalReports);
       const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
-        modelName,
+        defaultModel,
         synthesisPrompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: modelName,
+          model: defaultModel,
           contents: synthesisPrompt,
         });
 
@@ -225,13 +176,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       const validatePrompt = `Introduce yourself as Gemini and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm Gemini."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
-        VALIDATION_MODEL,
+        validationModel,
         validatePrompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: VALIDATION_MODEL,
+          model: validationModel,
           contents: validatePrompt,
         });
 
@@ -241,34 +192,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         return ok(true);
       } catch (error) {
         await logError('validateKey', requestId, startTime, error, auditContext);
-        return err(mapGeminiError(error));
-      }
-    },
-
-    async classify<T extends string>(
-      options: ClassifyOptions<T>
-    ): Promise<Result<ClassificationResult<T>, GeminiError>> {
-      const { text, systemPrompt, validTypes, defaultType } = options;
-      const prompt = `${systemPrompt}\n\nUser message to classify:\n"${text}"`;
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'classify',
-        modelName,
-        prompt
-      );
-
-      try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: prompt,
-        });
-
-        const responseText = response.text ?? '';
-        await logSuccess('classify', requestId, startTime, responseText, auditContext);
-
-        const result = parseClassificationResponse(responseText, validTypes, defaultType);
-        return ok(result);
-      } catch (error) {
-        await logError('classify', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
@@ -289,36 +212,6 @@ function mapGeminiError(error: unknown): GeminiError {
   }
 
   return { code: 'API_ERROR', message };
-}
-
-interface RawClassificationResponse {
-  type: string;
-  confidence: number;
-  title?: string;
-}
-
-function parseClassificationResponse<T extends string>(
-  text: string,
-  validTypes: readonly T[],
-  defaultType: T
-): ClassificationResult<T> {
-  const jsonMatch = /\{[\s\S]*\}/.exec(text);
-  if (jsonMatch === null) {
-    return { type: defaultType, confidence: 0, title: 'Unclassified' };
-  }
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as RawClassificationResponse;
-
-    const type = validTypes.includes(parsed.type as T) ? (parsed.type as T) : defaultType;
-    const confidence = Math.max(0, Math.min(1, parsed.confidence));
-    const title = (parsed.title ?? 'Untitled').slice(0, 100);
-
-    return { type, confidence, title };
-  } catch {
-    /* JSON parse failed - return default classification */
-    return { type: defaultType, confidence: 0, title: 'Unclassified' };
-  }
 }
 
 function extractSourcesFromResponse(response: GenerateContentResponse): string[] {

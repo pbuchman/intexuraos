@@ -1,19 +1,18 @@
+export type {
+  LLMError as GptError,
+  ResearchResult,
+  SynthesisInput,
+} from '@intexuraos/llm-contract';
+
 export interface GptConfig {
   apiKey: string;
-  model?: string; // default: 'gpt-5.2-pro'
+  defaultModel?: string;
+  validationModel?: string;
+  researchModel?: string;
 }
 
-export interface ResearchResult {
-  content: string;
-  sources?: string[]; // GPT doesn't provide sources
-}
-
-export interface SynthesisInput {
-  model: string;
-  content: string;
-}
-
-export interface GptError {
-  code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED' | 'CONTEXT_LENGTH';
-  message: string;
-}
+export const GPT_DEFAULTS = {
+  defaultModel: 'gpt-5.2',
+  validationModel: 'gpt-4.1',
+  researchModel: 'o3-deep-research',
+} as const;

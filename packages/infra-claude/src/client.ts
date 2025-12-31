@@ -6,23 +6,14 @@ import {
   ok,
   type Result,
 } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
+import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import type { LLMClient } from '@intexuraos/llm-contract';
 import type { ClaudeConfig, ClaudeError, ResearchResult, SynthesisInput } from './types.js';
+import { CLAUDE_DEFAULTS } from './types.js';
 
-const DEFAULT_MODEL = 'claude-opus-4-5';
-const VALIDATION_MODEL = 'claude-haiku-4-5';
+export type ClaudeClient = LLMClient;
+
 const MAX_TOKENS = 8192;
-
-export interface ClaudeClient {
-  research(prompt: string): Promise<Result<ResearchResult, ClaudeError>>;
-  generateTitle(prompt: string): Promise<Result<string, ClaudeError>>;
-  synthesize(
-    originalPrompt: string,
-    reports: SynthesisInput[],
-    inputContexts?: { content: string }[]
-  ): Promise<Result<string, ClaudeError>>;
-  validateKey(): Promise<Result<boolean, ClaudeError>>;
-}
 
 function createRequestContext(
   method: string,
@@ -32,7 +23,6 @@ function createRequestContext(
   const requestId = crypto.randomUUID();
   const startTime = new Date();
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Claude:${method}] Request`,
@@ -44,7 +34,6 @@ function createRequestContext(
     })
   );
 
-  // Create audit context for Firestore logging
   const auditContext = createAuditContext({
     provider: 'anthropic',
     model,
@@ -63,7 +52,6 @@ async function logSuccess(
   response: string,
   auditContext: AuditContext
 ): Promise<void> {
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[Claude:${method}] Response`,
@@ -75,7 +63,6 @@ async function logSuccess(
     })
   );
 
-  // Firestore audit logging
   await auditContext.success({ response });
 }
 
@@ -88,7 +75,6 @@ async function logError(
 ): Promise<void> {
   const errorMessage = getErrorMessage(error, String(error));
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[Claude:${method}] Error`,
@@ -99,26 +85,27 @@ async function logError(
     })
   );
 
-  // Firestore audit logging
   await auditContext.error({ error: errorMessage });
 }
 
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const modelName = config.model ?? DEFAULT_MODEL;
+  const defaultModel = config.defaultModel ?? CLAUDE_DEFAULTS.defaultModel;
+  const validationModel = config.validationModel ?? CLAUDE_DEFAULTS.validationModel;
+  const researchModel = config.researchModel ?? CLAUDE_DEFAULTS.researchModel;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        modelName,
+        researchModel,
         researchPrompt
       );
 
       try {
         const response = await client.messages.create({
-          model: modelName,
+          model: researchModel,
           max_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: researchPrompt }],
           tools: [
@@ -144,33 +131,29 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       }
     },
 
-    async generateTitle(prompt: string): Promise<Result<string, ClaudeError>> {
-      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+    async generate(prompt: string): Promise<Result<string, ClaudeError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
-        'generateTitle',
-        modelName,
-        titlePrompt
+        'generate',
+        defaultModel,
+        prompt
       );
 
       try {
         const response = await client.messages.create({
-          model: modelName,
-          max_tokens: 100,
-          messages: [{ role: 'user', content: titlePrompt }],
+          model: defaultModel,
+          max_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
         });
 
         const textBlocks = response.content.filter(
           (block): block is Anthropic.TextBlock => block.type === 'text'
         );
-        const text = textBlocks
-          .map((b) => b.text)
-          .join('')
-          .trim();
+        const text = textBlocks.map((b) => b.text).join('\n\n');
 
-        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
+        await logSuccess('generate', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        await logError('generateTitle', requestId, startTime, error, auditContext);
+        await logError('generate', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },
@@ -183,13 +166,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, externalReports);
       const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
-        modelName,
+        defaultModel,
         synthesisPrompt
       );
 
       try {
         const response = await client.messages.create({
-          model: modelName,
+          model: defaultModel,
           max_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: synthesisPrompt }],
         });
@@ -211,13 +194,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       const validatePrompt = `Introduce yourself as Claude and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm Claude."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
-        VALIDATION_MODEL,
+        validationModel,
         validatePrompt
       );
 
       try {
         const response = await client.messages.create({
-          model: VALIDATION_MODEL,
+          model: validationModel,
           max_tokens: 100,
           messages: [{ role: 'user', content: validatePrompt }],
         });

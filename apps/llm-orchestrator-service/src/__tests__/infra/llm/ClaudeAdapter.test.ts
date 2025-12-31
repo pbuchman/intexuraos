@@ -6,13 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResearch = vi.fn();
 const mockSynthesize = vi.fn();
-const mockGenerateTitle = vi.fn();
+const mockGenerate = vi.fn();
 
 vi.mock('@intexuraos/infra-claude', () => ({
   createClaudeClient: vi.fn().mockReturnValue({
     research: mockResearch,
     synthesize: mockSynthesize,
-    generateTitle: mockGenerateTitle,
+    generate: mockGenerate,
   }),
 }));
 
@@ -118,10 +118,10 @@ describe('ClaudeAdapter', () => {
   });
 
   describe('generateTitle', () => {
-    it('delegates to Claude client', async () => {
-      mockGenerateTitle.mockResolvedValue({
+    it('delegates to generate with title prompt', async () => {
+      mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Generated Title',
+        value: '  Generated Title  ',
       });
 
       const result = await adapter.generateTitle('Test prompt');
@@ -130,10 +130,14 @@ describe('ClaudeAdapter', () => {
       if (result.ok) {
         expect(result.value).toBe('Generated Title');
       }
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Generate a short, descriptive title')
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
     });
 
     it('maps errors correctly', async () => {
-      mockGenerateTitle.mockResolvedValue({
+      mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'INVALID_KEY', message: 'Invalid API key' },
       });

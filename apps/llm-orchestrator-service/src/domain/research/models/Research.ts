@@ -5,7 +5,7 @@
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
 
-export type ResearchStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ResearchStatus = 'draft' | 'pending' | 'processing' | 'completed' | 'failed';
 
 export type LlmResultStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -47,6 +47,7 @@ export interface Research {
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
+  sourceActionId?: string;
 }
 
 function getDefaultModel(provider: LlmProvider): string {
@@ -97,6 +98,39 @@ export function createResearch(params: {
       }
       return externalReport;
     });
+  }
+
+  return research;
+}
+
+export function createDraftResearch(params: {
+  id: string;
+  userId: string;
+  title: string;
+  prompt: string;
+  selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
+  sourceActionId?: string;
+}): Research {
+  const now = new Date().toISOString();
+  const research: Research = {
+    id: params.id,
+    userId: params.userId,
+    title: params.title,
+    prompt: params.prompt,
+    selectedLlms: params.selectedLlms,
+    synthesisLlm: params.synthesisLlm,
+    status: 'draft',
+    llmResults: params.selectedLlms.map((provider) => ({
+      provider,
+      model: getDefaultModel(provider),
+      status: 'pending' as const,
+    })),
+    startedAt: now,
+  };
+
+  if (params.sourceActionId !== undefined) {
+    research.sourceActionId = params.sourceActionId;
   }
 
   return research;

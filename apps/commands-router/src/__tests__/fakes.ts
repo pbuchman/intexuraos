@@ -9,6 +9,8 @@ import type {
   ClassificationResult,
   ClassifierFactory,
 } from '../domain/ports/classifier.js';
+import type { EventPublisherPort, PublishError } from '../domain/ports/eventPublisher.js';
+import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
 import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import type { Services } from '../services.js';
@@ -135,11 +137,34 @@ export class FakeUserServiceClient implements UserServiceClient {
   }
 }
 
+export class FakeEventPublisher implements EventPublisherPort {
+  private publishedEvents: ActionCreatedEvent[] = [];
+  private failNext = false;
+
+  getPublishedEvents(): ActionCreatedEvent[] {
+    return this.publishedEvents;
+  }
+
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
+  }
+
+  async publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err({ code: 'PUBLISH_FAILED', message: 'Simulated publish failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+}
+
 export function createFakeServices(deps: {
   commandRepository: FakeCommandRepository;
   actionRepository: FakeActionRepository;
   classifier: FakeClassifier;
   userServiceClient: FakeUserServiceClient;
+  eventPublisher: FakeEventPublisher;
 }): Services {
   const classifierFactory: ClassifierFactory = () => deps.classifier;
   return {
@@ -147,11 +172,13 @@ export function createFakeServices(deps: {
     actionRepository: deps.actionRepository,
     classifierFactory,
     userServiceClient: deps.userServiceClient,
+    eventPublisher: deps.eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
       commandRepository: deps.commandRepository,
       actionRepository: deps.actionRepository,
       classifierFactory,
       userServiceClient: deps.userServiceClient,
+      eventPublisher: deps.eventPublisher,
     }),
   };
 }

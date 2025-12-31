@@ -125,3 +125,18 @@ export const researchIdParamsSchema = {
     id: { type: 'string' },
   },
 } as const;
+
+export const approveResearchResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: researchSchema,
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

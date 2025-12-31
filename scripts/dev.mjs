@@ -36,6 +36,8 @@ const SERVICES = [
   { name: 'mobile-notifications-service', port: 8114, color: '\x1b[34m' },
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
   { name: 'llm-orchestrator-service', port: 8116, color: '\x1b[96m' },
+  { name: 'commands-router', port: 8117, color: '\x1b[93m' },
+  { name: 'research-agent', port: 8118, color: '\x1b[94m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -150,6 +152,8 @@ const API_DOCS_HUB_ENV = {
   WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
   LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
+  RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
 };
 
 function startService(service) {

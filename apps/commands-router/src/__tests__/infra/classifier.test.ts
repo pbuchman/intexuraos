@@ -1,20 +1,21 @@
-/**
- * Tests for GeminiClassifier.
- */
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import type { GeminiError, ClassificationResult } from '@intexuraos/infra-gemini';
+import type { GeminiError } from '@intexuraos/infra-gemini';
+import { extractSelectedLlms } from '../../infra/gemini/classifier.js';
 
-const mockClassify = vi.fn();
+const mockGenerate = vi.fn();
 
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: () => ({
-    classify: mockClassify,
+    generate: mockGenerate,
   }),
 }));
 
 const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
+
+function jsonResponse(type: string, confidence: number, title: string): string {
+  return JSON.stringify({ type, confidence, title });
+}
 
 describe('GeminiClassifier', () => {
   beforeEach(() => {
@@ -23,12 +24,7 @@ describe('GeminiClassifier', () => {
 
   describe('classify', () => {
     it('classifies todo command correctly', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'todo',
-        confidence: 0.95,
-        title: 'Buy groceries',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+      mockGenerate.mockResolvedValue(ok(jsonResponse('todo', 0.95, 'Buy groceries')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('I need to buy groceries');
@@ -39,12 +35,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('classifies research command correctly', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'research',
-        confidence: 0.88,
-        title: 'AI trends research',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+      mockGenerate.mockResolvedValue(ok(jsonResponse('research', 0.88, 'AI trends research')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('What are the latest AI trends?');
@@ -54,12 +45,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('returns unclassified when classify returns unclassified type', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'unclassified',
-        confidence: 0,
-        title: 'Unclassified',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+      mockGenerate.mockResolvedValue(ok(jsonResponse('unclassified', 0, 'Unclassified')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('random gibberish');
@@ -74,7 +60,7 @@ describe('GeminiClassifier', () => {
         code: 'RATE_LIMITED',
         message: 'API rate limit exceeded',
       };
-      mockClassify.mockResolvedValue(err(error));
+      mockGenerate.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
 
@@ -88,7 +74,7 @@ describe('GeminiClassifier', () => {
         code: 'INVALID_KEY',
         message: 'Invalid API key provided',
       };
-      mockClassify.mockResolvedValue(err(error));
+      mockGenerate.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'bad-key' });
 
@@ -98,12 +84,7 @@ describe('GeminiClassifier', () => {
     });
 
     it('classifies note command correctly', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'note',
-        confidence: 0.9,
-        title: 'Meeting notes',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+      mockGenerate.mockResolvedValue(ok(jsonResponse('note', 0.9, 'Meeting notes')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('Meeting notes from today');
@@ -112,49 +93,22 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.9);
     });
 
-    it('passes correct options to classify', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'todo',
-        confidence: 0.9,
-        title: 'Test',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+    it('passes prompt containing the text to generate', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('todo', 0.9, 'Test')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       await classifier.classify('test message');
 
-      expect(mockClassify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          text: 'test message',
-          defaultType: 'unclassified',
-        })
-      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('test message'));
     });
 
-    it('passes all valid types to classify', async () => {
-      const result: ClassificationResult<string> = {
-        type: 'calendar',
-        confidence: 0.85,
-        title: 'Team meeting',
-      };
-      mockClassify.mockResolvedValue(ok(result));
+    it('passes classification prompt to generate', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('calendar', 0.85, 'Team meeting')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       await classifier.classify('Team meeting tomorrow at 3pm');
 
-      expect(mockClassify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          validTypes: expect.arrayContaining([
-            'todo',
-            'research',
-            'note',
-            'link',
-            'calendar',
-            'reminder',
-            'unclassified',
-          ]),
-        })
-      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('command classifier'));
     });
 
     it('handles timeout error', async () => {
@@ -162,7 +116,7 @@ describe('GeminiClassifier', () => {
         code: 'TIMEOUT',
         message: 'Request timed out',
       };
-      mockClassify.mockResolvedValue(err(error));
+      mockGenerate.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
 
@@ -176,7 +130,7 @@ describe('GeminiClassifier', () => {
         code: 'API_ERROR',
         message: 'Server error',
       };
-      mockClassify.mockResolvedValue(err(error));
+      mockGenerate.mockResolvedValue(err(error));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
 
@@ -185,18 +139,136 @@ describe('GeminiClassifier', () => {
       );
     });
 
-    it('handles parse error', async () => {
-      const error: GeminiError = {
-        code: 'PARSE_ERROR',
-        message: 'Failed to parse response',
-      };
-      mockClassify.mockResolvedValue(err(error));
+    it('returns unclassified for invalid JSON response', async () => {
+      mockGenerate.mockResolvedValue(ok('This is not valid JSON'));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('test');
 
-      await expect(classifier.classify('test')).rejects.toThrow(
-        'Classification failed: Failed to parse response'
+      expect(classificationResult.type).toBe('unclassified');
+      expect(classificationResult.confidence).toBe(0.5);
+      expect(classificationResult.title).toBe('Unknown');
+    });
+
+    it('returns unclassified for unknown type in response', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('unknown_type', 0.9, 'Test')));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('test');
+
+      expect(classificationResult.type).toBe('unclassified');
+    });
+
+    it('clamps confidence to valid range', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('todo', 1.5, 'Test')));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('test');
+
+      expect(classificationResult.confidence).toBe(1);
+    });
+
+    it('extracts JSON from response with surrounding text', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(`Here is the classification: ${jsonResponse('todo', 0.9, 'Test')} done.`)
       );
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('test');
+
+      expect(classificationResult.type).toBe('todo');
+      expect(classificationResult.confidence).toBe(0.9);
+    });
+
+    it('extracts selectedLlms from text', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('research', 0.9, 'Research topic')));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('Research this using only gemini');
+
+      expect(classificationResult.selectedLlms).toEqual(['google']);
+    });
+
+    it('returns undefined selectedLlms when no LLM specified', async () => {
+      mockGenerate.mockResolvedValue(ok(jsonResponse('research', 0.9, 'Research topic')));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('Research this topic');
+
+      expect(classificationResult.selectedLlms).toBeUndefined();
+    });
+  });
+});
+
+describe('extractSelectedLlms', () => {
+  describe('all LLMs patterns', () => {
+    it('returns all LLMs for "use all LLMs"', () => {
+      expect(extractSelectedLlms('use all LLMs for this research')).toEqual([
+        'google',
+        'openai',
+        'anthropic',
+      ]);
+    });
+
+    it('returns all LLMs for "use all models"', () => {
+      expect(extractSelectedLlms('use all models')).toEqual(['google', 'openai', 'anthropic']);
+    });
+
+    it('returns all LLMs for Polish "użyj wszystkich"', () => {
+      expect(extractSelectedLlms('użyj wszystkich modeli')).toEqual([
+        'google',
+        'openai',
+        'anthropic',
+      ]);
+    });
+
+    it('returns all LLMs for Polish "wszystkie modele"', () => {
+      expect(extractSelectedLlms('chcę wszystkie modele')).toEqual([
+        'google',
+        'openai',
+        'anthropic',
+      ]);
+    });
+  });
+
+  describe('specific LLM keywords', () => {
+    it('extracts google for "gemini"', () => {
+      expect(extractSelectedLlms('use gemini for this')).toEqual(['google']);
+    });
+
+    it('extracts openai for "gpt"', () => {
+      expect(extractSelectedLlms('ask gpt about this')).toEqual(['openai']);
+    });
+
+    it('extracts openai for "chatgpt"', () => {
+      expect(extractSelectedLlms('ask chatgpt about this')).toEqual(['openai']);
+    });
+
+    it('extracts anthropic for "claude"', () => {
+      expect(extractSelectedLlms('use claude for research')).toEqual(['anthropic']);
+    });
+
+    it('extracts multiple LLMs', () => {
+      const result = extractSelectedLlms('use gpt and claude for this');
+      expect(result).toContain('openai');
+      expect(result).toContain('anthropic');
+    });
+
+    it('extracts all three LLMs when mentioned', () => {
+      const result = extractSelectedLlms('compare gemini, gpt and claude');
+      expect(result).toContain('google');
+      expect(result).toContain('openai');
+      expect(result).toContain('anthropic');
+    });
+  });
+
+  describe('no match', () => {
+    it('returns undefined when no LLM mentioned', () => {
+      expect(extractSelectedLlms('research this topic')).toBeUndefined();
+    });
+
+    it('returns undefined for empty string', () => {
+      expect(extractSelectedLlms('')).toBeUndefined();
     });
   });
 });

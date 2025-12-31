@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/infra-llm-audit": "*",
-    "@anthropic-ai/sdk": "^0.71.2"
+    "@intexuraos/llm-audit": "*",
+    "@intexuraos/llm-contract": "*",
+    "@anthropic-ai/sdk": "^0.52.0"
   }
 }

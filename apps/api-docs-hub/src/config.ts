@@ -36,6 +36,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'COMMANDS_ROUTER_OPENAPI_URL',
     displayName: 'Commands Router API',
   },
+  {
+    key: 'RESEARCH_AGENT_OPENAPI_URL',
+    displayName: 'Research Agent API',
+  },
 ];
 
 /**

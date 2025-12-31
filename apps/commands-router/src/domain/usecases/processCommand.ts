@@ -5,6 +5,8 @@ import { createAction } from '../models/action.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
+import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
 import type { UserServiceClient } from '../../infra/user/index.js';
 
 export interface ProcessCommandInput {
@@ -29,8 +31,15 @@ export function createProcessCommandUseCase(deps: {
   actionRepository: ActionRepository;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
+  eventPublisher: EventPublisherPort;
 }): ProcessCommandUseCase {
-  const { commandRepository, actionRepository, classifierFactory, userServiceClient } = deps;
+  const {
+    commandRepository,
+    actionRepository,
+    classifierFactory,
+    userServiceClient,
+    eventPublisher,
+  } = deps;
 
   return {
     async execute(input: ProcessCommandInput): Promise<ProcessCommandResult> {
@@ -75,6 +84,27 @@ export function createProcessCommandUseCase(deps: {
           });
 
           await actionRepository.save(action);
+
+          const eventPayload: ActionCreatedEvent['payload'] = {
+            prompt: input.text,
+            confidence: classification.confidence,
+          };
+          if (classification.selectedLlms !== undefined) {
+            eventPayload.selectedLlms = classification.selectedLlms;
+          }
+
+          const event: ActionCreatedEvent = {
+            type: 'action.created',
+            actionId: action.id,
+            userId: input.userId,
+            commandId: command.id,
+            actionType: classification.type,
+            title: classification.title,
+            payload: eventPayload,
+            timestamp: new Date().toISOString(),
+          };
+
+          await eventPublisher.publishActionCreated(event);
 
           command.classification = {
             type: classification.type,

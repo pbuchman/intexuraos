@@ -1,8 +1,3 @@
-/**
- * Tests for Claude client.
- * Mocks @anthropic-ai/sdk and @intexuraos/infra-llm-audit.
- */
-
 import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const mockMessagesCreate = vi.fn();
@@ -27,15 +22,15 @@ vi.mock('@anthropic-ai/sdk', () => {
   };
 });
 
-vi.mock('@intexuraos/infra-llm-audit', () => ({
+vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({
     success: vi.fn().mockResolvedValue(undefined),
     error: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
-const { createAuditContext } = await import('@intexuraos/infra-llm-audit');
-const { createClaudeClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createClaudeClient, CLAUDE_DEFAULTS } = await import('../index.js');
 
 describe('createClaudeClient', () => {
   beforeEach(() => {
@@ -61,7 +56,7 @@ describe('createClaudeClient', () => {
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-opus-4-5',
+          model: CLAUDE_DEFAULTS.researchModel,
           tools: expect.arrayContaining([expect.objectContaining({ type: 'web_search_20250305' })]),
         })
       );
@@ -197,40 +192,48 @@ describe('createClaudeClient', () => {
     });
   });
 
-  describe('generateTitle', () => {
-    it('returns generated title', async () => {
+  describe('generate', () => {
+    it('returns generated content', async () => {
       mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'AI Research Overview' }],
+        content: [{ type: 'text', text: 'Generated response' }],
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Tell me about AI');
+      const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('AI Research Overview');
+        expect(result.value).toBe('Generated response');
       }
+      expect(mockMessagesCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: CLAUDE_DEFAULTS.defaultModel,
+        })
+      );
     });
 
-    it('trims whitespace from title', async () => {
+    it('joins multiple text blocks', async () => {
       mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: '  Trimmed Title  ' }],
+        content: [
+          { type: 'text', text: 'First part' },
+          { type: 'text', text: 'Second part' },
+        ],
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
+      const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Trimmed Title');
+        expect(result.value).toBe('First part\n\nSecond part');
       }
     });
 
-    it('returns error on API failure', async () => {
+    it('returns error on failure', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('Network error'));
 
       const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
+      const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -356,7 +359,7 @@ describe('createClaudeClient', () => {
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-haiku-4-5',
+          model: CLAUDE_DEFAULTS.validationModel,
         })
       );
     });
@@ -374,18 +377,57 @@ describe('createClaudeClient', () => {
     });
   });
 
-  describe('custom model', () => {
-    it('uses custom model when provided', async () => {
+  describe('custom models', () => {
+    it('uses custom researchModel when provided', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Response' }],
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key', model: 'claude-3-sonnet' });
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        researchModel: 'claude-custom-research',
+      });
       await client.research('Test prompt');
 
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-3-sonnet',
+          model: 'claude-custom-research',
+        })
+      );
+    });
+
+    it('uses custom defaultModel when provided', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        defaultModel: 'claude-custom-default',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockMessagesCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-custom-default',
+        })
+      );
+    });
+
+    it('uses custom validationModel when provided', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        validationModel: 'claude-custom-validation',
+      });
+      await client.validateKey();
+
+      expect(mockMessagesCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-custom-validation',
         })
       );
     });

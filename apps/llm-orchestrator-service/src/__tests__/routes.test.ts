@@ -402,6 +402,124 @@ describe('Research Routes - Authenticated', () => {
     });
   });
 
+  describe('POST /research/:id/approve', () => {
+    it('approves draft research and triggers processing', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'draft' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('pending');
+      expect(processResearchCalled).toBe(true);
+    });
+
+    it('returns 401 without auth', async () => {
+      const research = createTestResearch({ status: 'draft' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 404 when research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/nonexistent-id/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for other users research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ userId: OTHER_USER_ID, status: 'draft' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when research is not in draft status', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'pending' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 500 on repo find failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/test-id/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 on repo update failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'draft' });
+      fakeRepo.addResearch(research);
+      fakeRepo.setFailNextUpdate(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
   describe('DELETE /research/:id', () => {
     it('deletes research when owned by user', async () => {
       const token = await createToken(TEST_USER_ID);
@@ -516,5 +634,157 @@ describe('System Endpoints', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { openapi: string };
     expect(body.openapi).toBeDefined();
+  });
+});
+
+describe('Internal Routes', () => {
+  let app: FastifyInstance;
+  let fakeRepo: FakeResearchRepository;
+  const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
+
+  beforeEach(async () => {
+    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
+
+    fakeRepo = new FakeResearchRepository();
+    const services: ServiceContainer = {
+      researchRepo: fakeRepo,
+      generateId: (): string => 'generated-id-123',
+      processResearchAsync: (): void => {
+        /* noop */
+      },
+    };
+    setServices(services);
+
+    app = await buildServer();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    resetServices();
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  });
+
+  describe('POST /internal/research/draft', () => {
+    it('creates draft research with valid internal auth', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['google', 'openai'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('generated-id-123');
+      expect(body.data.userId).toBe(TEST_USER_ID);
+      expect(body.data.title).toBe('Test Draft Research');
+      expect(body.data.status).toBe('draft');
+      expect(body.data.selectedLlms).toEqual(['google', 'openai']);
+    });
+
+    it('creates draft research with sourceActionId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['anthropic'],
+          sourceActionId: 'action-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.sourceActionId).toBe('action-123');
+    });
+
+    it('returns 401 when X-Internal-Auth header is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['google'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when X-Internal-Auth header has wrong value', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': 'wrong-token' },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['google'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': 'any-token' },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['google'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 500 on save failure', async () => {
+      fakeRepo.setFailNextSave(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          selectedLlms: ['google'],
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 });

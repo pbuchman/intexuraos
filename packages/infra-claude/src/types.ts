@@ -1,19 +1,18 @@
+export type {
+  LLMError as ClaudeError,
+  ResearchResult,
+  SynthesisInput,
+} from '@intexuraos/llm-contract';
+
 export interface ClaudeConfig {
   apiKey: string;
-  model?: string; // default: 'claude-opus-4-5'
+  defaultModel?: string;
+  validationModel?: string;
+  researchModel?: string;
 }
 
-export interface ResearchResult {
-  content: string;
-  sources?: string[];
-}
-
-export interface SynthesisInput {
-  model: string;
-  content: string;
-}
-
-export interface ClaudeError {
-  code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED' | 'OVERLOADED';
-  message: string;
-}
+export const CLAUDE_DEFAULTS = {
+  defaultModel: 'claude-sonnet-4-5-20250929',
+  validationModel: 'claude-haiku-4-5-20251001',
+  researchModel: 'claude-opus-4-5-20251101',
+} as const;

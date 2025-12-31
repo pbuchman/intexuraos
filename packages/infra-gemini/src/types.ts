@@ -1,32 +1,18 @@
+export type {
+  LLMError as GeminiError,
+  ResearchResult,
+  SynthesisInput,
+} from '@intexuraos/llm-contract';
+
 export interface GeminiConfig {
   apiKey: string;
-  model?: string; // default: 'gemini-2.0-flash'
+  defaultModel?: string;
+  validationModel?: string;
+  researchModel?: string;
 }
 
-export interface ResearchResult {
-  content: string;
-  sources?: string[];
-}
-
-export interface SynthesisInput {
-  model: string;
-  content: string;
-}
-
-export interface ClassificationResult<T extends string = string> {
-  type: T;
-  confidence: number;
-  title: string;
-}
-
-export interface ClassifyOptions<T extends string = string> {
-  text: string;
-  systemPrompt: string;
-  validTypes: readonly T[];
-  defaultType: T;
-}
-
-export interface GeminiError {
-  code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED' | 'PARSE_ERROR';
-  message: string;
-}
+export const GEMINI_DEFAULTS = {
+  defaultModel: 'gemini-2.5-flash',
+  validationModel: 'gemini-2.5-flash-lite',
+  researchModel: 'gemini-2.5-pro',
+} as const;

@@ -10,6 +10,7 @@ import {
   FakeActionRepository,
   FakeClassifier,
   FakeUserServiceClient,
+  FakeEventPublisher,
   createFakeServices,
 } from './fakes.js';
 
@@ -28,6 +29,7 @@ describe('Commands Router Routes', () => {
   let fakeActionRepo: FakeActionRepository;
   let fakeClassifier: FakeClassifier;
   let fakeUserServiceClient: FakeUserServiceClient;
+  let fakeEventPublisher: FakeEventPublisher;
 
   async function createAccessToken(sub: string): Promise<string> {
     return await new jose.SignJWT({
@@ -81,6 +83,7 @@ describe('Commands Router Routes', () => {
     fakeActionRepo = new FakeActionRepository();
     fakeClassifier = new FakeClassifier();
     fakeUserServiceClient = new FakeUserServiceClient();
+    fakeEventPublisher = new FakeEventPublisher();
 
     fakeUserServiceClient.setApiKeys('user-1', { google: 'test-gemini-key' });
     fakeUserServiceClient.setApiKeys('user-123', { google: 'test-gemini-key' });
@@ -94,6 +97,7 @@ describe('Commands Router Routes', () => {
         actionRepository: fakeActionRepo,
         classifier: fakeClassifier,
         userServiceClient: fakeUserServiceClient,
+        eventPublisher: fakeEventPublisher,
       })
     );
   });
@@ -625,6 +629,253 @@ describe('Commands Router Routes', () => {
       expect(body.data.actions).toHaveLength(1);
       expect(body.data.actions[0]?.title).toBe('Buy milk');
       expect(body.data.actions[0]?.type).toBe('todo');
+    });
+  });
+
+  describe('PATCH /internal/actions/:actionId', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-1',
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 401 when internal auth token is wrong', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-1',
+        headers: { 'x-internal-auth': 'wrong-token' },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/nonexistent',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Action not found');
+    });
+
+    it('updates action status successfully', async () => {
+      app = await buildServer();
+
+      fakeActionRepo.addAction({
+        id: 'action-update-1',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-update-1',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { status: 'processing' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedAction = await fakeActionRepo.getById('action-update-1');
+      expect(updatedAction?.status).toBe('processing');
+    });
+
+    it('updates action status and merges payload', async () => {
+      app = await buildServer();
+
+      fakeActionRepo.addAction({
+        id: 'action-update-2',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'processing',
+        payload: { existing: 'data' },
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-update-2',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          status: 'completed',
+          payload: { result: 'Research completed', sources: ['source1', 'source2'] },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updatedAction = await fakeActionRepo.getById('action-update-2');
+      expect(updatedAction?.status).toBe('completed');
+      expect(updatedAction?.payload).toEqual({
+        existing: 'data',
+        result: 'Research completed',
+        sources: ['source1', 'source2'],
+      });
+    });
+
+    it('updates action to failed status', async () => {
+      app = await buildServer();
+
+      fakeActionRepo.addAction({
+        id: 'action-fail',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'processing',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-fail',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          status: 'failed',
+          payload: { error: 'LLM API error' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updatedAction = await fakeActionRepo.getById('action-fail');
+      expect(updatedAction?.status).toBe('failed');
+      expect(updatedAction?.payload).toEqual({ error: 'LLM API error' });
+    });
+  });
+
+  describe('Event publishing', () => {
+    it('publishes event when action is created', async () => {
+      app = await buildServer();
+
+      fakeClassifier.setResult({
+        type: 'research',
+        confidence: 0.95,
+        title: 'Research AI trends',
+      });
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-event-1',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.event1',
+        text: 'Research the latest AI trends',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      fakeUserServiceClient.setApiKeys('user-event-1', { google: 'test-key' });
+
+      await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-event1' } },
+      });
+
+      const publishedEvents = fakeEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.type).toBe('action.created');
+      expect(publishedEvents[0]?.actionType).toBe('research');
+      expect(publishedEvents[0]?.title).toBe('Research AI trends');
+      expect(publishedEvents[0]?.payload.prompt).toBe('Research the latest AI trends');
+    });
+
+    it('does not publish event for unclassified commands', async () => {
+      app = await buildServer();
+
+      fakeClassifier.setResult({
+        type: 'unclassified',
+        confidence: 0.3,
+        title: 'Unknown',
+      });
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-event-2',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.event2',
+        text: 'Random gibberish',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      fakeUserServiceClient.setApiKeys('user-event-2', { google: 'test-key' });
+
+      await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-event2' } },
+      });
+
+      const publishedEvents = fakeEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(0);
+    });
+
+    it('includes selectedLlms in event payload', async () => {
+      app = await buildServer();
+
+      fakeClassifier.setResult({
+        type: 'research',
+        confidence: 0.95,
+        title: 'Research topic',
+        selectedLlms: ['google', 'anthropic'],
+      });
+
+      const event = {
+        type: 'command.ingest',
+        userId: 'user-event-3',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.event3',
+        text: 'Research this with gemini and claude',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      fakeUserServiceClient.setApiKeys('user-event-3', { google: 'test-key' });
+
+      await app.inject({
+        method: 'POST',
+        url: '/internal/router/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-event3' } },
+      });
+
+      const publishedEvents = fakeEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.payload.selectedLlms).toEqual(['google', 'anthropic']);
     });
   });
 

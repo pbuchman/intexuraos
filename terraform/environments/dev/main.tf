@@ -153,6 +153,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    research_agent = {
+      name      = "intexuraos-research-agent"
+      app_path  = "apps/research-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -379,6 +386,29 @@ module "pubsub_commands_ingest" {
   ]
 }
 
+# Topic for research action events (commands-router -> research-agent)
+module "pubsub_actions_research" {
+  source = "../../modules/pubsub-push"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-actions-research-${var.environment}"
+  labels     = local.common_labels
+
+  push_endpoint              = "${module.research_agent.service_url}/internal/actions/research"
+  push_service_account_email = module.iam.service_accounts["research_agent"]
+  push_audience              = module.research_agent.service_url
+
+  publisher_service_accounts = {
+    commands_router = module.iam.service_accounts["commands_router"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.research_agent,
+  ]
+}
+
 
 # -----------------------------------------------------------------------------
 # Cloud Run Services
@@ -595,6 +625,7 @@ module "api_docs_hub" {
     MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
     LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL     = "${module.llm_orchestrator_service.service_url}/openapi.json"
     COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
+    RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -607,6 +638,7 @@ module "api_docs_hub" {
     module.mobile_notifications_service,
     module.llm_orchestrator_service,
     module.commands_router,
+    module.research_agent,
   ]
 }
 
@@ -681,6 +713,46 @@ module "commands_router" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.user_service,
+  ]
+}
+
+# Research Agent - Processes research action events
+module "research_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.research_agent.name
+  service_account = module.iam.service_accounts["research_agent"]
+  port            = local.services.research_agent.port
+  min_scale       = local.services.research_agent.min_scale
+  max_scale       = local.services.research_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/research-agent:latest"
+
+  secrets = {
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    GOOGLE_CLOUD_PROJECT = var.project_id
+    COMMANDS_ROUTER_URL  = module.commands_router.service_url
+    LLM_ORCHESTRATOR_URL = module.llm_orchestrator_service.service_url
+    USER_SERVICE_URL     = module.user_service.service_url
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+    module.commands_router,
+    module.llm_orchestrator_service,
     module.user_service,
   ]
 }
@@ -779,6 +851,11 @@ output "commands_router_url" {
   value       = module.commands_router.service_url
 }
 
+output "research_agent_url" {
+  description = "Research Agent Service URL"
+  value       = module.research_agent.service_url
+}
+
 output "firestore_database" {
   description = "Firestore database name"
   value       = module.firestore.database_name
@@ -838,6 +915,11 @@ output "pubsub_media_cleanup_topic" {
 output "pubsub_commands_ingest_topic" {
   description = "Pub/Sub topic for commands ingest events"
   value       = module.pubsub_commands_ingest.topic_name
+}
+
+output "pubsub_actions_research_topic" {
+  description = "Pub/Sub topic for research action events"
+  value       = module.pubsub_actions_research.topic_name
 }
 
 output "github_wif_provider" {

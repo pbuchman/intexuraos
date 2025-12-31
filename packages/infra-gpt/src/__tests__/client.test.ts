@@ -1,8 +1,3 @@
-/**
- * Tests for GPT client.
- * Mocks openai and @intexuraos/infra-llm-audit.
- */
-
 import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const mockResponsesCreate = vi.fn();
@@ -29,15 +24,15 @@ vi.mock('openai', () => {
   return { default: MockOpenAI };
 });
 
-vi.mock('@intexuraos/infra-llm-audit', () => ({
+vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({
     success: vi.fn().mockResolvedValue(undefined),
     error: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
-const { createAuditContext } = await import('@intexuraos/infra-llm-audit');
-const { createGptClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createGptClient, GPT_DEFAULTS } = await import('../index.js');
 
 describe('createGptClient', () => {
   beforeEach(() => {
@@ -60,7 +55,7 @@ describe('createGptClient', () => {
       }
       expect(mockResponsesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4.1',
+          model: GPT_DEFAULTS.researchModel,
           tools: expect.arrayContaining([expect.objectContaining({ type: 'web_search_preview' })]),
         })
       );
@@ -248,33 +243,24 @@ describe('createGptClient', () => {
     });
   });
 
-  describe('generateTitle', () => {
-    it('returns generated title', async () => {
+  describe('generate', () => {
+    it('returns generated content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'AI Research Overview' } }],
+        choices: [{ message: { content: 'Generated response' } }],
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Tell me about AI');
+      const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('AI Research Overview');
+        expect(result.value).toBe('Generated response');
       }
-    });
-
-    it('trims whitespace from title', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: '  Trimmed Title  ' } }],
-      });
-
-      const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Trimmed Title');
-      }
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: GPT_DEFAULTS.defaultModel,
+        })
+      );
     });
 
     it('handles empty choices', async () => {
@@ -283,7 +269,7 @@ describe('createGptClient', () => {
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
+      const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -291,11 +277,25 @@ describe('createGptClient', () => {
       }
     });
 
-    it('returns error on API failure', async () => {
+    it('handles null content', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: null } }],
+      });
+
+      const client = createGptClient({ apiKey: 'test-key' });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('');
+      }
+    });
+
+    it('returns error on failure', async () => {
       mockChatCompletionsCreate.mockRejectedValue(new Error('Network error'));
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
+      const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -449,7 +449,7 @@ describe('createGptClient', () => {
       }
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4.1-mini',
+          model: GPT_DEFAULTS.validationModel,
         })
       );
     });
@@ -495,19 +495,58 @@ describe('createGptClient', () => {
     });
   });
 
-  describe('custom model', () => {
-    it('uses custom model when provided', async () => {
+  describe('custom models', () => {
+    it('uses custom researchModel when provided', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Response',
         output: [],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: 'gpt-4-turbo' });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        researchModel: 'gpt-custom-research',
+      });
       await client.research('Test prompt');
 
       expect(mockResponsesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4-turbo',
+          model: 'gpt-custom-research',
+        })
+      );
+    });
+
+    it('uses custom defaultModel when provided', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Response' } }],
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        defaultModel: 'gpt-custom-default',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-custom-default',
+        })
+      );
+    });
+
+    it('uses custom validationModel when provided', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Response' } }],
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        validationModel: 'gpt-custom-validation',
+      });
+      await client.validateKey();
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-custom-validation',
         })
       );
     });
