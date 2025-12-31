@@ -1,8 +1,17 @@
 #!/bin/bash
+#
+# Connection Verification for Claude Code Cloud Development
+#
+# This script verifies the setup for Claude Code running in a cloud environment.
+# For local development setup, see docs/setup/05-local-dev-with-gcp-deps.md
+#
 
 echo "═══════════════════════════════════════════════════════════"
-echo "  Connection Verification Summary"
+echo "  Claude Code Cloud Development - Connection Verification"
 echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "ℹ️  This verifies cloud dev setup (Service Account authentication)"
+echo "   For local setup, see: docs/setup/05-local-dev-with-gcp-deps.md"
 echo ""
 
 # GitHub/Git Connection
@@ -83,9 +92,9 @@ echo "  Summary"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 echo "✅ GitHub: Ready for git operations (push, pull, fetch)"
-echo "✅ GCP: Service account configured"
-echo "ℹ️  To activate GCP credentials in your shell, run:"
-echo "   export GOOGLE_APPLICATION_CREDENTIALS=/home/user/intexuraos/gcp-service-account.json"
+echo "✅ GCP: Service account configured for cloud development"
 echo ""
-echo "   Or source the .env.local file in your application"
+echo "ℹ️  Applications will automatically use credentials from .env.local"
+echo ""
+echo "📖 Full setup guide: docs/setup/10-claude-code-cloud-dev.md"
 echo ""
