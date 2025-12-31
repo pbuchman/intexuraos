@@ -156,6 +156,30 @@ const API_DOCS_HUB_ENV = {
   RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
 };
 
+const COMMON_SERVICE_ENV = {
+  AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
+  AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
+  AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE ?? '',
+  AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
+  AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
+};
+
+const SERVICE_ENV_MAPPINGS = {
+  'commands-router': {
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+  },
+  'llm-orchestrator-service': {
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? '',
+  },
+  'research-agent': {
+    COMMANDS_ROUTER_URL: 'http://localhost:8117',
+    LLM_ORCHESTRATOR_URL:
+      process.env.INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL ?? 'http://localhost:8116',
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+  },
+};
+
 function startService(service) {
   const serviceDir = join(ROOT_DIR, 'apps', service.name);
   if (!existsSync(serviceDir)) {
@@ -165,9 +189,11 @@ function startService(service) {
 
   const env = {
     ...process.env,
+    ...COMMON_SERVICE_ENV,
+    ...(SERVICE_ENV_MAPPINGS[service.name] ?? {}),
+    ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
     PORT: String(service.port),
     NODE_ENV: 'development',
-    ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
   };
 
   const child = spawn('npx', ['tsx', 'watch', 'src/index.ts'], {
