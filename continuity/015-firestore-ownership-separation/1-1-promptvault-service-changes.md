@@ -10,12 +10,14 @@ Create new `promptvault_settings` collection for promptVaultPageId and implement
 ## Problem
 
 Currently promptvault-service directly accesses `notion_connections` Firestore collection. Need to:
+
 1. Store `promptVaultPageId` in own collection
 2. Fetch Notion token via HTTP from notion-service
 
 ## Scope
 
 **In Scope:**
+
 - Create `promptVaultSettingsRepository.ts` with new Firestore collection
 - Create `notionServiceClient.ts` for HTTP calls to notion-service
 - Update `promptApi.ts` to use both repositories
@@ -25,6 +27,7 @@ Currently promptvault-service directly accesses `notion_connections` Firestore c
 - Write comprehensive tests
 
 **Out of Scope:**
+
 - Changes to notion-service (handled in 1-0)
 - Changes to shared package (handled in 1-2)
 

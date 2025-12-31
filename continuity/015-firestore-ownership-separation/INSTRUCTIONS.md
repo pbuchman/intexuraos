@@ -35,6 +35,7 @@ All tasks are designed to be idempotent - running them multiple times produces t
 ## Resume Procedure
 
 If interrupted:
+
 1. Read CONTINUITY.md for current state
 2. Check "Now" section for current task
 3. Continue from that task

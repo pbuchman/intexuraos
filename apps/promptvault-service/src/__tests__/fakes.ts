@@ -9,6 +9,11 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import type {
+  NotionServiceClient,
+  NotionTokenContext,
+  NotionServiceError,
+} from '../infra/notion/notionServiceClient.js';
 
 export interface NotionConnectionPublic {
   promptVaultPageId: string;
@@ -23,7 +28,66 @@ export interface NotionError {
 }
 
 /**
+ * Fake Notion service client for testing.
+ * Simulates HTTP calls to notion-service.
+ */
+export class FakeNotionServiceClient implements NotionServiceClient {
+  private tokenContexts = new Map<string, NotionTokenContext>();
+  private getNotionTokenError: NotionServiceError | null = null;
+
+  async getNotionToken(userId: string): Promise<Result<NotionTokenContext, NotionServiceError>> {
+    if (this.getNotionTokenError !== null) {
+      const error = this.getNotionTokenError;
+      this.getNotionTokenError = null; // Reset after use
+      return err(error);
+    }
+
+    const context = this.tokenContexts.get(userId);
+    if (context === undefined) {
+      return ok({ connected: false, token: null });
+    }
+
+    return ok(context);
+  }
+
+  // Test helpers
+  setTokenContext(userId: string, context: NotionTokenContext): void {
+    this.tokenContexts.set(userId, context);
+  }
+
+  setGetNotionTokenError(error: NotionServiceError | null): void {
+    this.getNotionTokenError = error;
+  }
+
+  clear(): void {
+    this.tokenContexts.clear();
+    this.getNotionTokenError = null;
+  }
+}
+
+/**
+ * Fake PromptVault settings repository for testing.
+ * Stores promptVaultPageId in memory.
+ */
+export class FakePromptVaultSettingsRepository {
+  private pageIds = new Map<string, string>();
+
+  getPromptVaultPageId(userId: string): string | null {
+    return this.pageIds.get(userId) ?? null;
+  }
+
+  savePromptVaultPageId(userId: string, pageId: string): void {
+    this.pageIds.set(userId, pageId);
+  }
+
+  clear(): void {
+    this.pageIds.clear();
+  }
+}
+
+/**
  * Fake Notion connection repository for testing.
+ * @deprecated Use FakeNotionServiceClient instead.
  */
 export class FakeNotionConnectionRepository {
   private connections = new Map<
@@ -361,6 +425,7 @@ interface PromptError {
 
 /**
  * Factory to create a fake prompt repository for testing.
+ * @deprecated Use the real promptRepository with FakeNotionServiceClient instead.
  */
 export function createFakePromptRepository(
   connectionRepo: FakeNotionConnectionRepository,

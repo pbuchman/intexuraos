@@ -65,8 +65,7 @@ function createConnectionRepository(): ConnectionRepository {
     isConnected: async (userId) => await isNotionConnected(userId),
     getToken: async (userId) => await getNotionToken(userId),
     getConnection: async (userId) => await getNotionConnection(userId),
-    saveConnection: async (userId, notionToken) =>
-      await saveNotionConnection(userId, notionToken),
+    saveConnection: async (userId, notionToken) => await saveNotionConnection(userId, notionToken),
     disconnect: async (userId) => await disconnectNotion(userId),
     disconnectConnection: async (userId) => await disconnectNotion(userId),
   };

@@ -10,7 +10,8 @@ import {
   type NotionLogger,
   type NotionError,
 } from '@intexuraos/infra-notion';
-import { getNotionToken, getNotionConnection, isNotionConnected } from '../firestore/index.js';
+import { getPromptVaultPageId } from '../firestore/promptVaultSettingsRepository.js';
+import type { NotionServiceClient } from './notionServiceClient.js';
 
 // ============================================================================
 // Types
@@ -76,35 +77,38 @@ function joinTextChunks(chunks: string[]): string {
 // ============================================================================
 
 async function getUserContext(
-  userId: string
+  userId: string,
+  notionServiceClient: NotionServiceClient
 ): Promise<Result<{ token: string; promptVaultPageId: string }, PromptVaultError>> {
-  const connectedResult = await isNotionConnected(userId);
-  if (!connectedResult.ok) {
-    return err({ code: 'DOWNSTREAM_ERROR', message: connectedResult.error.message });
+  // Fetch token from notion-service and promptVaultPageId from local Firestore in parallel
+  const [tokenContextResult, pageIdResult] = await Promise.all([
+    notionServiceClient.getNotionToken(userId),
+    getPromptVaultPageId(userId),
+  ]);
+
+  // Check token context
+  if (!tokenContextResult.ok) {
+    const errorCode =
+      tokenContextResult.error.code === 'UNAUTHORIZED' ? 'UNAUTHORIZED' : 'DOWNSTREAM_ERROR';
+    return err({ code: errorCode, message: tokenContextResult.error.message });
   }
-  if (!connectedResult.value) {
+
+  const { connected, token } = tokenContextResult.value;
+  if (!connected || token === null) {
     return err({ code: 'NOT_CONNECTED', message: 'Notion integration is not configured' });
   }
 
-  const tokenResult = await getNotionToken(userId);
-  if (!tokenResult.ok) {
-    return err({ code: 'DOWNSTREAM_ERROR', message: tokenResult.error.message });
-  }
-  const token = tokenResult.value;
-  if (token === null) {
-    return err({ code: 'NOT_CONNECTED', message: 'Notion token not found' });
+  // Check promptVaultPageId
+  if (!pageIdResult.ok) {
+    return err({ code: 'DOWNSTREAM_ERROR', message: pageIdResult.error.message });
   }
 
-  const configResult = await getNotionConnection(userId);
-  if (!configResult.ok) {
-    return err({ code: 'DOWNSTREAM_ERROR', message: configResult.error.message });
-  }
-  const config = configResult.value;
-  if (config === null) {
-    return err({ code: 'NOT_CONNECTED', message: 'Notion configuration not found' });
+  const promptVaultPageId = pageIdResult.value;
+  if (promptVaultPageId === null) {
+    return err({ code: 'NOT_CONNECTED', message: 'PromptVault page ID not configured' });
   }
 
-  return ok({ token, promptVaultPageId: config.promptVaultPageId });
+  return ok({ token, promptVaultPageId });
 }
 
 function mapError(e: NotionError): PromptVaultError {
@@ -129,9 +133,10 @@ export async function createPrompt(
   userId: string,
   title: string,
   content: string,
+  notionServiceClient: NotionServiceClient,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId);
+  const ctx = await getUserContext(userId, notionServiceClient);
   if (!ctx.ok) return err(ctx.error);
 
   const { token, promptVaultPageId } = ctx.value;
@@ -197,9 +202,10 @@ export async function createPrompt(
  */
 export async function listPrompts(
   userId: string,
+  notionServiceClient: NotionServiceClient,
   logger?: NotionLogger
 ): Promise<Result<Prompt[], PromptVaultError>> {
-  const ctx = await getUserContext(userId);
+  const ctx = await getUserContext(userId, notionServiceClient);
   if (!ctx.ok) return err(ctx.error);
 
   const { token, promptVaultPageId } = ctx.value;
@@ -239,9 +245,10 @@ export async function listPrompts(
 export async function getPrompt(
   userId: string,
   promptId: string,
+  notionServiceClient: NotionServiceClient,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId);
+  const ctx = await getUserContext(userId, notionServiceClient);
   if (!ctx.ok) return err(ctx.error);
 
   return await getPromptById(ctx.value.token, promptId, logger);
@@ -305,9 +312,10 @@ export async function updatePrompt(
   userId: string,
   promptId: string,
   update: { title?: string; content?: string },
+  notionServiceClient: NotionServiceClient,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId);
+  const ctx = await getUserContext(userId, notionServiceClient);
   if (!ctx.ok) return err(ctx.error);
 
   const { token } = ctx.value;

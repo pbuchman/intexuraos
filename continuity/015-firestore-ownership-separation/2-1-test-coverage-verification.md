@@ -10,6 +10,7 @@ Verify that all new code is properly tested and coverage thresholds are met. Thi
 ## Problem
 
 Need to ensure:
+
 1. New files have adequate test coverage
 2. Modified files maintain coverage thresholds
 3. All edge cases are tested
@@ -18,12 +19,14 @@ Need to ensure:
 ## Scope
 
 **In Scope:**
+
 - Run full test suite with coverage
 - Verify new files meet coverage thresholds
 - Identify and fill any coverage gaps
 - Verify integration tests pass
 
 **Out of Scope:**
+
 - Modifying `vitest.config.ts` coverage exclusions (FORBIDDEN)
 - Modifying coverage thresholds (FORBIDDEN)
 

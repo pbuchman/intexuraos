@@ -10,18 +10,21 @@ Remove Firestore repository functions from shared `@intexuraos/infra-notion` pac
 ## Problem
 
 Package currently contains both:
+
 1. Notion API client (should stay - shared utility)
 2. Firestore repository for connections (should be removed - now in notion-service)
 
 ## Scope
 
 **In Scope:**
+
 - Remove all `notionConnection` exports from `index.ts`
 - Delete `notionConnection.ts` file
 - Delete `__tests__/notionConnection.test.ts`
 - Remove `@intexuraos/infra-firestore` dependency from `package.json`
 
 **Out of Scope:**
+
 - Changes to Notion API client (`notion.ts`) - this stays
 - Changes to services (handled in 1-0 and 1-1)
 

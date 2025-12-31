@@ -14,6 +14,7 @@ Currently `notionConnection.ts` is in shared package `@intexuraos/infra-notion` 
 ## Scope
 
 **In Scope:**
+
 - Move `notionConnection.ts` to `apps/notion-service/src/infra/firestore/notionConnectionRepository.ts`
 - Remove `promptVaultPageId` from `NotionConnectionPublic` and `NotionConnectionDoc`
 - Create internal endpoint `/internal/notion/users/:userId/context`
@@ -21,6 +22,7 @@ Currently `notionConnection.ts` is in shared package `@intexuraos/infra-notion` 
 - Write tests for internal endpoint
 
 **Out of Scope:**
+
 - Changes to promptvault-service
 - Changes to shared package (handled in 1-2)
 

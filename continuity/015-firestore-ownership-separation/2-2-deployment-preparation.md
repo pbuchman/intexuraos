@@ -10,6 +10,7 @@ Prepare environment configuration and Terraform for deployment. Final task befor
 ## Problem
 
 Need to ensure:
+
 1. Environment variables configured
 2. Terraform changes validated
 3. Deployment checklist prepared
@@ -18,6 +19,7 @@ Need to ensure:
 ## Scope
 
 **In Scope:**
+
 - Update Terraform configuration for env vars
 - Validate Terraform syntax
 - Create deployment checklist
@@ -25,6 +27,7 @@ Need to ensure:
 - Archive task folder
 
 **Out of Scope:**
+
 - Actual deployment to GCP (manual step)
 - Production rollout
 
@@ -58,6 +61,7 @@ Need to ensure:
 ## Success Criteria Verification
 
 **Technical:**
+
 - [ ] `npm run ci` passes
 - [ ] `terraform fmt -check -recursive && terraform validate` passes
 - [ ] Only notion-service has direct access to `notion_connections`
@@ -67,12 +71,14 @@ Need to ensure:
 - [ ] All prompt operations work
 
 **Architecture:**
+
 - [ ] `notion_connections` contains: userId, notionToken, connected, timestamps (NO promptVaultPageId)
 - [ ] `promptvault_settings` contains: userId, promptVaultPageId, timestamps
 - [ ] Internal endpoints use `/internal/{service-prefix}/{resource-path}`
 - [ ] Convention documented in `.claude/CLAUDE.md` and `docs/architecture/`
 
 **Performance:**
+
 - [ ] No degradation (getUserContext uses parallel fetching)
 
 ## Deployment Checklist
@@ -115,6 +121,7 @@ cd terraform && terraform fmt -check -recursive && terraform validate
 ## Rollback
 
 If deployment fails:
+
 ```bash
 # Revert to previous service versions
 # Environment variables can remain (harmless)
@@ -123,6 +130,7 @@ If deployment fails:
 ## Archival
 
 After success criteria verified:
+
 ```bash
 mv continuity/015-firestore-ownership-separation continuity/archive/
 ```

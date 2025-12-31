@@ -20,10 +20,7 @@ export interface ConnectNotionInput {
 /**
  * Error codes specific to this use case.
  */
-export type ConnectNotionErrorCode =
-  | 'INVALID_TOKEN'
-  | 'DOWNSTREAM_ERROR'
-  | 'VALIDATION_ERROR';
+export type ConnectNotionErrorCode = 'INVALID_TOKEN' | 'DOWNSTREAM_ERROR' | 'VALIDATION_ERROR';
 
 export interface ConnectNotionError {
   code: ConnectNotionErrorCode;

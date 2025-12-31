@@ -15,6 +15,7 @@ npm run dev:emulators
 ```
 
 This starts:
+
 - Firebase Emulator (Firestore + Pub/Sub)
 - Fake GCS Server
 - All 7 services with `node --watch` (instant restart on file changes)
@@ -34,41 +35,50 @@ npm run emulators:logs
 
 ## Services & Ports
 
-| Service                      | Port | Health Check                  |
-| ---------------------------- | ---- | ----------------------------- |
-| user-service                 | 8110 | http://localhost:8110/health  |
-| promptvault-service          | 8111 | http://localhost:8111/health  |
-| notion-service               | 8112 | http://localhost:8112/health  |
-| whatsapp-service             | 8113 | http://localhost:8113/health  |
-| mobile-notifications-service | 8114 | http://localhost:8114/health  |
-| api-docs-hub                 | 8115 | http://localhost:8115/docs    |
-| llm-orchestrator-service     | 8116 | http://localhost:8116/health  |
+| Service                      | Port | Health Check                 |
+| ---------------------------- | ---- | ---------------------------- |
+| user-service                 | 8110 | http://localhost:8110/health |
+| promptvault-service          | 8111 | http://localhost:8111/health |
+| notion-service               | 8112 | http://localhost:8112/health |
+| whatsapp-service             | 8113 | http://localhost:8113/health |
+| mobile-notifications-service | 8114 | http://localhost:8114/health |
+| api-docs-hub                 | 8115 | http://localhost:8115/docs   |
+| llm-orchestrator-service     | 8116 | http://localhost:8116/health |
 
 ### Emulator Ports
 
-| Emulator    | Port | UI/Endpoint                               |
-| ----------- | ---- | ----------------------------------------- |
-| Firebase UI | 8100 | http://localhost:8100                     |
+| Emulator    | Port | UI/Endpoint                                   |
+| ----------- | ---- | --------------------------------------------- |
+| Firebase UI | 8100 | http://localhost:8100                         |
 | Firestore   | 8101 | (used internally via FIRESTORE_EMULATOR_HOST) |
 | Pub/Sub     | 8102 | (used internally via PUBSUB_EMULATOR_HOST)    |
-| Fake GCS    | 8103 | http://localhost:8103/storage/v1/b        |
+| Fake GCS    | 8103 | http://localhost:8103/storage/v1/b            |
 
 ## Prerequisites
 
 1. **Docker** - Must be running
 2. **Node 22+** - For `node --watch` support
-3. **Copy `.env.local.example` to `.env.local`** and fill in external API keys
+3. **direnv** - For environment variable management
+4. **Sync secrets and configure local overrides:**
 
 ```bash
-cp .env.local.example .env.local
-# Edit .env.local with your Auth0, WhatsApp, etc. credentials
+# Sync secrets from GCP Secret Manager (creates .envrc)
+./scripts/sync-secrets.sh
+
+# Copy local overrides template
+cp .envrc.local.example .envrc.local
+
+# Allow direnv to load variables
+direnv allow
 ```
+
+The `.envrc.local` file overrides cloud service URLs with localhost URLs for local development.
 
 ## Docker Compose Files
 
-| File                      | Purpose                                    |
-| ------------------------- | ------------------------------------------ |
-| `docker-compose.yaml`     | Full containerized services (legacy)       |
+| File                        | Purpose                                  |
+| --------------------------- | ---------------------------------------- |
+| `docker-compose.yaml`       | Full containerized services (legacy)     |
 | `docker-compose.local.yaml` | Emulators only (Firestore, Pub/Sub, GCS) |
 
 ## Legacy: Full Docker Build

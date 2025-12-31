@@ -75,7 +75,8 @@ describe('notion-service domain use-cases', () => {
     it('should return INVALID_TOKEN error when validateToken returns UNAUTHORIZED error', async () => {
       const notionError: NotionError = { code: 'UNAUTHORIZED', message: 'Invalid token' };
       const notionApi: NotionApi = {
-        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(err(notionError)),
+        validateToken: (): Promise<Result<boolean, NotionError>> =>
+          Promise.resolve(err(notionError)),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -125,7 +126,8 @@ describe('notion-service domain use-cases', () => {
     it('should return DOWNSTREAM_ERROR for other Notion API errors', async () => {
       const notionError: NotionError = { code: 'RATE_LIMITED', message: 'Rate limited' };
       const notionApi: NotionApi = {
-        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(err(notionError)),
+        validateToken: (): Promise<Result<boolean, NotionError>> =>
+          Promise.resolve(err(notionError)),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>

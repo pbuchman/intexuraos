@@ -32,7 +32,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'getInternalNotionContext',
         summary: 'Get Notion connection context (internal)',
-        description: 'Internal endpoint for service-to-service communication. Returns connection state and token.',
+        description:
+          'Internal endpoint for service-to-service communication. Returns connection state and token.',
         tags: ['internal'],
         params: {
           type: 'object',

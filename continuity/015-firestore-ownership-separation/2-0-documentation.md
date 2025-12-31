@@ -10,6 +10,7 @@ Document the service-to-service communication pattern and internal endpoint nami
 ## Problem
 
 New pattern needs to be documented so:
+
 1. Future developers understand the convention
 2. Claude Code can enforce it in future tasks
 3. Architecture decisions are preserved
@@ -17,12 +18,14 @@ New pattern needs to be documented so:
 ## Scope
 
 **In Scope:**
+
 - Create `docs/architecture/service-to-service-communication.md`
 - Update `.claude/CLAUDE.md` with internal endpoint convention
 - Document all existing internal endpoints
 - Provide examples and best practices
 
 **Out of Scope:**
+
 - Code changes (already done in Tier 1)
 - Terraform changes (handled in 2-2)
 
