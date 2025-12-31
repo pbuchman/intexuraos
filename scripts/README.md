@@ -28,6 +28,24 @@ Prerequisites:
 - Project configured: `gcloud config set project <PROJECT_ID>`
 - Terraform applied: secrets must exist before populating values
 
+## verify-connections.sh
+
+Verification script for Claude Code cloud development setup.
+
+```bash
+# Run from repository root
+./scripts/verify-connections.sh
+```
+
+The script verifies:
+
+1. GitHub/Git connectivity
+2. GCP service account configuration
+3. Security (gitignore verification)
+4. Current branch status
+
+See [docs/setup/10-claude-code-cloud-dev.md](../docs/setup/10-claude-code-cloud-dev.md) for full setup guide.
+
 ## Other Scripts
 
 - `sync-secrets.sh` - Sync secrets between environments

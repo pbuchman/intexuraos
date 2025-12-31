@@ -14,6 +14,10 @@ coverage/
 apps/*/.env
 .envrc
 
+# GCP Service Account Keys
+*service-account*.json
+gcp-*.json
+
 # Terraform
 terraform/.terraform/
 terraform/**/.terraform/
