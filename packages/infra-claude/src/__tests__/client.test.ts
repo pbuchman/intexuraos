@@ -88,6 +88,27 @@ describe('createClaudeClient', () => {
       }
     });
 
+    it('handles web_search_tool_result with non-array content', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Research content with https://text-source.com link' },
+          {
+            type: 'web_search_tool_result',
+            content: 'encrypted_content_string',
+          },
+        ],
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key' });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toContain('https://text-source.com');
+        expect(result.value.sources).not.toContain('encrypted_content_string');
+      }
+    });
+
     it('deduplicates sources', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'See https://example.com and https://example.com again.' }],

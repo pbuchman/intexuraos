@@ -13,10 +13,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Verification (MANDATORY)
 
 ```bash
-npm run ci                        # MUST pass before task completion
-terraform fmt -check -recursive   # If terraform changed (from /terraform)
-terraform validate                # If terraform changed
+npm run ci                    # MUST pass before task completion
+tf fmt -check -recursive      # If terraform changed (from /terraform)
+tf validate                   # If terraform changed
 ```
+
+**IMPORTANT:** Use `tf` command instead of `terraform`. This is an alias configured in the user's shell environment. Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
 
 **Do not claim complete until verification passes.**
 
@@ -240,7 +242,7 @@ Repositories should call `getFirestore()` within methods, not accept Firestore a
 7. Add project reference to root `tsconfig.json`
 8. Add to ESLint `no-restricted-imports` patterns in `eslint.config.js`
 9. Run `npm run ci`
-10. Run `terraform fmt -check -recursive && terraform validate`
+10. Run `tf fmt -check -recursive && tf validate`
 
 ---
 
@@ -308,19 +310,19 @@ Repositories should call `getFirestore()` within methods, not accept Firestore a
 **Verification:**
 
 ```bash
-terraform fmt -check -recursive   # From /terraform
-terraform validate                # From /terraform or environment dir
+tf fmt -check -recursive      # From /terraform
+tf validate                   # From /terraform or environment dir
 ```
 
 ### Rules
 
-| Rule                              | Verification                      |
-| --------------------------------- | --------------------------------- |
-| Formatted                         | `terraform fmt -check -recursive` |
-| Valid syntax                      | `terraform validate`              |
-| No hardcoded secrets              | Manual review                     |
-| Variables have description + type | `terraform validate`              |
-| Outputs have description          | `terraform validate`              |
+| Rule                              | Verification               |
+| --------------------------------- | -------------------------- |
+| Formatted                         | `tf fmt -check -recursive` |
+| Valid syntax                      | `tf validate`              |
+| No hardcoded secrets              | Manual review              |
+| Variables have description + type | `tf validate`              |
+| Outputs have description          | `tf validate`              |
 
 ### Structure
 
@@ -334,9 +336,9 @@ terraform/
 
 ### Change Process
 
-1. `terraform fmt -recursive`
-2. `terraform validate`
-3. `terraform plan` (review before apply)
+1. `tf fmt -recursive`
+2. `tf validate`
+3. `tf plan` (review before apply)
 4. Document in commit message
 
 ### Web Hosting Gotcha
@@ -350,8 +352,8 @@ Reference: `docs/architecture/web-app-hosting.md`
 
 ### Checklist
 
-- [ ] `terraform fmt -check -recursive` passes
-- [ ] `terraform validate` passes
+- [ ] `tf fmt -check -recursive` passes
+- [ ] `tf validate` passes
 - [ ] No hardcoded secrets/regions/project IDs
 - [ ] Plan reviewed (if environment access available)
 
@@ -827,7 +829,7 @@ Must track:
 ## Task Completion
 
 1. Run `npm run ci` — must pass
-2. If terraform changed: `terraform fmt -check -recursive && terraform validate`
+2. If terraform changed: `tf fmt -check -recursive && tf validate`
 3. If CI fails → fix → repeat
 4. **If coverage fails → write tests. NEVER modify vitest.config.ts exclusions.**
 5. Only when all pass → task complete

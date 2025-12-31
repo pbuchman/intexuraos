@@ -19,6 +19,7 @@ import {
   type TranscriptionPollingConfig,
 } from '../../domain/inbox/index.js';
 import {
+  FakeEventPublisher,
   FakeMediaStorage,
   FakeSpeechTranscriptionPort,
   FakeWhatsAppCloudApiPort,
@@ -617,6 +618,75 @@ describe('TranscribeAudioUseCase', () => {
       const failureMessage = sentMessages.find((m) => m.message.includes('❌'));
       expect(failureMessage).toBeDefined();
       expect(failureMessage?.message).toContain('Audio file corrupted');
+    });
+  });
+
+  describe('event publishing', () => {
+    it('publishes command ingest event after successful transcription', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const fakeEventPublisher = new FakeEventPublisher();
+      const depsWithPublisher: TranscribeAudioDeps = {
+        ...deps,
+        eventPublisher: fakeEventPublisher,
+      };
+      const usecaseWithPublisher = new TranscribeAudioUseCase(depsWithPublisher, fastPollingConfig);
+
+      const input = createTestInput();
+      const executePromise = usecaseWithPublisher.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(jobId, 'Voice transcription result');
+      }
+
+      await executePromise;
+
+      const events = fakeEventPublisher.getCommandIngestEvents();
+      expect(events.length).toBe(1);
+      expect(events[0]?.type).toBe('command.ingest');
+      expect(events[0]?.sourceType).toBe('whatsapp_voice');
+      expect(events[0]?.text).toBe('Voice transcription result');
+    });
+
+    it('handles event publish failure gracefully', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const fakeEventPublisher = {
+        publishMediaCleanup: vi.fn().mockResolvedValue({ ok: true }),
+        publishCommandIngest: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Publish failed' },
+        }),
+      };
+      const depsWithPublisher: TranscribeAudioDeps = {
+        ...deps,
+        eventPublisher: fakeEventPublisher,
+      };
+      const usecaseWithPublisher = new TranscribeAudioUseCase(depsWithPublisher, fastPollingConfig);
+
+      const input = createTestInput();
+      const executePromise = usecaseWithPublisher.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(jobId, 'Voice transcription result');
+      }
+
+      await executePromise;
+
+      // Transcription should still be successful despite publish failure
+      const message = await messageRepository.findById('test-user-id', 'test-message-id');
+      expect(message.ok).toBe(true);
+      if (message.ok && message.value !== null) {
+        expect(message.value.transcription?.status).toBe('completed');
+      }
     });
   });
 });

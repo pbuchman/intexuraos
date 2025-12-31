@@ -251,4 +251,34 @@ describe('Internal Routes', () => {
       expect(body.google).toBeNull();
     });
   });
+
+  describe('POST /internal/users/:uid/llm-keys/:provider/last-used', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/users/user-123/llm-keys/google/last-used',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('updates llm last used timestamp for valid request', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/users/user-123/llm-keys/anthropic/last-used',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe('');
+    });
+  });
 });

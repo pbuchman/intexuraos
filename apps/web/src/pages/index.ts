@@ -10,3 +10,4 @@ export { ApiKeysSettingsPage } from './ApiKeysSettingsPage.js';
 export { LlmOrchestratorPage } from './LlmOrchestratorPage.js';
 export { ResearchListPage } from './ResearchListPage.js';
 export { ResearchDetailPage } from './ResearchDetailPage.js';
+export { InboxPage } from './InboxPage.js';

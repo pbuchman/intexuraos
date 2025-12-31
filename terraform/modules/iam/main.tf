@@ -50,6 +50,13 @@ resource "google_service_account" "llm_orchestrator_service" {
   description  = "Service account for llm-orchestrator-service Cloud Run deployment"
 }
 
+# Service account for commands-router
+resource "google_service_account" "commands_router" {
+  account_id   = "intexuraos-cmd-router-${var.environment}"
+  display_name = "IntexuraOS Commands Router (${var.environment})"
+  description  = "Service account for commands-router Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -105,6 +112,15 @@ resource "google_secret_manager_secret_iam_member" "llm_orchestrator_service_sec
   member    = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
 }
 
+# Commands Router: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "commands_router_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.commands_router.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -146,6 +162,13 @@ resource "google_project_iam_member" "llm_orchestrator_service_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
+}
+
+# Commands Router: Firestore access
+resource "google_project_iam_member" "commands_router_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.commands_router.email}"
 }
 
 
@@ -202,5 +225,12 @@ resource "google_project_iam_member" "llm_orchestrator_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
+}
+
+# Commands Router: Cloud Logging
+resource "google_project_iam_member" "commands_router_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.commands_router.email}"
 }
 

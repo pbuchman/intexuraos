@@ -551,6 +551,7 @@ async function handleAudioMessage(
       mediaStorage: services.mediaStorage,
       transcriptionService: services.transcriptionService,
       whatsappCloudApi: services.whatsappCloudApi,
+      eventPublisher: services.eventPublisher,
     });
 
     // Get first phone number ID for sending transcription results
@@ -634,8 +635,18 @@ async function handleTextMessage(
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
 
-  // Start link preview extraction in background (fire-and-forget)
+  // Publish command ingest event for text message (fire-and-forget)
   const services = getServices();
+  void services.eventPublisher.publishCommandIngest({
+    type: 'command.ingest',
+    userId,
+    sourceType: 'whatsapp_text',
+    externalId: waMessageId,
+    text: messageText,
+    timestamp,
+  });
+
+  // Start link preview extraction in background (fire-and-forget)
   const extractLinkPreviewsUseCase = new ExtractLinkPreviewsUseCase({
     messageRepository: services.messageRepository,
     linkPreviewFetcher: services.linkPreviewFetcher,

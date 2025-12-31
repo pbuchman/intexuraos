@@ -81,4 +81,67 @@ describe('GcpPubSubPublisher', () => {
       }
     });
   });
+
+  describe('publishCommandIngest', () => {
+    it('skips publish when topic is not configured', async () => {
+      const result = await publisher.publishCommandIngest({
+        type: 'command.ingest',
+        userId: 'user-123',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.abc',
+        text: 'Test command',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
+    it('publishes event when topic is configured', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher(
+        'test-project',
+        'media-cleanup-topic',
+        'commands-ingest-topic'
+      );
+      mockPublishMessage.mockResolvedValue('message-id-456');
+
+      const result = await publisherWithTopic.publishCommandIngest({
+        type: 'command.ingest',
+        userId: 'user-123',
+        sourceType: 'whatsapp_voice',
+        externalId: 'wamid.voice123',
+        text: 'Voice transcription text',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledWith({
+        data: expect.any(Buffer) as Buffer,
+      });
+    });
+
+    it('returns error when publish fails', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher(
+        'test-project',
+        'media-cleanup-topic',
+        'commands-ingest-topic'
+      );
+      mockPublishMessage.mockRejectedValue(new Error('Topic unavailable'));
+
+      const result = await publisherWithTopic.publishCommandIngest({
+        type: 'command.ingest',
+        userId: 'user-789',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.fail',
+        text: 'Test',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Topic unavailable');
+      }
+    });
+  });
 });

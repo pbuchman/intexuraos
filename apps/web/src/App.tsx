@@ -7,6 +7,7 @@ import { config } from '@/config';
 import {
   ApiKeysSettingsPage,
   HomePage,
+  InboxPage,
   LlmOrchestratorPage,
   LoginPage,
   MobileNotificationsConnectionPage,
@@ -152,6 +153,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       {/* Feature routes */}
+      <Route
+        path="/inbox"
+        element={
+          <ProtectedRoute>
+            <InboxPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/notes"
         element={
