@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import {
   createResearch as createResearchApi,
@@ -41,7 +42,7 @@ export function useResearch(id: string): {
         const data = await getResearchApi(token, id);
         setResearch(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load research');
+        setError(getErrorMessage(err, 'Failed to load research'));
       } finally {
         if (shouldShowLoading) {
           setLoading(false);
@@ -102,7 +103,7 @@ export function useResearches(): {
       setCursor(data.nextCursor);
       setHasMore(data.nextCursor !== undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load researches');
+      setError(getErrorMessage(err, 'Failed to load researches'));
     } finally {
       setLoading(false);
     }
@@ -122,7 +123,7 @@ export function useResearches(): {
       setCursor(data.nextCursor);
       setHasMore(data.nextCursor !== undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more');
+      setError(getErrorMessage(err, 'Failed to load more'));
     }
   }, [cursor, hasMore, loading, getAccessToken]);
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey } from '@/services/llmKeysApi';
 import type { LlmKeysResponse, LlmProvider } from '@/services/llmKeysApi.types';
@@ -34,7 +35,7 @@ export function useLlmKeys(): UseLlmKeysResult {
       const data = await getLlmKeys(token, userId);
       setKeys(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      setError(getErrorMessage(err, 'Failed to load API keys'));
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export function useLlmKeys(): UseLlmKeysResult {
         await setLlmKey(token, userId, { provider, apiKey });
         await refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save API key');
+        setError(getErrorMessage(err, 'Failed to save API key'));
         throw err;
       }
     },
@@ -71,7 +72,7 @@ export function useLlmKeys(): UseLlmKeysResult {
         await deleteLlmKey(token, userId, provider);
         await refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete API key');
+        setError(getErrorMessage(err, 'Failed to delete API key'));
         throw err;
       }
     },

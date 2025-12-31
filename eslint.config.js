@@ -160,6 +160,8 @@ export default tseslint.config(
       'no-implied-eval': 'error',
       'no-return-await': 'off',
       '@typescript-eslint/return-await': ['error', 'always'],
+      // Rule 1.6: No empty catch blocks (all catch blocks must handle errors)
+      'no-empty': ['error', { allowEmptyCatch: false }],
       // Block deep imports into other packages' /src/ directories
       // Cross-package imports should use the public entrypoint (index.ts)
       // Also block cross-app imports (apps should not import from other apps)
@@ -255,6 +257,30 @@ export default tseslint.config(
             {
               group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Rule 1.1: Packages must use Firestore singleton from @intexuraos/infra-firestore
+  {
+    files: ['packages/*/src/**/*.ts'],
+    ignores: ['packages/infra-firestore/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: 'firebase-admin/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
             },
           ],
         },
@@ -474,6 +500,95 @@ export default tseslint.config(
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
+        },
+      ],
+    },
+  },
+  // Rule 1.2: Test isolation - tests must not make real network calls
+  {
+    files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='http'][callee.property.name='request']",
+          message: 'Tests must not make real HTTP requests. Use nock or fake service clients.',
+        },
+        {
+          selector: "CallExpression[callee.object.name='https'][callee.property.name='request']",
+          message: 'Tests must not make real HTTP requests. Use nock or fake service clients.',
+        },
+      ],
+    },
+  },
+  // Rule 1.3: No auth tokens in localStorage (use Auth0 SDK)
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/context/pwa-context.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name='localStorage'][callee.property.name='setItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message:
+            'Never store auth tokens in localStorage. Use Auth0 SDK for secure token storage.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='localStorage'][callee.property.name='getItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message: 'Never retrieve auth tokens from localStorage. Use Auth0 SDK hooks (useAuth0).',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='sessionStorage'][callee.property.name='setItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message:
+            'Never store auth tokens in sessionStorage. Use Auth0 SDK for secure token storage.',
+        },
+      ],
+    },
+  },
+  // Rule 1.4: TailwindCSS only (no inline styles)
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/pages/HomePage.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='style'][value.type='JSXExpressionContainer']",
+          message: 'Use TailwindCSS classes instead of inline style objects.',
+        },
+      ],
+    },
+  },
+  // Rule 1.5: Repositories should call getFirestore() in methods, not accept as constructor param
+  {
+    files: ['apps/*/src/infra/firestore/**/*.ts', 'packages/*/src/**/*Repository.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "MethodDefinition[key.name='constructor'] Parameter[typeAnnotation.typeAnnotation.typeName.name='Firestore']",
+          message:
+            'Repositories should call getFirestore() within methods, not accept Firestore as constructor parameter.',
+        },
+      ],
+    },
+  },
+  // Rule 1.7: Use error utilities instead of inline error extraction
+  {
+    files: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    ignores: ['packages/common-core/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "ConditionalExpression[test.operator='instanceof'][test.right.name='Error'][consequent.property.name='message']",
+          message:
+            'Use getErrorMessage(error, fallback) from @intexuraos/common-core instead of inline error extraction.',
         },
       ],
     },
