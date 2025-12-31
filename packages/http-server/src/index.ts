@@ -17,6 +17,7 @@ export {
   checkNotionSdk,
   computeOverallStatus,
   buildHealthResponse,
+  validateRequiredEnv,
 } from './health.js';
 
 // Validation error handler

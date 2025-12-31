@@ -1,4 +1,15 @@
+import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
+
+const REQUIRED_ENV = [
+  'GOOGLE_CLOUD_PROJECT',
+  'AUTH_JWKS_URL',
+  'AUTH_ISSUER',
+  'AUTH_AUDIENCE',
+  'INTEXURAOS_GEMINI_API_KEY',
+];
+
+validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   const app = await buildServer();

@@ -1,36 +1,48 @@
+# IntexuraOS Commands Router Dockerfile
+# Multi-stage build with esbuild bundling.
+
+# Stage 1: Build
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Copy all package.json files
 COPY package*.json ./
-COPY packages/common-core/package.json ./packages/common-core/
-COPY packages/common-http/package.json ./packages/common-http/
-COPY packages/http-contracts/package.json ./packages/http-contracts/
-COPY packages/http-server/package.json ./packages/http-server/
-COPY packages/infra-firestore/package.json ./packages/infra-firestore/
-COPY apps/commands-router/package.json ./apps/commands-router/
+COPY apps/commands-router/package*.json ./apps/commands-router/
+COPY packages/*/package*.json ./packages/
 
-RUN npm ci --workspace=@intexuraos/commands-router
+# Install dependencies
+RUN npm ci
 
-COPY packages/common-core ./packages/common-core
-COPY packages/common-http ./packages/common-http
-COPY packages/http-contracts ./packages/http-contracts
-COPY packages/http-server ./packages/http-server
-COPY packages/infra-firestore ./packages/infra-firestore
-COPY apps/commands-router ./apps/commands-router
-COPY scripts ./scripts
-COPY tsconfig.json ./
+# Copy source files
+COPY tsconfig*.json ./
+COPY scripts/ ./scripts/
+COPY packages/ ./packages/
+COPY apps/commands-router/ ./apps/commands-router/
 
-RUN npm run build --workspace=@intexuraos/commands-router
+# Build service (esbuild bundles everything into one file)
+RUN npm run build -w @intexuraos/commands-router
 
+# Stage 2: Production
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/apps/commands-router/dist ./dist
-COPY --from=builder /app/apps/commands-router/package.json ./
+COPY package*.json ./
+COPY apps/commands-router/package*.json ./apps/commands-router/
+
+# Install production dependencies only
+RUN npm ci --omit=dev -w @intexuraos/commands-router
+
+# Copy built file
+COPY --from=builder /app/apps/commands-router/dist ./apps/commands-router/dist
 
 ENV NODE_ENV=production
+ENV PORT=8080
+
 EXPOSE 8080
 
-CMD ["node", "dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+CMD ["node", "apps/commands-router/dist/index.js"]
