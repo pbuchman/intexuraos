@@ -1,6 +1,6 @@
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
-export { DashboardPage } from './DashboardPage.js';
+export { SystemHealthPage } from './SystemHealthPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
 export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';

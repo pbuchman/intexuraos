@@ -28,3 +28,7 @@ export interface LlmSynthesisProvider {
 
   generateTitle(prompt: string): Promise<Result<string, LlmError>>;
 }
+
+export interface TitleGenerator {
+  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
+}

@@ -68,6 +68,20 @@ describe('Auth0ClientImpl', () => {
       }
     });
 
+    it('returns INVALID_GRANT with default message when error_description is missing', async () => {
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
+        error: 'invalid_grant',
+      });
+
+      const result = await client.refreshAccessToken('bad-token');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_GRANT');
+        expect(result.error.message).toBe('Refresh token is invalid or expired');
+      }
+    });
+
     it('returns INTERNAL_ERROR for other Auth0 errors', async () => {
       nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
         error: 'invalid_request',
@@ -80,6 +94,20 @@ describe('Auth0ClientImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Missing required parameter');
+      }
+    });
+
+    it('returns INTERNAL_ERROR with error code as fallback when error_description is missing', async () => {
+      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+        error: 'invalid_request',
+      });
+
+      const result = await client.refreshAccessToken(REFRESH_TOKEN);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('invalid_request');
       }
     });
 

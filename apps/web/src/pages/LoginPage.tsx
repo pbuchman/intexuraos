@@ -21,7 +21,7 @@ export function LoginPage(): React.JSX.Element {
           </Button>
 
           <p className="text-center text-sm text-slate-500">
-            Sign in to manage your integrations and view your dashboard.
+            Sign in to manage your integrations and view your system health.
           </p>
         </div>
       </div>

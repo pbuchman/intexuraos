@@ -96,6 +96,84 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 
 **Full documentation:** [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
 
+### Firestore Collections
+
+**RULE: Each Firestore collection MUST be owned by exactly ONE service.**
+
+**Verification:** `npm run verify:firestore` (runs automatically in `npm run ci`)
+
+**Registry:** All collections declared in `firestore-collections.json` at repo root.
+
+| Collection                       | Owner                          | Description                              |
+| -------------------------------- | ------------------------------ | ---------------------------------------- |
+| `notion_connections`             | `notion-service`               | Notion OAuth tokens and connection state |
+| `promptvault_settings`           | `promptvault-service`          | Prompt Vault page ID configuration       |
+| `whatsapp_messages`              | `whatsapp-service`             | WhatsApp messages with metadata          |
+| `whatsapp_user_mappings`         | `whatsapp-service`             | Phone number to user ID mappings         |
+| `whatsapp_webhook_events`        | `whatsapp-service`             | Raw webhook events for audit             |
+| `mobile_notifications`           | `mobile-notifications-service` | Push notifications from devices          |
+| `mobile_notification_signatures` | `mobile-notifications-service` | Device signature to user ID bindings     |
+| `user_settings`                  | `user-service`                 | User preferences and encrypted API keys  |
+| `auth_tokens`                    | `user-service`                 | Encrypted Auth0 refresh tokens           |
+| `researches`                     | `llm-orchestrator-service`     | LLM research queries and results         |
+
+**Ownership Rules:**
+
+✅ **Allowed:**
+
+- Service directly accesses its OWN collections via `getFirestore()`
+- Service exposes internal HTTP endpoints for other services to access data
+- Read from service-owned collections only
+
+❌ **Forbidden:**
+
+- Accessing collections owned by other services
+- Sharing collections between multiple services
+- Cross-service Firestore queries
+
+**Adding New Collections:**
+
+1. Add to `firestore-collections.json`:
+
+   ```json
+   {
+     "collections": {
+       "my_new_collection": {
+         "owner": "my-service",
+         "description": "What this collection stores"
+       }
+     }
+   }
+   ```
+
+2. Access only from owning service:
+
+   ```typescript
+   import { getFirestore } from '@intexuraos/infra-firestore';
+
+   const db = getFirestore();
+   const collection = db.collection('my_new_collection');
+   ```
+
+3. Verify: `npm run verify:firestore`
+
+**Cross-Service Data Access:**
+
+If you need data from another service's collection, use service-to-service HTTP:
+
+```typescript
+// ❌ Direct Firestore access (VIOLATION)
+const db = getFirestore();
+const doc = await db.collection('whatsapp_messages').doc(id).get();
+
+// ✅ Service-to-service HTTP (CORRECT)
+const response = await fetch(`${WHATSAPP_SERVICE_URL}/internal/whatsapp/messages/${id}`, {
+  headers: { 'X-Internal-Auth': INTERNAL_AUTH_TOKEN },
+});
+```
+
+**Full documentation:** [docs/architecture/firestore-ownership.md](../docs/architecture/firestore-ownership.md)
+
 ---
 
 ## Apps (`apps/**`)

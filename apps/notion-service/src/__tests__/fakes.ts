@@ -37,6 +37,7 @@ export class FakeConnectionRepository {
   private shouldFailSave = false;
   private shouldFailGet = false;
   private shouldFailDisconnect = false;
+  private shouldFailIsConnected = false;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -48,6 +49,10 @@ export class FakeConnectionRepository {
 
   setFailNextDisconnect(fail: boolean): void {
     this.shouldFailDisconnect = fail;
+  }
+
+  setFailNextIsConnected(fail: boolean): void {
+    this.shouldFailIsConnected = fail;
   }
 
   saveConnection(
@@ -98,6 +103,12 @@ export class FakeConnectionRepository {
   }
 
   isConnected(userId: string): Promise<Result<boolean, NotionError>> {
+    if (this.shouldFailIsConnected) {
+      this.shouldFailIsConnected = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated isConnected failure' })
+      );
+    }
     const conn = this.connections.get(userId);
     return Promise.resolve(ok(conn?.connected ?? false));
   }

@@ -177,7 +177,7 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(ok({ content: 'Hello from Gemini!' })),
+          generate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -187,12 +187,12 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from Gemini!');
         }
-        expect(mockClient.research).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
       });
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 

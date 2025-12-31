@@ -116,5 +116,39 @@ describe('Internal Routes', () => {
       expect(body.connected).toBe(false);
       expect(body.token).toBe(null);
     });
+
+    it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async (): Promise<void> => {
+      // Remove the token from environment
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user123/context',
+        headers: {
+          'x-internal-auth': 'any-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns connected=false when isConnected fails', async (): Promise<void> => {
+      fakeRepo.setFailNextIsConnected(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user123/context',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
+      expect(body.connected).toBe(false);
+      expect(body.token).toBe(null);
+    });
   });
 });

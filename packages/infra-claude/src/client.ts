@@ -208,7 +208,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     },
 
     async validateKey(): Promise<Result<boolean, ClaudeError>> {
-      const validatePrompt = 'Say "ok"';
+      const validatePrompt = `Introduce yourself as Claude and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm Claude."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
         VALIDATION_MODEL,
@@ -218,7 +218,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       try {
         const response = await client.messages.create({
           model: VALIDATION_MODEL,
-          max_tokens: 10,
+          max_tokens: 100,
           messages: [{ role: 'user', content: validatePrompt }],
         });
 

@@ -25,9 +25,23 @@ const mockClose = vi.fn();
 const mockAck = vi.fn();
 const mockNack = vi.fn();
 
+// Mocks for topic and subscription emulator mode
+const mockTopicExists = vi.fn();
+const mockTopicCreate = vi.fn();
+const mockSubExists = vi.fn();
+const mockSubCreate = vi.fn();
+
 interface MockSubscription {
   on: (event: string, handler: MessageHandler | ErrorHandler) => MockSubscription;
   close: () => Promise<void>;
+  exists: () => Promise<[boolean]>;
+  create: () => Promise<void>;
+}
+
+interface MockTopic {
+  exists: () => Promise<[boolean]>;
+  create: () => Promise<void>;
+  subscription: (name: string) => MockSubscription;
 }
 
 const mockSubscription: MockSubscription = {
@@ -40,6 +54,14 @@ const mockSubscription: MockSubscription = {
     return mockSubscription;
   },
   close: (): Promise<void> => mockClose() as Promise<void>,
+  exists: (): Promise<[boolean]> => mockSubExists() as Promise<[boolean]>,
+  create: (): Promise<void> => mockSubCreate() as Promise<void>,
+};
+
+const mockTopic: MockTopic = {
+  exists: (): Promise<[boolean]> => mockTopicExists() as Promise<[boolean]>,
+  create: (): Promise<void> => mockTopicCreate() as Promise<void>,
+  subscription: (): MockSubscription => mockSubscription,
 };
 
 // Mock the module before any imports
@@ -47,6 +69,9 @@ vi.mock('@google-cloud/pubsub', () => {
   class MockPubSub {
     subscription(): MockSubscription {
       return mockSubscription;
+    }
+    topic(): MockTopic {
+      return mockTopic;
     }
   }
 
@@ -198,6 +223,13 @@ describe('CleanupWorker', () => {
     mockClose.mockResolvedValue(undefined);
     mockAck.mockReset();
     mockNack.mockReset();
+    mockTopicExists.mockReset();
+    mockTopicCreate.mockReset();
+    mockSubExists.mockReset();
+    mockSubCreate.mockReset();
+
+    // Clear emulator env var
+    delete process.env['PUBSUB_EMULATOR_HOST'];
 
     mediaStorage = new FakeMediaStorageForCleanup();
     logger = new FakeLogger();
@@ -443,6 +475,63 @@ describe('CleanupWorker', () => {
       expect(errorLogs.some((l) => l.data?.['error'] === 'Subscription connection failed')).toBe(
         true
       );
+    });
+  });
+
+  describe('emulator mode', () => {
+    beforeEach(() => {
+      process.env['PUBSUB_EMULATOR_HOST'] = 'localhost:8085';
+    });
+
+    afterEach(() => {
+      delete process.env['PUBSUB_EMULATOR_HOST'];
+    });
+
+    it('creates topic and subscription when they do not exist', async () => {
+      mockTopicExists.mockResolvedValue([false]);
+      mockTopicCreate.mockResolvedValue(undefined);
+      mockSubExists.mockResolvedValue([false]);
+      mockSubCreate.mockResolvedValue(undefined);
+
+      const emulatorWorker = new CleanupWorker(config, mediaStorage, logger);
+      await emulatorWorker.start();
+
+      expect(mockTopicExists).toHaveBeenCalled();
+      expect(mockTopicCreate).toHaveBeenCalled();
+      expect(mockSubExists).toHaveBeenCalled();
+      expect(mockSubCreate).toHaveBeenCalled();
+
+      const infoLogs = logger.getLogsByLevel('info');
+      expect(infoLogs.some((l) => l.msg.includes('Created Pub/Sub topic (emulator mode)'))).toBe(
+        true
+      );
+      expect(
+        infoLogs.some((l) => l.msg.includes('Created Pub/Sub subscription (emulator mode)'))
+      ).toBe(true);
+    });
+
+    it('skips topic creation when topic already exists', async () => {
+      mockTopicExists.mockResolvedValue([true]);
+      mockSubExists.mockResolvedValue([false]);
+      mockSubCreate.mockResolvedValue(undefined);
+
+      const emulatorWorker = new CleanupWorker(config, mediaStorage, logger);
+      await emulatorWorker.start();
+
+      expect(mockTopicExists).toHaveBeenCalled();
+      expect(mockTopicCreate).not.toHaveBeenCalled();
+      expect(mockSubExists).toHaveBeenCalled();
+      expect(mockSubCreate).toHaveBeenCalled();
+    });
+
+    it('skips subscription creation when subscription already exists', async () => {
+      mockTopicExists.mockResolvedValue([true]);
+      mockSubExists.mockResolvedValue([true]);
+
+      const emulatorWorker = new CleanupWorker(config, mediaStorage, logger);
+      await emulatorWorker.start();
+
+      expect(mockSubCreate).not.toHaveBeenCalled();
     });
   });
 });

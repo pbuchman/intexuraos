@@ -17,7 +17,7 @@ interface StatusState {
   details?: string;
 }
 
-export function DashboardPage(): React.JSX.Element {
+export function SystemHealthPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [notionState, setNotionState] = useState<StatusState>({
     status: 'loading',
@@ -183,7 +183,7 @@ export function DashboardPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Dashboard</h2>
+        <h2 className="text-2xl font-bold text-slate-900">System Health</h2>
         <p className="text-slate-600">Overview of your integration connections</p>
       </div>
 

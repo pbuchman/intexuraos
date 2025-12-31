@@ -7,6 +7,9 @@ import {
   connectNotion,
   getNotionStatus,
   disconnectNotion,
+  createConnectNotionUseCase,
+  createGetNotionStatusUseCase,
+  createDisconnectNotionUseCase,
   type ConnectionRepository,
   type NotionApi,
   type NotionConnectionPublic,
@@ -255,6 +258,39 @@ describe('notion-service domain use-cases', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('DOWNSTREAM_ERROR');
       }
+    });
+  });
+
+  describe('factory functions', () => {
+    const mockRepo: ConnectionRepository = {
+      saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
+        Promise.resolve(ok(mockConnection)),
+      getConnection: (): Promise<Result<NotionConnectionPublic | null, NotionError>> =>
+        Promise.resolve(ok(mockConnection)),
+      disconnectConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
+        Promise.resolve(ok({ ...mockConnection, connected: false })),
+    };
+
+    const mockApi: NotionApi = {
+      validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
+    };
+
+    it('createConnectNotionUseCase returns working usecase', async () => {
+      const useCase = createConnectNotionUseCase(mockRepo, mockApi);
+      const result = await useCase({ userId: 'user-123', notionToken: 'token-abc' });
+      expect(result.ok).toBe(true);
+    });
+
+    it('createGetNotionStatusUseCase returns working usecase', async () => {
+      const useCase = createGetNotionStatusUseCase(mockRepo);
+      const result = await useCase({ userId: 'user-123' });
+      expect(result.ok).toBe(true);
+    });
+
+    it('createDisconnectNotionUseCase returns working usecase', async () => {
+      const useCase = createDisconnectNotionUseCase(mockRepo);
+      const result = await useCase({ userId: 'user-123' });
+      expect(result.ok).toBe(true);
     });
   });
 });

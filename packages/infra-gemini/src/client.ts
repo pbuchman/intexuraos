@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, type GenerateContentResult } from '@google/generative-ai';
+import { GoogleGenAI, type GenerateContentResponse } from '@google/genai';
 import {
   ok,
   err,
@@ -9,11 +9,12 @@ import {
 import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
 import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
 
-const DEFAULT_MODEL = 'gemini-3-pro-preview';
-const VALIDATION_MODEL = 'gemini-2.0-flash-lite';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
+const VALIDATION_MODEL = 'gemini-2.0-flash';
 
 export interface GeminiClient {
   research(prompt: string): Promise<Result<ResearchResult, GeminiError>>;
+  generate(prompt: string): Promise<Result<string, GeminiError>>;
   generateTitle(prompt: string): Promise<Result<string, GeminiError>>;
   synthesize(
     originalPrompt: string,
@@ -103,7 +104,7 @@ async function logError(
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
-  const genAI = new GoogleGenerativeAI(config.apiKey);
+  const ai = new GoogleGenAI({ apiKey: config.apiKey });
   const modelName = config.model ?? DEFAULT_MODEL;
 
   return {
@@ -116,19 +117,44 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       );
 
       try {
-        const model = genAI.getGenerativeModel({
+        const response = await ai.models.generateContent({
           model: modelName,
-          tools: [{ googleSearchRetrieval: {} }],
+          contents: researchPrompt,
+          config: {
+            tools: [{ googleSearch: {} }],
+          },
         });
-        const result = await model.generateContent(researchPrompt);
-        const response = result.response;
-        const text = response.text();
-        const sources = extractSourcesFromGeminiResponse(result);
+
+        const text = response.text ?? '';
+        const sources = extractSourcesFromResponse(response);
 
         await logSuccess('research', requestId, startTime, text, auditContext);
         return ok({ content: text, sources });
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
+        return err(mapGeminiError(error));
+      }
+    },
+
+    async generate(prompt: string): Promise<Result<string, GeminiError>> {
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'generate',
+        modelName,
+        prompt
+      );
+
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+        });
+
+        const text = response.text ?? '';
+
+        await logSuccess('generate', requestId, startTime, text, auditContext);
+        return ok(text);
+      } catch (error) {
+        await logError('generate', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
@@ -142,9 +168,12 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       );
 
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(titlePrompt);
-        const text = result.response.text().trim();
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: titlePrompt,
+        });
+
+        const text = (response.text ?? '').trim();
 
         await logSuccess('generateTitle', requestId, startTime, text, auditContext);
         return ok(text);
@@ -167,9 +196,12 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       );
 
       try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(synthesisPrompt);
-        const text = result.response.text();
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: synthesisPrompt,
+        });
+
+        const text = response.text ?? '';
 
         await logSuccess('synthesize', requestId, startTime, text, auditContext);
         return ok(text);
@@ -180,7 +212,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     },
 
     async validateKey(): Promise<Result<boolean, GeminiError>> {
-      const validatePrompt = 'Say "ok"';
+      const validatePrompt = `Introduce yourself as Gemini and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm Gemini."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
         VALIDATION_MODEL,
@@ -188,9 +220,12 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       );
 
       try {
-        const model = genAI.getGenerativeModel({ model: VALIDATION_MODEL });
-        const result = await model.generateContent(validatePrompt);
-        const text = result.response.text();
+        const response = await ai.models.generateContent({
+          model: VALIDATION_MODEL,
+          contents: validatePrompt,
+        });
+
+        const text = response.text ?? '';
 
         await logSuccess('validateKey', requestId, startTime, text, auditContext);
         return ok(true);
@@ -218,12 +253,12 @@ function mapGeminiError(error: unknown): GeminiError {
   return { code: 'API_ERROR', message };
 }
 
-function extractSourcesFromGeminiResponse(result: GenerateContentResult): string[] {
+function extractSourcesFromResponse(response: GenerateContentResponse): string[] {
   const sources: string[] = [];
-  const candidate = result.response.candidates?.[0];
+  const candidate = response.candidates?.[0];
 
   if (candidate?.groundingMetadata !== undefined) {
-    const groundingChunks = candidate.groundingMetadata.groundingChuncks;
+    const groundingChunks = candidate.groundingMetadata.groundingChunks;
     if (Array.isArray(groundingChunks)) {
       for (const chunk of groundingChunks) {
         if (chunk.web?.uri !== undefined) {

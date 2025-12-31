@@ -386,8 +386,9 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to decrypt API key');
       }
 
-      const testPrompt =
-        'Respond with your name and model version in a short greeting. Example format: "Hello! I am GPT-4o."';
+      const providerName =
+        params.provider === 'google' ? 'Gemini' : params.provider === 'openai' ? 'GPT' : 'Claude';
+      const testPrompt = `Introduce yourself as ${providerName} and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm ${providerName}."`;
       const testResult = await llmValidator.testRequest(
         params.provider,
         decrypted.value,

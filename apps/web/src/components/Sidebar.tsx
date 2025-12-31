@@ -30,7 +30,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const topNavItems: NavItem[] = [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }];
+const topNavItems: NavItem[] = [{ to: '/', label: 'System Health', icon: LayoutDashboard }];
 
 const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },

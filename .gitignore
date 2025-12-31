@@ -32,3 +32,6 @@ affected.json
 
 speechmatics-js-sdk/
 
+# Local Firestore export data
+data/firestore-export/
+

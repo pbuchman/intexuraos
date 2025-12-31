@@ -8,6 +8,7 @@ import type {
   ResearchRepository,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  TitleGenerator,
   NotificationSender,
 } from '../ports/index.js';
 
@@ -15,6 +16,7 @@ export interface ProcessResearchDeps {
   researchRepo: ResearchRepository;
   llmProviders: Record<LlmProvider, LlmResearchProvider>;
   synthesizer: LlmSynthesisProvider;
+  titleGenerator?: TitleGenerator;
   notificationSender: NotificationSender;
 }
 
@@ -38,8 +40,9 @@ export async function processResearch(
   // Update status to processing
   await deps.researchRepo.update(researchId, { status: 'processing' });
 
-  // Generate title
-  const titleResult = await deps.synthesizer.generateTitle(research.prompt);
+  // Generate title (use dedicated titleGenerator if available, else fall back to synthesizer)
+  const titleGen = deps.titleGenerator ?? deps.synthesizer;
+  const titleResult = await titleGen.generateTitle(research.prompt);
   if (titleResult.ok) {
     await deps.researchRepo.update(researchId, { title: titleResult.value });
   }
@@ -153,7 +156,7 @@ export async function processResearch(
 function getModelName(provider: LlmProvider): string {
   switch (provider) {
     case 'google':
-      return 'Gemini 3 Pro';
+      return 'Gemini 2.0 Flash';
     case 'openai':
       return 'GPT-4.1';
     case 'anthropic':

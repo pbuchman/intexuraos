@@ -7,7 +7,15 @@ services:
       - '8102:8102'
     volumes:
       - ../firebase.json:/home/node/firebase.json:ro
-    command: firebase emulators:start --project=demo-intexuraos
+      - ../data/firestore-export:/data/firestore-export:ro
+    command: >
+      sh -c "if [ -d /data/firestore-export ] && [ -n \"$$(ls -A /data/firestore-export 2>/dev/null)\" ]; then
+        echo 'Importing Firestore data from /data/firestore-export...';
+        firebase emulators:start --project=demo-intexuraos --import=/data/firestore-export;
+      else
+        echo 'Starting with empty Firestore...';
+        firebase emulators:start --project=demo-intexuraos;
+      fi"
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8100']
       interval: 5s

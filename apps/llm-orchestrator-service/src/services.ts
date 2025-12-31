@@ -4,7 +4,7 @@
  */
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
-import { createLlmProviders, createSynthesizer } from './infra/llm/index.js';
+import { createLlmProviders, createSynthesizer, createTitleGenerator } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
 import {
   createUserServiceClient,
@@ -129,13 +129,21 @@ export function initializeServices(): void {
         const llmProviders = createLlmProviders(apiKeys);
         const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
 
-        // Process research
-        await processResearch(researchId, {
+        // Build deps for processing
+        const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
           llmProviders,
           synthesizer,
           notificationSender,
-        });
+        };
+
+        // Use Gemini for title generation if available (cheapest option)
+        if (apiKeys.google !== undefined) {
+          deps.titleGenerator = createTitleGenerator(apiKeys.google);
+        }
+
+        // Process research
+        await processResearch(researchId, deps);
       } catch (error) {
         /* Fire-and-forget: log error but don't throw */
         const message = getErrorMessage(error);

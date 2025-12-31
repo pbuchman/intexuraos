@@ -59,8 +59,18 @@ export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub-local
 # =============================================================================
 # GCP PROJECT (for local emulators)
 # =============================================================================
-# Use demo project ID for local emulators
+# Required by Google Cloud SDKs (Firestore, Pub/Sub, GCS).
+# GOOGLE_CLOUD_PROJECT is the standard env var that Google SDKs look for.
+# INTEXURAOS_GCP_PROJECT_ID is used by whatsapp-service.
+export GOOGLE_CLOUD_PROJECT=demo-intexuraos
+export GCLOUD_PROJECT=demo-intexuraos
 export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
+
+# =============================================================================
+# ENCRYPTION (for LLM API key storage)
+# =============================================================================
+# AES-256 encryption key for LLM API keys. Already set in .envrc from Secret Manager.
+# Only override here if you need a different key for local testing.
 
 # =============================================================================
 # WEB APP (Auth0 SPA Configuration)

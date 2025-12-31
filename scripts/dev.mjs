@@ -5,12 +5,17 @@
  * Features:
  * - Starts emulators (Firestore, Pub/Sub, GCS) via docker compose
  * - Waits for emulators to be healthy
- * - Starts all 7 services with hot-reload (node --watch)
+ * - Starts all 7 backend services with hot-reload (tsx watch)
+ * - Starts web app with Vite dev server (hot module replacement)
  * - Aggregates logs with color-coding per service
  * - Graceful shutdown on SIGINT/SIGTERM
  *
+ * Prerequisites:
+ *   - direnv installed and allowed (direnv allow)
+ *   - .envrc.local configured (cp .envrc.local.example .envrc.local)
+ *
  * Usage:
- *   npm run dev           # Start all services
+ *   npm run dev           # Start all services + web app
  *   npm run dev:emulators # Start only emulators
  */
 
@@ -32,6 +37,8 @@ const SERVICES = [
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
   { name: 'llm-orchestrator-service', port: 8116, color: '\x1b[96m' },
 ];
+
+const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
 
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
@@ -114,6 +121,37 @@ async function waitForEmulators() {
   }
 }
 
+const REQUIRED_ENV_VARS = [
+  'GOOGLE_CLOUD_PROJECT',
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'FIRESTORE_EMULATOR_HOST',
+  'INTEXURAOS_ENCRYPTION_KEY',
+];
+
+function validateEnvVars() {
+  const missing = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    console.error('');
+    console.error('Missing required environment variables:');
+    missing.forEach((name) => console.error(`  - ${name}`));
+    console.error('');
+    console.error('Make sure direnv is set up correctly:');
+    console.error('  1. cp .envrc.local.example .envrc.local');
+    console.error('  2. direnv allow');
+    console.error('');
+    process.exit(1);
+  }
+}
+
+const API_DOCS_HUB_ENV = {
+  USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
+  PROMPTVAULT_SERVICE_OPENAPI_URL: 'http://localhost:8111/openapi.json',
+  NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
+  WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
+  MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+};
+
 function startService(service) {
   const serviceDir = join(ROOT_DIR, 'apps', service.name);
   if (!existsSync(serviceDir)) {
@@ -125,12 +163,10 @@ function startService(service) {
     ...process.env,
     PORT: String(service.port),
     NODE_ENV: 'development',
-    FIRESTORE_EMULATOR_HOST: 'localhost:8101',
-    PUBSUB_EMULATOR_HOST: 'localhost:8102',
-    STORAGE_EMULATOR_HOST: 'http://localhost:8103',
+    ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
   };
 
-  const child = spawn('node', ['--watch', '--experimental-strip-types', 'src/index.ts'], {
+  const child = spawn('npx', ['tsx', 'watch', 'src/index.ts'], {
     cwd: serviceDir,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -165,6 +201,54 @@ function startService(service) {
   return child;
 }
 
+function startWebApp() {
+  const webDir = join(ROOT_DIR, 'apps', 'web');
+  if (!existsSync(webDir)) {
+    log(`[${WEB_APP.name}]`, `Directory not found: ${webDir}`, '\x1b[31m');
+    return null;
+  }
+
+  const env = {
+    ...process.env,
+    NODE_ENV: 'development',
+  };
+
+  const child = spawn('npm', ['run', 'dev'], {
+    cwd: webDir,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: true,
+  });
+
+  const prefix = `[${WEB_APP.name}]`.padEnd(30);
+
+  const processLine = (stream) => {
+    const rl = createInterface({ input: stream });
+    rl.on('line', (line) => {
+      log(prefix, line, WEB_APP.color);
+    });
+  };
+
+  processLine(child.stdout);
+  processLine(child.stderr);
+
+  child.on('error', (error) => {
+    log(prefix, `Error: ${error.message}`, '\x1b[31m');
+  });
+
+  child.on('exit', (code, signal) => {
+    if (!shuttingDown) {
+      log(prefix, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
+    }
+    processes.delete(WEB_APP.name);
+  });
+
+  processes.set(WEB_APP.name, child);
+  log(prefix, `Started on port ${String(WEB_APP.port)}`, WEB_APP.color);
+
+  return child;
+}
+
 async function startAllServices() {
   logOrchestrator('Starting services...');
 
@@ -173,18 +257,15 @@ async function startAllServices() {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  logOrchestrator(`All ${String(SERVICES.length)} services started!`);
+  logOrchestrator('Starting web app...');
+  startWebApp();
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  logOrchestrator(`All ${String(SERVICES.length)} services + web app started!`);
   logOrchestrator('');
-  logOrchestrator('Service URLs:');
-  for (const service of SERVICES) {
-    console.log(`  ${service.color}${service.name}${RESET}: http://localhost:${String(service.port)}`);
-  }
-  logOrchestrator('');
-  logOrchestrator('Emulator UIs:');
-  console.log(`  Firebase UI: http://localhost:8100`);
-  console.log(`  Firestore:   http://localhost:8101`);
-  console.log(`  Pub/Sub:     http://localhost:8102`);
-  console.log(`  GCS:         http://localhost:8103`);
+  console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
+  console.log(`  API Docs:         ${BOLD}http://localhost:8115${RESET}`);
+  console.log(`  Firebase UI:      http://localhost:8100`);
   logOrchestrator('');
   logOrchestrator('Press Ctrl+C to stop all services');
 }
@@ -238,10 +319,12 @@ async function main() {
   logOrchestrator('IntexuraOS Local Development Environment');
   logOrchestrator('');
 
-  if (!await checkDockerRunning()) {
+  if (!(await checkDockerRunning())) {
     console.error('Error: Docker is not running. Please start Docker and try again.');
     process.exit(1);
   }
+
+  validateEnvVars();
 
   try {
     await startEmulators();

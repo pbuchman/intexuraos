@@ -150,6 +150,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
       await docRef.update({
         [`llmApiKeys.${provider}`]: FieldValue.delete(),
+        [`llmTestResults.${provider}`]: FieldValue.delete(),
         updatedAt: new Date().toISOString(),
       });
 

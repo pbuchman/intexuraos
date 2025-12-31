@@ -7,7 +7,7 @@ import { config } from '@/config';
 import {
   HomePage,
   LoginPage,
-  DashboardPage,
+  SystemHealthPage,
   NotionConnectionPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
@@ -49,7 +49,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/system-health" replace />;
   }
 
   return <>{children}</>;
@@ -67,7 +67,7 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/system-health" replace />;
   }
 
   return <HomePage />;
@@ -86,10 +86,10 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/dashboard"
+        path="/system-health"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <SystemHealthPage />
           </ProtectedRoute>
         }
       />
@@ -175,7 +175,7 @@ function AppRoutes(): React.JSX.Element {
       <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
       <Route path="/mobile-notifications/list" element={<Navigate to="/notifications" replace />} />
       {/* 404 fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/system-health" replace />} />
     </Routes>
   );
 }

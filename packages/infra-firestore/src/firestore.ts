@@ -12,12 +12,18 @@ let firestoreInstance: Firestore | null = null;
 /**
  * Get or create the Firestore client instance.
  * Uses application default credentials in production.
+ * In development, uses FIRESTORE_EMULATOR_HOST with demo project.
  */
 export function getFirestore(): Firestore {
-  firestoreInstance ??= new Firestore({
-    // Uses GOOGLE_APPLICATION_CREDENTIALS or GCP metadata service
-    // Project ID is inferred from environment
-  });
+  if (firestoreInstance === null) {
+    const projectId = process.env['GOOGLE_CLOUD_PROJECT'];
+
+    if (projectId === undefined) {
+      throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable. Run: direnv allow');
+    }
+
+    firestoreInstance = new Firestore({ projectId });
+  }
   return firestoreInstance;
 }
 

@@ -246,18 +246,16 @@ function ApiKeyRow({
         ) : null}
       </div>
 
-      {savedTestResult !== null ? (
+      {testError !== null ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-700">{testError}</p>
+        </div>
+      ) : savedTestResult !== null ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
           <p className="text-sm font-medium text-green-800 mb-1">
             LLM Response ({formatDate(savedTestResult.testedAt)}):
           </p>
           <p className="text-sm text-green-700">{savedTestResult.response}</p>
-        </div>
-      ) : null}
-
-      {testError !== null ? (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm text-red-700">{testError}</p>
         </div>
       ) : null}
 
