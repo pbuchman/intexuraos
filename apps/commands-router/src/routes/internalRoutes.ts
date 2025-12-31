@@ -81,10 +81,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       try {
         const headersObj = { ...(request.headers as Record<string, unknown>) };
         // Redact sensitive headers but keep structure visible
-        if (headersObj['x-internal-auth']) {
+        if (headersObj['x-internal-auth'] !== undefined) {
           headersObj['x-internal-auth'] = '[REDACTED]';
         }
-        if (headersObj['authorization']) {
+        if (headersObj['authorization'] !== undefined) {
           headersObj['authorization'] = '[REDACTED]';
         }
         request.log.info(
@@ -258,10 +258,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Log incoming request BEFORE auth check
       try {
         const headersObj = { ...(request.headers as Record<string, unknown>) };
-        if (headersObj['x-internal-auth']) {
+        if (headersObj['x-internal-auth'] !== undefined) {
           headersObj['x-internal-auth'] = '[REDACTED]';
         }
-        if (headersObj['authorization']) {
+        if (headersObj['authorization'] !== undefined) {
           headersObj['authorization'] = '[REDACTED]';
         }
         request.log.info(
