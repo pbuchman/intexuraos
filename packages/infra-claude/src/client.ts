@@ -1,13 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  ok,
-  err,
-  type Result,
-  getErrorMessage,
   buildResearchPrompt,
+  err,
+  getErrorMessage,
+  ok,
+  type Result,
 } from '@intexuraos/common-core';
-import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
-import type { ClaudeConfig, ResearchResult, SynthesisInput, ClaudeError } from './types.js';
+import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
+import type { ClaudeConfig, ClaudeError, ResearchResult, SynthesisInput } from './types.js';
 
 const DEFAULT_MODEL = 'claude-opus-4-5';
 const VALIDATION_MODEL = 'claude-haiku-4-5';

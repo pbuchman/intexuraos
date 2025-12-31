@@ -2,12 +2,12 @@
  * Unified WhatsApp Cloud API client.
  * Provides sendTextMessage, getMediaUrl, and downloadMedia operations.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
-  WhatsAppConfig,
+  MediaUrlInfo,
   SendMessageParams,
   SendMessageResult,
-  MediaUrlInfo,
+  WhatsAppConfig,
   WhatsAppError,
 } from './types.js';
 

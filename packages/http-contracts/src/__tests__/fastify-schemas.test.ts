@@ -1,11 +1,11 @@
 /**
  * Tests for Fastify JSON schemas.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   fastifyDiagnosticsSchema,
-  fastifyErrorCodeSchema,
   fastifyErrorBodySchema,
+  fastifyErrorCodeSchema,
   registerCoreSchemas,
 } from '../fastify-schemas.js';
 

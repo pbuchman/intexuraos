@@ -17,7 +17,7 @@ apps/*
 ## Package Structure
 
 | Package           | Description                                          | Dependencies                     |
-| ----------------- | ---------------------------------------------------- | -------------------------------- |
+|-------------------|------------------------------------------------------|----------------------------------|
 | `common-core`     | Result types, error codes, redaction utilities       | None (leaf)                      |
 | `common-http`     | Fastify plugins, JWT auth, API response helpers      | `common-core`                    |
 | `http-contracts`  | OpenAPI schemas, Fastify JSON schemas                | None (leaf)                      |

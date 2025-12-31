@@ -3,7 +3,7 @@
  * Mocks @intexuraos/infra-firestore.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDocSet = vi.fn().mockResolvedValue(undefined);
 const mockCollectionDoc = vi.fn().mockReturnValue({ set: mockDocSet });

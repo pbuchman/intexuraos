@@ -1,8 +1,8 @@
 /**
  * Tests for redaction utilities.
  */
-import { describe, it, expect } from 'vitest';
-import { redactToken, redactObject, SENSITIVE_FIELDS } from '../redaction.js';
+import { describe, expect, it } from 'vitest';
+import { redactObject, redactToken, SENSITIVE_FIELDS } from '../redaction.js';
 
 describe('Redaction utilities', () => {
   describe('redactToken', () => {

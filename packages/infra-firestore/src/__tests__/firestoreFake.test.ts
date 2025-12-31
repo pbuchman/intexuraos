@@ -2,7 +2,7 @@
  * Tests for Fake Firestore implementation.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, type FakeFirestore } from '../testing/firestoreFake.js';
 
 describe('FakeFirestore', () => {

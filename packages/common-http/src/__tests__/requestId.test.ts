@@ -1,7 +1,7 @@
 /**
  * Tests for request ID utilities.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRequestId, REQUEST_ID_HEADER } from '../http/requestId.js';
 
 // Mock crypto.randomUUID

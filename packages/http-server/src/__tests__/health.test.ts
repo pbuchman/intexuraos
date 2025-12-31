@@ -1,7 +1,15 @@
 /**
  * Tests for health check utilities.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildHealthResponse,
+  checkFirestore,
+  checkNotionSdk,
+  checkSecrets,
+  computeOverallStatus,
+  type HealthCheck,
+} from '../health.js';
 
 // Mock specific modules before importing health module
 vi.mock('@intexuraos/common-core', () => ({
@@ -13,15 +21,6 @@ vi.mock('@intexuraos/common-core', () => ({
 vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: vi.fn(),
 }));
-
-import {
-  checkSecrets,
-  checkFirestore,
-  checkNotionSdk,
-  computeOverallStatus,
-  buildHealthResponse,
-  type HealthCheck,
-} from '../health.js';
 
 describe('Health Utilities', () => {
   describe('checkSecrets', () => {

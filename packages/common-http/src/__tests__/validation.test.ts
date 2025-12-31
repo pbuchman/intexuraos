@@ -2,9 +2,9 @@
  * Tests for Zod validation error handling.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FastifyReply } from 'fastify';
-import { ZodError, z } from 'zod';
+import { z, ZodError } from 'zod';
 import { handleValidationError } from '../http/validation.js';
 
 describe('Validation utilities', () => {

@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { ok, err, type Result } from './result.js';
+import { err, ok, type Result } from './result.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;

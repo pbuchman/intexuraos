@@ -1,8 +1,8 @@
 /**
  * Tests for error utilities and types.
  */
-import { describe, it, expect } from 'vitest';
-import { ERROR_HTTP_STATUS, IntexuraOSError, getErrorMessage, type ErrorCode } from '../errors.js';
+import { describe, expect, it } from 'vitest';
+import { ERROR_HTTP_STATUS, type ErrorCode, getErrorMessage, IntexuraOSError } from '../errors.js';
 
 describe('Error utilities', () => {
   describe('ERROR_HTTP_STATUS', () => {

@@ -1,7 +1,7 @@
 /**
  * Tests for validation error handler.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { createValidationErrorHandler } from '../validation-handler.js';
 

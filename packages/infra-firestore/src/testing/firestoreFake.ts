@@ -15,7 +15,7 @@
  *   });
  */
 
-import type { WriteResult, DocumentData, CollectionReference } from '@google-cloud/firestore';
+import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
 
 /**
  * In-memory document storage.
