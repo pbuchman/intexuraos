@@ -6,7 +6,7 @@
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
 

@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { UserInfo, UserSettings, NotificationFilter } from '@/types';
+import type { NotificationFilter, UserInfo, UserSettings } from '@/types';
 
 export async function getUserInfo(accessToken: string): Promise<UserInfo> {
   return await apiRequest<UserInfo>(config.authServiceUrl, '/auth/me', accessToken);

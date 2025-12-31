@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAuth } from '@/context';
-import { apiRequest, ApiError } from '@/services/apiClient';
+import { ApiError, apiRequest } from '@/services/apiClient';
 
 interface UseApiClientResult {
   request: <T>(baseUrl: string, path: string, options?: RequestOptions) => Promise<T>;

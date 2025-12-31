@@ -10,12 +10,12 @@
  *
  * Note: Transcription is handled separately by TranscribeAudioUseCase.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { InboxError } from '../models/InboxNote.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
-  WhatsAppWebhookEventRepository,
   WhatsAppMessageRepository,
+  WhatsAppWebhookEventRepository,
 } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';

@@ -2,10 +2,16 @@
  * Tests for CleanupWorker.
  * Mocks @google-cloud/pubsub SDK to test message handling without real Pub/Sub.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
-import type { MediaStoragePort, InboxError, MediaCleanupEvent } from '../../domain/inbox/index.js';
+import { err, ok } from '@intexuraos/common-core';
+import type { InboxError, MediaCleanupEvent, MediaStoragePort } from '../../domain/inbox/index.js';
+import {
+  CleanupWorker,
+  type CleanupWorkerConfig,
+  type CleanupWorkerLogger,
+  createCleanupWorker,
+} from '../../workers/cleanupWorker.js';
 
 // Create mock subscription with event emitter pattern
 type MessageHandler = (message: MockMessage) => void;
@@ -79,13 +85,6 @@ vi.mock('@google-cloud/pubsub', () => {
     PubSub: MockPubSub,
   };
 });
-
-import {
-  CleanupWorker,
-  createCleanupWorker,
-  type CleanupWorkerConfig,
-  type CleanupWorkerLogger,
-} from '../../workers/cleanupWorker.js';
 
 /**
  * Fake media storage for testing.

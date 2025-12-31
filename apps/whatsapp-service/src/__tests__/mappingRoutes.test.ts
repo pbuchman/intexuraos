@@ -4,7 +4,7 @@
  * - GET /whatsapp/status
  * - DELETE /whatsapp/disconnect
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('WhatsApp Mapping Routes', () => {
   const ctx = setupTestContext();

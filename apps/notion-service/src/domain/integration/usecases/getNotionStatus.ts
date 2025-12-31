@@ -1,7 +1,7 @@
 /**
  * Use case for getting Notion integration status.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { ConnectionRepository } from '../ports/index.js';
 
 /**

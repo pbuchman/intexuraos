@@ -8,7 +8,7 @@
  * are completed (see docs/continuity/1-7-notion-service-coverage.md).
  */
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 
 export interface NotionConnectionPublic {
   connected: boolean;

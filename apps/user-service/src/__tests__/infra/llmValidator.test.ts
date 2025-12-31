@@ -2,8 +2,8 @@
  * Tests for LlmValidatorImpl.
  * Uses vi.mock to mock the infra packages.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { err, ok } from '@intexuraos/common-core';
 import { LlmValidatorImpl } from '../../infra/llm/LlmValidatorImpl.js';
 
 // Mock the infra packages

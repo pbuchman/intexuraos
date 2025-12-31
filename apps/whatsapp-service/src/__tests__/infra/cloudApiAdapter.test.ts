@@ -1,8 +1,8 @@
 /**
  * Tests for WhatsAppCloudApiAdapter.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { err, ok } from '@intexuraos/common-core';
 import { WhatsAppCloudApiAdapter } from '../../infra/whatsapp/index.js';
 
 const mockClient = {

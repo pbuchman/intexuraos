@@ -1,20 +1,20 @@
 /**
  * Tests for ProcessImageMessageUseCase.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  ProcessImageMessageUseCase,
-  type ProcessImageMessageInput,
   type ProcessImageMessageDeps,
+  type ProcessImageMessageInput,
   type ProcessImageMessageLogger,
+  ProcessImageMessageUseCase,
   type WhatsAppWebhookEvent,
 } from '../../domain/inbox/index.js';
 import {
-  FakeWhatsAppWebhookEventRepository,
-  FakeWhatsAppMessageRepository,
   FakeMediaStorage,
-  FakeWhatsAppCloudApiPort,
   FakeThumbnailGeneratorPort,
+  FakeWhatsAppCloudApiPort,
+  FakeWhatsAppMessageRepository,
+  FakeWhatsAppWebhookEventRepository,
 } from '../fakes.js';
 
 function createTestLogger(): ProcessImageMessageLogger {

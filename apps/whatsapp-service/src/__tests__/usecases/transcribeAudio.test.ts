@@ -9,20 +9,20 @@
  * - Update message with transcription
  * - Send result to user via WhatsApp
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  TranscribeAudioUseCase,
-  type TranscribeAudioInput,
-  type TranscribeAudioDeps,
-  type TranscribeAudioLogger,
-  type TranscriptionPollingConfig,
-} from '../../domain/inbox/index.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaStoragePort } from '../../domain/inbox/index.js';
 import {
-  FakeWhatsAppMessageRepository,
+  type TranscribeAudioDeps,
+  type TranscribeAudioInput,
+  type TranscribeAudioLogger,
+  TranscribeAudioUseCase,
+  type TranscriptionPollingConfig,
+} from '../../domain/inbox/index.js';
+import {
   FakeMediaStorage,
   FakeSpeechTranscriptionPort,
   FakeWhatsAppCloudApiPort,
+  FakeWhatsAppMessageRepository,
 } from '../fakes.js';
 
 /**

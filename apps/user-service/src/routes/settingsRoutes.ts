@@ -5,13 +5,13 @@
  * PATCH /users/:uid/settings - Update user settings
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
   getUserSettings,
-  updateUserSettings,
   type GetUserSettingsErrorCode,
+  updateUserSettings,
   type UpdateUserSettingsErrorCode,
 } from '../domain/settings/index.js';
 

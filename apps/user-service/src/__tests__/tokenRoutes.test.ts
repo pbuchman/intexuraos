@@ -1,12 +1,12 @@
 /**
  * Tests for POST /auth/refresh
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { ok, err } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
-import { setServices, resetServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeAuth0Client, FakeUserSettingsRepository } from './fakes.js';
+import { resetServices, setServices } from '../services.js';
+import { FakeAuth0Client, FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH0_CLIENT_ID = 'test-client-id';

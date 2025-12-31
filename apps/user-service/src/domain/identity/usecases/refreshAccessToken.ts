@@ -5,7 +5,7 @@
  * Handles token retrieval, refresh, storage, and error mapping.
  */
 
-import { ok, err, isErr, type Result } from '@intexuraos/common-core';
+import { err, isErr, ok, type Result } from '@intexuraos/common-core';
 import type { AuthTokenRepository } from '../ports/AuthTokenRepository.js';
 import type { Auth0Client } from '../ports/Auth0Client.js';
 import type { AuthTokens, RefreshResult } from '../models/AuthToken.js';

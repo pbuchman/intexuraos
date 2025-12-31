@@ -3,8 +3,8 @@
  * Provides dependency injection for domain adapters.
  */
 import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
-import type { AuthTokenRepository, Auth0Client } from './domain/identity/index.js';
-import type { UserSettingsRepository, LlmValidator } from './domain/settings/index.js';
+import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
+import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,

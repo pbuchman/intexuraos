@@ -8,14 +8,14 @@ import { createLlmProviders, createSynthesizer, createTitleGenerator } from './i
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
 import {
   createUserServiceClient,
-  type UserServiceClient,
   type DecryptedApiKeys,
+  type UserServiceClient,
 } from './infra/user/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import {
+  type NotificationSender,
   processResearch,
   type ResearchRepository,
-  type NotificationSender,
 } from './domain/research/index.js';
 
 /**

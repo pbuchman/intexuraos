@@ -6,18 +6,17 @@
 /* eslint-disable @typescript-eslint/return-await */
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { intexuraFastifyPlugin } from '../http/fastifyPlugin.js';
 import { fastifyAuthPlugin, requireAuth, tryAuth } from '../auth/fastifyAuthPlugin.js';
+import { verifyJwt } from '../auth/jwt.js';
 
 // Mock the JWT verification module
 vi.mock('../auth/jwt.js', () => ({
   verifyJwt: vi.fn(),
   clearJwksCache: vi.fn(),
 }));
-
-import { verifyJwt } from '../auth/jwt.js';
 
 describe('Fastify Auth Plugin', () => {
   let app: FastifyInstance;

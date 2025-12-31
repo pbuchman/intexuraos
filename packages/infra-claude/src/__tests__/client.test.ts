@@ -3,7 +3,7 @@
  * Mocks @anthropic-ai/sdk and @intexuraos/infra-llm-audit.
  */
 
-import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
+import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const mockMessagesCreate = vi.fn();
 

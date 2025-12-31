@@ -2,7 +2,7 @@
  * Open Graph metadata fetcher adapter.
  * Fetches and parses HTML to extract link preview data.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/inbox/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/inbox/models/LinkPreview.js';
 import * as cheerio from 'cheerio';

@@ -1,12 +1,12 @@
 /**
  * Tests for connect routes.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
-import { setServices, resetServices, type ServiceContainer } from '../services.js';
-import { FakeSignatureConnectionRepository, FakeNotificationRepository } from './fakes.js';
+import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { FakeNotificationRepository, FakeSignatureConnectionRepository } from './fakes.js';
 import { hashSignature } from '../domain/notifications/index.js';
 
 // Test JWT (from user-service tests pattern)

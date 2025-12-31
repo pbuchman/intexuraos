@@ -2,8 +2,8 @@
  * Notion client utilities.
  * Simple wrapper around @notionhq/client for common operations.
  */
-import { Client, isNotionClientError, APIErrorCode, LogLevel } from '@notionhq/client';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { APIErrorCode, Client, isNotionClientError, LogLevel } from '@notionhq/client';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 
 /**
  * Logger interface for Notion API calls.
@@ -177,8 +177,6 @@ export type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoin
 // =============================================================================
 // Notion API utilities
 // =============================================================================
-
-import { ok, err, type Result } from '@intexuraos/common-core';
 
 /**
  * Page preview structure.

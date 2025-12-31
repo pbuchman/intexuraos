@@ -1,18 +1,18 @@
 /**
  * Tests for OpenAPI JSON schemas.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  ERROR_CODES,
-  ErrorCodeSchema,
-  DiagnosticsSchema,
-  ErrorBodySchema,
-  ApiOkSchema,
   ApiErrorSchema,
+  ApiOkSchema,
+  bearerAuthSecurityScheme,
+  coreComponentSchemas,
+  DiagnosticsSchema,
+  ERROR_CODES,
+  ErrorBodySchema,
+  ErrorCodeSchema,
   HealthCheckSchema,
   HealthResponseSchema,
-  coreComponentSchemas,
-  bearerAuthSecurityScheme,
 } from '../openapi-schemas.js';
 
 describe('OpenAPI Schemas', () => {

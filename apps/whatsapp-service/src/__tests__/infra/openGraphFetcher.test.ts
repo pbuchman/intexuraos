@@ -2,7 +2,7 @@
  * Tests for Open Graph metadata fetcher.
  * Mocks fetch() to simulate HTML responses.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { OpenGraphFetcher } from '../../infra/linkpreview/openGraphFetcher.js';
 

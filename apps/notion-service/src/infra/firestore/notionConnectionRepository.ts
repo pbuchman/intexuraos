@@ -2,11 +2,11 @@
  * Firestore repository for Notion connection configuration.
  * Owned by notion-service - manages Notion token and connection state.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
-  NotionError,
   NotionConnectionPublic,
+  NotionError,
 } from '../../domain/integration/ports/ConnectionRepository.js';
 
 /**

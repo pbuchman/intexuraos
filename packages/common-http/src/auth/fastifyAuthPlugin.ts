@@ -3,9 +3,9 @@
  * Reads configuration from environment variables.
  */
 
-import type { FastifyInstance, FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
-import { verifyJwt, type JwtConfig } from './jwt.js';
+import { type JwtConfig, verifyJwt } from './jwt.js';
 
 /**
  * User context attached to authenticated requests.

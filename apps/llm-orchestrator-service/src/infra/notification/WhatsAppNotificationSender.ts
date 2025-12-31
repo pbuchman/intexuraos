@@ -7,8 +7,8 @@ import {
   type WhatsAppClient,
   type WhatsAppConfig,
 } from '@intexuraos/infra-whatsapp';
-import { ok, err, type Result } from '@intexuraos/common-core';
-import type { NotificationSender, NotificationError } from '../../domain/research/index.js';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
 
 export interface UserPhoneLookup {
   getPhoneNumber(userId: string): Promise<string | null>;

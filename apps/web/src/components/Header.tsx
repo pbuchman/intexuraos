@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context';
-import { LogOut, ChevronDown, User } from 'lucide-react';
+import { ChevronDown, LogOut, User } from 'lucide-react';
 
 export function Header(): React.JSX.Element {
   const { user, logout } = useAuth();

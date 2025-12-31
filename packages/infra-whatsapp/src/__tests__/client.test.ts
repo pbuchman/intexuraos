@@ -2,7 +2,7 @@
  * Tests for WhatsApp Cloud API client.
  * Mocks fetch() calls to Graph API endpoints.
  */
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { createWhatsAppClient } from '../client.js';
 import type { WhatsAppConfig } from '../types.js';

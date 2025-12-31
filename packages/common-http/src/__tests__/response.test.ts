@@ -1,8 +1,8 @@
 /**
  * Tests for API response utilities.
  */
-import { describe, it, expect } from 'vitest';
-import { ok, fail, type Diagnostics } from '../http/response.js';
+import { describe, expect, it } from 'vitest';
+import { type Diagnostics, fail, ok } from '../http/response.js';
 
 describe('Response utilities', () => {
   describe('ok', () => {

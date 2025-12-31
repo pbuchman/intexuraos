@@ -4,19 +4,19 @@
  */
 
 import {
-  ok,
-  err,
-  type Result,
   type EncryptedValue,
+  err,
   getErrorMessage,
+  ok,
+  type Result,
 } from '@intexuraos/common-core';
-import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
+import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import type {
-  UserSettingsRepository,
-  UserSettings,
-  SettingsError,
   LlmProvider,
   LlmTestResult,
+  SettingsError,
+  UserSettings,
+  UserSettingsRepository,
 } from '../../domain/settings/index.js';
 
 const COLLECTION_NAME = 'user_settings';

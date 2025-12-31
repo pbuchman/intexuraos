@@ -4,17 +4,17 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
 import {
-  intexuraFastifyPlugin,
   fastifyAuthPlugin,
+  intexuraFastifyPlugin,
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import type { NotionLogger } from '@intexuraos/infra-notion';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import {
-  checkSecrets,
+  buildHealthResponse,
   checkFirestore,
   checkNotionSdk,
-  buildHealthResponse,
+  checkSecrets,
   createValidationErrorHandler,
   type HealthCheck,
 } from '@intexuraos/http-server';

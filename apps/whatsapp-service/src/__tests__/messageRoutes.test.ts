@@ -5,7 +5,7 @@
  * - GET /whatsapp/messages/:message_id/thumbnail
  * - DELETE /whatsapp/messages/:message_id
  */
-import { describe, it, expect, setupTestContext, createToken } from './testUtils.js';
+import { createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('WhatsApp Message Routes', () => {
   const ctx = setupTestContext();

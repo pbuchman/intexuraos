@@ -4,9 +4,9 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type {
+  InboxError,
   ThumbnailGeneratorPort,
   ThumbnailResult,
-  InboxError,
 } from '../../domain/inbox/index.js';
 import { generateThumbnail } from './thumbnailGenerator.js';
 

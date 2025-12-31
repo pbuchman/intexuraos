@@ -1,8 +1,16 @@
 /**
  * Tests for Notion client utilities.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { APIErrorCode, isNotionClientError } from '@notionhq/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APIErrorCode, Client, isNotionClientError } from '@notionhq/client';
+import {
+  createNotionClient,
+  extractPageTitle,
+  getPageWithPreview,
+  mapNotionError,
+  type NotionLogger,
+  validateNotionToken,
+} from '../notion.js';
 
 // Create mock client instance holder
 let mockClientInstance: {
@@ -32,16 +40,6 @@ vi.mock('@notionhq/client', () => {
     },
   };
 });
-
-import {
-  mapNotionError,
-  extractPageTitle,
-  createNotionClient,
-  validateNotionToken,
-  getPageWithPreview,
-  type NotionLogger,
-} from '../notion.js';
-import { Client } from '@notionhq/client';
 
 describe('Notion utilities', () => {
   beforeEach(() => {

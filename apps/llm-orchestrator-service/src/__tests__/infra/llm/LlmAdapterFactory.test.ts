@@ -2,7 +2,7 @@
  * Tests for LlmAdapterFactory.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
   GeminiAdapter: class MockGeminiAdapter {

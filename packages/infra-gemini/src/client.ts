@@ -1,13 +1,13 @@
-import { GoogleGenAI, type GenerateContentResponse } from '@google/genai';
+import { type GenerateContentResponse, GoogleGenAI } from '@google/genai';
 import {
-  ok,
-  err,
-  type Result,
-  getErrorMessage,
   buildResearchPrompt,
+  err,
+  getErrorMessage,
+  ok,
+  type Result,
 } from '@intexuraos/common-core';
-import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
-import type { GeminiConfig, ResearchResult, SynthesisInput, GeminiError } from './types.js';
+import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
+import type { GeminiConfig, GeminiError, ResearchResult, SynthesisInput } from './types.js';
 
 const DEFAULT_MODEL = 'gemini-2.0-flash';
 const VALIDATION_MODEL = 'gemini-2.0-flash';

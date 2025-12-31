@@ -2,9 +2,9 @@
  * Use case for creating a new signature connection.
  * Generates a crypto-secure token, hashes it, and stores the hash.
  */
-import { randomBytes, createHash } from 'node:crypto';
-import { ok, err, type Result } from '@intexuraos/common-core';
-import type { SignatureConnectionRepository, RepositoryError } from '../ports/index.js';
+import { createHash, randomBytes } from 'node:crypto';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { RepositoryError, SignatureConnectionRepository } from '../ports/index.js';
 import type { CreateSignatureConnectionInput } from '../models/index.js';
 
 /**

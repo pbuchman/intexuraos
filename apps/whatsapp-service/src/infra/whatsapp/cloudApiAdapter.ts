@@ -2,13 +2,13 @@
  * Adapter for WhatsApp Cloud API port.
  * Uses @intexuraos/infra-whatsapp for WhatsApp Graph API operations.
  */
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
 import type {
-  WhatsAppCloudApiPort,
+  InboxError,
   MediaUrlInfo,
   SendMessageResult,
-  InboxError,
+  WhatsAppCloudApiPort,
 } from '../../domain/inbox/index.js';
 
 /**

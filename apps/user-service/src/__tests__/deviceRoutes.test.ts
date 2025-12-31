@@ -1,11 +1,11 @@
 /**
  * Tests for POST /auth/device/start and POST /auth/device/poll
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
-import { setServices, resetServices } from '../services.js';
+import { resetServices, setServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';

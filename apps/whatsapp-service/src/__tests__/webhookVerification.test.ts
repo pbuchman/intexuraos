@@ -2,7 +2,7 @@
  * Tests for webhook verification:
  * - GET /whatsapp/webhooks (Meta webhook verification)
  */
-import { describe, it, expect, setupTestContext, testConfig } from './testUtils.js';
+import { describe, expect, it, setupTestContext, testConfig } from './testUtils.js';
 
 describe('GET /whatsapp/webhooks (webhook verification)', () => {
   const ctx = setupTestContext();

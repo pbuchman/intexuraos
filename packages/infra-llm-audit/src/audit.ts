@@ -7,12 +7,12 @@
 
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type {
-  LlmAuditLog,
-  CreateAuditLogParams,
-  CompleteAuditLogSuccessParams,
   CompleteAuditLogErrorParams,
+  CompleteAuditLogSuccessParams,
+  CreateAuditLogParams,
+  LlmAuditLog,
 } from './types.js';
 
 const COLLECTION_NAME = 'llm_api_logs';

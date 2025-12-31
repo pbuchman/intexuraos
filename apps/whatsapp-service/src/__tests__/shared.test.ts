@@ -1,22 +1,22 @@
 /**
  * Tests for shared utilities in whatsapp-service.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  normalizePhoneNumber,
-  validatePhoneNumber,
-  getSupportedCountries,
-  extractWabaId,
-  extractPhoneNumberId,
+  extractAudioMedia,
   extractDisplayPhoneNumber,
-  extractSenderPhoneNumber,
+  extractImageMedia,
   extractMessageId,
   extractMessageText,
   extractMessageTimestamp,
-  extractSenderName,
   extractMessageType,
-  extractImageMedia,
-  extractAudioMedia,
+  extractPhoneNumberId,
+  extractSenderName,
+  extractSenderPhoneNumber,
+  extractWabaId,
+  getSupportedCountries,
+  normalizePhoneNumber,
+  validatePhoneNumber,
 } from '../routes/shared.js';
 
 describe('shared utilities', () => {

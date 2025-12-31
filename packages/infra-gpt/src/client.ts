@@ -1,13 +1,13 @@
 import OpenAI from 'openai';
 import {
-  ok,
-  err,
-  type Result,
-  getErrorMessage,
   buildResearchPrompt,
+  err,
+  getErrorMessage,
+  ok,
+  type Result,
 } from '@intexuraos/common-core';
-import { createAuditContext, type AuditContext } from '@intexuraos/infra-llm-audit';
-import type { GptConfig, ResearchResult, SynthesisInput, GptError } from './types.js';
+import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
+import type { GptConfig, GptError, ResearchResult, SynthesisInput } from './types.js';
 
 const DEFAULT_MODEL = 'gpt-4.1';
 const VALIDATION_MODEL = 'gpt-4.1-mini';

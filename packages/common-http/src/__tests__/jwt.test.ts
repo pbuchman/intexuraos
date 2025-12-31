@@ -8,9 +8,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
-import { verifyJwt, clearJwksCache, type JwtConfig } from '../auth/jwt.js';
+import { clearJwksCache, type JwtConfig, verifyJwt } from '../auth/jwt.js';
 import { IntexuraOSError } from '@intexuraos/common-core';
 
 // Mock jose module

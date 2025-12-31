@@ -2,7 +2,7 @@
  * HTTP client for notion-service internal API.
  * Fetches Notion token context via service-to-service communication.
  */
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 
 export interface NotionServiceConfig {
   baseUrl: string;

@@ -4,11 +4,11 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type {
+  CreatePromptInput,
   Prompt,
   PromptId,
-  CreatePromptInput,
-  UpdatePromptInput,
   PromptVaultError,
+  UpdatePromptInput,
 } from '../models/index.js';
 
 /**

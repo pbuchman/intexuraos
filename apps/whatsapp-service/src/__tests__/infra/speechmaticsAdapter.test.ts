@@ -4,7 +4,8 @@
  * Tests the Speechmatics Batch API adapter for speech-to-text transcription.
  * Uses mocked BatchClient to test all code paths.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SpeechmaticsTranscriptionAdapter } from '../../infra/speechmatics/adapter.js';
 
 // Use vi.hoisted to define mocks before vi.mock is evaluated
 const { mockCreateTranscriptionJob, mockGetJob, mockGetJobResult, constructorArgs } = vi.hoisted(
@@ -45,8 +46,6 @@ vi.mock('pino', () => ({
     error: vi.fn(),
   })),
 }));
-
-import { SpeechmaticsTranscriptionAdapter } from '../../infra/speechmatics/adapter.js';
 
 describe('SpeechmaticsTranscriptionAdapter', () => {
   let adapter: SpeechmaticsTranscriptionAdapter;

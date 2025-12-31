@@ -1,24 +1,24 @@
 /**
  * Shared test utilities for whatsapp-service tests.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { createHmac } from 'node:crypto';
 import { buildServer } from '../server.js';
-import { setServices, resetServices } from '../services.js';
+import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import {
-  FakeWhatsAppWebhookEventRepository,
-  FakeWhatsAppUserMappingRepository,
-  FakeWhatsAppMessageRepository,
-  FakeMediaStorage,
   FakeEventPublisher,
+  FakeLinkPreviewFetcherPort,
+  FakeMediaStorage,
   FakeMessageSender,
   FakeSpeechTranscriptionPort,
-  FakeWhatsAppCloudApiPort,
   FakeThumbnailGeneratorPort,
-  FakeLinkPreviewFetcherPort,
+  FakeWhatsAppCloudApiPort,
+  FakeWhatsAppMessageRepository,
+  FakeWhatsAppUserMappingRepository,
+  FakeWhatsAppWebhookEventRepository,
 } from './fakes.js';
 import type { Config } from '../config.js';
 

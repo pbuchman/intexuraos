@@ -6,7 +6,7 @@
  * DELETE /whatsapp/disconnect - Disconnect mapping
  */
 
-import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';

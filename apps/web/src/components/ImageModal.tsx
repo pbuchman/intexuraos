@@ -2,9 +2,9 @@
  * Modal component for displaying full-size images.
  * Fetches signed URL on open and displays with loading state.
  */
-import { useState, useEffect, useCallback } from 'react';
-import { X, Download, Loader2 } from 'lucide-react';
-import { getMessageMediaUrl, ApiError } from '@/services';
+import { useCallback, useEffect, useState } from 'react';
+import { Download, Loader2, X } from 'lucide-react';
+import { ApiError, getMessageMediaUrl } from '@/services';
 
 interface ImageModalProps {
   messageId: string;

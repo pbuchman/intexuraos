@@ -4,7 +4,7 @@
  * - GET /docs
  * - GET /openapi.json
  */
-import { describe, it, expect, setupTestContext } from './testUtils.js';
+import { describe, expect, it, setupTestContext } from './testUtils.js';
 
 describe('System Endpoints', () => {
   const ctx = setupTestContext();

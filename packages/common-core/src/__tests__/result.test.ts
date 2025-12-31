@@ -1,8 +1,8 @@
 /**
  * Tests for Result type utilities.
  */
-import { describe, it, expect } from 'vitest';
-import { ok, err, isOk, isErr, type Result } from '../result.js';
+import { describe, expect, it } from 'vitest';
+import { err, isErr, isOk, ok, type Result } from '../result.js';
 
 describe('Result utilities', () => {
   describe('ok', () => {

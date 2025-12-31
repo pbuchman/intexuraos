@@ -1,9 +1,9 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
-  Research,
   CreateResearchRequest,
   ListResearchesResponse,
+  Research,
 } from './llmOrchestratorApi.types.js';
 
 /**

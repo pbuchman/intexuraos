@@ -1,11 +1,12 @@
 /**
  * Tests for HTTP client utility
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from '../routes/httpClient.js';
 import https from 'node:https';
 import { EventEmitter } from 'node:events';
+
 describe('httpClient utilities', () => {
   beforeAll(() => {
     nock.disableNetConnect();

@@ -1,20 +1,21 @@
 /**
  * Tests for ProcessAudioMessageUseCase.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { WhatsAppWebhookEvent } from '../../domain/inbox/index.js';
 import {
-  ProcessAudioMessageUseCase,
-  type ProcessAudioMessageInput,
   type ProcessAudioMessageDeps,
+  type ProcessAudioMessageInput,
   type ProcessAudioMessageLogger,
+  ProcessAudioMessageUseCase,
 } from '../../domain/inbox/index.js';
 import {
-  FakeWhatsAppWebhookEventRepository,
-  FakeWhatsAppMessageRepository,
   FakeMediaStorage,
   FakeWhatsAppCloudApiPort,
+  FakeWhatsAppMessageRepository,
+  FakeWhatsAppWebhookEventRepository,
 } from '../fakes.js';
-import type { WhatsAppWebhookEvent } from '../../domain/inbox/index.js';
+
 function createTestLogger(): ProcessAudioMessageLogger {
   return {
     info: (): void => {

@@ -1,16 +1,16 @@
 /**
  * Tests for notion-service domain use-cases.
  */
-import { describe, it, expect } from 'vitest';
-import { ok, err, type Result } from '@intexuraos/common-core';
+import { describe, expect, it } from 'vitest';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import {
-  connectNotion,
-  getNotionStatus,
-  disconnectNotion,
-  createConnectNotionUseCase,
-  createGetNotionStatusUseCase,
-  createDisconnectNotionUseCase,
   type ConnectionRepository,
+  connectNotion,
+  createConnectNotionUseCase,
+  createDisconnectNotionUseCase,
+  createGetNotionStatusUseCase,
+  disconnectNotion,
+  getNotionStatus,
   type NotionApi,
   type NotionConnectionPublic,
   type NotionError,

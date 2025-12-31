@@ -4,11 +4,11 @@
  */
 import { PubSub } from '@google-cloud/pubsub';
 import pino, { type LevelWithSilent } from 'pino';
-import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   EventPublisherPort,
-  MediaCleanupEvent,
   InboxError,
+  MediaCleanupEvent,
 } from '../../domain/inbox/index.js';
 
 /**

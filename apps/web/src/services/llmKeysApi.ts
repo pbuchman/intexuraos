@@ -1,8 +1,8 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
-  LlmProvider,
   LlmKeysResponse,
+  LlmProvider,
   SetLlmKeyRequest,
   SetLlmKeyResponse,
 } from './llmKeysApi.types.js';

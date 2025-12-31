@@ -10,11 +10,11 @@ import {
 } from './infra/notion/notionServiceClient.js';
 import {
   createPrompt as createPromptFn,
-  listPrompts as listPromptsFn,
   getPrompt as getPromptFn,
-  updatePrompt as updatePromptFn,
+  listPrompts as listPromptsFn,
   type Prompt,
   type PromptVaultError,
+  updatePrompt as updatePromptFn,
 } from './infra/notion/index.js';
 
 /**
