@@ -308,8 +308,6 @@ module "secret_manager" {
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
     "INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL"     = "LLM Orchestrator service Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
-    # Gemini API key for commands classification
-    "INTEXURAOS_GEMINI_API_KEY" = "Google Gemini API key for command classification"
   }
 
   depends_on = [google_project_service.apis]
