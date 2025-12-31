@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/infra-firestore": "*",
     "@notionhq/client": "^2.2.15"
   }
 }

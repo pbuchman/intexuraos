@@ -403,15 +403,21 @@ module "promptvault_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_NOTION_SERVICE_URL = module.notion_service.service_url
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.notion_service,
   ]
 }
 
@@ -432,9 +438,10 @@ module "notion_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   depends_on = [

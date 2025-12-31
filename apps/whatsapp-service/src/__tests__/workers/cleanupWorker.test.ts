@@ -186,6 +186,7 @@ describe('CleanupWorker', () => {
   let logger: FakeLogger;
   const config: CleanupWorkerConfig = {
     projectId: 'test-project',
+    topicName: 'test-cleanup-topic',
     subscriptionName: 'test-cleanup-subscription',
   };
 
@@ -209,8 +210,8 @@ describe('CleanupWorker', () => {
   });
 
   describe('start()', () => {
-    it('starts subscription and logs startup', () => {
-      worker.start();
+    it('starts subscription and logs startup', async () => {
+      await worker.start();
 
       expect(messageHandlers.length).toBe(1);
       expect(errorHandlers.length).toBe(1);
@@ -222,11 +223,11 @@ describe('CleanupWorker', () => {
       );
     });
 
-    it('returns early if already running', () => {
-      worker.start();
+    it('returns early if already running', async () => {
+      await worker.start();
       const handlerCountBefore = messageHandlers.length;
 
-      worker.start(); // Second call should be no-op
+      await worker.start(); // Second call should be no-op
 
       expect(messageHandlers.length).toBe(handlerCountBefore);
     });
@@ -234,7 +235,7 @@ describe('CleanupWorker', () => {
 
   describe('stop()', () => {
     it('closes subscription when running', async () => {
-      worker.start();
+      await worker.start();
       await worker.stop();
 
       expect(mockClose).toHaveBeenCalled();
@@ -250,8 +251,8 @@ describe('CleanupWorker', () => {
   });
 
   describe('message handling', () => {
-    beforeEach(() => {
-      worker.start();
+    beforeEach(async () => {
+      await worker.start();
     });
 
     it('processes valid cleanup event and deletes files', async () => {
@@ -357,7 +358,7 @@ describe('CleanupWorker', () => {
       };
 
       const throwingWorker = new CleanupWorker(config, throwingStorage, logger);
-      throwingWorker.start();
+      await throwingWorker.start();
 
       const event = createCleanupEvent();
       const message = createMockMessage(event);
@@ -425,8 +426,8 @@ describe('CleanupWorker', () => {
   });
 
   describe('subscription error handling', () => {
-    it('logs subscription errors', () => {
-      worker.start();
+    it('logs subscription errors', async () => {
+      await worker.start();
 
       const testError = new Error('Subscription connection failed');
       testError.stack = 'Error stack trace';
@@ -450,6 +451,7 @@ describe('createCleanupWorker', () => {
   it('creates a CleanupWorker instance', () => {
     const config: CleanupWorkerConfig = {
       projectId: 'test-project',
+      topicName: 'test-topic',
       subscriptionName: 'test-subscription',
     };
     const mediaStorage = new FakeMediaStorageForCleanup();

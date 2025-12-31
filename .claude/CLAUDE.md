@@ -64,6 +64,38 @@ docs/             → All documentation
 - Apps importing from other apps
 - Deep imports into package internals (`@intexuraos/*/src/*`)
 
+### Service-to-Service Communication
+
+Apps communicate via HTTP-based internal endpoints following the pattern:
+
+```
+/internal/{service-prefix}/{resource-path}
+```
+
+**Service Prefixes:**
+
+| Service                    | Prefix        | Example Endpoint                         |
+| -------------------------- | ------------- | ---------------------------------------- |
+| `notion-service`           | `notion`      | `/internal/notion/users/:userId/context` |
+| `user-service`             | `user`        | `/internal/users/:uid/llm-keys`          |
+| `promptvault-service`      | `promptvault` | (future endpoints)                       |
+| `whatsapp-service`         | `whatsapp`    | (future endpoints)                       |
+| `llm-orchestrator-service` | `llm`         | (future endpoints)                       |
+
+**Authentication:**
+
+- Header: `X-Internal-Auth: <token>`
+- Env var: `INTEXURAOS_INTERNAL_AUTH_TOKEN`
+- Returns `401 Unauthorized` for missing/invalid tokens
+
+**Implementation:**
+
+- Server: Use `validateInternalAuth()` helper (see [service-to-service-communication.md](../docs/architecture/service-to-service-communication.md))
+- Client: Create typed service client with `fetch()` + auth header
+- Testing: Inject fake clients via dependency injection
+
+**Full documentation:** [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
+
 ---
 
 ## Apps (`apps/**`)

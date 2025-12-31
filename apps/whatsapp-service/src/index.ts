@@ -53,12 +53,13 @@ async function main(): Promise<void> {
     cleanupWorker = createCleanupWorker(
       {
         projectId: config.gcpProjectId,
+        topicName: config.mediaCleanupTopic,
         subscriptionName: config.mediaCleanupSubscription,
       },
       services.mediaStorage,
       createWorkerLogger('CleanupWorker')
     );
-    cleanupWorker.start();
+    await cleanupWorker.start();
   }
 
   const close = (): void => {

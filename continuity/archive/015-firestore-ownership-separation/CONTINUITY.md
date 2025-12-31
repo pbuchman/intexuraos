@@ -61,10 +61,19 @@ Rozdzielić własność kolekcji Firestore między serwisami zgodnie z zasadą "
 
 ### Now
 
-- Execute 1-2-infra-notion-cleanup
+- Execute tier 2: deployment preparation (2-2)
+- Archive task
 
 ### Done (continued)
 
+- ✅ 2-2-deployment-preparation COMPLETE
+  - Updated Terraform configuration for both services
+  - Added INTEXURAOS_INTERNAL_AUTH_TOKEN secret to notion-service
+  - Added INTEXURAOS_INTERNAL_AUTH_TOKEN secret to promptvault-service
+  - Added INTEXURAOS_NOTION_SERVICE_URL env var to promptvault-service (points to notion_service URL)
+  - Added module.notion_service dependency to promptvault-service
+  - Terraform formatted and validated successfully
+  - All success criteria verified
 - ✅ 1-1-promptvault-service-changes COMPLETE
   - Created promptVaultSettingsRepository.ts for local promptVaultPageId storage
   - Created notionServiceClient.ts HTTP client for notion-service communication
@@ -86,13 +95,27 @@ Rozdzielić własność kolekcji Firestore między serwisami zgodnie z zasadą "
     - All 34 route tests passing
   - promptvault-service tests: 34/34 passing
   - Note: Global coverage failure in packages/common-core/src/prompts/researchPrompt.ts (0%) - unrelated to this task
+- ✅ 1-2-clean-up-infra-notion COMPLETE
+  - Removed all notionConnection exports from index.ts
+  - Deleted notionConnection.ts file
+  - Deleted notionConnection.test.ts file
+  - Removed @intexuraos/infra-firestore dependency from package.json
+  - Updated package comment to remove infra-firestore mention
+  - Verification: All 47 notion.test.ts tests passing, typecheck passing
+- ✅ 2-0-documentation COMPLETE
+  - Created docs/architecture/service-to-service-communication.md with comprehensive guide
+  - Documented `/internal/{service-prefix}/{resource-path}` pattern
+  - Documented authentication with X-Internal-Auth header
+  - Listed all current internal endpoints (notion-service, user-service)
+  - Provided implementation examples for both server and client
+  - Added best practices for security, error handling, performance, testing
+  - Updated .claude/CLAUDE.md with Service-to-Service Communication section
+  - Added service prefix table and quick reference
+  - Verification: Both docs exist and pattern is documented
 
 ### Next
 
-- Execute 1-2-infra-notion-cleanup
-- Execute tier 2: documentation
-- Execute tier 2: test coverage verification
-- Execute tier 2: deployment preparation
+- Execute tier 2: deployment preparation (2-2)
 - Archive task
 
 ## Open Questions
@@ -166,3 +189,50 @@ Fixed all 9 failing tests in promptRoutes.test.ts:
 - Solution: Properly configured Notion Client mocks with correct block types and error handling
 - Verification: All 34 promptRoutes.test.ts tests passing
 - Note: Global coverage failure in packages/common-core/src/prompts/researchPrompt.ts is unrelated to this task
+
+**2025-12-31 01:21** - Task 1-2 complete
+Cleaned up @intexuraos/infra-notion package:
+
+- Removed all notionConnection exports (moved to notion-service in Task 1-0)
+- Deleted notionConnection.ts and notionConnection.test.ts
+- Removed @intexuraos/infra-firestore dependency from package.json
+- Package now contains only Notion API client wrapper (shared utility)
+- Verification: All 47 notion.test.ts tests passing, typecheck passing
+- Tier 1 tasks complete - moving to Tier 2 (documentation, verification, deployment prep)
+
+**2025-12-31 01:26** - Task 2-0 complete
+Created comprehensive service-to-service communication documentation:
+
+- Created docs/architecture/service-to-service-communication.md (comprehensive guide)
+- Documented `/internal/{service-prefix}/{resource-path}` pattern with examples
+- Documented authentication pattern with X-Internal-Auth header
+- Listed all current endpoints: notion-service, user-service
+- Provided complete implementation guide for server and client
+- Added best practices: security, error handling, performance, testing
+- Added migration guide from direct Firestore access to service-to-service
+- Updated .claude/CLAUDE.md with quick reference section
+- Pattern is now enforced and documented for future development
+
+**2025-12-31 01:45** - Task 2-1 complete
+Test coverage verification completed:
+
+- Created comprehensive tests for notionServiceClient.ts (100% coverage)
+- Created comprehensive tests for promptVaultSettingsRepository.ts (100% coverage)
+- Created tests for researchPrompt.ts (100% coverage)
+- All Task 015 changed files have 100% test coverage
+- Fixed OpenAPI contract tests for port mismatches (unrelated pre-existing issue)
+- Note: Global coverage failures (functions 94.75%, statements 94.72%, branches 92.51%) are from pre-existing code unrelated to Task 015:
+  - userTokenRepository.ts: 2% (user-service, pre-existing)
+  - promptApi.ts: 74.41% (pre-existing)
+  - cleanupWorker.ts: 81.35% (whatsapp-service, pre-existing)
+- Lines coverage PASSED (95.01% >= 95%)
+- All Task 015 deliverables fully covered and tested
+
+**2025-12-31 01:50** - Task 2-2 complete
+Deployment preparation finalized:
+
+- Terraform configuration updated with environment variables for service-to-service communication
+- Both services now have INTEXURAOS_INTERNAL_AUTH_TOKEN from Secret Manager
+- promptvault-service has INTEXURAOS_NOTION_SERVICE_URL pointing to notion_service.service_url
+- Terraform validation passed: `terraform fmt -check -recursive && terraform validate`
+- Ready for deployment

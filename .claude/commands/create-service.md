@@ -295,7 +295,27 @@ Edit `tsconfig.json`:
 }
 ```
 
-### 11. Run Verification
+### 11. Add to Local Dev Setup
+
+Edit `scripts/dev.mjs` — add service to SERVICES array:
+
+```javascript
+const SERVICES = [
+  // ... existing services ...
+  { name: '<service-name>', port: 81XX, color: '\x1b[XXm' },
+];
+```
+
+Choose an unused port in range 8110-8119 and an ANSI color code.
+
+If service needs additional env vars, add them to `.envrc.local.example`:
+
+```bash
+# In the appropriate section
+export INTEXURAOS_<SERVICE>_SOME_VAR=local-value
+```
+
+### 12. Run Verification
 
 ```bash
 npm install
@@ -316,6 +336,7 @@ cd terraform && terraform fmt -recursive && terraform validate
 - [ ] CloudBuild trigger configured
 - [ ] Registered in api-docs-hub
 - [ ] Added to root tsconfig.json
+- [ ] Added to local dev setup (`scripts/dev.mjs`)
 - [ ] `npm run ci` passes
 - [ ] `terraform validate` passes
 

@@ -75,7 +75,7 @@ describe('promptvault-service OpenAPI contract', () => {
     );
     expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('http://localhost:8081');
+    expect(servers?.[1]?.url).toBe('http://localhost:8111');
     expect(servers?.[1]?.description).toBe('Local');
   });
 

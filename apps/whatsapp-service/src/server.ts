@@ -40,7 +40,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       url: 'https://intexuraos-whatsapp-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
-    { url: 'http://localhost:8082', description: 'Local' },
+    { url: 'http://localhost:8113', description: 'Local' },
   ];
 
   return {

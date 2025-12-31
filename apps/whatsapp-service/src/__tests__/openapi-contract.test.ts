@@ -91,7 +91,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     expect(servers?.[0]?.url).toBe('https://intexuraos-whatsapp-service-cj44trunra-lm.a.run.app');
     expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('http://localhost:8082');
+    expect(servers?.[1]?.url).toBe('http://localhost:8113');
     expect(servers?.[1]?.description).toBe('Local');
   });
 

@@ -28,6 +28,7 @@ export interface CleanupWorkerLogger {
  */
 export interface CleanupWorkerConfig {
   projectId: string;
+  topicName: string;
   subscriptionName: string;
 }
 
@@ -36,6 +37,7 @@ export interface CleanupWorkerConfig {
  */
 export class CleanupWorker {
   private readonly pubsub: PubSub;
+  private readonly topicName: string;
   private readonly subscriptionName: string;
   private readonly mediaStorage: MediaStoragePort;
   private readonly logger: CleanupWorkerLogger;
@@ -47,6 +49,7 @@ export class CleanupWorker {
     logger: CleanupWorkerLogger
   ) {
     this.pubsub = new PubSub({ projectId: config.projectId });
+    this.topicName = config.topicName;
     this.subscriptionName = config.subscriptionName;
     this.mediaStorage = mediaStorage;
     this.logger = logger;
@@ -54,14 +57,20 @@ export class CleanupWorker {
 
   /**
    * Start listening for cleanup events.
-   * Non-blocking - sets up subscription listener and returns immediately.
+   * In emulator mode, auto-creates topic/subscription if they don't exist.
    */
-  start(): void {
+  async start(): Promise<void> {
     if (this.isRunning) {
       return;
     }
 
     this.isRunning = true;
+
+    // Auto-create topic/subscription in emulator mode
+    if (process.env['PUBSUB_EMULATOR_HOST'] !== undefined) {
+      await this.ensureTopicAndSubscription();
+    }
+
     const subscription = this.pubsub.subscription(this.subscriptionName);
 
     this.logger.info('Starting Pub/Sub subscription for media cleanup events', {
@@ -88,6 +97,29 @@ export class CleanupWorker {
     this.logger.info('Cleanup worker started successfully', {
       subscription: this.subscriptionName,
     });
+  }
+
+  /**
+   * Ensure topic and subscription exist (for emulator mode).
+   */
+  private async ensureTopicAndSubscription(): Promise<void> {
+    const topic = this.pubsub.topic(this.topicName);
+    const [topicExists] = await topic.exists();
+
+    if (!topicExists) {
+      await topic.create();
+      this.logger.info('Created Pub/Sub topic (emulator mode)', { topic: this.topicName });
+    }
+
+    const subscription = topic.subscription(this.subscriptionName);
+    const [subExists] = await subscription.exists();
+
+    if (!subExists) {
+      await subscription.create();
+      this.logger.info('Created Pub/Sub subscription (emulator mode)', {
+        subscription: this.subscriptionName,
+      });
+    }
   }
 
   /**
