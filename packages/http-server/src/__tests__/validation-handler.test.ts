@@ -158,5 +158,21 @@ describe('Validation Error Handler', () => {
       expect(statusFn).toHaveBeenCalledWith(500);
       expect(failFn).toHaveBeenCalledWith('INTERNAL_ERROR', 'Internal error');
     });
+
+    it('handles validation error with undefined instancePath', async () => {
+      const handler = createValidationErrorHandler();
+      const { reply, failFn } = createMockReply();
+      const { request } = createMockRequest();
+
+      const validationError = {
+        validation: [{ message: 'must be valid' }],
+      } as unknown as FastifyError;
+
+      await handler(validationError, request, reply);
+
+      expect(failFn).toHaveBeenCalledWith('INVALID_REQUEST', 'Validation failed', undefined, {
+        errors: [{ path: 'body', message: 'must be valid' }],
+      });
+    });
   });
 });

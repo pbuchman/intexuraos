@@ -170,6 +170,10 @@ export default tseslint.config(
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
         },
       ],
@@ -205,6 +209,10 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
@@ -270,6 +278,10 @@ export default tseslint.config(
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
         },
       ],
@@ -318,6 +330,10 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],

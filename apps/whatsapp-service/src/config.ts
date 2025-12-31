@@ -69,6 +69,12 @@ const configSchema = z.object({
     .min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION is required'),
 
   /**
+   * Pub/Sub topic for commands ingest events.
+   * Optional - commands-router integration.
+   */
+  commandsIngestTopic: z.string().optional(),
+
+  /**
    * Speechmatics API key for audio transcription.
    */
   speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
@@ -107,6 +113,7 @@ export function loadConfig(): Config {
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
+    commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });

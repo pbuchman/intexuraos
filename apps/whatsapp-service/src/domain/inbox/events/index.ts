@@ -3,6 +3,7 @@
  */
 export type {
   AudioStoredEvent,
+  CommandIngestEvent,
   MediaCleanupEvent,
   TranscriptionCompletedEvent,
   WhatsAppEvent,

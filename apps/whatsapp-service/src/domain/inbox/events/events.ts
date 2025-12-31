@@ -118,6 +118,46 @@ export interface TranscriptionCompletedEvent {
 }
 
 /**
+ * Event published when a command is ready for ingestion.
+ * Triggers the commands-router to classify and create actions.
+ */
+export interface CommandIngestEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'command.ingest';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Source type identifier.
+   */
+  sourceType: 'whatsapp_text' | 'whatsapp_voice';
+
+  /**
+   * External ID (WhatsApp message ID).
+   */
+  externalId: string;
+
+  /**
+   * Command text content.
+   */
+  text: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Union of all event types for type safety.
  */
-export type WhatsAppEvent = AudioStoredEvent | MediaCleanupEvent | TranscriptionCompletedEvent;
+export type WhatsAppEvent =
+  | AudioStoredEvent
+  | MediaCleanupEvent
+  | TranscriptionCompletedEvent
+  | CommandIngestEvent;

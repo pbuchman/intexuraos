@@ -32,6 +32,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL',
     displayName: 'LLM Orchestrator Service API',
   },
+  {
+    key: 'COMMANDS_ROUTER_OPENAPI_URL',
+    displayName: 'Commands Router API',
+  },
 ];
 
 /**

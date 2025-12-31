@@ -196,6 +196,21 @@ In local npm dev, services run on different ports on localhost.
 Check that `.env.local` exists and is in the correct location.
 For Docker, ensure `env_file` is configured in `docker-compose.yaml`.
 
+### Terraform hangs on "Initializing the backend..."
+
+If you use local GCP emulators (Firestore, Storage, Pub/Sub), the emulator environment variables interfere with Terraform's GCS backend.
+
+**Cause:** `STORAGE_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, or `PUBSUB_EMULATOR_HOST` redirects Terraform to non-existent local emulators instead of real GCP.
+
+**Solution:** Use a `tf` alias that unsets emulator variables:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
+```
+
+Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
+
 ## Summary
 
 After completing these steps, you can:

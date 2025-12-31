@@ -11,6 +11,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
+  CommandIngestEvent,
   EventPublisherPort,
   IgnoredReason,
   InboxError,
@@ -493,9 +494,15 @@ export class FakeMediaStorage implements MediaStoragePort {
  */
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
+  private commandIngestEvents: CommandIngestEvent[] = [];
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
     this.mediaCleanupEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, InboxError>> {
+    this.commandIngestEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
@@ -503,8 +510,13 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.mediaCleanupEvents];
   }
 
+  getCommandIngestEvents(): CommandIngestEvent[] {
+    return [...this.commandIngestEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
+    this.commandIngestEvents = [];
   }
 }
 

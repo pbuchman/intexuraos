@@ -19,6 +19,7 @@ export function getConfig(): AppConfig {
     notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
     mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
     llmOrchestratorServiceUrl: getEnvVar('INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL'),
+    commandsRouterServiceUrl: getEnvVar('INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'),
   };
 }
 
