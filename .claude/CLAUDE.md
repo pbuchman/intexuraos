@@ -109,13 +109,13 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 
 **Service Prefixes:**
 
-| Service                    | Prefix        | Example Endpoint                         |
-| -------------------------- | ------------- | ---------------------------------------- |
-| `notion-service`           | `notion`      | `/internal/notion/users/:userId/context` |
-| `user-service`             | `user`        | `/internal/users/:uid/llm-keys`          |
-| `promptvault-service`      | `promptvault` | (future endpoints)                       |
-| `whatsapp-service`         | `whatsapp`    | (future endpoints)                       |
-| `llm-orchestrator-service` | `llm`         | (future endpoints)                       |
+| Service               | Prefix        | Example Endpoint                         |
+| --------------------- | ------------- | ---------------------------------------- |
+| `notion-service`      | `notion`      | `/internal/notion/users/:userId/context` |
+| `user-service`        | `user`        | `/internal/users/:uid/llm-keys`          |
+| `promptvault-service` | `promptvault` | (future endpoints)                       |
+| `whatsapp-service`    | `whatsapp`    | (future endpoints)                       |
+| `llm-orchestrator`    | `llm`         | (future endpoints)                       |
 
 **Authentication:**
 
@@ -130,6 +130,29 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 - Testing: Inject fake clients via dependency injection
 
 **Full documentation:** [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
+
+### Pub/Sub Subscriptions (Cloud Run)
+
+**RULE: Never use pull subscriptions. All Pub/Sub consumers MUST use HTTP push.**
+
+```ts-example
+// ❌ Pull subscription (FORBIDDEN)
+const subscription = pubsub.subscription('my-sub');
+subscription.on('message', (message) => { ... });
+
+// ✅ Push subscription (CORRECT)
+fastify.post('/internal/pubsub/my-topic', async (request, reply) => {
+  const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
+  // Process message
+  return { success: true };
+});
+```
+
+**Why:** Cloud Run scales to zero. Pull subscriptions require persistent background processes. Messages accumulate and are never processed.
+
+**Reference Implementation:** See `apps/research-agent/src/routes/internalRoutes.ts`
+
+**Verification:** ESLint `no-restricted-syntax` rule fails build on pull subscription patterns.
 
 ### Firestore Collections
 
@@ -150,7 +173,7 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 | `mobile_notification_signatures` | `mobile-notifications-service` | Device signature to user ID bindings     |
 | `user_settings`                  | `user-service`                 | User preferences and encrypted API keys  |
 | `auth_tokens`                    | `user-service`                 | Encrypted Auth0 refresh tokens           |
-| `researches`                     | `llm-orchestrator-service`     | LLM research queries and results         |
+| `researches`                     | `llm-orchestrator`             | LLM research queries and results         |
 
 **Ownership Rules:**
 

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pub/Sub Events - IntexuraOS</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .status {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .controls {
+      background: #1e293b;
+      padding: 15px 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 6px 12px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      background: #1e293b;
+      border-color: #475569;
+    }
+
+    .filter-btn.active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .clear-btn {
+      padding: 6px 12px;
+      border: 1px solid #ef4444;
+      background: transparent;
+      color: #ef4444;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+      margin-left: auto;
+    }
+
+    .clear-btn:hover {
+      background: #ef4444;
+      color: white;
+    }
+
+    .events-container {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      max-height: calc(100vh - 280px);
+      overflow-y: auto;
+    }
+
+    .event {
+      background: #0f172a;
+      border-left: 4px solid #3b82f6;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .event.media-cleanup { border-left-color: #8b5cf6; }
+    .event.send-message { border-left-color: #10b981; }
+    .event.commands-ingest { border-left-color: #f59e0b; }
+    .event.actions-research { border-left-color: #06b6d4; }
+
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .event-type {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .event-badge {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .media-cleanup .event-badge { background: #8b5cf6; color: white; }
+    .send-message .event-badge { background: #10b981; color: white; }
+    .commands-ingest .event-badge { background: #f59e0b; color: white; }
+    .actions-research .event-badge { background: #06b6d4; color: white; }
+
+    .event-time {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .event-meta {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .event-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .event-body.expanded {
+      max-height: 1000px;
+    }
+
+    pre {
+      background: #020617;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔔 Pub/Sub Event Monitor</h1>
+      <div class="status">
+        <div class="status-dot"></div>
+        <span id="connection-status">Connecting...</span>
+        <span>•</span>
+        <span id="event-count">0 events</span>
+      </div>
+    </header>
+
+    <div class="controls">
+      <div class="filter-group" id="topic-filters"></div>
+      <button class="clear-btn" onclick="clearEvents()">Clear Events</button>
+    </div>
+
+    <div class="events-container" id="events">
+      <div class="empty-state">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+        </svg>
+        <div>Waiting for events...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let eventCount = 0;
+    let activeFilters = new Set();
+    const topics = [];
+
+    const eventSource = new EventSource('/events');
+
+    eventSource.onopen = () => {
+      document.getElementById('connection-status').textContent = 'Connected';
+    };
+
+    eventSource.onerror = () => {
+      document.getElementById('connection-status').textContent = 'Disconnected';
+    };
+
+    eventSource.onmessage = (e) => {
+      const message = JSON.parse(e.data);
+
+      if (message.type === 'connected') {
+        message.topics.forEach(topic => {
+          if (!topics.includes(topic)) {
+            topics.push(topic);
+            addTopicFilter(topic);
+          }
+        });
+      } else if (message.type === 'event') {
+        addEvent(message.event);
+      }
+    };
+
+    function addTopicFilter(topic) {
+      const container = document.getElementById('topic-filters');
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn active';
+      btn.textContent = topic;
+      btn.onclick = () => toggleFilter(topic, btn);
+      activeFilters.add(topic);
+      container.appendChild(btn);
+    }
+
+    function toggleFilter(topic, btn) {
+      if (activeFilters.has(topic)) {
+        activeFilters.delete(topic);
+        btn.classList.remove('active');
+      } else {
+        activeFilters.add(topic);
+        btn.classList.add('active');
+      }
+      filterEvents();
+    }
+
+    function filterEvents() {
+      const events = document.querySelectorAll('.event');
+      events.forEach(event => {
+        const topic = event.dataset.topic;
+        event.style.display = activeFilters.has(topic) ? 'block' : 'none';
+      });
+    }
+
+    function addEvent(event) {
+      eventCount++;
+      document.getElementById('event-count').textContent = `${eventCount} event${eventCount !== 1 ? 's' : ''}`;
+
+      const container = document.getElementById('events');
+      const emptyState = container.querySelector('.empty-state');
+      if (emptyState) emptyState.remove();
+
+      const eventType = event.data.type.split('.').slice(-1)[0];
+      const eventClass = event.topic.replace(/-/g, '-');
+
+      const eventEl = document.createElement('div');
+      eventEl.className = `event ${eventClass}`;
+      eventEl.dataset.topic = event.topic;
+      eventEl.style.display = activeFilters.has(event.topic) ? 'block' : 'none';
+
+      const time = new Date(event.receivedAt).toLocaleTimeString();
+
+      eventEl.innerHTML = `
+        <div class="event-header" onclick="toggleEventBody(this)">
+          <div class="event-type">
+            <span class="event-badge">${eventType}</span>
+            <span>${event.topic}</span>
+          </div>
+          <div class="event-time">${time}</div>
+        </div>
+        <div class="event-meta">
+          Message ID: ${event.messageId} • User: ${event.data.userId || 'N/A'}
+        </div>
+        <div class="event-body">
+          <pre>${JSON.stringify(event.data, null, 2)}</pre>
+        </div>
+      `;
+
+      container.insertBefore(eventEl, container.firstChild);
+
+      if (container.children.length > 100) {
+        container.lastChild.remove();
+      }
+    }
+
+    function toggleEventBody(header) {
+      const body = header.nextElementSibling.nextElementSibling;
+      body.classList.toggle('expanded');
+    }
+
+    function clearEvents() {
+      const container = document.getElementById('events');
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+          <div>Waiting for events...</div>
+        </div>
+      `;
+      eventCount = 0;
+      document.getElementById('event-count').textContent = '0 events';
+    }
+  </script>
+</body>
+</html>

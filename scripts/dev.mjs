@@ -35,7 +35,7 @@ const SERVICES = [
   { name: 'whatsapp-service', port: 8113, color: '\x1b[32m' },
   { name: 'mobile-notifications-service', port: 8114, color: '\x1b[34m' },
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
-  { name: 'llm-orchestrator-service', port: 8116, color: '\x1b[96m' },
+  { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
   { name: 'research-agent', port: 8118, color: '\x1b[94m' },
 ];
@@ -99,7 +99,9 @@ async function waitForEmulators() {
 
   const endpoints = [
     { name: 'Firestore', url: 'http://localhost:8101' },
+    { name: 'Pub/Sub', url: 'http://localhost:8102' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
+    { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
 
   for (const endpoint of endpoints) {
@@ -151,7 +153,7 @@ const API_DOCS_HUB_ENV = {
   NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
-  LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
   RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
 };
@@ -168,14 +170,21 @@ const SERVICE_ENV_MAPPINGS = {
   'commands-router': {
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
-  'llm-orchestrator-service': {
+  'llm-orchestrator': {
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
     INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? '',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'whatsapp-service': {
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-sub',
   },
   'research-agent': {
     COMMANDS_ROUTER_URL: 'http://localhost:8117',
-    LLM_ORCHESTRATOR_URL:
-      process.env.INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL ?? 'http://localhost:8116',
+    LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
 };

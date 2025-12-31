@@ -118,6 +118,47 @@ export interface TranscriptionCompletedEvent {
 }
 
 /**
+ * Event received to send an outbound WhatsApp message.
+ * Published by other services (e.g., llm-orchestrator) to request message sending.
+ */
+export interface SendMessageEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'whatsapp.message.send';
+
+  /**
+   * IntexuraOS user ID (for audit/logging).
+   */
+  userId: string;
+
+  /**
+   * Recipient phone number (E.164 format, e.g., +48123456789).
+   */
+  phoneNumber: string;
+
+  /**
+   * Message text to send.
+   */
+  message: string;
+
+  /**
+   * Optional: WhatsApp message ID to reply to.
+   */
+  replyToMessageId?: string;
+
+  /**
+   * Correlation ID for tracing across services.
+   */
+  correlationId: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
  * Event published when a command is ready for ingestion.
  * Triggers the commands-router to classify and create actions.
  */
@@ -160,4 +201,5 @@ export type WhatsAppEvent =
   | AudioStoredEvent
   | MediaCleanupEvent
   | TranscriptionCompletedEvent
-  | CommandIngestEvent;
+  | CommandIngestEvent
+  | SendMessageEvent;

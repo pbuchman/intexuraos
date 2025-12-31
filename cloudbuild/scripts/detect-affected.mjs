@@ -68,7 +68,7 @@ const SERVICE_DEPS = {
     ...COMMON_DEPS,
   ],
   'api-docs-hub': ['apps/api-docs-hub/', ...ALL_PACKAGES, ...COMMON_DEPS],
-  'llm-orchestrator-service': ['apps/llm-orchestrator-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
+  'llm-orchestrator': ['apps/llm-orchestrator/', ...ALL_PACKAGES, ...COMMON_DEPS],
   'commands-router': ['apps/commands-router/', ...ALL_PACKAGES, ...COMMON_DEPS],
   'research-agent': ['apps/research-agent/', ...ALL_PACKAGES, ...COMMON_DEPS],
   web: ['apps/web/', ...COMMON_DEPS],

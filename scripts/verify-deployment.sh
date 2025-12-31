@@ -12,7 +12,7 @@ SERVICES=(
   "intexuraos-whatsapp-service"
   "intexuraos-mobile-notifications-service"
   "intexuraos-api-docs-hub"
-  "intexuraos-llm-orchestrator-service"
+  "intexuraos-llm-orchestrator"
 )
 
 # Colors

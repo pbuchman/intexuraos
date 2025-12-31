@@ -13,7 +13,7 @@ export async function createResearch(
   accessToken: string,
   request: CreateResearchRequest
 ): Promise<Research> {
-  return await apiRequest<Research>(config.llmOrchestratorServiceUrl, '/research', accessToken, {
+  return await apiRequest<Research>(config.llmOrchestratorUrl, '/research', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -36,22 +36,14 @@ export async function listResearches(
   const query = params.toString();
   const path = query !== '' ? `/research?${query}` : '/research';
 
-  return await apiRequest<ListResearchesResponse>(
-    config.llmOrchestratorServiceUrl,
-    path,
-    accessToken
-  );
+  return await apiRequest<ListResearchesResponse>(config.llmOrchestratorUrl, path, accessToken);
 }
 
 /**
  * Get a single research by ID.
  */
 export async function getResearch(accessToken: string, id: string): Promise<Research> {
-  return await apiRequest<Research>(
-    config.llmOrchestratorServiceUrl,
-    `/research/${id}`,
-    accessToken
-  );
+  return await apiRequest<Research>(config.llmOrchestratorUrl, `/research/${id}`, accessToken);
 }
 
 /**
@@ -59,7 +51,7 @@ export async function getResearch(accessToken: string, id: string): Promise<Rese
  */
 export async function deleteResearch(accessToken: string, id: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
-    config.llmOrchestratorServiceUrl,
+    config.llmOrchestratorUrl,
     `/research/${id}`,
     accessToken,
     { method: 'DELETE' }

@@ -75,6 +75,13 @@ const configSchema = z.object({
   commandsIngestTopic: z.string().optional(),
 
   /**
+   * Pub/Sub topic for send message events.
+   * Other services publish to this topic to request outbound WhatsApp messages.
+   * Note: Subscription is configured in Terraform as push to /internal/whatsapp/pubsub/send-message
+   */
+  sendMessageTopic: z.string().optional(),
+
+  /**
    * Speechmatics API key for audio transcription.
    */
   speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
@@ -114,6 +121,7 @@ export function loadConfig(): Config {
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
+    sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });

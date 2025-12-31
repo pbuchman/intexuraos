@@ -22,13 +22,13 @@ All internal endpoints follow the pattern:
 
 ### Service Prefixes
 
-| Service                    | Prefix        | Description                     |
-| -------------------------- | ------------- | ------------------------------- |
-| `notion-service`           | `notion`      | Notion integration operations   |
-| `user-service`             | `user`        | User management and settings    |
-| `promptvault-service`      | `promptvault` | PromptVault operations (future) |
-| `whatsapp-service`         | `whatsapp`    | WhatsApp operations (future)    |
-| `llm-orchestrator-service` | `llm`         | LLM orchestration (future)      |
+| Service               | Prefix        | Description                     |
+| --------------------- | ------------- | ------------------------------- |
+| `notion-service`      | `notion`      | Notion integration operations   |
+| `user-service`        | `user`        | User management and settings    |
+| `promptvault-service` | `promptvault` | PromptVault operations (future) |
+| `whatsapp-service`    | `whatsapp`    | WhatsApp operations (future)    |
+| `llm-orchestrator`    | `llm`         | LLM orchestration (future)      |
 
 ## Authentication
 
@@ -169,7 +169,7 @@ X-Internal-Auth: <token>
 }
 ```
 
-**Purpose:** Allows llm-orchestrator-service to retrieve decrypted API keys without direct access to encryption logic.
+**Purpose:** Allows llm-orchestrator to retrieve decrypted API keys without direct access to encryption logic.
 
 ## Implementation Guide
 
@@ -457,4 +457,4 @@ const token = contextResult.value.token;
 - [Internal Routes Implementation (notion-service)](../../apps/notion-service/src/routes/internalRoutes.ts)
 - [Internal Routes Implementation (user-service)](../../apps/user-service/src/routes/internalRoutes.ts)
 - [Service Client Example (notionServiceClient)](../../apps/promptvault-service/src/infra/notion/notionServiceClient.ts)
-- [Service Client Example (userServiceClient)](../../apps/llm-orchestrator-service/src/infra/user/userServiceClient.ts)
+- [Service Client Example (userServiceClient)](../../apps/llm-orchestrator/src/infra/user/userServiceClient.ts)

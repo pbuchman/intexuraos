@@ -43,11 +43,11 @@ resource "google_service_account" "mobile_notifications_service" {
   description  = "Service account for mobile-notifications-service Cloud Run deployment"
 }
 
-# Service account for llm-orchestrator-service
-resource "google_service_account" "llm_orchestrator_service" {
+# Service account for llm-orchestrator
+resource "google_service_account" "llm_orchestrator" {
   account_id   = "intexuraos-llm-orch-${var.environment}"
-  display_name = "IntexuraOS LLM Orchestrator Service (${var.environment})"
-  description  = "Service account for llm-orchestrator-service Cloud Run deployment"
+  display_name = "IntexuraOS LLM Orchestrator (${var.environment})"
+  description  = "Service account for llm-orchestrator Cloud Run deployment"
 }
 
 # Service account for commands-router
@@ -110,13 +110,13 @@ resource "google_secret_manager_secret_iam_member" "mobile_notifications_service
   member    = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
 }
 
-# LLM Orchestrator service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "llm_orchestrator_service_secrets" {
+# LLM Orchestrator: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "llm_orchestrator_secrets" {
   for_each = var.secret_ids
 
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
+  member    = "serviceAccount:${google_service_account.llm_orchestrator.email}"
 }
 
 # Commands Router: Secret Manager access
@@ -173,11 +173,11 @@ resource "google_project_iam_member" "user_service_firestore" {
   member  = "serviceAccount:${google_service_account.user_service.email}"
 }
 
-# LLM Orchestrator service: Firestore access
-resource "google_project_iam_member" "llm_orchestrator_service_firestore" {
+# LLM Orchestrator: Firestore access
+resource "google_project_iam_member" "llm_orchestrator_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
+  member  = "serviceAccount:${google_service_account.llm_orchestrator.email}"
 }
 
 # Commands Router: Firestore access
@@ -243,11 +243,11 @@ resource "google_project_iam_member" "mobile_notifications_service_logging" {
   member  = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
 }
 
-# LLM Orchestrator service: Cloud Logging
-resource "google_project_iam_member" "llm_orchestrator_service_logging" {
+# LLM Orchestrator: Cloud Logging
+resource "google_project_iam_member" "llm_orchestrator_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.llm_orchestrator_service.email}"
+  member  = "serviceAccount:${google_service_account.llm_orchestrator.email}"
 }
 
 # Commands Router: Cloud Logging

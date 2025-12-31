@@ -138,7 +138,7 @@ export function createGptClient(config: GptConfig): GptClient {
       try {
         const response = await client.chat.completions.create({
           model: defaultModel,
-          max_tokens: MAX_TOKENS,
+          max_completion_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         });
 
@@ -166,7 +166,7 @@ export function createGptClient(config: GptConfig): GptClient {
       try {
         const response = await client.chat.completions.create({
           model: defaultModel,
-          max_tokens: MAX_TOKENS,
+          max_completion_tokens: MAX_TOKENS,
           messages: [
             {
               role: 'system',
@@ -200,7 +200,7 @@ export function createGptClient(config: GptConfig): GptClient {
       try {
         const response = await client.chat.completions.create({
           model: validationModel,
-          max_tokens: 100,
+          max_completion_tokens: 100,
           messages: [{ role: 'user', content: validatePrompt }],
         });
 
