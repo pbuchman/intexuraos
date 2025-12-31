@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { StatusWidget, Layout } from '@/components';
 import { useAuth } from '@/context';
+import { useLlmKeys } from '@/hooks';
 import {
   getNotionStatus,
   getWhatsAppStatus,
@@ -19,6 +20,7 @@ interface StatusState {
 
 export function SystemHealthPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
+  const { keys: llmKeys, loading: llmLoading } = useLlmKeys();
   const [notionState, setNotionState] = useState<StatusState>({
     status: 'loading',
     description: 'Loading...',
@@ -180,6 +182,51 @@ export function SystemHealthPage(): React.JSX.Element {
     );
   };
 
+  const getLlmStatus = (provider: 'google' | 'openai' | 'anthropic'): StatusState => {
+    if (llmLoading) {
+      return { status: 'loading', description: 'Loading...' };
+    }
+    if (llmKeys === null) {
+      return { status: 'disconnected', description: 'Configure API key' };
+    }
+
+    const hasKey = llmKeys[provider] !== null;
+    const testResult = llmKeys.testResults[provider];
+
+    if (!hasKey) {
+      return { status: 'disconnected', description: 'API key not configured' };
+    }
+
+    if (testResult !== null) {
+      return {
+        status: 'connected',
+        description: 'API key configured and tested',
+        details: `Last tested: ${new Date(testResult.testedAt).toLocaleString()}`,
+      };
+    }
+
+    return { status: 'disconnected', description: 'API key configured (not tested)' };
+  };
+
+  const renderLlmWidget = (
+    title: string,
+    provider: 'google' | 'openai' | 'anthropic'
+  ): React.JSX.Element => {
+    const state = getLlmStatus(provider);
+    const details = state.details;
+    if (details !== undefined) {
+      return (
+        <StatusWidget
+          title={title}
+          status={state.status}
+          description={state.description}
+          details={details}
+        />
+      );
+    }
+    return <StatusWidget title={title} status={state.status} description={state.description} />;
+  };
+
   return (
     <Layout>
       <div className="mb-6">
@@ -187,10 +234,22 @@ export function SystemHealthPage(): React.JSX.Element {
         <p className="text-slate-600">Overview of your integration connections</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {renderNotionWidget()}
-        {renderWhatsAppWidget()}
-        {renderMobileNotificationsWidget()}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">Integrations</h3>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {renderNotionWidget()}
+          {renderWhatsAppWidget()}
+          {renderMobileNotificationsWidget()}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">LLM Providers</h3>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {renderLlmWidget('Claude (Anthropic)', 'anthropic')}
+          {renderLlmWidget('Gemini (Google)', 'google')}
+          {renderLlmWidget('GPT (OpenAI)', 'openai')}
+        </div>
       </div>
     </Layout>
   );
