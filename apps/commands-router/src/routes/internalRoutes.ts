@@ -77,20 +77,57 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn(
+      // Log incoming request BEFORE auth check (for debugging)
+      try {
+        const headersObj = { ...(request.headers as Record<string, unknown>) };
+        // Redact sensitive headers but keep structure visible
+        if (headersObj['x-internal-auth']) {
+          headersObj['x-internal-auth'] = '[REDACTED]';
+        }
+        if (headersObj['authorization']) {
+          headersObj['authorization'] = '[REDACTED]';
+        }
+        request.log.info(
           {
-            reason: authResult.reason,
-            headers: {
-              'x-internal-auth':
-                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
-            },
+            event: 'incoming_request',
+            headers: headersObj,
+            bodyPreview: JSON.stringify(request.body).substring(0, 500),
           },
-          'Pub/Sub auth failed for router/commands endpoint'
+          'Received PubSub push to /internal/router/commands'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+      } catch (logErr) {
+        // Best-effort logging
+        request.log.debug({ error: logErr }, 'Failed to log incoming request');
+      }
+
+      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
+      // Direct service calls use x-internal-auth header
+      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+
+      if (isPubSubPush) {
+        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
+        // Just log that it's from Pub/Sub
+        request.log.info(
+          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
+        );
+      } else {
+        // Direct service call: validate x-internal-auth header
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            {
+              reason: authResult.reason,
+              headers: {
+                'x-internal-auth':
+                  request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
+              },
+            },
+            'Internal auth failed for router/commands endpoint'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
       }
 
       const body = request.body as PubSubMessage;
@@ -218,7 +255,33 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      // Log incoming request BEFORE auth check
+      try {
+        const headersObj = { ...(request.headers as Record<string, unknown>) };
+        if (headersObj['x-internal-auth']) {
+          headersObj['x-internal-auth'] = '[REDACTED]';
+        }
+        if (headersObj['authorization']) {
+          headersObj['authorization'] = '[REDACTED]';
+        }
+        request.log.info(
+          {
+            event: 'incoming_request',
+            headers: headersObj,
+            bodyPreview: JSON.stringify(request.body).substring(0, 200),
+            params: request.params,
+          },
+          'Received request to /internal/actions/:actionId'
+        );
+      } catch (logErr) {
+        request.log.debug({ error: logErr }, 'Failed to log incoming request');
+      }
+
+      // Validate auth (Pub/Sub uses OIDC, direct calls use x-internal-auth)
+      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+
+      if (!isPubSubPush && !validateInternalAuth(request).valid) {
+        request.log.warn('Internal auth failed for actions endpoint');
         reply.status(401);
         return { error: 'Unauthorized' };
       }
