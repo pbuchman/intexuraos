@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { validateInternalAuth } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { CommandSourceType } from '../domain/models/command.js';
 import type { ActionStatus } from '../domain/models/action.js';
@@ -78,27 +78,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       // Log incoming request BEFORE auth check (for debugging)
-      try {
-        const headersObj = { ...(request.headers as Record<string, unknown>) };
-        // Redact sensitive headers but keep structure visible
-        if (headersObj['x-internal-auth'] !== undefined) {
-          headersObj['x-internal-auth'] = '[REDACTED]';
-        }
-        if (headersObj['authorization'] !== undefined) {
-          headersObj['authorization'] = '[REDACTED]';
-        }
-        request.log.info(
-          {
-            event: 'incoming_request',
-            headers: headersObj,
-            bodyPreview: JSON.stringify(request.body).substring(0, 500),
-          },
-          'Received PubSub push to /internal/router/commands'
-        );
-      } catch (logErr) {
-        // Best-effort logging
-        request.log.debug({ error: logErr }, 'Failed to log incoming request');
-      }
+      logIncomingRequest(request, {
+        message: 'Received PubSub push to /internal/router/commands',
+        bodyPreviewLength: 500,
+      });
 
       // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
       // Direct service calls use x-internal-auth header
@@ -256,26 +239,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       // Log incoming request BEFORE auth check
-      try {
-        const headersObj = { ...(request.headers as Record<string, unknown>) };
-        if (headersObj['x-internal-auth'] !== undefined) {
-          headersObj['x-internal-auth'] = '[REDACTED]';
-        }
-        if (headersObj['authorization'] !== undefined) {
-          headersObj['authorization'] = '[REDACTED]';
-        }
-        request.log.info(
-          {
-            event: 'incoming_request',
-            headers: headersObj,
-            bodyPreview: JSON.stringify(request.body).substring(0, 200),
-            params: request.params,
-          },
-          'Received request to /internal/actions/:actionId'
-        );
-      } catch (logErr) {
-        request.log.debug({ error: logErr }, 'Failed to log incoming request');
-      }
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions/:actionId',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
 
       // Validate auth (Pub/Sub uses OIDC, direct calls use x-internal-auth)
       const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;

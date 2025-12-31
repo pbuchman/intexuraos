@@ -59,4 +59,6 @@ export const SENSITIVE_FIELDS = [
   'apiKey',
   'client_secret',
   'clientSecret',
+  'x-internal-auth',
+  'x-goog-iap-jwt-assertion',
 ] as const;
