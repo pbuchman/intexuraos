@@ -9,6 +9,7 @@ import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import {
   FakeNotionConnectionRepository,
+  FakeNotionServiceClient,
   MockNotionApiAdapter,
   createFakePromptRepository,
 } from './fakes.js';
@@ -67,6 +68,8 @@ export async function setupJwksServer(): Promise<void> {
     process.env['AUTH_JWKS_URL'] = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
     process.env['AUTH_ISSUER'] = issuer;
     process.env['AUTH_AUDIENCE'] = audience;
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-auth-token';
+    process.env['INTEXURAOS_NOTION_SERVICE_URL'] = 'http://localhost:3000';
   }
 }
 
@@ -79,11 +82,14 @@ export async function teardownJwksServer(): Promise<void> {
   delete process.env['AUTH_JWKS_URL'];
   delete process.env['AUTH_ISSUER'];
   delete process.env['AUTH_AUDIENCE'];
+  delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  delete process.env['INTEXURAOS_NOTION_SERVICE_URL'];
 }
 
 export interface TestContext {
   app: FastifyInstance;
   connectionRepository: FakeNotionConnectionRepository;
+  notionServiceClient: FakeNotionServiceClient;
   notionApi: MockNotionApiAdapter;
 }
 
@@ -97,6 +103,7 @@ export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
     connectionRepository: null as unknown as FakeNotionConnectionRepository,
+    notionServiceClient: null as unknown as FakeNotionServiceClient,
     notionApi: null as unknown as MockNotionApiAdapter,
   };
 
@@ -110,17 +117,13 @@ export function setupTestContext(): TestContext {
 
   beforeEach(async () => {
     context.connectionRepository = new FakeNotionConnectionRepository();
+    context.notionServiceClient = new FakeNotionServiceClient();
     context.notionApi = new MockNotionApiAdapter();
 
     // Inject fake services for testing
-    const fakePromptRepository = createFakePromptRepository(
-      context.connectionRepository,
-      context.notionApi
-    );
+    // Use real promptRepository (will call real promptApi functions with mocked Notion Client)
     setServices({
-      connectionRepository: context.connectionRepository as never,
-      notionApi: context.notionApi as never,
-      promptRepository: fakePromptRepository as never,
+      notionServiceClient: context.notionServiceClient,
     });
 
     clearJwksCache();

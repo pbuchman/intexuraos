@@ -310,8 +310,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     }
 
     const existing = this.settings.get(userId);
-    if (existing !== undefined && existing.llmApiKeys !== undefined) {
-      delete existing.llmApiKeys[provider];
+    if (existing !== undefined) {
+      if (existing.llmApiKeys !== undefined) {
+        delete existing.llmApiKeys[provider];
+      }
+      if (existing.llmTestResults !== undefined) {
+        delete existing.llmTestResults[provider];
+      }
       existing.updatedAt = new Date().toISOString();
       this.settings.set(userId, existing);
     }
@@ -340,6 +345,33 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     llmTestResults[provider] = testResult;
     existing.llmTestResults = llmTestResults;
     existing.updatedAt = new Date().toISOString();
+
+    this.settings.set(userId, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>> {
+    let existing = this.settings.get(userId);
+    const now = new Date().toISOString();
+
+    if (existing === undefined) {
+      existing = {
+        userId,
+        notifications: { filters: [] },
+        llmTestResults: { [provider]: { response: '', testedAt: now } },
+        createdAt: now,
+        updatedAt: now,
+      };
+    } else {
+      const llmTestResults = existing.llmTestResults ?? {};
+      const existingResult = llmTestResults[provider];
+      llmTestResults[provider] = {
+        response: existingResult?.response ?? '',
+        testedAt: now,
+      };
+      existing.llmTestResults = llmTestResults;
+      existing.updatedAt = now;
+    }
 
     this.settings.set(userId, existing);
     return Promise.resolve(ok(undefined));

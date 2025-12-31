@@ -3,6 +3,7 @@
  * These routes are authenticated via X-Internal-Auth header.
  *
  * GET /internal/users/:uid/llm-keys - Get decrypted LLM API keys for a user
+ * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
@@ -102,6 +103,59 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
       };
+    }
+  );
+
+  // POST /internal/users/:uid/llm-keys/:provider/last-used
+  fastify.post(
+    '/internal/users/:uid/llm-keys/:provider/last-used',
+    {
+      schema: {
+        operationId: 'updateInternalLlmLastUsed',
+        summary: 'Update LLM last used timestamp (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Updates the testedAt timestamp for an LLM provider.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+            provider: {
+              type: 'string',
+              enum: ['google', 'openai', 'anthropic'],
+              description: 'LLM provider',
+            },
+          },
+          required: ['uid', 'provider'],
+        },
+        response: {
+          204: {
+            description: 'Timestamp updated successfully',
+            type: 'null',
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!validateInternalAuth(request)) {
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const params = request.params as { uid: string; provider: LlmProvider };
+      const { userSettingsRepository } = getServices();
+
+      await userSettingsRepository.updateLlmLastUsed(params.uid, params.provider);
+
+      reply.status(204);
+      return;
     }
   );
 

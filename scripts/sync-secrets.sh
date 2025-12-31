@@ -39,4 +39,12 @@ for secret in $(gcloud secrets list --project="${PROJECT_ID}" --format="value(na
   fi
 done
 
+# Add local overrides support
+cat >> "${ENVRC_FILE}" << 'EOF'
+
+# === LOCAL OVERRIDES ===
+# Load .envrc.local if exists (for local dev overrides)
+[[ -f .envrc.local ]] && source .envrc.local
+EOF
+
 echo "Updated ${ENVRC_FILE}"

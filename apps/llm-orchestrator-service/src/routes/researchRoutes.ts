@@ -31,7 +31,7 @@ interface CreateResearchBody {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm?: LlmProvider;
-  inputContexts?: { content: string }[];
+  externalReports?: { content: string; model?: string }[];
 }
 
 interface ListResearchesQuery {
@@ -74,8 +74,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         selectedLlms: body.selectedLlms,
         synthesisLlm: body.synthesisLlm ?? 'anthropic',
       };
-      if (body.inputContexts !== undefined) {
-        submitParams.inputContexts = body.inputContexts;
+      if (body.externalReports !== undefined) {
+        submitParams.externalReports = body.externalReports;
       }
       const result = await submitResearch(submitParams, { researchRepo, generateId });
 

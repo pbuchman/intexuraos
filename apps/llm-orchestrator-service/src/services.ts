@@ -4,7 +4,7 @@
  */
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
-import { createLlmProviders, createSynthesizer } from './infra/llm/index.js';
+import { createLlmProviders, createSynthesizer, createTitleGenerator } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
 import {
   createUserServiceClient,
@@ -105,17 +105,18 @@ export function initializeServices(): void {
     void (async (): Promise<void> => {
       try {
         // Get research to find user ID and synthesis LLM selection
-        const research = await researchRepo.findById(researchId);
-        if (!research.ok || research.value === null) {
+        const researchResult = await researchRepo.findById(researchId);
+        if (!researchResult.ok || researchResult.value === null) {
           return;
         }
+        const research = researchResult.value;
 
         // Get user's API keys
-        const apiKeysResult = await userServiceClient.getApiKeys(research.value.userId);
+        const apiKeysResult = await userServiceClient.getApiKeys(research.userId);
         const apiKeys: DecryptedApiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
         // Get the API key for the selected synthesis LLM
-        const synthesisProvider = research.value.synthesisLlm;
+        const synthesisProvider = research.synthesisLlm;
         const synthesisKey = apiKeys[synthesisProvider];
         if (synthesisKey === undefined) {
           await researchRepo.update(researchId, {
@@ -129,13 +130,24 @@ export function initializeServices(): void {
         const llmProviders = createLlmProviders(apiKeys);
         const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
 
-        // Process research
-        await processResearch(researchId, {
+        // Build deps for processing
+        const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
           llmProviders,
           synthesizer,
           notificationSender,
-        });
+          reportLlmSuccess: (provider): void => {
+            void userServiceClient.reportLlmSuccess(research.userId, provider);
+          },
+        };
+
+        // Use Gemini for title generation if available (cheapest option)
+        if (apiKeys.google !== undefined) {
+          deps.titleGenerator = createTitleGenerator(apiKeys.google);
+        }
+
+        // Process research
+        await processResearch(researchId, deps);
       } catch (error) {
         /* Fire-and-forget: log error but don't throw */
         const message = getErrorMessage(error);

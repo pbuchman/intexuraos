@@ -74,14 +74,14 @@ export class LlmValidatorImpl implements LlmValidator {
     switch (provider) {
       case 'google': {
         const client = createGeminiClient({ apiKey });
-        const result = await client.research(prompt);
+        const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
             message: result.error.message,
           });
         }
-        return ok({ content: result.value.content });
+        return ok({ content: result.value });
       }
       case 'openai': {
         const client = createGptClient({ apiKey });

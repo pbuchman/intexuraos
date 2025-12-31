@@ -25,7 +25,6 @@ export interface GetNotionStatusError {
 export interface NotionStatus {
   configured: boolean;
   connected: boolean;
-  promptVaultPageId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -50,7 +49,6 @@ export async function getNotionStatus(
   return ok({
     configured: config !== null,
     connected: config?.connected ?? false,
-    promptVaultPageId: config?.promptVaultPageId ?? null,
     createdAt: config?.createdAt ?? null,
     updatedAt: config?.updatedAt ?? null,
   });

@@ -16,7 +16,7 @@ import {
 import { validateNotionToken, getPageWithPreview } from './infra/notion/index.js';
 
 /**
- * Connection repository adapter matching old interface.
+ * Connection repository adapter matching domain port interface.
  */
 interface ConnectionRepository {
   isConnected(userId: string): Promise<Result<boolean, FirestoreError>>;
@@ -24,7 +24,6 @@ interface ConnectionRepository {
   getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, FirestoreError>>;
   saveConnection(
     userId: string,
-    promptVaultPageId: string,
     notionToken: string
   ): Promise<Result<NotionConnectionPublic, FirestoreError>>;
   disconnect(userId: string): Promise<Result<NotionConnectionPublic, FirestoreError>>;
@@ -66,8 +65,7 @@ function createConnectionRepository(): ConnectionRepository {
     isConnected: async (userId) => await isNotionConnected(userId),
     getToken: async (userId) => await getNotionToken(userId),
     getConnection: async (userId) => await getNotionConnection(userId),
-    saveConnection: async (userId, promptVaultPageId, notionToken) =>
-      await saveNotionConnection(userId, promptVaultPageId, notionToken),
+    saveConnection: async (userId, notionToken) => await saveNotionConnection(userId, notionToken),
     disconnect: async (userId) => await disconnectNotion(userId),
     disconnectConnection: async (userId) => await disconnectNotion(userId),
   };

@@ -178,9 +178,9 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     async synthesize(
       originalPrompt: string,
       reports: SynthesisInput[],
-      inputContexts?: { content: string }[]
+      externalReports?: { content: string; model?: string }[]
     ): Promise<Result<string, ClaudeError>> {
-      const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+      const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, externalReports);
       const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
         modelName,
@@ -208,7 +208,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     },
 
     async validateKey(): Promise<Result<boolean, ClaudeError>> {
-      const validatePrompt = 'Say "ok"';
+      const validatePrompt = `Introduce yourself as Claude and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm Claude."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
         VALIDATION_MODEL,
@@ -218,7 +218,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       try {
         const response = await client.messages.create({
           model: VALIDATION_MODEL,
-          max_tokens: 10,
+          max_tokens: 100,
           messages: [{ role: 'user', content: validatePrompt }],
         });
 
@@ -240,25 +240,41 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 function buildSynthesisPrompt(
   originalPrompt: string,
   reports: SynthesisInput[],
-  inputContexts?: { content: string }[]
+  externalReports?: { content: string; model?: string }[]
 ): string {
   const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
 
-  let inputContextsSection = '';
-  if (inputContexts !== undefined && inputContexts.length > 0) {
-    const formattedContexts = inputContexts
-      .map((ctx, idx) => `### User Context ${String(idx + 1)}\n\n${ctx.content}`)
+  let externalReportsSection = '';
+  if (externalReports !== undefined && externalReports.length > 0) {
+    const formattedExternal = externalReports
+      .map((report, idx) => {
+        const source = report.model ?? 'unknown source';
+        return `### External Report ${String(idx + 1)} (${source})\n\n${report.content}`;
+      })
       .join('\n\n---\n\n');
-    inputContextsSection = `## User-Provided Context
+    externalReportsSection = `## External LLM Reports
 
-The user has provided the following reference materials to consider in the synthesis:
+The following reports were obtained from external LLM sources not available through system APIs:
 
-${formattedContexts}
+${formattedExternal}
 
 ---
 
 `;
   }
+
+  const hasExternal = externalReports !== undefined && externalReports.length > 0;
+  const conflictGuidelines = hasExternal
+    ? `
+## Conflict Resolution Guidelines
+
+When information conflicts between system reports and external reports:
+1. Note the discrepancy explicitly
+2. Present both perspectives with attribution
+3. If dates are available, prefer more recent information
+4. Never silently discard conflicting data
+`
+    : '';
 
   return `You are a research analyst. Below are research reports from multiple AI models responding to the same prompt. Synthesize them into a comprehensive, well-organized report.
 
@@ -266,15 +282,15 @@ ${formattedContexts}
 
 ${originalPrompt}
 
-${inputContextsSection}## Individual Reports
+${externalReportsSection}## System Reports
 
 ${formattedReports}
-
+${conflictGuidelines}
 ## Your Task
 
 Create a unified synthesis that:
-1. Combines the best insights from all reports${inputContexts !== undefined && inputContexts.length > 0 ? ' and user-provided context' : ''}
-2. Notes any conflicting information
+1. Combines the best insights from all reports${hasExternal ? ' (both system and external)' : ''}
+2. Notes any conflicting information with clear attribution
 3. Provides a balanced conclusion
 4. Lists key sources from across all reports
 

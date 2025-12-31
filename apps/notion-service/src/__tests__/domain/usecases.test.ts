@@ -7,37 +7,27 @@ import {
   connectNotion,
   getNotionStatus,
   disconnectNotion,
+  createConnectNotionUseCase,
+  createGetNotionStatusUseCase,
+  createDisconnectNotionUseCase,
   type ConnectionRepository,
   type NotionApi,
-  type NotionPagePreview,
   type NotionConnectionPublic,
   type NotionError,
 } from '../../domain/integration/index.js';
 
 describe('notion-service domain use-cases', () => {
   // Mock data
-  const mockPagePreview: NotionPagePreview = {
-    page: {
-      id: 'page-123',
-      title: 'Test Page',
-      url: 'https://notion.so/test-page',
-    },
-    blocks: [{ type: 'paragraph', content: 'Test content' }],
-  };
-
   const mockConnection: NotionConnectionPublic = {
-    promptVaultPageId: 'page-123',
     connected: true,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
   };
 
   describe('connectNotion', () => {
-    it('should successfully connect when page is accessible', async () => {
+    it('should successfully connect when token is valid', async () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
-        getPageWithPreview: (): Promise<Result<NotionPagePreview, NotionError>> =>
-          Promise.resolve(ok(mockPagePreview)),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -51,23 +41,19 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-        promptVaultPageId: 'page-123',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.connected).toBe(true);
-        expect(result.value.pageTitle).toBe('Test Page');
-        expect(result.value.pageUrl).toBe('https://notion.so/test-page');
+        expect(result.value.createdAt).toBe('2024-01-01T00:00:00Z');
+        expect(result.value.updatedAt).toBe('2024-01-01T00:00:00Z');
       }
     });
 
-    it('should return PAGE_NOT_ACCESSIBLE error when page not found', async () => {
-      const notionError: NotionError = { code: 'NOT_FOUND', message: 'Page not found' };
+    it('should return INVALID_TOKEN error when token validation returns false', async () => {
       const notionApi: NotionApi = {
-        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
-        getPageWithPreview: (): Promise<Result<NotionPagePreview, NotionError>> =>
-          Promise.resolve(err(notionError)),
+        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(false)),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -80,22 +66,19 @@ describe('notion-service domain use-cases', () => {
 
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
-        notionToken: 'token-abc',
-        promptVaultPageId: 'page-123',
+        notionToken: 'invalid-token',
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('PAGE_NOT_ACCESSIBLE');
-        expect(result.error.details?.pageId).toBe('page-123');
+        expect(result.error.code).toBe('INVALID_TOKEN');
       }
     });
 
-    it('should return INVALID_TOKEN error when unauthorized', async () => {
+    it('should return INVALID_TOKEN error when validateToken returns UNAUTHORIZED error', async () => {
       const notionError: NotionError = { code: 'UNAUTHORIZED', message: 'Invalid token' };
       const notionApi: NotionApi = {
-        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
-        getPageWithPreview: (): Promise<Result<NotionPagePreview, NotionError>> =>
+        validateToken: (): Promise<Result<boolean, NotionError>> =>
           Promise.resolve(err(notionError)),
       };
       const connectionRepository: ConnectionRepository = {
@@ -110,7 +93,6 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'invalid-token',
-        promptVaultPageId: 'page-123',
       });
 
       expect(result.ok).toBe(false);
@@ -122,8 +104,6 @@ describe('notion-service domain use-cases', () => {
     it('should return DOWNSTREAM_ERROR when save fails', async () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
-        getPageWithPreview: (): Promise<Result<NotionPagePreview, NotionError>> =>
-          Promise.resolve(ok(mockPagePreview)),
       };
       const saveError: NotionError = { code: 'INTERNAL_ERROR', message: 'Save failed' };
       const connectionRepository: ConnectionRepository = {
@@ -138,7 +118,6 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-        promptVaultPageId: 'page-123',
       });
 
       expect(result.ok).toBe(false);
@@ -147,11 +126,10 @@ describe('notion-service domain use-cases', () => {
       }
     });
 
-    it('should return DOWNSTREAM_ERROR for other Notion errors', async () => {
+    it('should return DOWNSTREAM_ERROR for other Notion API errors', async () => {
       const notionError: NotionError = { code: 'RATE_LIMITED', message: 'Rate limited' };
       const notionApi: NotionApi = {
-        validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
-        getPageWithPreview: (): Promise<Result<NotionPagePreview, NotionError>> =>
+        validateToken: (): Promise<Result<boolean, NotionError>> =>
           Promise.resolve(err(notionError)),
       };
       const connectionRepository: ConnectionRepository = {
@@ -166,7 +144,6 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-        promptVaultPageId: 'page-123',
       });
 
       expect(result.ok).toBe(false);
@@ -194,7 +171,8 @@ describe('notion-service domain use-cases', () => {
       if (result.ok) {
         expect(result.value.configured).toBe(true);
         expect(result.value.connected).toBe(true);
-        expect(result.value.promptVaultPageId).toBe('page-123');
+        expect(result.value.createdAt).toBe('2024-01-01T00:00:00Z');
+        expect(result.value.updatedAt).toBe('2024-01-01T00:00:00Z');
       }
     });
 
@@ -214,7 +192,8 @@ describe('notion-service domain use-cases', () => {
       if (result.ok) {
         expect(result.value.configured).toBe(false);
         expect(result.value.connected).toBe(false);
-        expect(result.value.promptVaultPageId).toBe(null);
+        expect(result.value.createdAt).toBe(null);
+        expect(result.value.updatedAt).toBe(null);
       }
     });
 
@@ -279,6 +258,39 @@ describe('notion-service domain use-cases', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('DOWNSTREAM_ERROR');
       }
+    });
+  });
+
+  describe('factory functions', () => {
+    const mockRepo: ConnectionRepository = {
+      saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
+        Promise.resolve(ok(mockConnection)),
+      getConnection: (): Promise<Result<NotionConnectionPublic | null, NotionError>> =>
+        Promise.resolve(ok(mockConnection)),
+      disconnectConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
+        Promise.resolve(ok({ ...mockConnection, connected: false })),
+    };
+
+    const mockApi: NotionApi = {
+      validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
+    };
+
+    it('createConnectNotionUseCase returns working usecase', async () => {
+      const useCase = createConnectNotionUseCase(mockRepo, mockApi);
+      const result = await useCase({ userId: 'user-123', notionToken: 'token-abc' });
+      expect(result.ok).toBe(true);
+    });
+
+    it('createGetNotionStatusUseCase returns working usecase', async () => {
+      const useCase = createGetNotionStatusUseCase(mockRepo);
+      const result = await useCase({ userId: 'user-123' });
+      expect(result.ok).toBe(true);
+    });
+
+    it('createDisconnectNotionUseCase returns working usecase', async () => {
+      const useCase = createDisconnectNotionUseCase(mockRepo);
+      const result = await useCase({ userId: 'user-123' });
+      expect(result.ok).toBe(true);
     });
   });
 });

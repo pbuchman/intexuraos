@@ -167,6 +167,7 @@ resource "google_project_service" "apis" {
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "storage.googleapis.com",
     "compute.googleapis.com",
@@ -403,15 +404,21 @@ module "promptvault_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_NOTION_SERVICE_URL = module.notion_service.service_url
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.notion_service,
   ]
 }
 
@@ -432,9 +439,10 @@ module "notion_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   depends_on = [
@@ -621,6 +629,24 @@ module "cloud_build" {
 }
 
 # -----------------------------------------------------------------------------
+# GitHub Workload Identity Federation (for GitHub Actions -> Cloud Build)
+# -----------------------------------------------------------------------------
+
+module "github_wif" {
+  source = "../../modules/github-wif"
+
+  project_id                       = var.project_id
+  github_owner                     = var.github_owner
+  github_repo                      = var.github_repo
+  cloud_build_service_account_name = module.cloud_build.cloud_build_service_account_name
+
+  depends_on = [
+    google_project_service.apis,
+    module.cloud_build,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -719,5 +745,10 @@ output "whatsapp_media_bucket_name" {
 output "pubsub_media_cleanup_topic" {
   description = "Pub/Sub topic for media cleanup events"
   value       = module.pubsub_media_cleanup.topic_name
+}
+
+output "github_wif_provider" {
+  description = "Workload Identity Provider for GitHub Actions authentication"
+  value       = module.github_wif.workload_identity_provider
 }
 

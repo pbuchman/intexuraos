@@ -23,6 +23,55 @@ import type { WriteResult, DocumentData, CollectionReference } from '@google-clo
 type DocumentStore = Map<string, Map<string, DocumentData>>;
 
 /**
+ * Check if a value is a FieldValue.delete() sentinel.
+ * The actual FieldValue.delete() returns an object with isEqual method.
+ */
+function isFieldValueDelete(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  return 'isEqual' in value && typeof (value as { isEqual: unknown }).isEqual === 'function';
+}
+
+/**
+ * Set a nested field using dot notation (e.g., "llmApiKeys.google").
+ */
+function setNestedField(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path.split('.');
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (key === undefined) continue;
+    if (current[key] === undefined || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  const lastKey = parts[parts.length - 1];
+  if (lastKey !== undefined) {
+    current[lastKey] = value;
+  }
+}
+
+/**
+ * Delete a nested field using dot notation (e.g., "llmApiKeys.google").
+ */
+function deleteNestedField(obj: Record<string, unknown>, path: string): void {
+  const parts = path.split('.');
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (key === undefined) continue;
+    if (current[key] === undefined || typeof current[key] !== 'object') {
+      return;
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  const lastKey = parts[parts.length - 1];
+  if (lastKey !== undefined) {
+    Reflect.deleteProperty(current, lastKey);
+  }
+}
+
+/**
  * Fake DocumentSnapshot implementation.
  */
 class FakeDocumentSnapshot {
@@ -237,7 +286,22 @@ class FakeDocumentReference {
     if (existing === undefined) {
       throw new Error(`Document ${this.collectionName}/${this.docId} does not exist`);
     }
-    collection?.set(this.docId, { ...existing, ...data });
+    const updated = { ...existing };
+    for (const key of Object.keys(data)) {
+      const value: unknown = data[key as keyof typeof data];
+      if (isFieldValueDelete(value)) {
+        if (key.includes('.')) {
+          deleteNestedField(updated, key);
+        } else {
+          Reflect.deleteProperty(updated, key);
+        }
+      } else if (key.includes('.')) {
+        setNestedField(updated, key, value);
+      } else {
+        (updated as Record<string, unknown>)[key] = value;
+      }
+    }
+    collection?.set(this.docId, updated);
     return Promise.resolve({ writeTime: { toDate: (): Date => new Date() } } as WriteResult);
   }
 

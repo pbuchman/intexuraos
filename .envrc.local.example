@@ -1,0 +1,97 @@
+# IntexuraOS Local Development Overrides
+#
+# Copy this file to .envrc.local and uncomment what you need.
+# This file overrides values from .envrc (synced from Secret Manager).
+#
+# Usage:
+#   cp .envrc.local.example .envrc.local
+#   ./scripts/sync-secrets.sh
+#   direnv allow
+#   npm run dev
+
+# =============================================================================
+# AUTH (backend services require non-prefixed names)
+# =============================================================================
+# The fastifyAuthPlugin expects AUTH_* without INTEXURAOS_ prefix.
+# Map from the prefixed versions loaded from Secret Manager.
+
+export AUTH_JWKS_URL=$INTEXURAOS_AUTH_JWKS_URL
+export AUTH_ISSUER=$INTEXURAOS_AUTH_ISSUER
+export AUTH_AUDIENCE=$INTEXURAOS_AUTH_AUDIENCE
+
+# =============================================================================
+# EMULATORS
+# =============================================================================
+# Uncomment to use local emulators instead of GCP services.
+# These are automatically set when using 'npm run dev', but you can
+# also set them here if running services manually.
+
+export FIRESTORE_EMULATOR_HOST=localhost:8101
+export PUBSUB_EMULATOR_HOST=localhost:8102
+export STORAGE_EMULATOR_HOST=http://localhost:8103
+
+# =============================================================================
+# SERVICE URLS (override run.app -> localhost)
+# =============================================================================
+# Override cloud-deployed services with locally running instances.
+# Uncomment services you're running locally via 'npm run dev'.
+
+export INTEXURAOS_USER_SERVICE_URL=http://localhost:8110
+export INTEXURAOS_PROMPTVAULT_SERVICE_URL=http://localhost:8111
+export INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
+export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
+export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
+export INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL=http://localhost:8116
+
+# =============================================================================
+# GCS BUCKETS (for local fake-gcs-server)
+# =============================================================================
+# Required by whatsapp-service for media storage
+export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media-local
+
+# =============================================================================
+# PUB/SUB (for local Firebase emulator)
+# =============================================================================
+# Required by whatsapp-service for media cleanup events
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=media-cleanup-local
+export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub-local
+
+# =============================================================================
+# GCP PROJECT (for local emulators)
+# =============================================================================
+# Required by Google Cloud SDKs (Firestore, Pub/Sub, GCS).
+# GOOGLE_CLOUD_PROJECT is the standard env var that Google SDKs look for.
+# INTEXURAOS_GCP_PROJECT_ID is used by whatsapp-service.
+export GOOGLE_CLOUD_PROJECT=demo-intexuraos
+export GCLOUD_PROJECT=demo-intexuraos
+export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
+
+# =============================================================================
+# ENCRYPTION (for LLM API key storage)
+# =============================================================================
+# AES-256 encryption key for LLM API keys. Already set in .envrc from Secret Manager.
+# Only override here if you need a different key for local testing.
+
+# =============================================================================
+# WEB APP (Auth0 SPA Configuration)
+# =============================================================================
+# Required for web app authentication. These values should match your
+# Auth0 SPA application configuration.
+#
+# Note: These are automatically loaded from .envrc (Secret Manager) but
+# you can override them here for local development if needed.
+
+# export INTEXURAOS_AUTH0_DOMAIN=your-tenant.eu.auth0.com
+# export INTEXURAOS_AUTH0_SPA_CLIENT_ID=your-spa-client-id
+# export INTEXURAOS_AUTH_AUDIENCE=urn:intexuraos:api
+
+# =============================================================================
+# OPTIONAL: Custom ports
+# =============================================================================
+# Override default ports if needed (e.g., port conflict).
+# Default ports: user=8110, promptvault=8111, notion=8112, whatsapp=8113,
+# mobile-notifications=8114, api-docs-hub=8115, llm-orchestrator=8116,
+# web=3000
+
+# export USER_SERVICE_PORT=9110
+# export PROMPTVAULT_SERVICE_PORT=9111

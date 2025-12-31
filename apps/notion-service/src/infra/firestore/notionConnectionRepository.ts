@@ -1,27 +1,23 @@
 /**
- * Firestore repository for Notion connection config.
- * Shared between promptvault-service and notion-service.
+ * Firestore repository for Notion connection configuration.
+ * Owned by notion-service - manages Notion token and connection state.
  */
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { NotionError } from './notion.js';
-
-/**
- * Public-facing Notion connection data (excludes sensitive token).
- */
-export interface NotionConnectionPublic {
-  promptVaultPageId: string;
-  connected: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+import type {
+  NotionError,
+  NotionConnectionPublic,
+} from '../../domain/integration/ports/ConnectionRepository.js';
 
 /**
  * Internal document structure stored in Firestore.
  */
-interface NotionConnectionDoc extends NotionConnectionPublic {
+interface NotionConnectionDoc {
   userId: string;
   notionToken: string;
+  connected: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const COLLECTION_NAME = 'notion_connections';
@@ -31,7 +27,6 @@ const COLLECTION_NAME = 'notion_connections';
  */
 export async function saveNotionConnection(
   userId: string,
-  promptVaultPageId: string,
   notionToken: string
 ): Promise<Result<NotionConnectionPublic, NotionError>> {
   try {
@@ -44,7 +39,6 @@ export async function saveNotionConnection(
 
     const doc: NotionConnectionDoc = {
       userId,
-      promptVaultPageId,
       notionToken,
       connected: true,
       createdAt: existingData?.createdAt ?? now,
@@ -54,7 +48,6 @@ export async function saveNotionConnection(
     await docRef.set(doc);
 
     return ok({
-      promptVaultPageId: doc.promptVaultPageId,
       connected: doc.connected,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
@@ -80,7 +73,6 @@ export async function getNotionConnection(
 
     const data = doc.data() as NotionConnectionDoc;
     return ok({
-      promptVaultPageId: data.promptVaultPageId,
       connected: data.connected,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -147,7 +139,6 @@ export async function disconnectNotion(
     await docRef.update({ connected: false, updatedAt: now });
 
     return ok({
-      promptVaultPageId: existingData?.promptVaultPageId ?? '',
       connected: false,
       createdAt: existingData?.createdAt ?? now,
       updatedAt: now,

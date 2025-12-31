@@ -2,7 +2,7 @@
  * @intexuraos/infra-notion
  *
  * Notion client and adapters.
- * Depends on @intexuraos/common-core and @intexuraos/infra-firestore.
+ * Depends on @intexuraos/common-core.
  */
 
 // Notion client
@@ -19,13 +19,3 @@ export {
   getPageWithPreview,
   extractPageTitle,
 } from './notion.js';
-
-// Notion connection repository
-export {
-  type NotionConnectionPublic,
-  saveNotionConnection,
-  getNotionConnection,
-  getNotionToken,
-  isNotionConnected,
-  disconnectNotion,
-} from './notionConnection.js';

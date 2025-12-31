@@ -5,6 +5,7 @@ export type {
   LlmResearchResult,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  TitleGenerator,
 } from './llmProvider.js';
 
 export type { NotificationError, NotificationSender } from './notification.js';

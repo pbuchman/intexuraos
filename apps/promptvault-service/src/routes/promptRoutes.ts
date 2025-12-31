@@ -14,6 +14,8 @@ import { createPrompt, listPrompts, getPrompt, updatePrompt } from '../domain/pr
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
 import { getServices } from '../services.js';
 import { mapDomainErrorCode } from './shared.js';
+import { getPageWithPreview } from '../infra/notion/index.js';
+import { getPromptVaultPageId } from '../infra/firestore/promptVaultSettingsRepository.js';
 
 export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /prompt-vault/main-page
@@ -74,53 +76,52 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const { connectionRepository, notionApi } = getServices();
+      const { notionServiceClient } = getServices();
 
-      // Check if connected
-      const connectedResult = await connectionRepository.isConnected(user.userId);
-      if (!connectedResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', connectedResult.error.message);
+      // Get token and pageId in parallel
+      const [tokenContextResult, pageIdResult] = await Promise.all([
+        notionServiceClient.getNotionToken(user.userId),
+        getPromptVaultPageId(user.userId),
+      ]);
+
+      // Check token context
+      if (!tokenContextResult.ok) {
+        const errorCode =
+          tokenContextResult.error.code === 'UNAUTHORIZED' ? 'UNAUTHORIZED' : 'DOWNSTREAM_ERROR';
+        return await reply.fail(errorCode, tokenContextResult.error.message);
       }
 
-      const isConnected = connectedResult.value;
-      if (!isConnected) {
+      const { connected, token } = tokenContextResult.value;
+      if (!connected || token === null) {
         return await reply.fail(
           'MISCONFIGURED',
           'Notion integration is not configured. Call POST /notion/connect first.'
         );
       }
 
-      // Get token
-      const tokenResult = await connectionRepository.getToken(user.userId);
-      if (!tokenResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', tokenResult.error.message);
-      }
-      const token = tokenResult.value;
-      if (token === null) {
-        return await reply.fail('MISCONFIGURED', 'Notion token not found.');
+      // Check promptVaultPageId
+      if (!pageIdResult.ok) {
+        return await reply.fail('DOWNSTREAM_ERROR', pageIdResult.error.message);
       }
 
-      // Get config
-      const configResult = await connectionRepository.getConnection(user.userId);
-      if (!configResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', configResult.error.message);
+      const promptVaultPageId = pageIdResult.value;
+      if (promptVaultPageId === null) {
+        return await reply.fail('MISCONFIGURED', 'PromptVault page ID not configured');
       }
-      const config = configResult.value;
-      if (config === null) {
-        return await reply.fail('MISCONFIGURED', 'Notion configuration not found.');
-      }
-
-      const pageId = config.promptVaultPageId;
 
       // Fetch page from Notion
-      const pageResult = await notionApi.getPageWithPreview(token, pageId);
+      const pageResult = await getPageWithPreview(token, promptVaultPageId);
       if (!pageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', pageResult.error.message);
       }
 
       const pageData = pageResult.value;
       return await reply.ok({
-        page: pageData.page,
+        page: {
+          id: pageData.id,
+          title: pageData.title,
+          url: pageData.url,
+        },
         preview: {
           blocks: pageData.blocks,
         },

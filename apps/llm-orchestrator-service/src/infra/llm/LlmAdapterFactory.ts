@@ -6,6 +6,7 @@ import type {
   LlmProvider,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  TitleGenerator,
 } from '../../domain/research/index.js';
 import type { DecryptedApiKeys } from '../user/index.js';
 import { GeminiAdapter } from './GeminiAdapter.js';
@@ -39,4 +40,8 @@ export function createSynthesizer(provider: LlmProvider, apiKey: string): LlmSyn
     case 'openai':
       return new GptAdapter(apiKey);
   }
+}
+
+export function createTitleGenerator(googleApiKey: string): TitleGenerator {
+  return new GeminiAdapter(googleApiKey);
 }

@@ -7,4 +7,5 @@ export {
   type UserServiceConfig,
   type DecryptedApiKeys,
   type UserServiceError,
+  type LlmProvider,
 } from './userServiceClient.js';

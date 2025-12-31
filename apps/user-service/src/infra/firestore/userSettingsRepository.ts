@@ -150,6 +150,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
       await docRef.update({
         [`llmApiKeys.${provider}`]: FieldValue.delete(),
+        [`llmTestResults.${provider}`]: FieldValue.delete(),
         updatedAt: new Date().toISOString(),
       });
 
@@ -193,6 +194,40 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to update LLM test result: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateLlmLastUsed(
+    userId: string,
+    provider: LlmProvider
+  ): Promise<Result<void, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const doc = await docRef.get();
+      const now = new Date().toISOString();
+
+      if (!doc.exists) {
+        await docRef.set({
+          userId,
+          notifications: { filters: [] },
+          llmTestResults: { [provider]: { response: '', testedAt: now } },
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.update({
+          [`llmTestResults.${provider}.testedAt`]: now,
+          updatedAt: now,
+        });
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update LLM last used: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

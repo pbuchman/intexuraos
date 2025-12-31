@@ -137,6 +137,120 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.messages[1]?.text).toBe('Older message');
     });
 
+    it('returns transcription fields for audio messages', async () => {
+      const userId = 'user-with-transcription';
+      const token = await createToken({ sub: userId });
+
+      // Add an audio message
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.audio-transcribed',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: '',
+        mediaType: 'audio',
+        gcsPath: 'whatsapp/user/msg/audio.ogg',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-transcription',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Update the message with transcription
+      await ctx.messageRepository.updateTranscription(userId, messageId, {
+        status: 'completed',
+        text: 'This is the transcribed text',
+        error: undefined,
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          messages: {
+            id: string;
+            transcriptionStatus?: string;
+            transcription?: string;
+            transcriptionError?: string;
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.messages.length).toBe(1);
+      expect(body.data.messages[0]?.transcriptionStatus).toBe('completed');
+      expect(body.data.messages[0]?.transcription).toBe('This is the transcribed text');
+      expect(body.data.messages[0]?.transcriptionError).toBeUndefined();
+    });
+
+    it('returns linkPreview for text messages with URLs', async () => {
+      const userId = 'user-with-linkpreview';
+      const token = await createToken({ sub: userId });
+
+      // Add a text message
+      const saveResult = await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.text-with-link',
+        fromNumber: '+15551234567',
+        toNumber: '+15559876543',
+        text: 'Check out https://example.com',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-linkpreview',
+      });
+
+      expect(saveResult.ok).toBe(true);
+      const messageId = saveResult.ok ? saveResult.value.id : '';
+
+      // Update the message with link preview (LinkPreviewState has previews as array)
+      const updateResult = await ctx.messageRepository.updateLinkPreview(userId, messageId, {
+        status: 'completed',
+        previews: [
+          {
+            url: 'https://example.com',
+            title: 'Example Domain',
+            description: 'This is an example website',
+            siteName: 'example.com',
+          },
+        ],
+      });
+      expect(updateResult.ok).toBe(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          messages: {
+            id: string;
+            linkPreview?: {
+              status: string;
+              previews?: { url: string; title?: string }[];
+            };
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.messages.length).toBe(1);
+      expect(body.data.messages[0]?.linkPreview).toBeDefined();
+      expect(body.data.messages[0]?.linkPreview?.status).toBe('completed');
+      expect(body.data.messages[0]?.linkPreview?.previews?.[0]?.title).toBe('Example Domain');
+      expect(body.data.messages[0]?.linkPreview?.previews?.[0]?.url).toBe('https://example.com');
+    });
+
     it('includes nextCursor when pagination has more results', async () => {
       const userId = 'user-with-pagination';
       const token = await createToken({ sub: userId });

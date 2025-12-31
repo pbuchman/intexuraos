@@ -20,7 +20,7 @@ export const createResearchBodySchema = {
       maxItems: 3,
     },
     synthesisLlm: llmProviderSchema,
-    inputContexts: {
+    externalReports: {
       type: 'array',
       items: {
         type: 'object',
@@ -29,6 +29,10 @@ export const createResearchBodySchema = {
           content: {
             type: 'string',
             maxLength: 60000,
+          },
+          model: {
+            type: 'string',
+            maxLength: 100,
           },
         },
       },

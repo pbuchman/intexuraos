@@ -16,7 +16,6 @@ describe('Notion Integration Routes', () => {
         url: '/notion/connect',
         payload: {
           notionToken: 'secret-notion-token',
-          promptVaultPageId: 'page-123',
         },
       });
 
@@ -29,11 +28,8 @@ describe('Notion Integration Routes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('connects successfully, validates page access, and includes page info in response', async () => {
+    it('connects successfully and validates token', async () => {
       const token = await createToken({ sub: 'user-123' });
-
-      // Set up the page in the mock before attempting to connect
-      ctx.notionApi.setPage('page-123', 'Prompt Vault', 'Test content');
 
       const response = await ctx.app.inject({
         method: 'POST',
@@ -41,7 +37,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-notion-token',
-          promptVaultPageId: 'page-123',
         },
       });
 
@@ -50,49 +45,20 @@ describe('Notion Integration Routes', () => {
         success: boolean;
         data: {
           connected: boolean;
-          promptVaultPageId: string;
-          pageTitle: string;
-          pageUrl: string;
+          createdAt: string;
+          updatedAt: string;
         };
         diagnostics: { requestId: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.connected).toBe(true);
-      expect(body.data.promptVaultPageId).toBe('page-123');
-      expect(body.data.pageTitle).toBe('Prompt Vault');
-      expect(body.data.pageUrl).toContain('page-123');
+      expect(body.data.createdAt).toBeDefined();
+      expect(body.data.updatedAt).toBeDefined();
       expect(body.diagnostics.requestId).toBeDefined();
 
       // Verify token is NOT in response
       const bodyStr = response.body;
       expect(bodyStr).not.toContain('secret-notion-token');
-    });
-
-    it('returns 400 INVALID_REQUEST when page is not accessible (not shared with integration)', async () => {
-      const token = await createToken({ sub: 'user-inaccessible' });
-
-      ctx.notionApi.setPageInaccessible('inaccessible-page-id');
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'valid-token',
-          promptVaultPageId: 'inaccessible-page-id',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string; message: string; details?: { pageId: string } };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('Could not access page');
-      expect(body.error.message).toContain('shared with your Notion integration');
-      expect(body.error.details?.pageId).toBe('inaccessible-page-id');
     });
 
     it('returns 400 INVALID_REQUEST when notionToken is missing', async () => {
@@ -102,52 +68,7 @@ describe('Notion Integration Routes', () => {
         method: 'POST',
         url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
-        payload: {
-          promptVaultPageId: 'page-123',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-    });
-
-    it('returns 400 INVALID_REQUEST when promptVaultPageId is missing', async () => {
-      const token = await createToken({ sub: 'user-123' });
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-notion-token',
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-    });
-
-    it('returns 400 INVALID_REQUEST when promptVaultPageId is empty string', async () => {
-      const token = await createToken({ sub: 'user-empty-page-id' });
-
-      const response = await ctx.app.inject({
-        method: 'POST',
-        url: '/notion/connect',
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          notionToken: 'secret-notion-token',
-          promptVaultPageId: '',
-        },
+        payload: {},
       });
 
       expect(response.statusCode).toBe(400);
@@ -162,8 +83,6 @@ describe('Notion Integration Routes', () => {
     it('returns 401 UNAUTHORIZED when Notion token is invalid', async () => {
       const token = await createToken({ sub: 'user-unauthorized' });
 
-      // Set up the page but mark the token as unauthorized
-      ctx.notionApi.setPage('page-unauth', 'Test Page', 'Test content');
       ctx.notionApi.setTokenUnauthorized('invalid-notion-token');
 
       const response = await ctx.app.inject({
@@ -172,7 +91,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'invalid-notion-token',
-          promptVaultPageId: 'page-unauth',
         },
       });
 
@@ -198,7 +116,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'valid-token',
-          promptVaultPageId: 'any-page',
         },
       });
 
@@ -214,8 +131,6 @@ describe('Notion Integration Routes', () => {
     it('returns 502 DOWNSTREAM_ERROR when repository fails to save', async () => {
       const token = await createToken({ sub: 'user-repo-fail' });
 
-      // Set up a valid page but make the repository fail
-      ctx.notionApi.setPage('page-save-fail', 'Test Page', 'Test content');
       ctx.connectionRepository.setFailNextSave(true);
 
       const response = await ctx.app.inject({
@@ -224,7 +139,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'valid-token',
-          promptVaultPageId: 'page-save-fail',
         },
       });
 
@@ -261,9 +175,6 @@ describe('Notion Integration Routes', () => {
     it('shows connected=true after connect', async () => {
       const token = await createToken({ sub: 'user-456' });
 
-      // Set up the page in the mock before attempting to connect
-      ctx.notionApi.setPage('page-456', 'Test Page', 'Test content');
-
       // First connect
       await ctx.app.inject({
         method: 'POST',
@@ -271,7 +182,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
-          promptVaultPageId: 'page-456',
         },
       });
 
@@ -288,13 +198,11 @@ describe('Notion Integration Routes', () => {
         data: {
           configured: boolean;
           connected: boolean;
-          promptVaultPageId: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.configured).toBe(true);
       expect(body.data.connected).toBe(true);
-      expect(body.data.promptVaultPageId).toBe('page-456');
     });
 
     it('returns 502 DOWNSTREAM_ERROR when repository fails to get connection', async () => {
@@ -336,9 +244,6 @@ describe('Notion Integration Routes', () => {
     it('disconnects successfully', async () => {
       const token = await createToken({ sub: 'user-789' });
 
-      // Set up the page in the mock before attempting to connect
-      ctx.notionApi.setPage('page-789', 'Test Page', 'Test content');
-
       // First connect
       await ctx.app.inject({
         method: 'POST',
@@ -346,7 +251,6 @@ describe('Notion Integration Routes', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
-          promptVaultPageId: 'page-789',
         },
       });
 
@@ -370,14 +274,12 @@ describe('Notion Integration Routes', () => {
       const token = await createToken({ sub: 'user-disconnect-fail' });
 
       // Set up a connection first
-      ctx.notionApi.setPage('page-disconnect', 'Test Page', 'Test content');
       await ctx.app.inject({
         method: 'POST',
         url: '/notion/connect',
         headers: { authorization: `Bearer ${token}` },
         payload: {
           notionToken: 'secret-token',
-          promptVaultPageId: 'page-disconnect',
         },
       });
 

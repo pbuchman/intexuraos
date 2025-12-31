@@ -11,11 +11,18 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:emulators": "node scripts/dev.mjs --emulators-only",
+    "emulators:start": "docker compose -f docker/docker-compose.local.yaml up -d",
+    "emulators:stop": "docker compose -f docker/docker-compose.local.yaml down",
+    "emulators:logs": "docker compose -f docker/docker-compose.local.yaml logs -f",
+    "firestore:sync": "./scripts/sync-firestore.sh",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "node scripts/typecheck-parallel.mjs",
+    "typecheck:sequential": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -25,7 +32,8 @@
     "verify:package-json": "node scripts/verify-package-json.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:common": "node scripts/verify-common.mjs",
-    "ci": "npm run typecheck && npm run lint && npm run verify:package-json && npm run verify:boundaries && npm run verify:common && npm run format && npm run test:coverage && npm run build"
+    "verify:firestore": "node scripts/verify-firestore-ownership.mjs",
+    "ci": "node scripts/ci.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -36,6 +44,7 @@
     "eslint-plugin-boundaries": "^5.3.1",
     "globals": "^15.14.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^4.0.16"

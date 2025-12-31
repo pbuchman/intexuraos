@@ -38,7 +38,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       url: 'https://intexuraos-mobile-notifications-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
-    { url: 'http://localhost:8085', description: 'Local' },
+    { url: 'http://localhost:8114', description: 'Local' },
   ];
 
   return {

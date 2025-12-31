@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Firestore Collection Ownership Registry - Each collection MUST be owned by exactly ONE service",
+  "collections": {
+    "notion_connections": {
+      "owner": "notion-service",
+      "description": "Notion OAuth connection tokens and state"
+    },
+    "promptvault_settings": {
+      "owner": "promptvault-service",
+      "description": "User's Notion Prompt Vault page ID configuration"
+    },
+    "whatsapp_messages": {
+      "owner": "whatsapp-service",
+      "description": "WhatsApp messages with transcription and link preview metadata"
+    },
+    "whatsapp_user_mappings": {
+      "owner": "whatsapp-service",
+      "description": "Phone number to user ID mappings for WhatsApp integration"
+    },
+    "whatsapp_webhook_events": {
+      "owner": "whatsapp-service",
+      "description": "Raw WhatsApp webhook events for audit and debugging"
+    },
+    "mobile_notifications": {
+      "owner": "mobile-notifications-service",
+      "description": "Mobile push notifications received from user devices"
+    },
+    "mobile_notification_signatures": {
+      "owner": "mobile-notifications-service",
+      "description": "Device signature to user ID bindings for notification delivery"
+    },
+    "user_settings": {
+      "owner": "user-service",
+      "description": "User preferences, notification filters, and LLM API keys (encrypted)"
+    },
+    "auth_tokens": {
+      "owner": "user-service",
+      "description": "Auth0 refresh tokens (AES-256-GCM encrypted)"
+    },
+    "researches": {
+      "owner": "llm-orchestrator-service",
+      "description": "LLM research queries, responses, and synthesized results"
+    }
+  }
+}

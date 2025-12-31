@@ -26,6 +26,8 @@ describe('promptvault-service OpenAPI contract', () => {
     process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['AUTH_AUDIENCE'] = 'https://api.test.com';
     process.env['VITEST'] = 'true';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-auth-token';
+    process.env['INTEXURAOS_NOTION_SERVICE_URL'] = 'http://localhost:3000';
 
     app = await buildServer();
     const response = await app.inject({
@@ -41,6 +43,8 @@ describe('promptvault-service OpenAPI contract', () => {
     delete process.env['AUTH_ISSUER'];
     delete process.env['AUTH_AUDIENCE'];
     delete process.env['VITEST'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_NOTION_SERVICE_URL'];
   });
 
   it('has no "Default Response" placeholders', () => {
@@ -71,7 +75,7 @@ describe('promptvault-service OpenAPI contract', () => {
     );
     expect(servers?.[0]?.description).toBe('Cloud (Development)');
 
-    expect(servers?.[1]?.url).toBe('http://localhost:8081');
+    expect(servers?.[1]?.url).toBe('http://localhost:8111');
     expect(servers?.[1]?.description).toBe('Local');
   });
 

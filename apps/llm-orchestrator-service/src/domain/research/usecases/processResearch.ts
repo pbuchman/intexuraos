@@ -8,6 +8,7 @@ import type {
   ResearchRepository,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  TitleGenerator,
   NotificationSender,
 } from '../ports/index.js';
 
@@ -15,7 +16,9 @@ export interface ProcessResearchDeps {
   researchRepo: ResearchRepository;
   llmProviders: Record<LlmProvider, LlmResearchProvider>;
   synthesizer: LlmSynthesisProvider;
+  titleGenerator?: TitleGenerator;
   notificationSender: NotificationSender;
+  reportLlmSuccess?: (provider: LlmProvider) => void;
 }
 
 interface LlmCallResult {
@@ -38,10 +41,16 @@ export async function processResearch(
   // Update status to processing
   await deps.researchRepo.update(researchId, { status: 'processing' });
 
-  // Generate title
-  const titleResult = await deps.synthesizer.generateTitle(research.prompt);
+  // Generate title (use dedicated titleGenerator if available, else fall back to synthesizer)
+  const titleGen = deps.titleGenerator ?? deps.synthesizer;
+  const titleResult = await titleGen.generateTitle(research.prompt);
   if (titleResult.ok) {
     await deps.researchRepo.update(researchId, { title: titleResult.value });
+    // Report success for title generator (Gemini if dedicated titleGenerator, else synthesis provider)
+    if (deps.reportLlmSuccess !== undefined) {
+      const titleProvider = deps.titleGenerator !== undefined ? 'google' : research.synthesisLlm;
+      deps.reportLlmSuccess(titleProvider);
+    }
   }
 
   // Run LLM calls in parallel
@@ -86,6 +95,11 @@ export async function processResearch(
       }
       await deps.researchRepo.updateLlmResult(researchId, provider, updateData);
 
+      // Report successful research call
+      if (deps.reportLlmSuccess !== undefined) {
+        deps.reportLlmSuccess(provider);
+      }
+
       return {
         provider,
         model: getModelName(provider),
@@ -104,10 +118,18 @@ export async function processResearch(
 
   // Synthesize results
   if (successfulResults.length > 0) {
+    const externalReportsForSynthesis = research.externalReports?.map((report) => {
+      const mapped: { content: string; model?: string } = { content: report.content };
+      if (report.model !== undefined) {
+        mapped.model = report.model;
+      }
+      return mapped;
+    });
+
     const synthesisResult = await deps.synthesizer.synthesize(
       research.prompt,
       successfulResults.map((r) => ({ model: r.model, content: r.content })),
-      research.inputContexts?.map((ctx) => ({ content: ctx.content }))
+      externalReportsForSynthesis
     );
 
     if (!synthesisResult.ok) {
@@ -122,6 +144,10 @@ export async function processResearch(
         synthesizedResult: synthesisResult.value,
         completedAt: new Date().toISOString(),
       });
+      // Report successful synthesis
+      if (deps.reportLlmSuccess !== undefined) {
+        deps.reportLlmSuccess(research.synthesisLlm);
+      }
     }
   } else {
     await deps.researchRepo.update(researchId, {
@@ -145,7 +171,7 @@ export async function processResearch(
 function getModelName(provider: LlmProvider): string {
   switch (provider) {
     case 'google':
-      return 'Gemini 3 Pro';
+      return 'Gemini 2.0 Flash';
     case 'openai':
       return 'GPT-4.1';
     case 'anthropic':

@@ -5,58 +5,17 @@
 import type { Result } from '@intexuraos/common-core';
 import type { NotionLogger } from '@intexuraos/infra-notion';
 import {
-  saveNotionConnection,
-  getNotionConnection,
-  getNotionToken,
-  isNotionConnected,
-  disconnectNotion,
-  type NotionConnectionPublic,
-  type NotionError,
-} from './infra/firestore/index.js';
+  createNotionServiceClient,
+  type NotionServiceClient,
+} from './infra/notion/notionServiceClient.js';
 import {
   createPrompt as createPromptFn,
   listPrompts as listPromptsFn,
   getPrompt as getPromptFn,
   updatePrompt as updatePromptFn,
-  validateNotionToken,
-  getPageWithPreview,
   type Prompt,
   type PromptVaultError,
 } from './infra/notion/index.js';
-
-/**
- * Connection repository adapter matching old interface.
- */
-interface ConnectionRepository {
-  isConnected(userId: string): Promise<Result<boolean, NotionError>>;
-  getToken(userId: string): Promise<Result<string | null, NotionError>>;
-  getConnection(userId: string): Promise<Result<NotionConnectionPublic | null, NotionError>>;
-  saveConnection(
-    userId: string,
-    promptVaultPageId: string,
-    notionToken: string
-  ): Promise<Result<NotionConnectionPublic, NotionError>>;
-  disconnect(userId: string): Promise<Result<NotionConnectionPublic, NotionError>>;
-}
-
-/**
- * Notion API adapter matching old interface.
- */
-interface NotionApiAdapter {
-  validateToken(token: string): Promise<Result<boolean, NotionError>>;
-  getPageWithPreview(
-    token: string,
-    pageId: string
-  ): Promise<
-    Result<
-      {
-        page: { id: string; title: string; url: string };
-        blocks: { type: string; content: string }[];
-      },
-      NotionError
-    >
-  >;
-}
 
 /**
  * Prompt repository adapter matching old interface.
@@ -80,58 +39,25 @@ interface PromptRepository {
  */
 export interface ServiceContainer {
   logger: NotionLogger | undefined;
-  connectionRepository: ConnectionRepository;
-  notionApi: NotionApiAdapter;
+  notionServiceClient: NotionServiceClient;
   promptRepository: PromptRepository;
 }
 
 let container: ServiceContainer | null = null;
 
-function createConnectionRepository(): ConnectionRepository {
-  return {
-    isConnected: async (userId) => await isNotionConnected(userId),
-    getToken: async (userId) => await getNotionToken(userId),
-    getConnection: async (userId) => await getNotionConnection(userId),
-    saveConnection: async (userId, promptVaultPageId, notionToken) =>
-      await saveNotionConnection(userId, promptVaultPageId, notionToken),
-    disconnect: async (userId) => await disconnectNotion(userId),
-  };
-}
-
-function createNotionApiAdapter(logger: NotionLogger | undefined): NotionApiAdapter {
-  return {
-    validateToken: async (token): Promise<Result<boolean, NotionError>> =>
-      await validateNotionToken(token, logger),
-    getPageWithPreview: async (
-      token,
-      pageId
-    ): Promise<
-      Result<
-        {
-          page: { id: string; title: string; url: string };
-          blocks: { type: string; content: string }[];
-        },
-        NotionError
-      >
-    > => {
-      const result = await getPageWithPreview(token, pageId, logger);
-      if (!result.ok) return result;
-      const { id, title, url, blocks } = result.value;
-      return { ok: true as const, value: { page: { id, title, url }, blocks } };
-    },
-  };
-}
-
-function createPromptRepository(logger: NotionLogger | undefined): PromptRepository {
+function createPromptRepository(
+  notionServiceClient: NotionServiceClient,
+  logger: NotionLogger | undefined
+): PromptRepository {
   return {
     createPrompt: async (userId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await createPromptFn(userId, input.title, input.content, logger),
+      await createPromptFn(userId, input.title, input.content, notionServiceClient, logger),
     listPrompts: async (userId): Promise<Result<Prompt[], PromptVaultError>> =>
-      await listPromptsFn(userId, logger),
+      await listPromptsFn(userId, notionServiceClient, logger),
     getPrompt: async (userId, promptId): Promise<Result<Prompt, PromptVaultError>> =>
-      await getPromptFn(userId, promptId, logger),
+      await getPromptFn(userId, promptId, notionServiceClient, logger),
     updatePrompt: async (userId, promptId, input): Promise<Result<Prompt, PromptVaultError>> =>
-      await updatePromptFn(userId, promptId, input, logger),
+      await updatePromptFn(userId, promptId, input, notionServiceClient, logger),
   };
 }
 
@@ -140,11 +66,28 @@ function createPromptRepository(logger: NotionLogger | undefined): PromptReposit
  * Call this early in server startup.
  */
 export function getServices(logger?: NotionLogger): ServiceContainer {
-  container ??= {
+  if (container !== null) return container;
+
+  const notionServiceUrl = process.env['INTEXURAOS_NOTION_SERVICE_URL'];
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+  if (notionServiceUrl === undefined || notionServiceUrl === '') {
+    throw new Error('INTEXURAOS_NOTION_SERVICE_URL is not configured');
+  }
+
+  if (internalAuthToken === undefined || internalAuthToken === '') {
+    throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured');
+  }
+
+  const notionServiceClient = createNotionServiceClient({
+    baseUrl: notionServiceUrl,
+    internalAuthToken,
+  });
+
+  container = {
     logger,
-    connectionRepository: createConnectionRepository(),
-    notionApi: createNotionApiAdapter(logger),
-    promptRepository: createPromptRepository(logger),
+    notionServiceClient,
+    promptRepository: createPromptRepository(notionServiceClient, logger),
   };
 
   return container;
@@ -155,11 +98,19 @@ export function getServices(logger?: NotionLogger): ServiceContainer {
  */
 export function setServices(services: Partial<ServiceContainer>): void {
   const logger = services.logger;
+
+  const notionServiceClient =
+    services.notionServiceClient ??
+    createNotionServiceClient({
+      baseUrl: process.env['INTEXURAOS_NOTION_SERVICE_URL'] ?? '',
+      internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    });
+
   container = {
     logger,
-    connectionRepository: services.connectionRepository ?? createConnectionRepository(),
-    notionApi: services.notionApi ?? createNotionApiAdapter(logger),
-    promptRepository: services.promptRepository ?? createPromptRepository(logger),
+    notionServiceClient,
+    promptRepository:
+      services.promptRepository ?? createPromptRepository(notionServiceClient, logger),
   };
 }
 

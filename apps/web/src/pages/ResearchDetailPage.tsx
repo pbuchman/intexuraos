@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Loader2, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { Layout, Button, Card } from '@/components';
 import { useResearch } from '@/hooks';
 import type { LlmResult, ResearchStatus } from '@/services/llmOrchestratorApi.types';
@@ -67,7 +69,9 @@ interface MarkdownContentProps {
 function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   return (
     <div className="prose prose-slate max-w-none">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

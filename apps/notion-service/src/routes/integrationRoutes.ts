@@ -25,7 +25,6 @@ function mapConnectErrorToHttp(
   code: ConnectNotionErrorCode
 ): 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'DOWNSTREAM_ERROR' {
   switch (code) {
-    case 'PAGE_NOT_ACCESSIBLE':
     case 'VALIDATION_ERROR':
       return 'INVALID_REQUEST';
     case 'INVALID_TOKEN':
@@ -96,9 +95,8 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       if (user === null) return;
 
       // Fastify JSON schema validation ensures body is valid before handler runs
-      const { notionToken, promptVaultPageId } = request.body as {
+      const { notionToken } = request.body as {
         notionToken: string;
-        promptVaultPageId: string;
       };
 
       // Delegate to use-case
@@ -106,7 +104,6 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: user.userId,
         notionToken,
-        promptVaultPageId,
       });
 
       // Map result to HTTP response

@@ -33,6 +33,10 @@ export default defineConfig({
         // Type definition files
         '**/*.d.ts',
 
+        // Pure type/interface files with no runtime code
+        // JUSTIFIED: TypeScript interfaces only, no executable code
+        'packages/infra-*/src/types.ts',
+
         // Type-only files with no runtime code
         // JUSTIFIED: Interfaces and types only, no executable code
         '**/domain/**/models/**',
@@ -52,35 +56,6 @@ export default defineConfig({
 
         // JUSTIFIED: Class adapters that delegate to infra functions, no logic
         '**/adapters.ts',
-
-        // External LLM API adapter packages
-        // JUSTIFIED: Thin wrappers around SDK calls (Anthropic, Google, OpenAI)
-        // No business logic - translate between domain types and SDK types
-        'packages/infra-claude/**',
-        'packages/infra-gemini/**',
-        'packages/infra-gpt/**',
-        'packages/infra-whatsapp/**',
-
-        // LLM Audit logging infrastructure
-        // JUSTIFIED: Thin wrapper around Firestore SDK for audit logging
-        // Same pattern as other infra packages - no business logic
-        'packages/infra-llm-audit/**',
-
-        // LLM Orchestrator service infrastructure and config
-        // JUSTIFIED: LLM adapters delegate to SDK calls (same pattern as packages above)
-        // WhatsApp notification sender delegates to infra-whatsapp package
-        // Firestore repository is Firestore adapter (same pattern as other **/firestore.ts exclusions)
-        // Config folder contains synthesis prompt template (pure constant string)
-        // processResearch orchestrates external LLM API calls (infrastructure orchestration)
-        'apps/llm-orchestrator-service/src/infra/**',
-        'apps/llm-orchestrator-service/src/domain/research/config/**',
-        'apps/llm-orchestrator-service/src/domain/research/usecases/processResearch.ts',
-
-        // LLM Orchestrator routes
-        // JUSTIFIED: Routes delegate to usecases (which are tested)
-        // JWT verification blocks happy path coverage in unit tests
-        // Auth/error paths are covered by route tests
-        'apps/llm-orchestrator-service/src/routes/**',
 
         // Server initialization files
         // JUSTIFIED: Contains Fastify app setup, plugin registration, and lifecycle hooks

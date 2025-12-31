@@ -12,7 +12,7 @@ export interface SubmitResearchParams {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
-  inputContexts?: { content: string }[];
+  externalReports?: { content: string; model?: string }[];
 }
 
 export interface SubmitResearchDeps {
@@ -31,8 +31,8 @@ export async function submitResearch(
     selectedLlms: params.selectedLlms,
     synthesisLlm: params.synthesisLlm,
   };
-  if (params.inputContexts !== undefined) {
-    createParams.inputContexts = params.inputContexts;
+  if (params.externalReports !== undefined) {
+    createParams.externalReports = params.externalReports;
   }
   const research = createResearch(createParams);
 

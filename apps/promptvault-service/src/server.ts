@@ -34,7 +34,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       url: 'https://intexuraos-promptvault-service-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
-    { url: 'http://localhost:8081', description: 'Local' },
+    { url: 'http://localhost:8111', description: 'Local' },
   ];
 
   return {

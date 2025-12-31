@@ -1,12 +1,16 @@
 /**
  * Firestore infrastructure for notion-service.
+ * Exports Notion connection repository (owned by notion-service).
  */
 export {
-  type NotionConnectionPublic,
-  type NotionError,
   saveNotionConnection,
   getNotionConnection,
   getNotionToken,
   isNotionConnected,
   disconnectNotion,
-} from '@intexuraos/infra-notion';
+} from './notionConnectionRepository.js';
+
+export type {
+  NotionConnectionPublic,
+  NotionError,
+} from '../../domain/integration/ports/ConnectionRepository.js';

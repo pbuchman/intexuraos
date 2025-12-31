@@ -15,9 +15,9 @@ interface ProviderOption {
 }
 
 const PROVIDERS: ProviderOption[] = [
-  { id: 'google', name: 'Gemini 3 Pro', shortName: 'Gemini' },
-  { id: 'openai', name: 'GPT-5.2 Pro', shortName: 'GPT' },
   { id: 'anthropic', name: 'Claude Opus 4.5', shortName: 'Claude' },
+  { id: 'google', name: 'Gemini 2.0 Flash', shortName: 'Gemini' },
+  { id: 'openai', name: 'GPT-4.1', shortName: 'GPT' },
 ];
 
 export function LlmOrchestratorPage(): React.JSX.Element {
@@ -74,13 +74,16 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     );
   };
 
+  const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
+  const hasValidContexts = validContexts.length > 0;
+
   const handleSubmit = async (): Promise<void> => {
     if (prompt.length < 10) {
       setError('Prompt must be at least 10 characters');
       return;
     }
-    if (selectedLlms.length === 0) {
-      setError('Select at least one LLM');
+    if (selectedLlms.length === 0 && !hasValidContexts) {
+      setError('Select at least one LLM or provide input context');
       return;
     }
     if (synthesisLlm === null) {
@@ -92,18 +95,15 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setError(null);
 
     try {
-      // Filter out empty contexts
-      const validContexts = inputContexts
-        .filter((ctx) => ctx.trim().length > 0)
-        .map((content) => ({ content }));
+      const contextObjects = validContexts.map((content) => ({ content }));
 
       const request: Parameters<typeof createResearch>[0] = {
         prompt,
         selectedLlms,
         synthesisLlm,
       };
-      if (validContexts.length > 0) {
-        request.inputContexts = validContexts;
+      if (contextObjects.length > 0) {
+        request.inputContexts = contextObjects;
       }
 
       const research = await createResearch(request);
@@ -116,8 +116,16 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   };
 
   const hasAnyLlm = configuredProviders.length > 0;
-  const canSubmit =
-    hasAnyLlm && prompt.length >= 10 && selectedLlms.length > 0 && synthesisLlm !== null;
+  const hasLlmOrContext = selectedLlms.length > 0 || hasValidContexts;
+  const canSubmit = prompt.length >= 10 && hasLlmOrContext && synthesisLlm !== null;
+
+  const getDisabledReason = (): string | undefined => {
+    if (canSubmit) return undefined;
+    if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
+    if (!hasLlmOrContext) return 'Select at least one LLM or provide input context';
+    if (synthesisLlm === null) return 'Select a synthesis LLM';
+    return undefined;
+  };
 
   return (
     <Layout>
@@ -295,6 +303,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             }}
             disabled={!canSubmit || submitting}
             isLoading={submitting}
+            title={getDisabledReason()}
           >
             Start Research
           </Button>
