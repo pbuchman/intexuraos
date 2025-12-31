@@ -14,7 +14,6 @@ import { createPrompt, getPrompt, listPrompts, updatePrompt } from '../domain/pr
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
 import { getServices } from '../services.js';
 import { mapDomainErrorCode } from './shared.js';
-import { getPageWithPreview } from '../infra/notion/index.js';
 
 export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /prompt-vault/main-page
@@ -75,7 +74,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
-      const { notionServiceClient, promptVaultSettings } = getServices();
+      const { notionServiceClient, notionPageClient, promptVaultSettings } = getServices();
 
       // Get token and pageId in parallel
       const [tokenContextResult, pageIdResult] = await Promise.all([
@@ -109,7 +108,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Fetch page from Notion
-      const pageResult = await getPageWithPreview(token, promptVaultPageId);
+      const pageResult = await notionPageClient.getPageWithPreview(token, promptVaultPageId);
       if (!pageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', pageResult.error.message);
       }

@@ -3,7 +3,11 @@
  * Provides backward-compatible service container for routes.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { NotionLogger } from '@intexuraos/infra-notion';
+import {
+  type NotionLogger,
+  type NotionError,
+  getPageWithPreview as getPageWithPreviewFn,
+} from '@intexuraos/infra-notion';
 import {
   createNotionServiceClient,
   type NotionServiceClient,
@@ -21,6 +25,20 @@ import {
   getPromptVaultPageId,
   savePromptVaultPageId,
 } from './infra/firestore/promptVaultSettingsRepository.js';
+
+export interface NotionPagePreview {
+  id: string;
+  title: string;
+  url: string;
+  blocks: { type: string; content: string }[];
+}
+
+export interface NotionPageClient {
+  getPageWithPreview(
+    token: string,
+    pageId: string
+  ): Promise<Result<NotionPagePreview, NotionError>>;
+}
 
 /**
  * Prompt repository adapter matching old interface.
@@ -45,6 +63,7 @@ interface PromptRepository {
 export interface ServiceContainer {
   logger: NotionLogger | undefined;
   notionServiceClient: NotionServiceClient;
+  notionPageClient: NotionPageClient;
   promptRepository: PromptRepository;
   promptVaultSettings: PromptVaultSettingsPort;
 }
@@ -114,9 +133,14 @@ export function getServices(logger?: NotionLogger): ServiceContainer {
 
   const promptVaultSettings = createPromptVaultSettingsAdapter();
 
+  const notionPageClient: NotionPageClient = {
+    getPageWithPreview: async (token, pageId) => await getPageWithPreviewFn(token, pageId, logger),
+  };
+
   container = {
     logger,
     notionServiceClient,
+    notionPageClient,
     promptRepository: createPromptRepository(notionServiceClient, promptVaultSettings, logger),
     promptVaultSettings,
   };
@@ -139,9 +163,14 @@ export function setServices(services: Partial<ServiceContainer>): void {
 
   const promptVaultSettings = services.promptVaultSettings ?? createPromptVaultSettingsAdapter();
 
+  const notionPageClient: NotionPageClient = services.notionPageClient ?? {
+    getPageWithPreview: async (token, pageId) => await getPageWithPreviewFn(token, pageId, logger),
+  };
+
   container = {
     logger,
     notionServiceClient,
+    notionPageClient,
     promptRepository:
       services.promptRepository ??
       createPromptRepository(notionServiceClient, promptVaultSettings, logger),
