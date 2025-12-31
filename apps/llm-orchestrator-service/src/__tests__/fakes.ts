@@ -19,6 +19,7 @@ export class FakeResearchRepository implements ResearchRepository {
   private failNextSave = false;
   private failNextFind = false;
   private failNextDelete = false;
+  private failNextUpdate = false;
 
   async save(research: Research): Promise<Result<Research, RepositoryError>> {
     if (this.failNextSave) {
@@ -56,6 +57,10 @@ export class FakeResearchRepository implements ResearchRepository {
   }
 
   async update(id: string, updates: Partial<Research>): Promise<Result<Research, RepositoryError>> {
+    if (this.failNextUpdate) {
+      this.failNextUpdate = false;
+      return err({ code: 'FIRESTORE_ERROR', message: 'Test update failure' });
+    }
     const existing = this.researches.get(id);
     if (existing === undefined) {
       return err({ code: 'NOT_FOUND', message: 'Research not found' });
@@ -105,6 +110,10 @@ export class FakeResearchRepository implements ResearchRepository {
 
   setFailNextDelete(fail: boolean): void {
     this.failNextDelete = fail;
+  }
+
+  setFailNextUpdate(fail: boolean): void {
+    this.failNextUpdate = fail;
   }
 
   addResearch(research: Research): void {

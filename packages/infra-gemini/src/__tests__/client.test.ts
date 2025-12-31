@@ -1,8 +1,3 @@
-/**
- * Tests for Gemini client.
- * Mocks @google/genai and @intexuraos/infra-llm-audit.
- */
-
 import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const mockGenerateContent = vi.fn();
@@ -13,15 +8,15 @@ vi.mock('@google/genai', () => ({
   },
 }));
 
-vi.mock('@intexuraos/infra-llm-audit', () => ({
+vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({
     success: vi.fn().mockResolvedValue(undefined),
     error: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
-const { createAuditContext } = await import('@intexuraos/infra-llm-audit');
-const { createGeminiClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createGeminiClient, GEMINI_DEFAULTS } = await import('../index.js');
 
 describe('createGeminiClient', () => {
   beforeEach(() => {
@@ -44,7 +39,7 @@ describe('createGeminiClient', () => {
       }
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gemini-2.0-flash',
+          model: GEMINI_DEFAULTS.researchModel,
           config: expect.objectContaining({
             tools: [{ googleSearch: {} }],
           }),
@@ -227,6 +222,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value).toBe('Generated response');
       }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: GEMINI_DEFAULTS.defaultModel,
+        })
+      );
     });
 
     it('handles null text response', async () => {
@@ -250,62 +250,6 @@ describe('createGeminiClient', () => {
       const result = await client.generate('Test');
 
       expect(result.ok).toBe(false);
-    });
-  });
-
-  describe('generateTitle', () => {
-    it('returns generated title', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'AI Research Overview',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Tell me about AI');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('AI Research Overview');
-      }
-    });
-
-    it('trims whitespace from title', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '  Trimmed Title  ',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Trimmed Title');
-      }
-    });
-
-    it('returns error on API failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Network error'));
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-
-    it('handles null text response', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('');
-      }
     });
   });
 
@@ -426,6 +370,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value).toBe(true);
       }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: GEMINI_DEFAULTS.validationModel,
+        })
+      );
     });
 
     it('returns true even with null text response', async () => {
@@ -455,238 +404,60 @@ describe('createGeminiClient', () => {
     });
   });
 
-  describe('custom model', () => {
-    it('uses custom model when provided', async () => {
+  describe('custom models', () => {
+    it('uses custom researchModel when provided', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Response',
+        candidates: [],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key', model: 'gemini-pro' });
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        researchModel: 'gemini-custom-research',
+      });
       await client.research('Test prompt');
 
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gemini-pro',
+          model: 'gemini-custom-research',
         })
       );
     });
-  });
 
-  describe('classify', () => {
-    const validTypes = ['todo', 'note', 'research', 'unclassified'] as const;
-
-    it('returns parsed classification result', async () => {
+    it('uses custom defaultModel when provided', async () => {
       mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 0.95, "title": "Buy groceries"}',
+        text: 'Response',
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'I need to buy groceries',
-        systemPrompt: 'Classify this message',
-        validTypes,
-        defaultType: 'unclassified',
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        defaultModel: 'gemini-custom-default',
       });
+      await client.generate('Test prompt');
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('todo');
-        expect(result.value.confidence).toBe(0.95);
-        expect(result.value.title).toBe('Buy groceries');
-      }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-custom-default',
+        })
+      );
     });
 
-    it('extracts JSON from response with surrounding text', async () => {
+    it('uses custom validationModel when provided', async () => {
       mockGenerateContent.mockResolvedValue({
-        text: 'Here is my classification: {"type": "note", "confidence": 0.8, "title": "Meeting notes"} based on analysis.',
+        text: 'Response',
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Meeting notes from today',
-        systemPrompt: 'Classify this message',
-        validTypes,
-        defaultType: 'unclassified',
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        validationModel: 'gemini-custom-validation',
       });
+      await client.validateKey();
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('note');
-        expect(result.value.title).toBe('Meeting notes');
-      }
-    });
-
-    it('returns default type when type is invalid', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "invalid_type", "confidence": 0.9, "title": "Something"}',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Some text',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('unclassified');
-      }
-    });
-
-    it('returns default classification when no JSON found', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'I cannot classify this message properly.',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Random text',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('unclassified');
-        expect(result.value.confidence).toBe(0);
-        expect(result.value.title).toBe('Unclassified');
-      }
-    });
-
-    it('returns default classification on JSON parse error', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": }',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Some text',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('unclassified');
-        expect(result.value.confidence).toBe(0);
-      }
-    });
-
-    it('clamps confidence to valid range', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 1.5, "title": "Test"}',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.confidence).toBe(1);
-      }
-    });
-
-    it('clamps negative confidence to zero', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": -0.5, "title": "Test"}',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.confidence).toBe(0);
-      }
-    });
-
-    it('truncates title to 100 characters', async () => {
-      const longTitle = 'A'.repeat(150);
-      mockGenerateContent.mockResolvedValue({
-        text: `{"type": "todo", "confidence": 0.9, "title": "${longTitle}"}`,
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title.length).toBe(100);
-      }
-    });
-
-    it('uses Untitled when title is missing', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '{"type": "todo", "confidence": 0.9}',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.title).toBe('Untitled');
-      }
-    });
-
-    it('returns error on API failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Server error'));
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-
-    it('handles null text response', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.classify({
-        text: 'Test',
-        systemPrompt: 'Classify',
-        validTypes,
-        defaultType: 'unclassified',
-      });
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.type).toBe('unclassified');
-      }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-custom-validation',
+        })
+      );
     });
   });
 

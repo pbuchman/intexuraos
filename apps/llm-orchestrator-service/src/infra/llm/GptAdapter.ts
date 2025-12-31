@@ -49,7 +49,8 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const result = await this.client.generateTitle(prompt);
+    const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+    const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {
       return {
@@ -58,7 +59,7 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       };
     }
 
-    return result;
+    return { ok: true, value: result.value.trim() };
   }
 }
 

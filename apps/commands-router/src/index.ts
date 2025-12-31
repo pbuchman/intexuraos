@@ -17,6 +17,7 @@ async function main(): Promise<void> {
   initServices({
     userServiceUrl: process.env['USER_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
+    gcpProjectId: process.env['GOOGLE_CLOUD_PROJECT'] as string,
   });
 
   const app = await buildServer();

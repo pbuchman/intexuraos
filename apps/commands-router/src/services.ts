@@ -1,6 +1,7 @@
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
+import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
 import {
   createProcessCommandUseCase,
   type ProcessCommandUseCase,
@@ -8,6 +9,7 @@ import {
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createGeminiClassifier } from './infra/gemini/classifier.js';
+import { createActionEventPublisher } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 
 export interface Services {
@@ -15,12 +17,14 @@ export interface Services {
   actionRepository: ActionRepository;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
+  eventPublisher: EventPublisherPort;
   processCommandUseCase: ProcessCommandUseCase;
 }
 
 export interface ServiceConfig {
   userServiceUrl: string;
   internalAuthToken: string;
+  gcpProjectId: string;
 }
 
 let container: Services | null = null;
@@ -34,17 +38,20 @@ export function initServices(config: ServiceConfig): void {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
   });
+  const eventPublisher = createActionEventPublisher({ projectId: config.gcpProjectId });
 
   container = {
     commandRepository,
     actionRepository,
     classifierFactory,
     userServiceClient,
+    eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
       commandRepository,
       actionRepository,
       classifierFactory,
       userServiceClient,
+      eventPublisher,
     }),
   };
 }

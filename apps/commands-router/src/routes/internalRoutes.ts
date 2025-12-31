@@ -2,6 +2,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { CommandSourceType } from '../domain/models/command.js';
+import type { ActionStatus } from '../domain/models/action.js';
 
 interface PubSubMessage {
   message: {
@@ -110,6 +111,97 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         commandId: result.command.id,
         isNew: result.isNew,
       };
+    }
+  );
+
+  fastify.patch(
+    '/internal/actions/:actionId',
+    {
+      schema: {
+        operationId: 'updateActionStatus',
+        summary: 'Update action status',
+        description: 'Internal endpoint for updating action status from workers.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string', description: 'Action ID to update' },
+          },
+          required: ['actionId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['pending', 'processing', 'completed', 'failed'],
+              description: 'New action status',
+            },
+            payload: {
+              type: 'object',
+              additionalProperties: true,
+              description: 'Additional payload data to merge',
+            },
+          },
+          required: ['status'],
+        },
+        response: {
+          200: {
+            description: 'Action updated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+            },
+            required: ['success'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          404: {
+            description: 'Action not found',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!validateInternalAuth(request).valid) {
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { actionId } = request.params as { actionId: string };
+      const { status, payload } = request.body as {
+        status: ActionStatus;
+        payload?: Record<string, unknown>;
+      };
+
+      const { actionRepository } = getServices();
+
+      const action = await actionRepository.getById(actionId);
+      if (action === null) {
+        reply.status(404);
+        return { error: 'Action not found' };
+      }
+
+      action.status = status;
+      action.updatedAt = new Date().toISOString();
+      if (payload !== undefined) {
+        action.payload = { ...action.payload, ...payload };
+      }
+
+      await actionRepository.update(action);
+
+      request.log.info({ actionId, status }, 'Action status updated');
+
+      return { success: true };
     }
   );
 

@@ -1,5 +1,5 @@
 /**
- * @intexuraos/infra-llm-audit
+ * @intexuraos/llm-audit
  *
  * LLM API audit logging to Firestore.
  * Logs all LLM requests and responses for debugging and monitoring.

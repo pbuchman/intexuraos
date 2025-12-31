@@ -5,4 +5,5 @@ export {
   type LlmResult,
   type Research,
   createResearch,
+  createDraftResearch,
 } from './Research.js';

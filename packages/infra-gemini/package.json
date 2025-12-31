@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/infra-llm-audit": "*",
-    "@google/genai": "^1.34.0"
+    "@intexuraos/llm-audit": "*",
+    "@intexuraos/llm-contract": "*",
+    "@google/genai": "^1.0.0"
   }
 }

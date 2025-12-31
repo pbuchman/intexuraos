@@ -9,7 +9,7 @@ export const llmProviderSchema = {
 
 export const researchStatusSchema = {
   type: 'string',
-  enum: ['pending', 'processing', 'completed', 'failed'],
+  enum: ['draft', 'pending', 'processing', 'completed', 'failed'],
 } as const;
 
 export const llmResultSchema = {
@@ -65,6 +65,7 @@ export const researchSchema = {
     startedAt: { type: 'string' },
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },
+    sourceActionId: { type: 'string', nullable: true },
   },
   required: [
     'id',

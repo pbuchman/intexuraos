@@ -1,10 +1,11 @@
 /**
  * Research Routes
  *
- * POST   /research     - Create new research
- * GET    /research     - List user's researches
- * GET    /research/:id - Get single research
- * DELETE /research/:id - Delete research
+ * POST   /research            - Create new research
+ * GET    /research            - List user's researches
+ * GET    /research/:id        - Get single research
+ * POST   /research/:id/approve - Approve draft research
+ * DELETE /research/:id        - Delete research
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -18,6 +19,7 @@ import {
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
 import {
+  approveResearchResponseSchema,
   createResearchBodySchema,
   createResearchResponseSchema,
   deleteResearchResponseSchema,
@@ -174,6 +176,60 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(result.value);
+    }
+  );
+
+  // POST /research/:id/approve
+  fastify.post(
+    '/research/:id/approve',
+    {
+      schema: {
+        operationId: 'approveResearch',
+        summary: 'Approve draft research',
+        description: 'Approve a draft research and start processing.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        response: {
+          200: approveResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const params = request.params as ResearchIdParams;
+      const { researchRepo, processResearchAsync } = getServices();
+
+      const existing = await getResearch(params.id, { researchRepo });
+
+      if (!existing.ok) {
+        return await reply.fail('INTERNAL_ERROR', existing.error.message);
+      }
+
+      if (existing.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      if (existing.value.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Access denied');
+      }
+
+      if (existing.value.status !== 'draft') {
+        return await reply.fail('CONFLICT', 'Research is not in draft status');
+      }
+
+      const updateResult = await researchRepo.update(params.id, { status: 'pending' });
+
+      if (!updateResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+      }
+
+      processResearchAsync(params.id);
+
+      return await reply.ok(updateResult.value);
     }
   );
 

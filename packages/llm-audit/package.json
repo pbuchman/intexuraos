@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/infra-llm-audit",
+  "name": "@intexuraos/llm-audit",
   "version": "0.0.1",
   "private": true,
   "type": "module",
