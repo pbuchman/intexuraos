@@ -39,13 +39,68 @@ export interface ActionConfigAction {
 }
 
 /**
+ * Predicate operators for condition evaluation.
+ */
+export type PredicateOperator =
+  | 'eq'      // equality (===)
+  | 'neq'     // not equal (!==)
+  | 'gt'      // greater than
+  | 'gte'     // greater than or equal
+  | 'lt'      // less than
+  | 'lte'     // less than or equal
+  | 'in'      // value in array
+  | 'nin'     // value not in array
+  | 'exists'; // field exists (not null/undefined)
+
+/**
+ * Basic predicate: { field, op, value }
+ */
+export interface Predicate {
+  /** Dot-notation path to field (e.g., "status", "payload.prompt") */
+  field: string;
+  /** Comparison operator */
+  op: PredicateOperator;
+  /** Value to compare against (optional for 'exists' operator) */
+  value?: unknown;
+}
+
+/**
+ * AND logic - all conditions must be true.
+ */
+export interface AllCondition {
+  /** Array of conditions (AND logic) */
+  all: ConditionTree[];
+}
+
+/**
+ * OR logic - at least one condition must be true.
+ */
+export interface AnyCondition {
+  /** Array of conditions (OR logic) */
+  any: ConditionTree[];
+}
+
+/**
+ * NOT logic - negates the condition.
+ */
+export interface NotCondition {
+  /** Condition to negate */
+  not: ConditionTree;
+}
+
+/**
+ * Condition tree = predicate OR logical operator.
+ */
+export type ConditionTree = Predicate | AllCondition | AnyCondition | NotCondition;
+
+/**
  * Action mapping with conditions for a specific type.
  */
 export interface ActionConfigTypeMapping {
   /** Action ID reference */
   action: string;
-  /** Condition expressions (ALL must be true - AND logic) */
-  conditions: string[];
+  /** When condition (optional - if missing, always true) */
+  when?: ConditionTree;
 }
 
 /**
