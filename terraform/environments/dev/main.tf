@@ -92,10 +92,20 @@ variable "audit_llms" {
 }
 
 # -----------------------------------------------------------------------------
+# Data Sources
+# -----------------------------------------------------------------------------
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+# -----------------------------------------------------------------------------
 # Locals
 # -----------------------------------------------------------------------------
 
 locals {
+  project_number = data.google_project.current.number
+
   services = {
     user_service = {
       name      = "intexuraos-user-service"
@@ -349,9 +359,10 @@ module "iam" {
 module "pubsub_media_cleanup" {
   source = "../../modules/pubsub"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-media-cleanup-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels         = local.common_labels
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -370,9 +381,10 @@ module "pubsub_media_cleanup" {
 module "pubsub_whatsapp_webhook_process" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-webhook-process-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-webhook-process-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -393,9 +405,10 @@ module "pubsub_whatsapp_webhook_process" {
 module "pubsub_whatsapp_transcription" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-transcription-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-transcription-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -416,9 +429,10 @@ module "pubsub_whatsapp_transcription" {
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-commands-ingest-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-commands-ingest-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.commands_router.service_url}/internal/router/commands"
   push_service_account_email = module.iam.service_accounts["commands_router"]
@@ -439,9 +453,10 @@ module "pubsub_commands_ingest" {
 module "pubsub_actions_research" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-actions-research-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-actions-research-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.actions_agent.service_url}/internal/actions/research"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
@@ -462,9 +477,10 @@ module "pubsub_actions_research" {
 module "pubsub_research_process" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-research-process-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-research-process-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
@@ -486,9 +502,10 @@ module "pubsub_research_process" {
 module "pubsub_llm_analytics" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-llm-analytics-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-llm-analytics-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/report-analytics"
   push_service_account_email = module.iam.service_accounts["llm_orchestrator"]

@@ -95,6 +95,8 @@ resource "google_cloud_run_v2_service" "service" {
     ignore_changes = [
       # Ignore image changes as Cloud Build manages deployments
       template[0].containers[0].image,
+      # Ignore annotation drift from gcloud/GCP API
+      template[0].annotations,
     ]
   }
 }
