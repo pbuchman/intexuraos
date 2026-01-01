@@ -1111,4 +1111,250 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
+
+  describe('POST /internal/llm/pubsub/process-research', () => {
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    it('returns 401 without auth headers', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('accepts Pub/Sub push with from header', async () => {
+      const research = createTestResearch({ status: 'pending' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(false);
+    });
+
+    it('accepts direct call with x-internal-auth header', async () => {
+      const research = createTestResearch({ status: 'pending' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'projects/test/subscriptions/test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns 200 with error for invalid message format', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: 'invalid-base64-that-is-not-json!!!',
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('Invalid message format');
+    });
+
+    it('returns 200 with error for unexpected event type', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({ type: 'some.other.event' }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('Unexpected event type');
+    });
+
+    it('returns 200 with error for non-existent research', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: 'non-existent-id',
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('Research not found');
+    });
+  });
+
+  describe('POST /internal/llm/pubsub/report-analytics', () => {
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    it('returns 401 without auth headers', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'llm.report',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              provider: 'google',
+              model: 'gemini-2.0-flash-exp',
+              inputTokens: 100,
+              outputTokens: 200,
+              durationMs: 1000,
+            }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts Pub/Sub push and reports analytics', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'llm.report',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              provider: 'google',
+              model: 'gemini-2.0-flash-exp',
+              inputTokens: 100,
+              outputTokens: 200,
+              durationMs: 1000,
+            }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 200 even for invalid message format', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: 'not-valid-base64!!!',
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(false);
+    });
+
+    it('returns 200 for unexpected event type', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({ type: 'some.other.event' }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(false);
+    });
+  });
 });

@@ -6,10 +6,7 @@
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { createLlmProviders, createSynthesizer, createTitleGenerator } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
-import {
-  createResearchEventPublisher,
-  type ResearchEventPublisher,
-} from './infra/pubsub/index.js';
+import { createResearchEventPublisher, type ResearchEventPublisher } from './infra/pubsub/index.js';
 import {
   createUserServiceClient,
   type DecryptedApiKeys,
