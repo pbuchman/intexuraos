@@ -22,17 +22,28 @@ export interface UserServiceClient {
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
   return {
     async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
+      const url = `${config.baseUrl}/internal/users/${userId}/llm-keys`;
+
       try {
-        const response = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
+        const response = await fetch(url, {
           headers: {
             'X-Internal-Auth': config.internalAuthToken,
           },
         });
 
         if (!response.ok) {
+          // Try to get error details from response body
+          let errorDetails = '';
+          try {
+            const body = await response.text();
+            errorDetails = body.length > 0 ? `: ${body.substring(0, 200)}` : '';
+          } catch {
+            // Ignore body read errors
+          }
+
           return err({
             code: 'API_ERROR',
-            message: `HTTP ${String(response.status)}`,
+            message: `HTTP ${String(response.status)}${errorDetails}`,
           });
         }
 

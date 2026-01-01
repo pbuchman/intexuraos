@@ -91,14 +91,30 @@ export function createProcessCommandUseCase(deps: {
 
       const apiKeysResult = await userServiceClient.getApiKeys(input.userId);
 
-      if (!apiKeysResult.ok || apiKeysResult.value.google === undefined) {
+      if (!apiKeysResult.ok) {
         logger.warn(
           {
             commandId: command.id,
             userId: input.userId,
-            reason: !apiKeysResult.ok ? 'fetch_failed' : 'no_google_key',
+            reason: 'fetch_failed',
+            errorCode: apiKeysResult.error.code,
+            errorMessage: apiKeysResult.error.message,
           },
-          'User has no Google API key, marking command as pending_classification'
+          'Failed to fetch user API keys from user-service'
+        );
+        command.status = 'pending_classification';
+        await commandRepository.update(command);
+        return { command, isNew: true };
+      }
+
+      if (apiKeysResult.value.google === undefined) {
+        logger.warn(
+          {
+            commandId: command.id,
+            userId: input.userId,
+            reason: 'no_google_key',
+          },
+          'User has no Google API key configured, marking command as pending_classification'
         );
         command.status = 'pending_classification';
         await commandRepository.update(command);
