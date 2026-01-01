@@ -204,6 +204,63 @@ describe('Commands Router Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    describe('Pub/Sub OIDC authentication', () => {
+      it('accepts Pub/Sub push with x-goog-pubsub-subscription-name header (no x-internal-auth)', async () => {
+        app = await buildServer();
+
+        fakeUserServiceClient.setApiKeys('test-user', { google: 'test-gemini-key' });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/router/commands',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-pubsub-subscription-name': 'projects/test/subscriptions/commands-ingest-push',
+            // NOTE: NO x-internal-auth header - should still work via OIDC
+          },
+          payload: {
+            message: {
+              data: Buffer.from(
+                JSON.stringify({
+                  type: 'command.ingest',
+                  userId: 'test-user',
+                  sourceType: 'whatsapp_text',
+                  externalId: 'wa-msg-123',
+                  text: 'Test command',
+                  timestamp: '2025-01-01T12:00:00.000Z',
+                })
+              ).toString('base64'),
+              messageId: 'pubsub-msg-123',
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as { success: boolean; commandId: string };
+        expect(body.success).toBe(true);
+        expect(body.commandId).toBeDefined();
+      });
+
+      it('rejects direct calls without x-internal-auth or Pub/Sub header', async () => {
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/router/commands',
+          headers: {
+            'content-type': 'application/json',
+            // NO x-goog-pubsub-subscription-name
+            // NO x-internal-auth
+          },
+          payload: validMessagePayload,
+        });
+
+        expect(response.statusCode).toBe(401);
+        const body = JSON.parse(response.body) as { error: string };
+        expect(body.error).toBe('Unauthorized');
+      });
+    });
+
     it('processes valid command and returns 200', async () => {
       app = await buildServer();
 
