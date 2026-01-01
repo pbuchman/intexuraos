@@ -9,7 +9,8 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { handleValidationError } from '@intexuraos/common-http';
+import { handleValidationError, logIncomingRequest } from '@intexuraos/common-http';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
@@ -162,20 +163,15 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         },
       },
       async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) => {
+        // Log incoming request (before validation for debugging)
+        logIncomingRequest(request, {
+          message: 'Received WhatsApp webhook POST',
+          bodyPreviewLength: 500,
+        });
+
         // Get raw body for signature validation
         const rawBody =
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
-
-        try {
-          const headersObj = { ...(request.headers as Record<string, unknown>) };
-          request.log.info(
-            { event: 'incoming_whatsapp_webhook', headers: headersObj, rawBody },
-            'Received WhatsApp webhook POST'
-          );
-        } catch (logErr) {
-          // Best-effort logging - should not interrupt processing
-          request.log.debug({ error: logErr }, 'Failed to log incoming webhook');
-        }
 
         // Get signature from header
         const signature = request.headers[SIGNATURE_HEADER];
@@ -279,11 +275,16 @@ async function processWebhookAsync(
   const services = getServices();
   const { webhookEventRepository, userMappingRepository } = services;
 
+  request.log.info({ eventId: savedEvent.id }, 'Starting asynchronous webhook processing');
+
   try {
     // Find user by phone number
     const fromNumber = extractSenderPhoneNumber(request.body);
     if (fromNumber === null) {
-      request.log.debug({ eventId: savedEvent.id }, 'No sender phone number found');
+      request.log.info(
+        { eventId: savedEvent.id, reason: 'no_sender' },
+        'No sender phone number found in payload'
+      );
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
         ignoredReason: {
           code: 'NO_SENDER',
@@ -298,6 +299,18 @@ async function processWebhookAsync(
     const messageType = extractMessageType(request.body);
     const imageMedia = extractImageMedia(request.body);
     const audioMedia = extractAudioMedia(request.body);
+
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        fromNumber,
+        messageType,
+        hasText: messageText !== null,
+        hasImage: imageMedia !== null,
+        hasAudio: audioMedia !== null,
+      },
+      'Extracted message details from webhook payload'
+    );
 
     // Validate message type
     const supportedTypes = ['text', 'image', 'audio'];
@@ -351,10 +364,12 @@ async function processWebhookAsync(
     }
 
     // Look up user by phone number
+    request.log.info({ eventId: savedEvent.id, fromNumber }, 'Looking up user by phone number');
+
     const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
     if (!userIdResult.ok) {
       request.log.error(
-        { error: userIdResult.error, eventId: savedEvent.id },
+        { eventId: savedEvent.id, fromNumber, error: userIdResult.error },
         'Failed to look up user by phone number'
       );
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
@@ -379,6 +394,11 @@ async function processWebhookAsync(
     }
 
     const userId = userIdResult.value;
+
+    request.log.info(
+      { eventId: savedEvent.id, fromNumber, userId },
+      'User mapping found for phone number'
+    );
 
     // Check if user mapping is connected
     const mappingResult = await userMappingRepository.getMapping(userId);
@@ -405,6 +425,16 @@ async function processWebhookAsync(
     const phoneNumberId = extractPhoneNumberId(request.body);
 
     // Route to appropriate handler
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        messageType,
+        waMessageId,
+      },
+      'Routing message to handler'
+    );
+
     if (messageType === 'image' && imageMedia !== null) {
       await handleImageMessage(
         request,
@@ -455,8 +485,11 @@ async function processWebhookAsync(
     );
   } catch (error) {
     request.log.error(
-      { error, eventId: savedEvent.id },
-      'Unexpected error during webhook processing'
+      {
+        eventId: savedEvent.id,
+        error: getErrorMessage(error),
+      },
+      'Unexpected error during asynchronous webhook processing'
     );
   }
 }
@@ -633,10 +666,20 @@ async function handleTextMessage(
 
   const savedMessage = saveResult.value;
 
+  request.log.info(
+    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+    'Text message saved to database'
+  );
+
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
 
   // Publish command ingest event for text message (fire-and-forget)
   const services = getServices();
+  request.log.info(
+    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+    'Publishing command.ingest event'
+  );
+
   void services.eventPublisher.publishCommandIngest({
     type: 'command.ingest',
     userId,
@@ -663,7 +706,7 @@ async function handleTextMessage(
 
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-    'Message saved successfully'
+    'Text message processing completed successfully'
   );
 
   await sendConfirmationMessage(request, savedEvent, fromNumber, 'text');

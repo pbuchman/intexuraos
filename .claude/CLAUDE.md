@@ -285,6 +285,208 @@ fastify.post('/internal/pubsub/my-topic', async (request, reply) => {
 
 **Verification:** ESLint `no-restricted-syntax` rule fails build on pull subscription patterns.
 
+### Webhook Endpoint Logging
+
+**REQUIREMENT: All webhook endpoints MUST use consistent logging patterns like internal endpoints.**
+
+Webhooks receive external events (GitHub, WhatsApp, Stripe, etc.) and should log comprehensively for debugging and traceability.
+
+#### Entry Point Logging
+
+Use `logIncomingRequest()` at webhook entry (before validation):
+
+```typescript
+async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) => {
+  // Log incoming request (before validation for debugging)
+  logIncomingRequest(request, {
+    message: 'Received WhatsApp webhook POST',
+    bodyPreviewLength: 500,
+  });
+
+  // Validate signature
+  const signature = request.headers[SIGNATURE_HEADER];
+  if (typeof signature !== 'string' || signature === '') {
+    request.log.warn({ reason: 'missing_signature' }, 'Webhook rejected');
+    return await reply.fail('UNAUTHORIZED', 'Missing signature header');
+  }
+
+  // Process webhook
+  // ...
+}
+```
+
+**Why use `logIncomingRequest()` for webhooks:**
+- Automatic header redaction (sensitive auth headers)
+- Consistent logging format across all entry points
+- Body preview for debugging without logging full payload
+- Helps diagnose webhook delivery issues
+
+#### Asynchronous Processing Logging
+
+For webhooks that return 200 immediately and process asynchronously:
+
+```typescript
+async function processWebhookAsync(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  config: Config
+): Promise<void> {
+  // Entry point
+  request.log.info(
+    { eventId: savedEvent.id },
+    'Starting asynchronous webhook processing'
+  );
+
+  try {
+    // Extraction
+    const fromNumber = extractSenderPhoneNumber(request.body);
+    const messageType = extractMessageType(request.body);
+
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        fromNumber,
+        messageType,
+        hasText: messageText !== null,
+      },
+      'Extracted message details from webhook payload'
+    );
+
+    // Validation - log each rejection reason
+    if (messageType === null || !supportedTypes.includes(messageType)) {
+      request.log.info(
+        { eventId: savedEvent.id, messageType },
+        'Ignoring unsupported message type'
+      );
+      await updateStatus('IGNORED', { code: 'UNSUPPORTED_MESSAGE_TYPE' });
+      return;
+    }
+
+    // User lookup
+    request.log.info(
+      { eventId: savedEvent.id, fromNumber },
+      'Looking up user by phone number'
+    );
+
+    const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
+
+    if (userIdResult.value === null) {
+      request.log.info(
+        { eventId: savedEvent.id, fromNumber },
+        'No user mapping found for phone number'
+      );
+      await updateStatus('USER_UNMAPPED', { code: 'USER_UNMAPPED' });
+      return;
+    }
+
+    const userId = userIdResult.value;
+
+    request.log.info(
+      { eventId: savedEvent.id, fromNumber, userId },
+      'User mapping found for phone number'
+    );
+
+    // Routing
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        messageType,
+        waMessageId,
+      },
+      'Routing message to handler'
+    );
+
+    // Handler invocation
+    await handleImageMessage(...);
+
+    // Success
+    request.log.info(
+      { eventId: savedEvent.id, userId, messageId },
+      'Text message processing completed successfully'
+    );
+
+  } catch (error) {
+    request.log.error(
+      {
+        eventId: savedEvent.id,
+        error: getErrorMessage(error),
+      },
+      'Unexpected error during asynchronous webhook processing'
+    );
+  }
+}
+```
+
+#### What to Log in Webhook Processing
+
+**Always log:**
+- Entry point with event/webhook ID
+- Extracted entities (user IDs, message IDs, types)
+- Validation failures with rejection reasons
+- External service lookups (before/after)
+- Routing decisions
+- Processing completion
+- Errors with full context
+
+**Use structured data:**
+- `eventId`: Webhook event identifier for correlation
+- `userId`, `messageId`, `fromNumber`: Entity IDs
+- `messageType`, `status`: State information
+- `reason`, `code`: Rejection/error reasons
+
+**Avoid logging:**
+- Full webhook payload (use previews)
+- Sensitive user data (PII, tokens, secrets)
+- Large binary data (media, attachments)
+
+#### Error Handling Pattern
+
+Always use `getErrorMessage()` from common-core:
+
+```typescript
+} catch (error) {
+  request.log.error(
+    {
+      eventId: savedEvent.id,
+      error: getErrorMessage(error),
+    },
+    'Webhook processing failed'
+  );
+}
+```
+
+**Never use inline error extraction:**
+```typescript
+// ❌ WRONG - violates ESLint rule
+error: error instanceof Error ? error.message : String(error),
+
+// ✅ CORRECT - use utility
+error: getErrorMessage(error),
+```
+
+#### Reference Implementation
+
+`apps/whatsapp-service/src/routes/webhookRoutes.ts` - Comprehensive webhook logging with:
+- Entry point logging via `logIncomingRequest()`
+- Asynchronous processing with full lifecycle logs
+- Structured data at all decision points
+- Proper error handling
+
+#### Verification Checklist
+
+For new/updated webhook endpoints:
+
+- [ ] Uses `logIncomingRequest()` at entry point
+- [ ] Logs validation failures with rejection reasons
+- [ ] Logs user/entity lookup operations
+- [ ] Logs routing decisions
+- [ ] Logs processing completion
+- [ ] Uses `getErrorMessage()` for error logging
+- [ ] No sensitive data in logs
+- [ ] Event ID included in all log entries
+- [ ] Tests verify logging behavior
+
 ### Use Case Logging (Domain Layer)
 
 **REQUIREMENT: All business-critical use cases MUST include comprehensive logging for action tracing.**
@@ -294,6 +496,7 @@ Use cases that process important business flows (commands, actions, events, paym
 #### When to Add Use Case Logging
 
 **Always log in use cases that:**
+
 - Process user commands or actions
 - Make external API calls (LLM, payment processors, etc.)
 - Create or update critical domain entities
@@ -302,6 +505,7 @@ Use cases that process important business flows (commands, actions, events, paym
 - Can fail with multiple error scenarios
 
 **Examples requiring logging:**
+
 - Command classification and routing
 - LLM research processing
 - Payment processing
@@ -319,14 +523,14 @@ export function createProcessCommandUseCase(deps: {
   commandRepository: CommandRepository;
   classifierFactory: ClassifierFactory;
   eventPublisher: EventPublisherPort;
-  logger: Logger;  // ← Required
+  logger: Logger; // ← Required
 }): ProcessCommandUseCase {
   const { commandRepository, classifierFactory, eventPublisher, logger } = deps;
 
   return {
     async execute(input: ProcessCommandInput): Promise<ProcessCommandResult> {
       // Use logger throughout
-    }
+    },
   };
 }
 ```
@@ -420,6 +624,7 @@ catch (error) {
 #### What to Log
 
 **Include in log context (structured data):**
+
 - **Entity IDs**: commandId, actionId, userId, researchId, etc.
 - **Status/state**: current status, state transitions
 - **Decisions**: classification type, selected options, confidence scores
@@ -427,11 +632,13 @@ catch (error) {
 - **Errors**: error messages (via `getErrorMessage()`), failure reasons
 
 **Log message (human-readable string):**
+
 - Use present continuous for in-progress: "Starting classification", "Fetching API keys"
 - Use past tense for completed: "Classification completed", "Action published"
 - Be specific and searchable: "User has no Google API key" not "Missing dependency"
 
 **Do NOT log:**
+
 - Sensitive data (API keys, tokens, passwords, PII)
 - Full request/response payloads (use previews/lengths)
 - Redundant information already in structured context
@@ -452,7 +659,7 @@ export function initServices(config: ServiceConfig): void {
       commandRepository,
       classifierFactory,
       eventPublisher,
-      logger,  // ← Pass to use case
+      logger, // ← Pass to use case
     }),
   };
 }
@@ -472,7 +679,7 @@ export function createFakeServices(deps: {
   return {
     processCommandUseCase: createProcessCommandUseCase({
       commandRepository: deps.commandRepository,
-      logger,  // ← Silent logger for tests
+      logger, // ← Silent logger for tests
     }),
   };
 }
@@ -481,18 +688,21 @@ export function createFakeServices(deps: {
 #### Benefits of Use Case Logging
 
 **Operational visibility:**
+
 - Trace full lifecycle: "request accepted → entry in DB"
 - Identify bottlenecks (slow external API calls)
 - Monitor error rates by failure reason
 - Track business metrics (classification types, confidence)
 
 **Debugging:**
+
 - Understand why a command failed at specific step
 - See exact decision path taken
 - Correlate across services using entity IDs
 - Reproduce issues with actual input data
 
 **Compliance & audit:**
+
 - Full audit trail for critical operations
 - Timestamps for all state transitions
 - Evidence of proper error handling
@@ -1197,6 +1407,7 @@ logIncomingRequest(request, {
    - Which services might have the same issue?
 
 2. **Search Systematically**
+
    ```bash
    # Find all files with pattern
    grep -r "pattern" apps/*/src --include="*.ts"
@@ -1233,6 +1444,7 @@ grep -B5 -A10 "isPubSubPush" apps/*/src/routes/*.ts
 ```
 
 **What to verify:**
+
 - All Pub/Sub endpoints check `from: noreply@google.com` header
 - All have dual-mode auth (Pub/Sub OIDC OR x-internal-auth)
 - All log authentication failures with context
@@ -1251,6 +1463,7 @@ grep -r "logIncomingRequest" apps/*/src/routes --include="*.ts"
 ```
 
 **What to verify:**
+
 - All `/internal/*` endpoints use `logIncomingRequest()` at entry
 - Logging happens BEFORE authentication check
 - Sensitive headers are redacted automatically
@@ -1269,6 +1482,7 @@ grep -B3 "export function create.*UseCase" apps/*/src/domain/usecases/*.ts | gre
 ```
 
 **What to verify:**
+
 - All use cases accept logger in dependencies
 - Logger is passed from services.ts
 - Test fakes create logger with `level: 'silent'`
@@ -1279,6 +1493,7 @@ grep -B3 "export function create.*UseCase" apps/*/src/domain/usecases/*.ts | gre
 When you fix a pattern in one service, apply it everywhere:
 
 **Step 1: Document the pattern**
+
 ```typescript
 // ✅ CORRECT PATTERN (apply everywhere)
 const fromHeader = request.headers.from;
@@ -1298,18 +1513,21 @@ if (isPubSubPush) {
 ```
 
 **Step 2: Find all instances**
+
 ```bash
 # Find services with Pub/Sub endpoints
 find apps -name "pubsubRoutes.ts" -o -name "internalRoutes.ts" | xargs grep -l "pubsub"
 ```
 
 **Step 3: Verify and fix each**
+
 - Read the current implementation
 - Compare to the correct pattern
 - Apply fix if different
 - Update tests to match
 
 **Step 4: Commit atomically**
+
 - All fixes in a single commit
 - Clear commit message explaining the pattern
 - Reference the original issue/fix
@@ -1319,6 +1537,7 @@ find apps -name "pubsubRoutes.ts" -o -name "internalRoutes.ts" | xargs grep -l "
 **When issues occur in production:**
 
 1. **Gather logs from Cloud Logging**
+
    ```bash
    gcloud logging read "resource.labels.service_name=intexuraos-commands-router" \
      --project=intexuraos-dev-pbuchman \
@@ -1333,6 +1552,7 @@ find apps -name "pubsubRoutes.ts" -o -name "internalRoutes.ts" | xargs grep -l "
    - Which endpoint is affected?
 
 3. **Reproduce locally with tests**
+
    ```typescript
    it('handles Pub/Sub push without x-internal-auth', async () => {
      const response = await app.inject({
@@ -1372,12 +1592,14 @@ After applying a pattern across services:
 **Audit steps:**
 
 1. **Search for similar endpoints**
+
    ```bash
    grep -r "'/internal/.*/pubsub/" apps/*/src/routes --include="*.ts"
    # Found: whatsapp-service, research-agent
    ```
 
 2. **Check current implementation**
+
    ```bash
    grep -A30 "'/internal/whatsapp/pubsub/" apps/whatsapp-service/src/routes/pubsubRoutes.ts
    # Found: Using wrong header check
@@ -1413,6 +1635,7 @@ When you complete an audit and apply a pattern:
 
 1. **Update CLAUDE.md** with the pattern (if not already documented)
 2. **Note the audit in commit message**
+
    ```
    Fix Pub/Sub authentication across all internal endpoints
 
