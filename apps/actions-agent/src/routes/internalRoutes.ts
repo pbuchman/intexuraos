@@ -2,6 +2,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
+import { getHandlerForType } from '../domain/usecases/actionHandlerRegistry.js';
 
 interface PubSubMessage {
   message: {
@@ -14,14 +15,21 @@ interface PubSubMessage {
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post(
-    '/internal/actions/research',
+    '/internal/actions/:actionType',
     {
       schema: {
-        operationId: 'processResearchAction',
-        summary: 'Process research action from PubSub',
+        operationId: 'processAction',
+        summary: 'Process action from PubSub',
         description:
-          'Internal endpoint for PubSub push. Receives research action events and processes them.',
+          'Internal endpoint for PubSub push. Receives action events and routes to appropriate handler.',
         tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            actionType: { type: 'string', description: 'Type of action to process' },
+          },
+          required: ['actionType'],
+        },
         body: {
           type: 'object',
           properties: {
@@ -73,10 +81,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const { actionType } = request.params as { actionType: string };
+
       // Log incoming request BEFORE auth check (for debugging)
       logIncomingRequest(request, {
-        message: 'Received request to /internal/actions/research',
+        message: `Received request to /internal/actions/${actionType}`,
         bodyPreviewLength: 500,
+        includeParams: true,
       });
 
       // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
@@ -133,32 +144,52 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Invalid event type' };
       }
 
-      if (eventData.actionType !== 'research') {
+      // Validate that URL actionType matches event actionType
+      if (eventData.actionType !== actionType) {
         request.log.warn(
           {
-            actionType: eventData.actionType,
+            urlActionType: actionType,
+            eventActionType: eventData.actionType,
             actionId: eventData.actionId,
             messageId: body.message.messageId,
           },
-          'Unexpected action type'
+          'Action type mismatch between URL and event'
         );
         reply.status(400);
-        return { error: 'Invalid action type' };
+        return { error: 'Action type mismatch' };
       }
 
-      const { handleResearchActionUseCase } = getServices();
+      // Get handler for this action type
+      const services = getServices();
+      const handler = getHandlerForType(services, actionType);
 
-      const result = await handleResearchActionUseCase.execute(eventData);
+      if (handler === undefined) {
+        request.log.warn(
+          {
+            actionType,
+            actionId: eventData.actionId,
+            messageId: body.message.messageId,
+          },
+          'No handler registered for action type'
+        );
+        reply.status(400);
+        return { error: `Unsupported action type: ${actionType}` };
+      }
+
+      const result = await handler.execute(eventData);
 
       if (!result.ok) {
-        request.log.error({ err: result.error }, 'Failed to process research action');
+        request.log.error(
+          { err: result.error, actionType, actionId: eventData.actionId },
+          'Failed to process action'
+        );
         reply.status(500);
         return { error: result.error.message };
       }
 
       request.log.info(
-        { actionId: eventData.actionId, researchId: result.value.researchId },
-        'Research action processed'
+        { actionId: eventData.actionId, actionType, researchId: result.value.researchId },
+        'Action processed successfully'
       );
 
       return {

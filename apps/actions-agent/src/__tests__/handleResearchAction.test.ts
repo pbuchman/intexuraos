@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { isOk, isErr, type Result } from '@intexuraos/common-core';
 import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import {
@@ -148,9 +148,9 @@ describe('handleResearchAction usecase', () => {
     let callCount = 0;
     const originalUpdateAction = fakeActionClient.updateAction.bind(fakeActionClient);
     fakeActionClient.updateAction = async (
-      actionId,
-      update
-    ): Promise<ReturnType<typeof originalUpdateAction>> => {
+      actionId: string,
+      update: { status: string; payload?: Record<string, unknown> }
+    ): Promise<Result<void>> => {
       callCount++;
       if (callCount === 1 && update.status === 'completed') {
         return { ok: false, error: new Error('Database unavailable') };

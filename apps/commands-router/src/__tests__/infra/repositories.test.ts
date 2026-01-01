@@ -78,6 +78,7 @@ describe('Firestore Repositories', () => {
       command.classification = {
         type: 'todo',
         confidence: 0.95,
+        reasoning: 'User wants to buy groceries',
         classifiedAt: '2025-01-01T12:00:01.000Z',
       };
       command.actionId = 'action-123';
@@ -124,6 +125,7 @@ describe('Firestore Repositories', () => {
         classification: {
           type: 'todo',
           confidence: 0.95,
+          reasoning: 'User wants to add a todo',
           classifiedAt: '2025-01-01T12:00:01.000Z',
         },
         actionId: 'action-linked',

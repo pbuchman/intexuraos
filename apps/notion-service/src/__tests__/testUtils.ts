@@ -7,7 +7,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { FakeNotionConnectionRepository, MockNotionApiAdapter } from './fakes.js';
+import { FakeConnectionRepository, MockNotionApiAdapter } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
@@ -79,7 +79,7 @@ export async function teardownJwksServer(): Promise<void> {
 
 export interface TestContext {
   app: FastifyInstance;
-  connectionRepository: FakeNotionConnectionRepository;
+  connectionRepository: FakeConnectionRepository;
   notionApi: MockNotionApiAdapter;
 }
 
@@ -92,7 +92,7 @@ export interface TestContext {
 export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
-    connectionRepository: null as unknown as FakeNotionConnectionRepository,
+    connectionRepository: null as unknown as FakeConnectionRepository,
     notionApi: null as unknown as MockNotionApiAdapter,
   };
 
@@ -105,7 +105,7 @@ export function setupTestContext(): TestContext {
   });
 
   beforeEach(async () => {
-    context.connectionRepository = new FakeNotionConnectionRepository();
+    context.connectionRepository = new FakeConnectionRepository();
     context.notionApi = new MockNotionApiAdapter();
 
     // Inject fake services for testing

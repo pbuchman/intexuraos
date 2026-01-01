@@ -35,7 +35,7 @@ const phases = [
   {
     name: 'Type & Lint Checks',
     parallel: true,
-    commands: ['typecheck', 'lint'],
+    commands: ['typecheck', 'typecheck:tests', 'lint'],
   },
   {
     name: 'Tests',

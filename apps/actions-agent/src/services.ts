@@ -14,6 +14,8 @@ export interface Services {
   researchServiceClient: ResearchServiceClient;
   notificationSender: NotificationSender;
   handleResearchActionUseCase: HandleResearchActionUseCase;
+  // Action handler registry (for dynamic routing)
+  research: HandleResearchActionUseCase;
 }
 
 export interface ServiceConfig {
@@ -41,15 +43,19 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
 
+  const handleResearchActionUseCase = createHandleResearchActionUseCase({
+    actionServiceClient,
+    researchServiceClient,
+    notificationSender,
+  });
+
   container = {
     actionServiceClient,
     researchServiceClient,
     notificationSender,
-    handleResearchActionUseCase: createHandleResearchActionUseCase({
-      actionServiceClient,
-      researchServiceClient,
-      notificationSender,
-    }),
+    handleResearchActionUseCase,
+    // Action handler registry (for dynamic routing)
+    research: handleResearchActionUseCase,
   };
 }
 

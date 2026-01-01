@@ -37,7 +37,7 @@ const SERVICES = [
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
   { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
-  { name: 'research-agent', port: 8118, color: '\x1b[94m' },
+  { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -189,7 +189,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
-  'research-agent': {
+  'actions-agent': {
     COMMANDS_ROUTER_URL: 'http://localhost:8117',
     LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',

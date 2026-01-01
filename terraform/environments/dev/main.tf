@@ -153,9 +153,9 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    research_agent = {
-      name      = "intexuraos-research-agent"
-      app_path  = "apps/research-agent"
+    actions_agent = {
+      name      = "intexuraos-actions-agent"
+      app_path  = "apps/actions-agent"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -443,9 +443,9 @@ module "pubsub_actions_research" {
   topic_name = "intexuraos-actions-research-${var.environment}"
   labels     = local.common_labels
 
-  push_endpoint              = "${module.research_agent.service_url}/internal/actions/research"
-  push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = module.research_agent.service_url
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/research"
+  push_service_account_email = module.iam.service_accounts["actions_agent"]
+  push_audience              = module.actions_agent.service_url
 
   publisher_service_accounts = {
     commands_router = module.iam.service_accounts["commands_router"]
@@ -454,7 +454,7 @@ module "pubsub_actions_research" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.research_agent,
+    module.actions_agent,
   ]
 }
 
@@ -725,7 +725,7 @@ module "api_docs_hub" {
     MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
     LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
     COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
-    RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
+    ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -738,7 +738,7 @@ module "api_docs_hub" {
     module.mobile_notifications_service,
     module.llm_orchestrator,
     module.commands_router,
-    module.research_agent,
+    module.actions_agent,
   ]
 }
 
@@ -816,21 +816,21 @@ module "commands_router" {
   ]
 }
 
-# Research Agent - Processes research action events
-module "research_agent" {
+# Actions Agent - Processes action events (research, todo, etc.)
+module "actions_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.research_agent.name
-  service_account = module.iam.service_accounts["research_agent"]
-  port            = local.services.research_agent.port
-  min_scale       = local.services.research_agent.min_scale
-  max_scale       = local.services.research_agent.max_scale
+  service_name    = local.services.actions_agent.name
+  service_account = module.iam.service_accounts["actions_agent"]
+  port            = local.services.actions_agent.port
+  min_scale       = local.services.actions_agent.min_scale
+  max_scale       = local.services.actions_agent.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/research-agent:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/actions-agent:latest"
 
   secrets = {
     AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
@@ -1001,9 +1001,9 @@ output "commands_router_url" {
   value       = module.commands_router.service_url
 }
 
-output "research_agent_url" {
-  description = "Research Agent Service URL"
-  value       = module.research_agent.service_url
+output "actions_agent_url" {
+  description = "Actions Agent Service URL"
+  value       = module.actions_agent.service_url
 }
 
 output "firestore_database" {

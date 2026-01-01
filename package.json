@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "typecheck": "node scripts/typecheck-parallel.mjs",
     "typecheck:sequential": "npm run typecheck --workspaces --if-present",
+    "typecheck:tests": "tsc --project tsconfig.tests-check.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

@@ -237,7 +237,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid action type');
+      expect(body.error).toBe('Action type mismatch');
     });
 
     it('processes valid research action and returns 200', async () => {

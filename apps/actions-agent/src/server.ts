@@ -12,7 +12,7 @@ import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import { registerRoutes } from './routes/index.js';
 
-const SERVICE_NAME = 'research-agent';
+const SERVICE_NAME = 'actions-agent';
 const SERVICE_VERSION = '0.0.1';
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {

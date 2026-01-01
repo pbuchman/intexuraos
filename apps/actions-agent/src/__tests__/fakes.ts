@@ -143,5 +143,6 @@ export function createFakeServices(deps: {
     researchServiceClient: deps.researchServiceClient,
     notificationSender: deps.notificationSender,
     handleResearchActionUseCase,
+    research: handleResearchActionUseCase,
   };
 }
