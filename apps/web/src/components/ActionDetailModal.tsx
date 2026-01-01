@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Action, Command, CommandType } from '@/types';
+import type { ResolvedActionButton } from '@/types/actionConfig';
 import {
   Bell,
   Calendar,
@@ -8,23 +9,17 @@ import {
   HelpCircle,
   Link,
   ListTodo,
-  Loader2,
-  Play,
   Search,
-  Trash2,
   X,
-  XCircle,
 } from 'lucide-react';
+import { useActionConfig } from '@/hooks/useActionConfig';
+import { ConfigurableActionButton } from './ConfigurableActionButton';
 
 interface ActionDetailModalProps {
   action: Action;
   command: Command | undefined;
   onClose: () => void;
-  onProceed: () => void;
-  onReject: () => void;
-  onDelete: () => void;
-  isUpdating: boolean;
-  isDeleting: boolean;
+  onActionSuccess: (button: ResolvedActionButton) => void;
 }
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
@@ -66,13 +61,9 @@ export function ActionDetailModal({
   action,
   command,
   onClose,
-  onProceed,
-  onReject,
-  onDelete,
-  isUpdating,
-  isDeleting,
+  onActionSuccess,
 }: ActionDetailModalProps): React.JSX.Element {
-  const isPending = action.status === 'pending';
+  const { buttons, isLoading } = useActionConfig(action);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent): void => {
@@ -160,80 +151,43 @@ export function ActionDetailModal({
             )}
           </div>
 
-          {/* Status badge for non-pending actions */}
-          {!isPending && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <span className="text-sm font-medium text-slate-600">
-                Status:{' '}
-                <span
-                  className={
-                    action.status === 'completed'
-                      ? 'text-green-600'
-                      : action.status === 'processing'
-                        ? 'text-blue-600'
-                        : action.status === 'failed' || action.status === 'rejected'
-                          ? 'text-red-600'
-                          : 'text-slate-600'
-                  }
-                >
-                  {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
-                </span>
+          {/* Status badge */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <span className="text-sm font-medium text-slate-600">
+              Status:{' '}
+              <span
+                className={
+                  action.status === 'completed'
+                    ? 'text-green-600'
+                    : action.status === 'processing'
+                      ? 'text-blue-600'
+                      : action.status === 'failed' || action.status === 'rejected'
+                        ? 'text-red-600'
+                        : 'text-slate-600'
+                }
+              >
+                {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
               </span>
-            </div>
-          )}
+            </span>
+          </div>
         </div>
 
-        {/* Actions - only for pending */}
-        {isPending && (
-          <div className="flex items-center justify-between border-t border-slate-200 p-4">
-            <button
-              onClick={onDelete}
-              disabled={isUpdating || isDeleting}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              Delete
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={onReject}
-                disabled={isUpdating || isDeleting}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-              >
-                <XCircle className="h-4 w-4" />
-                Reject
-              </button>
-              <button
-                onClick={onProceed}
-                disabled={isUpdating || isDeleting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-              >
-                {isUpdating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4" />
-                )}
-                Proceed
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Close button for non-pending */}
-        {!isPending && (
-          <div className="flex justify-end border-t border-slate-200 p-4">
-            <button
-              onClick={onClose}
-              className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
-            >
-              Close
-            </button>
-          </div>
-        )}
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
+          {isLoading ? (
+            <div className="text-sm text-slate-500">Loading actions...</div>
+          ) : (
+            buttons.map((button) => (
+              <ConfigurableActionButton
+                key={button.id}
+                button={button}
+                onSuccess={(): void => {
+                  onActionSuccess(button);
+                }}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
