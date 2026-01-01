@@ -8,9 +8,9 @@ import {
   deleteCommand,
   getActions,
   getCommands,
-  updateActionStatus,
 } from '@/services';
 import type { Action, Command, CommandType } from '@/types';
+import type { ResolvedActionButton } from '@/types/actionConfig';
 import {
   Archive,
   Bell,
@@ -25,7 +25,6 @@ import {
   Loader2,
   MessageSquare,
   Mic,
-  Play,
   RefreshCw,
   Search,
   Trash2,
@@ -178,24 +177,11 @@ function CommandItem({
 interface ActionItemProps {
   action: Action;
   onClick: () => void;
-  onProceed: (id: string) => void;
-  onReject: (id: string) => void;
   onDelete: (id: string) => void;
-  isUpdating: boolean;
   isDeleting: boolean;
 }
 
-function ActionItem({
-  action,
-  onClick,
-  onProceed,
-  onReject,
-  onDelete,
-  isUpdating,
-  isDeleting,
-}: ActionItemProps): React.JSX.Element {
-  const isPending = action.status === 'pending';
-
+function ActionItem({ action, onClick, onDelete, isDeleting }: ActionItemProps): React.JSX.Element {
   return (
     <div
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
@@ -224,55 +210,27 @@ function ActionItem({
             <span>{formatDate(action.createdAt)}</span>
           </div>
         </div>
-        {isPending && (
-          <div
-            className="flex shrink-0 gap-2"
-            onClick={(e): void => {
-              e.stopPropagation();
+        <div
+          className="flex shrink-0 gap-2"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <button
+            onClick={(): void => {
+              onDelete(action.id);
             }}
+            disabled={isDeleting}
+            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            title="Delete action"
           >
-            <button
-              onClick={(): void => {
-                onProceed(action.id);
-              }}
-              disabled={isUpdating || isDeleting}
-              className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-              title="Proceed with action"
-            >
-              {isUpdating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Proceed
-            </button>
-            <button
-              onClick={(): void => {
-                onReject(action.id);
-              }}
-              disabled={isUpdating || isDeleting}
-              className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-              title="Reject action"
-            >
-              <XCircle className="h-3.5 w-3.5" />
-              Reject
-            </button>
-            <button
-              onClick={(): void => {
-                onDelete(action.id);
-              }}
-              disabled={isUpdating || isDeleting}
-              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-              title="Delete action"
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        )}
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -280,7 +238,10 @@ function ActionItem({
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('actions');
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const stored = localStorage.getItem('inbox-active-tab');
+    return stored === 'actions' || stored === 'commands' ? stored : 'actions';
+  });
   const [commands, setCommands] = useState<Command[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [commandsCursor, setCommandsCursor] = useState<string | undefined>(undefined);
@@ -289,11 +250,14 @@ export function InboxPage(): React.JSX.Element {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [updatingActionId, setUpdatingActionId] = useState<string | null>(null);
   const [deletingActionId, setDeletingActionId] = useState<string | null>(null);
   const [deletingCommandId, setDeletingCommandId] = useState<string | null>(null);
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('inbox-active-tab', activeTab);
+  }, [activeTab]);
 
   const fetchData = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -356,34 +320,6 @@ export function InboxPage(): React.JSX.Element {
       setError(e instanceof ApiError ? e.message : 'Failed to load more actions');
     } finally {
       setIsLoadingMore(false);
-    }
-  };
-
-  const handleProceedAction = async (actionId: string): Promise<void> => {
-    try {
-      setUpdatingActionId(actionId);
-      setError(null);
-      const token = await getAccessToken();
-      const updatedAction = await updateActionStatus(token, actionId, 'processing');
-      setActions((prev) => prev.map((a) => (a.id === actionId ? updatedAction : a)));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to proceed with action');
-    } finally {
-      setUpdatingActionId(null);
-    }
-  };
-
-  const handleRejectAction = async (actionId: string): Promise<void> => {
-    try {
-      setUpdatingActionId(actionId);
-      setError(null);
-      const token = await getAccessToken();
-      const updatedAction = await updateActionStatus(token, actionId, 'rejected');
-      setActions((prev) => prev.map((a) => (a.id === actionId ? updatedAction : a)));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to reject action');
-    } finally {
-      setUpdatingActionId(null);
     }
   };
 
@@ -551,16 +487,9 @@ export function InboxPage(): React.JSX.Element {
                   onClick={(): void => {
                     setSelectedAction(action);
                   }}
-                  onProceed={(id): void => {
-                    void handleProceedAction(id);
-                  }}
-                  onReject={(id): void => {
-                    void handleRejectAction(id);
-                  }}
                   onDelete={(id): void => {
                     void handleDeleteAction(id);
                   }}
-                  isUpdating={updatingActionId === action.id}
                   isDeleting={deletingActionId === action.id}
                 />
               ))
@@ -615,18 +544,14 @@ export function InboxPage(): React.JSX.Element {
           onClose={(): void => {
             setSelectedAction(null);
           }}
-          onProceed={(): void => {
-            void handleProceedAction(selectedAction.id);
-          }}
-          onReject={(): void => {
-            void handleRejectAction(selectedAction.id);
-          }}
-          onDelete={(): void => {
-            void handleDeleteAction(selectedAction.id);
+          onActionSuccess={(button: ResolvedActionButton): void => {
+            // If action is DELETE, remove from local state
+            if (button.endpoint.method === 'DELETE') {
+              setActions((prev) => prev.filter((a) => a.id !== button.action.id));
+            }
+            // Close modal after action completes
             setSelectedAction(null);
           }}
-          isUpdating={updatingActionId === selectedAction.id}
-          isDeleting={deletingActionId === selectedAction.id}
         />
       )}
     </Layout>
