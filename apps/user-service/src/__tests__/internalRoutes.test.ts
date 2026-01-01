@@ -59,7 +59,7 @@ describe('Internal Routes', () => {
     process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
     process.env['AUTH_JWKS_URL'] = jwksUrl;
     process.env['AUTH_ISSUER'] = issuer;
-    process.env['INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();
 
@@ -78,7 +78,7 @@ describe('Internal Routes', () => {
   afterEach(async () => {
     await app.close();
     resetServices();
-    delete process.env['INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 
   describe('GET /internal/users/:uid/llm-keys', () => {
@@ -199,8 +199,8 @@ describe('Internal Routes', () => {
       expect(body.anthropic).toBeNull();
     });
 
-    it('returns 401 when INTERNAL_AUTH_TOKEN is not configured', async () => {
-      delete process.env['INTERNAL_AUTH_TOKEN'];
+    it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
       app = await buildServer();
 

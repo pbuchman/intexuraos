@@ -131,6 +131,64 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.error).toBe('Unauthorized');
     });
 
+    describe('Pub/Sub OIDC authentication', () => {
+      it('accepts Pub/Sub push with x-goog-pubsub-subscription-name header (no x-internal-auth)', async () => {
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-123',
+          phoneNumber: '+48123456789',
+          message: 'Hello from Pub/Sub',
+          correlationId: 'corr-pubsub',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-pubsub-subscription-name': 'projects/test/subscriptions/send-message-push',
+            // NOTE: NO x-internal-auth header - should still work via OIDC
+          },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        const responseBody = JSON.parse(response.body) as { success: boolean };
+        expect(responseBody.success).toBe(true);
+
+        // Verify message was sent
+        expect(messageSender.getSentMessages()).toHaveLength(1);
+        expect(messageSender.getSentMessages()[0]?.phoneNumber).toBe('+48123456789');
+      });
+
+      it('rejects direct calls without x-internal-auth or Pub/Sub header', async () => {
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-123',
+          phoneNumber: '+48123456789',
+          message: 'Hello',
+          correlationId: 'corr-123',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: {
+            'content-type': 'application/json',
+            // NO x-goog-pubsub-subscription-name
+            // NO x-internal-auth
+          },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(401);
+        const responseBody = JSON.parse(response.body) as { error: string };
+        expect(responseBody.error).toBe('Unauthorized');
+      });
+    });
+
     it('returns 400 when message data is not valid base64', async () => {
       const response = await app.inject({
         method: 'POST',

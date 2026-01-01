@@ -4,7 +4,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { validateInternalAuth } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { createDraftResearch, type LlmProvider } from '../domain/research/index.js';
 import { getServices } from '../services.js';
 import { llmProviderSchema, researchSchema } from './schemas/index.js';
@@ -63,8 +63,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/research/draft',
+        bodyPreviewLength: 500,
+      });
+
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for research/draft endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }

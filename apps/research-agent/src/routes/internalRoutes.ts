@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { validateInternalAuth } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 
@@ -73,17 +73,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions/research',
+        bodyPreviewLength: 500,
+      });
+
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn(
-          {
-            reason: authResult.reason,
-            headers: {
-              'x-internal-auth':
-                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
-            },
-          },
-          'Pub/Sub auth failed for actions/research endpoint'
+          { reason: authResult.reason },
+          'Internal auth failed for actions/research endpoint'
         );
         reply.status(401);
         return { error: 'Unauthorized' };

@@ -85,29 +85,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
       // Direct service calls use x-internal-auth header
-      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
-
-      // Diagnostic logging to debug Pub/Sub auth detection
-      request.log.info(
-        {
-          isPubSubPush,
-          hasPubSubHeader: request.headers['x-goog-pubsub-subscription-name'] !== undefined,
-          headerValue: request.headers['x-goog-pubsub-subscription-name'],
-          allGoogHeaders: Object.keys(request.headers)
-            .filter((k) => k.startsWith('x-goog-'))
-            .reduce((acc: Record<string, unknown>, k) => {
-              acc[k] = request.headers[k];
-              return acc;
-            }, {}),
-        },
-        'Pub/Sub detection check'
-      );
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
       if (isPubSubPush) {
         // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
-        // Just log that it's from Pub/Sub
         request.log.info(
-          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
           'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
       } else {
@@ -262,12 +250,25 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       // Validate auth (Pub/Sub uses OIDC, direct calls use x-internal-auth)
-      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-      if (!isPubSubPush && !validateInternalAuth(request).valid) {
-        request.log.warn('Internal auth failed for actions endpoint');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+      if (isPubSubPush) {
+        request.log.info(
+          { from: fromHeader },
+          'Authenticated Pub/Sub push request for actions endpoint'
+        );
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for actions endpoint'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
       }
 
       const { actionId } = request.params as { actionId: string };

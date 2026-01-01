@@ -131,6 +131,45 @@ Apps communicate via HTTP-based internal endpoints following the pattern:
 
 **Full documentation:** [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
 
+### Internal Endpoint Logging
+
+**RULE: ALL internal endpoints (`/internal/*`) MUST use `logIncomingRequest()` at entry.**
+
+**Pattern:**
+
+```typescript
+async (request: FastifyRequest, reply: FastifyReply) => {
+  // STEP 1: Log incoming request BEFORE auth check (for debugging)
+  logIncomingRequest(request, {
+    message: 'Received request to /internal/endpoint/path',
+    bodyPreviewLength: 200, // Adjust based on expected payload size
+    includeParams: true, // Optional: include URL params
+  });
+
+  // STEP 2: Validate authentication
+  const authResult = validateInternalAuth(request);
+  if (!authResult.valid) {
+    request.log.warn({ reason: authResult.reason }, 'Internal auth failed');
+    reply.status(401);
+    return { error: 'Unauthorized' };
+  }
+
+  // STEP 3: Process request
+  // ...
+};
+```
+
+**Why log BEFORE auth check:**
+
+- Captures diagnostic information even for failed auth attempts
+- Helps debug authorization issues (e.g., missing headers, token mismatch)
+- Safe because `logIncomingRequest()` automatically redacts sensitive headers
+
+**Sensitive headers automatically redacted:**
+
+- `x-internal-auth`, `authorization`, `x-goog-iap-jwt-assertion`
+- All fields in `SENSITIVE_FIELDS` from `@intexuraos/common-core`
+
 ### Pub/Sub Push Endpoints
 
 **Pattern:** `/internal/{service-prefix}/pubsub/{resource}`
@@ -846,9 +885,11 @@ This rule exists because excluding code from coverage is technical debt that com
 // ✅ Import domain types where needed, don't re-export from infra
 ```
 
-### Request Logging
+### Request Logging (Internal Endpoints)
 
 **Inline request logging with manual redaction** — use centralized utility:
+
+**APPLIES TO:** All `/internal/*` endpoints (service-to-service, Pub/Sub push)
 
 ```ts-example
 // ❌ Manual header redaction (error-prone, duplicated)

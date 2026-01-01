@@ -205,7 +205,7 @@ describe('Commands Router Routes', () => {
     });
 
     describe('Pub/Sub OIDC authentication', () => {
-      it('accepts Pub/Sub push with x-goog-pubsub-subscription-name header (no x-internal-auth)', async () => {
+      it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
         app = await buildServer();
 
         fakeUserServiceClient.setApiKeys('test-user', { google: 'test-gemini-key' });
@@ -215,7 +215,7 @@ describe('Commands Router Routes', () => {
           url: '/internal/router/commands',
           headers: {
             'content-type': 'application/json',
-            'x-goog-pubsub-subscription-name': 'projects/test/subscriptions/commands-ingest-push',
+            from: 'noreply@google.com',
             // NOTE: NO x-internal-auth header - should still work via OIDC
           },
           payload: {
@@ -241,7 +241,7 @@ describe('Commands Router Routes', () => {
         expect(body.commandId).toBeDefined();
       });
 
-      it('rejects direct calls without x-internal-auth or Pub/Sub header', async () => {
+      it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
         app = await buildServer();
 
         const response = await app.inject({
@@ -249,7 +249,7 @@ describe('Commands Router Routes', () => {
           url: '/internal/router/commands',
           headers: {
             'content-type': 'application/json',
-            // NO x-goog-pubsub-subscription-name
+            // NO from: noreply@google.com
             // NO x-internal-auth
           },
           payload: validMessagePayload,

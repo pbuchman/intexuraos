@@ -4,7 +4,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { validateInternalAuth } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -46,7 +46,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request).valid) {
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/notion/users/:userId/context',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for notion/users/:userId/context endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
