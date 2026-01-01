@@ -112,6 +112,8 @@ interface ResearchCardProps {
 function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[research.status];
+  const isDraft = research.status === 'draft';
+  const deleteLabel = isDraft ? 'Discard' : 'Delete';
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -159,7 +161,7 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
         {showDeleteConfirm ? (
           <div className="flex gap-2">
             <Button variant="danger" onClick={onDelete}>
-              Confirm Delete
+              Confirm {deleteLabel}
             </Button>
             <Button
               variant="secondary"
@@ -177,7 +179,7 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
             }}
             className="text-sm text-slate-400 hover:text-red-600"
           >
-            Delete
+            {deleteLabel}
           </button>
         )}
       </div>

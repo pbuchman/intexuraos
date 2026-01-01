@@ -18,6 +18,7 @@ import {
   getResearch,
   listResearches,
   type LlmProvider,
+  type Research,
   submitResearch,
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
@@ -32,6 +33,7 @@ import {
   researchIdParamsSchema,
   saveDraftBodySchema,
   saveDraftResponseSchema,
+  updateDraftBodySchema,
 } from './schemas/index.js';
 
 interface CreateResearchBody {
@@ -175,6 +177,107 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.code(201).ok({ id: draft.id });
+    }
+  );
+
+  // PATCH /research/:id
+  fastify.patch(
+    '/research/:id',
+    {
+      schema: {
+        operationId: 'updateDraft',
+        summary: 'Update draft research',
+        description: 'Update an existing draft research. Only drafts can be updated.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: updateDraftBodySchema,
+        response: {
+          200: getResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as { id: string };
+      const body = request.body as SaveDraftBody;
+      const { researchRepo, userServiceClient, createTitleGenerator } = getServices();
+
+      // Get existing research
+      const existingResult = await researchRepo.findById(id);
+      if (!existingResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', existingResult.error.message);
+      }
+      if (existingResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      const existing = existingResult.value;
+
+      // Check ownership
+      if (existing.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Not authorized to update this research');
+      }
+
+      // Can only update drafts
+      if (existing.status !== 'draft') {
+        return await reply.fail('CONFLICT', 'Can only update draft research');
+      }
+
+      // Get user's API keys to regenerate title if prompt changed
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+
+      // Regenerate title if prompt changed
+      let title = existing.title;
+      if (body.prompt !== existing.prompt) {
+        if (apiKeys.google !== undefined) {
+          const titleGenerator = createTitleGenerator(apiKeys.google);
+          const titleResult = await titleGenerator.generateTitle(body.prompt);
+          title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+        } else {
+          title = body.prompt.slice(0, 60);
+        }
+      }
+
+      // Update draft
+      const updates: Partial<Research> = {
+        title,
+        prompt: body.prompt,
+        selectedLlms: body.selectedLlms ?? existing.selectedLlms,
+        synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
+      };
+
+      if (body.externalReports !== undefined) {
+        const now = new Date().toISOString();
+        updates.externalReports = body.externalReports.map((report) => {
+          const externalReport: ExternalReport = {
+            id: crypto.randomUUID(),
+            content: report.content,
+            addedAt: now,
+          };
+          if (report.model !== undefined) {
+            externalReport.model = report.model;
+          }
+          return externalReport;
+        });
+      }
+
+      const updateResult = await researchRepo.update(id, updates);
+      if (!updateResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+      }
+
+      // Return updated research
+      const updatedResult = await researchRepo.findById(id);
+      if (!updatedResult.ok || updatedResult.value === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to retrieve updated research');
+      }
+
+      return await reply.ok(updatedResult.value);
     }
   );
 
