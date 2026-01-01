@@ -17,7 +17,7 @@ describe('createCommandsRouterClient', () => {
   describe('updateActionStatus', () => {
     it('returns ok on successful status update', async () => {
       nock(baseUrl)
-        .patch('/internal/actions/action-123/status')
+        .patch('/internal/actions/action-123')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200);
@@ -30,7 +30,7 @@ describe('createCommandsRouterClient', () => {
 
     it('sends status in request body', async () => {
       const scope = nock(baseUrl)
-        .patch('/internal/actions/action-456/status', { status: 'in_progress' })
+        .patch('/internal/actions/action-456', { status: 'in_progress' })
         .reply(200);
 
       const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
@@ -40,7 +40,7 @@ describe('createCommandsRouterClient', () => {
     });
 
     it('returns error on non-ok response', async () => {
-      nock(baseUrl).patch('/internal/actions/action-123/status').reply(500);
+      nock(baseUrl).patch('/internal/actions/action-123').reply(500);
 
       const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
       const result = await client.updateActionStatus('action-123', 'completed');
@@ -52,9 +52,7 @@ describe('createCommandsRouterClient', () => {
     });
 
     it('returns error on network failure', async () => {
-      nock(baseUrl)
-        .patch('/internal/actions/action-123/status')
-        .replyWithError('Connection refused');
+      nock(baseUrl).patch('/internal/actions/action-123').replyWithError('Connection refused');
 
       const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
       const result = await client.updateActionStatus('action-123', 'completed');
