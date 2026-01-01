@@ -412,6 +412,54 @@ module "pubsub_actions_research" {
   ]
 }
 
+# Topic for research processing (llm-orchestrator async research)
+module "pubsub_research_process" {
+  source = "../../modules/pubsub-push"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-research-process-${var.environment}"
+  labels     = local.common_labels
+
+  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-research"
+  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
+  push_audience              = module.llm_orchestrator.service_url
+  ack_deadline_seconds       = 900
+
+  publisher_service_accounts = {
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.llm_orchestrator,
+  ]
+}
+
+# Topic for LLM analytics reporting (llm-orchestrator -> user-service)
+module "pubsub_llm_analytics" {
+  source = "../../modules/pubsub-push"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-llm-analytics-${var.environment}"
+  labels     = local.common_labels
+
+  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/report-analytics"
+  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
+  push_audience              = module.llm_orchestrator.service_url
+  ack_deadline_seconds       = 300
+
+  publisher_service_accounts = {
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.llm_orchestrator,
+  ]
+}
+
 
 # -----------------------------------------------------------------------------
 # Cloud Run Services
@@ -658,6 +706,7 @@ module "llm_orchestrator" {
   min_scale       = local.services.llm_orchestrator.min_scale
   max_scale       = local.services.llm_orchestrator.max_scale
   labels          = local.common_labels
+  timeout         = "900s"
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator:latest"
 
@@ -670,7 +719,9 @@ module "llm_orchestrator" {
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
+    GOOGLE_CLOUD_PROJECT                     = var.project_id
+    INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC = "intexuraos-research-process-${var.environment}"
+    INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
   }
 
   depends_on = [
@@ -970,6 +1021,16 @@ output "pubsub_commands_ingest_topic" {
 output "pubsub_actions_research_topic" {
   description = "Pub/Sub topic for research action events"
   value       = module.pubsub_actions_research.topic_name
+}
+
+output "pubsub_research_process_topic" {
+  description = "Pub/Sub topic for research processing events"
+  value       = module.pubsub_research_process.topic_name
+}
+
+output "pubsub_llm_analytics_topic" {
+  description = "Pub/Sub topic for LLM analytics reporting"
+  value       = module.pubsub_llm_analytics.topic_name
 }
 
 output "github_wif_provider" {
