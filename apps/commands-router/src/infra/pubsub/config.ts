@@ -1,7 +1,7 @@
 import type { ActionType } from '../../domain/models/action.js';
 
 export const ACTION_TOPICS: Record<ActionType, string | null> = {
-  research: 'intexuraos-actions-research',
+  research: 'intexuraos-actions-research-dev',
   todo: null,
   note: null,
   link: null,
