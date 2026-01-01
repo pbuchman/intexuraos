@@ -1,3 +1,4 @@
+import pino from 'pino';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
@@ -30,6 +31,8 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export function initServices(config: ServiceConfig): void {
+  const logger = pino({ name: 'commands-router' });
+
   const commandRepository = createFirestoreCommandRepository();
   const actionRepository = createFirestoreActionRepository();
   const classifierFactory: ClassifierFactory = (apiKey: string) =>
@@ -52,6 +55,7 @@ export function initServices(config: ServiceConfig): void {
       classifierFactory,
       userServiceClient,
       eventPublisher,
+      logger,
     }),
   };
 }

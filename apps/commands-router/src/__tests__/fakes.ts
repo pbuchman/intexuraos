@@ -1,5 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import pino from 'pino';
 import type { Command } from '../domain/models/command.js';
 import type { Action } from '../domain/models/action.js';
 import type { CommandRepository } from '../domain/ports/commandRepository.js';
@@ -167,6 +168,8 @@ export function createFakeServices(deps: {
   eventPublisher: FakeEventPublisher;
 }): Services {
   const classifierFactory: ClassifierFactory = () => deps.classifier;
+  const logger = pino({ name: 'commands-router-test', level: 'silent' });
+
   return {
     commandRepository: deps.commandRepository,
     actionRepository: deps.actionRepository,
@@ -179,6 +182,7 @@ export function createFakeServices(deps: {
       classifierFactory,
       userServiceClient: deps.userServiceClient,
       eventPublisher: deps.eventPublisher,
+      logger,
     }),
   };
 }
