@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import {
+  Archive,
   Trash2,
   XCircle,
   Sparkles,
@@ -26,6 +27,7 @@ interface ConfigurableActionButtonProps {
 
 // Icon mapping for dynamic icon rendering
 const ICON_MAP: Record<string, LucideIcon> = {
+  Archive,
   Trash2,
   XCircle,
   Sparkles,
