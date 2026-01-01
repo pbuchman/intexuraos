@@ -9,6 +9,11 @@ resource "google_cloud_run_v2_service" "service" {
   template {
     service_account = var.service_account
 
+    # CPU is only allocated during request processing (cost optimization)
+    annotations = {
+      "run.googleapis.com/cpu-throttling" = "true"
+    }
+
     scaling {
       min_instance_count = var.min_scale
       max_instance_count = var.max_scale
@@ -77,7 +82,7 @@ resource "google_cloud_run_v2_service" "service" {
     }
 
     # Timeout for requests
-    timeout = "300s"
+    timeout = var.timeout
   }
 
   # Traffic configuration
