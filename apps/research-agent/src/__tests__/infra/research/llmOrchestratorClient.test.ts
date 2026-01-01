@@ -17,7 +17,7 @@ describe('createLlmOrchestratorClient', () => {
   describe('createDraft', () => {
     it('returns draft id on successful creation', async () => {
       nock(baseUrl)
-        .post('/internal/research/drafts')
+        .post('/internal/research/draft')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
@@ -41,7 +41,7 @@ describe('createLlmOrchestratorClient', () => {
 
     it('sends correct request body', async () => {
       const scope = nock(baseUrl)
-        .post('/internal/research/drafts', {
+        .post('/internal/research/draft', {
           userId: 'user-789',
           title: 'Test Research',
           prompt: 'Research prompt',
@@ -63,7 +63,7 @@ describe('createLlmOrchestratorClient', () => {
     });
 
     it('returns error on non-ok HTTP response', async () => {
-      nock(baseUrl).post('/internal/research/drafts').reply(500);
+      nock(baseUrl).post('/internal/research/draft').reply(500);
 
       const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
@@ -81,7 +81,7 @@ describe('createLlmOrchestratorClient', () => {
 
     it('returns error when response success is false', async () => {
       nock(baseUrl)
-        .post('/internal/research/drafts')
+        .post('/internal/research/draft')
         .reply(200, {
           success: false,
           error: { message: 'User not found' },
@@ -102,7 +102,7 @@ describe('createLlmOrchestratorClient', () => {
     });
 
     it('returns error when response data is undefined', async () => {
-      nock(baseUrl).post('/internal/research/drafts').reply(200, {
+      nock(baseUrl).post('/internal/research/draft').reply(200, {
         success: true,
       });
 
@@ -121,7 +121,7 @@ describe('createLlmOrchestratorClient', () => {
     });
 
     it('returns default error message when no error message in response', async () => {
-      nock(baseUrl).post('/internal/research/drafts').reply(200, {
+      nock(baseUrl).post('/internal/research/draft').reply(200, {
         success: false,
       });
 
@@ -140,7 +140,7 @@ describe('createLlmOrchestratorClient', () => {
     });
 
     it('returns error on network failure', async () => {
-      nock(baseUrl).post('/internal/research/drafts').replyWithError('Connection refused');
+      nock(baseUrl).post('/internal/research/draft').replyWithError('Connection refused');
 
       const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
