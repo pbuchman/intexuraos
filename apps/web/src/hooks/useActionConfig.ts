@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import type { Action } from '../types';
 import type { ActionConfig, ResolvedActionButton, UseActionConfigResult } from '../types/actionConfig';
-import { evaluateConditions } from '../services/conditionEvaluator';
+import { evaluateCondition } from '../services/conditionEvaluator';
 import { loadActionConfig, getFallbackConfig } from '../services/actionConfigLoader';
 
 /**
@@ -103,8 +103,8 @@ function resolveButtons(action: Action, config: ActionConfig): ResolvedActionBut
       continue;
     }
 
-    // Evaluate conditions (empty array = always true)
-    const conditionsMet = mapping.conditions.length === 0 || evaluateConditions(action, mapping.conditions);
+    // Evaluate when condition (undefined = always true)
+    const conditionsMet = evaluateCondition(action, mapping.when);
 
     if (conditionsMet) {
       resolved.push({
