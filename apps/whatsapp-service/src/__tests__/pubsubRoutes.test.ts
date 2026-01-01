@@ -3,7 +3,7 @@
  * POST /internal/whatsapp/pubsub/send-message
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
