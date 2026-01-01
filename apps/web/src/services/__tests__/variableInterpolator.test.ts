@@ -30,19 +30,19 @@ describe('interpolateVariables', () => {
     it('interpolates simple field placeholder', () => {
       const template = { title: '{{action.title}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.title).toBe('Test Title');
+      expect(result['title']).toBe('Test Title');
     });
 
     it('interpolates nested field placeholder', () => {
       const template = { prompt: '{{action.payload.prompt}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.prompt).toBe('Test prompt');
+      expect(result['prompt']).toBe('Test prompt');
     });
 
     it('interpolates deeply nested field', () => {
       const template = { value: '{{action.payload.nested.value}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.value).toBe('nested value');
+      expect(result['value']).toBe('nested value');
     });
 
     it('interpolates multiple fields', () => {
@@ -51,8 +51,8 @@ describe('interpolateVariables', () => {
         prompt: '{{action.payload.prompt}}',
       };
       const result = interpolateVariables(template, mockAction);
-      expect(result.title).toBe('Test Title');
-      expect(result.prompt).toBe('Test prompt');
+      expect(result['title']).toBe('Test Title');
+      expect(result['prompt']).toBe('Test prompt');
     });
   });
 
@@ -60,19 +60,19 @@ describe('interpolateVariables', () => {
     it('interpolates placeholder in middle of string', () => {
       const template = { text: 'Title: {{action.title}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.text).toBe('Title: Test Title');
+      expect(result['text']).toBe('Title: Test Title');
     });
 
     it('interpolates multiple placeholders in same string', () => {
       const template = { text: '{{action.title}} - {{action.payload.prompt}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.text).toBe('Test Title - Test prompt');
+      expect(result['text']).toBe('Test Title - Test prompt');
     });
 
     it('interpolates placeholder with prefix and suffix', () => {
       const template = { text: 'Prefix {{action.title}} suffix' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.text).toBe('Prefix Test Title suffix');
+      expect(result['text']).toBe('Prefix Test Title suffix');
     });
   });
 
@@ -80,14 +80,14 @@ describe('interpolateVariables', () => {
     it('converts numbers to strings in interpolation', () => {
       const template = { conf: 'Confidence: {{action.confidence}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.conf).toBe('Confidence: 0.85');
+      expect(result['conf']).toBe('Confidence: 0.85');
     });
 
     it('keeps non-string values as-is when not interpolating', () => {
       const template = { count: 42, enabled: true };
       const result = interpolateVariables(template, mockAction);
-      expect(result.count).toBe(42);
-      expect(result.enabled).toBe(true);
+      expect(result['count']).toBe(42);
+      expect(result['enabled']).toBe(true);
     });
   });
 
@@ -100,7 +100,7 @@ describe('interpolateVariables', () => {
         },
       };
       const result = interpolateVariables(template, mockAction);
-      expect(result.metadata).toEqual({
+      expect(result['metadata']).toEqual({
         title: 'Test Title',
         prompt: 'Test prompt',
       });
@@ -111,7 +111,7 @@ describe('interpolateVariables', () => {
         items: ['{{action.title}}', '{{action.payload.prompt}}', 'static value'],
       };
       const result = interpolateVariables(template, mockAction);
-      expect(result.items).toEqual(['Test Title', 'Test prompt', 'static value']);
+      expect(result['items']).toEqual(['Test Title', 'Test prompt', 'static value']);
     });
 
     it('interpolates in deeply nested structures', () => {
@@ -124,7 +124,7 @@ describe('interpolateVariables', () => {
         },
       };
       const result = interpolateVariables(template, mockAction);
-      expect(result.data).toEqual({
+      expect(result['data']).toEqual({
         items: [
           { name: 'Test Title' },
           { name: 'Test prompt' },
@@ -137,32 +137,32 @@ describe('interpolateVariables', () => {
     it('handles non-existent fields gracefully', () => {
       const template = { value: '{{action.nonexistent}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.value).toBe('');
+      expect(result['value']).toBe('');
     });
 
     it('handles null values', () => {
       const actionWithNull = { ...mockAction, payload: { ...mockAction.payload, nullValue: null } };
       const template = { value: '{{action.payload.nullValue}}' };
       const result = interpolateVariables(template, actionWithNull);
-      expect(result.value).toBe('');
+      expect(result['value']).toBe('');
     });
 
     it('handles undefined values', () => {
       const template = { value: '{{action.payload.undefined}}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.value).toBe('');
+      expect(result['value']).toBe('');
     });
 
     it('handles whitespace in placeholders', () => {
       const template = { value: '{{ action.title }}' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.value).toBe('Test Title');
+      expect(result['value']).toBe('Test Title');
     });
 
     it('preserves strings without placeholders', () => {
       const template = { static: 'No placeholders here' };
       const result = interpolateVariables(template, mockAction);
-      expect(result.static).toBe('No placeholders here');
+      expect(result['static']).toBe('No placeholders here');
     });
 
     it('handles empty template', () => {
