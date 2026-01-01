@@ -9,13 +9,16 @@ import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/noti
 import { createResearchEventPublisher, type ResearchEventPublisher } from './infra/pubsub/index.js';
 import {
   createUserServiceClient,
-  type DecryptedApiKeys,
+  type DecryptedApiKeys as InfraDecryptedApiKeys,
   type UserServiceClient,
 } from './infra/user/index.js';
-import { getErrorMessage } from '@intexuraos/common-core';
+
+export type { DecryptedApiKeys } from './infra/user/index.js';
 import {
+  type LlmProvider,
+  type LlmResearchProvider,
+  type LlmSynthesisProvider,
   type NotificationSender,
-  processResearch,
   type ResearchRepository,
   type TitleGenerator,
 } from './domain/research/index.js';
@@ -26,11 +29,12 @@ import {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   generateId: () => string;
-  processResearchAsync: (researchId: string) => void;
   researchEventPublisher: ResearchEventPublisher;
   userServiceClient: UserServiceClient;
-  createTitleGenerator: (apiKey: string) => TitleGenerator;
   notificationSender: NotificationSender;
+  createLlmProviders: (apiKeys: InfraDecryptedApiKeys) => Record<LlmProvider, LlmResearchProvider>;
+  createSynthesizer: (provider: LlmProvider, apiKey: string) => LlmSynthesisProvider;
+  createTitleGenerator: (apiKey: string) => TitleGenerator;
 }
 
 let container: ServiceContainer | null = null;
@@ -97,7 +101,6 @@ function createNotificationSender(userServiceClient: UserServiceClient): Notific
 export function initializeServices(): void {
   const researchRepo = new FirestoreResearchRepository();
 
-  // Create user service client for fetching API keys and phone numbers
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
@@ -110,73 +113,14 @@ export function initializeServices(): void {
     topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
   });
 
-  /**
-   * Process research asynchronously (fire and forget).
-   * @deprecated Use researchEventPublisher.publishProcessResearch() instead.
-   */
-  const processResearchAsync = (researchId: string): void => {
-    void (async (): Promise<void> => {
-      try {
-        // Get research to find user ID and synthesis LLM selection
-        const researchResult = await researchRepo.findById(researchId);
-        if (!researchResult.ok || researchResult.value === null) {
-          return;
-        }
-        const research = researchResult.value;
-
-        // Get user's API keys
-        const apiKeysResult = await userServiceClient.getApiKeys(research.userId);
-        const apiKeys: DecryptedApiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
-
-        // Get the API key for the selected synthesis LLM
-        const synthesisProvider = research.synthesisLlm;
-        const synthesisKey = apiKeys[synthesisProvider];
-        if (synthesisKey === undefined) {
-          await researchRepo.update(researchId, {
-            status: 'failed',
-            synthesisError: `API key required for synthesis with ${synthesisProvider}`,
-          });
-          return;
-        }
-
-        // Create LLM providers with user's keys
-        const llmProviders = createLlmProviders(apiKeys);
-        const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
-
-        // Build deps for processing
-        const deps: Parameters<typeof processResearch>[1] = {
-          researchRepo,
-          llmProviders,
-          synthesizer,
-          notificationSender,
-          reportLlmSuccess: (provider): void => {
-            void userServiceClient.reportLlmSuccess(research.userId, provider);
-          },
-        };
-
-        // Use Gemini for title generation if available (cheapest option)
-        if (apiKeys.google !== undefined) {
-          deps.titleGenerator = createTitleGenerator(apiKeys.google);
-        }
-
-        // Process research
-        await processResearch(researchId, deps);
-      } catch (error) {
-        /* Fire-and-forget: log error but don't throw */
-        const message = getErrorMessage(error);
-        // eslint-disable-next-line no-console
-        console.error('Error processing research:', message);
-      }
-    })();
-  };
-
   container = {
     researchRepo,
     generateId: (): string => crypto.randomUUID(),
-    processResearchAsync,
     researchEventPublisher,
     userServiceClient,
-    createTitleGenerator,
     notificationSender,
+    createLlmProviders,
+    createSynthesizer,
+    createTitleGenerator,
   };
 }

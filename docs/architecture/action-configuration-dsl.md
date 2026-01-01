@@ -8,6 +8,7 @@
 The action configuration system provides a declarative way to define action buttons for the IntexuraOS frontend. Actions are triggered on user interaction and execute API calls to backend services.
 
 **Key Features:**
+
 - Tree-based logical conditions (AND/OR/NOT)
 - Variable interpolation from action data
 - Type-safe predicate evaluation (no eval())
@@ -32,10 +33,10 @@ types:
 
 ### Top-Level Keys
 
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| `actions` | Object | Yes | Global action definitions (button behavior) |
-| `types` | Object | Yes | Mappings from action types to available actions |
+| Key       | Type   | Required | Description                                     |
+| --------- | ------ | -------- | ----------------------------------------------- |
+| `actions` | Object | Yes      | Global action definitions (button behavior)     |
+| `types`   | Object | Yes      | Mappings from action types to available actions |
 
 ---
 
@@ -51,7 +52,7 @@ actions:
     endpoint:
       path: /api/endpoint
       method: GET|POST|PATCH|DELETE
-      body:  # Optional
+      body: # Optional
         key: value
     ui:
       label: Button Text
@@ -65,16 +66,18 @@ actions:
 
 Defines the HTTP request to execute.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `path` | String | Yes | API endpoint path (supports `{actionId}` placeholder) |
-| `method` | String | Yes | HTTP method (`GET`, `POST`, `PATCH`, `DELETE`) |
-| `body` | Object | No | Request body (supports variable interpolation) |
+| Field    | Type   | Required | Description                                           |
+| -------- | ------ | -------- | ----------------------------------------------------- |
+| `path`   | String | Yes      | API endpoint path (supports `{actionId}` placeholder) |
+| `method` | String | Yes      | HTTP method (`GET`, `POST`, `PATCH`, `DELETE`)        |
+| `body`   | Object | No       | Request body (supports variable interpolation)        |
 
 **Path Placeholders:**
+
 - `{actionId}` - Replaced with actual action ID at runtime
 
 **Example:**
+
 ```yaml
 endpoint:
   path: /router/actions/{actionId}
@@ -87,18 +90,20 @@ endpoint:
 
 Defines the button appearance.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `label` | String | Yes | Button text displayed to user |
-| `variant` | String | Yes | Button styling (`primary`, `secondary`, `danger`) |
-| `icon` | String | Yes | Lucide icon name (e.g., `Play`, `Trash2`, `XCircle`) |
+| Field     | Type   | Required | Description                                          |
+| --------- | ------ | -------- | ---------------------------------------------------- |
+| `label`   | String | Yes      | Button text displayed to user                        |
+| `variant` | String | Yes      | Button styling (`primary`, `secondary`, `danger`)    |
+| `icon`    | String | Yes      | Lucide icon name (e.g., `Play`, `Trash2`, `XCircle`) |
 
 **Variants:**
+
 - `primary` - Blue background, white text (CTA)
 - `secondary` - Gray text, hover background (neutral)
 - `danger` - Red text on hover (destructive)
 
 **Example:**
+
 ```yaml
 ui:
   label: Approve & Start
@@ -116,24 +121,24 @@ Request bodies support variable interpolation using `{{variable}}` syntax.
 
 ```yaml
 body:
-  field: "{{action.fieldName}}"
-  nested: "{{action.payload.nestedField}}"
+  field: '{{action.fieldName}}'
+  nested: '{{action.payload.nestedField}}'
 ```
 
 ### Available Variables
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `{{action.id}}` | String | Action ID |
-| `{{action.userId}}` | String | User ID |
-| `{{action.commandId}}` | String | Command ID |
-| `{{action.type}}` | String | Action type (e.g., `research`, `todo`) |
-| `{{action.confidence}}` | Number | Classification confidence (0-1) |
-| `{{action.title}}` | String | Action title |
-| `{{action.status}}` | String | Action status (`pending`, `processing`, etc.) |
-| `{{action.payload.*}}` | Any | Payload field (dot-notation supported) |
-| `{{action.createdAt}}` | String | ISO timestamp |
-| `{{action.updatedAt}}` | String | ISO timestamp |
+| Variable                | Type   | Description                                   |
+| ----------------------- | ------ | --------------------------------------------- |
+| `{{action.id}}`         | String | Action ID                                     |
+| `{{action.userId}}`     | String | User ID                                       |
+| `{{action.commandId}}`  | String | Command ID                                    |
+| `{{action.type}}`       | String | Action type (e.g., `research`, `todo`)        |
+| `{{action.confidence}}` | Number | Classification confidence (0-1)               |
+| `{{action.title}}`      | String | Action title                                  |
+| `{{action.status}}`     | String | Action status (`pending`, `processing`, etc.) |
+| `{{action.payload.*}}`  | Any    | Payload field (dot-notation supported)        |
+| `{{action.createdAt}}`  | String | ISO timestamp                                 |
+| `{{action.updatedAt}}`  | String | ISO timestamp                                 |
 
 ### Dot-Notation
 
@@ -141,8 +146,8 @@ Access nested fields using dot notation:
 
 ```yaml
 body:
-  prompt: "{{action.payload.prompt}}"
-  name: "{{action.payload.metadata.name}}"
+  prompt: '{{action.payload.prompt}}'
+  name: '{{action.payload.metadata.name}}'
 ```
 
 ### String Interpolation
@@ -151,7 +156,7 @@ Variables can be embedded in strings:
 
 ```yaml
 body:
-  message: "Processing action {{action.id}} with confidence {{action.confidence}}"
+  message: 'Processing action {{action.id}} with confidence {{action.confidence}}'
 ```
 
 ### Type Conversion
@@ -166,10 +171,10 @@ endpoint:
   path: /llm/research/draft
   method: POST
   body:
-    prompt: "{{action.payload.prompt}}"
+    prompt: '{{action.payload.prompt}}'
     metadata:
-      actionId: "{{action.id}}"
-      confidence: "{{action.confidence}}"
+      actionId: '{{action.id}}'
+      confidence: '{{action.confidence}}'
 ```
 
 ---
@@ -185,15 +190,15 @@ types:
   action-type:
     actions:
       - action: action-id
-        when: { ... }  # Optional condition
+        when: { ... } # Optional condition
 ```
 
 ### Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `action` | String | Yes | Reference to action ID from `actions` section |
-| `when` | ConditionTree | No | Logical condition (if omitted, always true) |
+| Field    | Type          | Required | Description                                   |
+| -------- | ------------- | -------- | --------------------------------------------- |
+| `action` | String        | Yes      | Reference to action ID from `actions` section |
+| `when`   | ConditionTree | No       | Logical condition (if omitted, always true)   |
 
 ### Example
 
@@ -223,6 +228,7 @@ Conditions control **when** an action button is visible.
 ### Overview
 
 Conditions are evaluated as logical trees supporting:
+
 - **Predicates** - Compare action fields to values
 - **AND logic** - All conditions must be true (`all`)
 - **OR logic** - At least one condition must be true (`any`)
@@ -239,29 +245,30 @@ when:
 
 #### Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `field` | String | Yes | Dot-notation path to action field |
-| `op` | String | Yes | Comparison operator (see below) |
-| `value` | Any | No* | Value to compare against (*required except for `exists`) |
+| Field   | Type   | Required | Description                                               |
+| ------- | ------ | -------- | --------------------------------------------------------- |
+| `field` | String | Yes      | Dot-notation path to action field                         |
+| `op`    | String | Yes      | Comparison operator (see below)                           |
+| `value` | Any    | No\*     | Value to compare against (\*required except for `exists`) |
 
 #### Operators
 
-| Operator | Description | Example | Value Type |
-|----------|-------------|---------|------------|
-| `eq` | Equality (`===`) | `status == 'pending'` | Any |
-| `neq` | Not equal (`!==`) | `status != 'completed'` | Any |
-| `gt` | Greater than | `confidence > 0.8` | Number |
-| `gte` | Greater than or equal | `confidence >= 0.8` | Number |
-| `lt` | Less than | `confidence < 0.5` | Number |
-| `lte` | Less than or equal | `confidence <= 0.5` | Number |
-| `in` | Value in array | `status in ['pending', 'processing']` | Array |
-| `nin` | Value not in array | `status not in ['failed', 'rejected']` | Array |
-| `exists` | Field exists (not null/undefined) | `payload.prompt exists` | Boolean (optional) |
+| Operator | Description                       | Example                                | Value Type         |
+| -------- | --------------------------------- | -------------------------------------- | ------------------ |
+| `eq`     | Equality (`===`)                  | `status == 'pending'`                  | Any                |
+| `neq`    | Not equal (`!==`)                 | `status != 'completed'`                | Any                |
+| `gt`     | Greater than                      | `confidence > 0.8`                     | Number             |
+| `gte`    | Greater than or equal             | `confidence >= 0.8`                    | Number             |
+| `lt`     | Less than                         | `confidence < 0.5`                     | Number             |
+| `lte`    | Less than or equal                | `confidence <= 0.5`                    | Number             |
+| `in`     | Value in array                    | `status in ['pending', 'processing']`  | Array              |
+| `nin`    | Value not in array                | `status not in ['failed', 'rejected']` | Array              |
+| `exists` | Field exists (not null/undefined) | `payload.prompt exists`                | Boolean (optional) |
 
 #### Examples
 
 **Equality:**
+
 ```yaml
 when:
   field: status
@@ -270,6 +277,7 @@ when:
 ```
 
 **Comparison:**
+
 ```yaml
 when:
   field: confidence
@@ -278,6 +286,7 @@ when:
 ```
 
 **Membership:**
+
 ```yaml
 when:
   field: status
@@ -286,6 +295,7 @@ when:
 ```
 
 **Existence:**
+
 ```yaml
 # Check field exists
 when:
@@ -348,6 +358,7 @@ when:
 Conditions can be nested to arbitrary depth.
 
 **Complex Example:**
+
 ```yaml
 when:
   all:
@@ -368,6 +379,7 @@ when:
 ```
 
 **Logical interpretation:**
+
 ```
 type == 'research' AND (
   status == 'pending' OR (
@@ -479,11 +491,11 @@ actions:
       path: /llm/research/draft
       method: POST
       body:
-        prompt: "{{action.payload.prompt}}"
+        prompt: '{{action.payload.prompt}}'
         metadata:
           source: action
-          actionId: "{{action.id}}"
-          confidence: "{{action.confidence}}"
+          actionId: '{{action.id}}'
+          confidence: '{{action.confidence}}'
     ui:
       label: Save as Draft
       variant: secondary
@@ -506,12 +518,14 @@ types:
 ### 1. Action Naming
 
 Use descriptive, action-oriented IDs:
+
 - ✅ `approve-research`, `reject-proposal`, `create-draft`
 - ❌ `button1`, `action-a`, `thing`
 
 ### 2. Condition Complexity
 
 Keep conditions readable:
+
 - ✅ Nest logically related conditions
 - ✅ Use meaningful field names
 - ❌ Don't nest more than 3 levels deep
@@ -520,6 +534,7 @@ Keep conditions readable:
 ### 3. Variable Interpolation
 
 Validate required fields exist:
+
 ```yaml
 # Good - checks field exists before using it
 when:
@@ -528,12 +543,13 @@ when:
 
 # Then safely interpolate
 body:
-  prompt: "{{action.payload.prompt}}"
+  prompt: '{{action.payload.prompt}}'
 ```
 
 ### 4. Type Safety
 
 Use appropriate operators for data types:
+
 - Strings: `eq`, `neq`, `in`, `nin`, `exists`
 - Numbers: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
 - Mixed: `exists`
@@ -541,18 +557,20 @@ Use appropriate operators for data types:
 ### 5. Button Order
 
 Actions are displayed in the order defined in `types.<type>.actions`:
+
 ```yaml
 types:
   research:
     actions:
-      - action: primary-action    # Appears first (left)
-      - action: secondary-action  # Appears second
-      - action: danger-action     # Appears last (right)
+      - action: primary-action # Appears first (left)
+      - action: secondary-action # Appears second
+      - action: danger-action # Appears last (right)
 ```
 
 ### 6. Status Transitions
 
 Document valid status transitions:
+
 ```yaml
 # Valid transitions:
 # pending -> processing (approve)
@@ -564,6 +582,7 @@ Document valid status transitions:
 ### 7. Fallback Behavior
 
 If no type mapping exists or no conditions match:
+
 - Frontend shows default delete button (if configured in fallback)
 - Or shows no action buttons
 
@@ -572,6 +591,7 @@ If no type mapping exists or no conditions match:
 ## Validation
 
 The configuration loader validates:
+
 1. ✅ YAML syntax is valid
 2. ✅ `actions` and `types` sections exist
 3. ✅ Each action has `endpoint` and `ui` sections
@@ -580,6 +600,7 @@ The configuration loader validates:
 6. ❌ **NOT validated:** Variable interpolation (runtime check)
 
 **Runtime Errors:**
+
 - Invalid condition structure → condition evaluates to `false`
 - Missing interpolated field → empty string (`""`)
 - Undefined action reference → button not rendered (warning logged)
@@ -591,6 +612,7 @@ The configuration loader validates:
 ### From String Conditions (Old Format)
 
 **Old:**
+
 ```yaml
 types:
   research:
@@ -598,10 +620,11 @@ types:
       - action: approve
         conditions:
           - "status == 'pending'"
-          - "confidence > 0.8"
+          - 'confidence > 0.8'
 ```
 
 **New:**
+
 ```yaml
 types:
   research:
@@ -614,6 +637,7 @@ types:
 ```
 
 **Migration Steps:**
+
 1. Replace `conditions` with `when`
 2. Convert each string condition to a predicate
 3. Wrap multiple conditions in `all` (implicit AND)
@@ -626,6 +650,7 @@ types:
 ### Button Not Showing
 
 **Check:**
+
 1. Action is defined in `actions` section
 2. Type mapping exists for action type
 3. Condition evaluates to `true` (check field values)
@@ -634,6 +659,7 @@ types:
 ### Variable Interpolation Failed
 
 **Check:**
+
 1. Field path is correct (use dot notation for nesting)
 2. Field exists in action payload
 3. Syntax is `{{action.field}}` (not `{action.field}`)
@@ -641,6 +667,7 @@ types:
 ### Condition Never True
 
 **Check:**
+
 1. Operator is correct for data type (string vs number)
 2. Value matches expected type (e.g., `0.8` not `"0.8"`)
 3. Field path is correct
@@ -657,10 +684,10 @@ interface Action {
   id: string;
   userId: string;
   commandId: string;
-  type: CommandType;  // 'research' | 'todo' | 'note' | 'link' | 'calendar' | 'reminder' | 'unclassified'
+  type: CommandType; // 'research' | 'todo' | 'note' | 'link' | 'calendar' | 'reminder' | 'unclassified'
   confidence: number;
   title: string;
-  status: ActionStatus;  // 'pending' | 'processing' | 'completed' | 'failed' | 'rejected'
+  status: ActionStatus; // 'pending' | 'processing' | 'completed' | 'failed' | 'rejected'
   payload: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

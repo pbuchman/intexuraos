@@ -8,7 +8,7 @@ import {
   WebhookEventRepositoryAdapter,
 } from './adapters.js';
 import { GcsMediaStorageAdapter } from './infra/gcs/index.js';
-import { GcpPubSubPublisher } from './infra/pubsub/index.js';
+import { GcpPubSubPublisher, type GcpPubSubPublisherConfig } from './infra/pubsub/index.js';
 import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
@@ -34,9 +34,28 @@ export interface ServiceConfig {
   gcpProjectId: string;
   mediaCleanupTopic: string;
   commandsIngestTopic?: string;
+  webhookProcessTopic?: string;
+  transcriptionTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
   speechmaticsApiKey: string;
+}
+
+function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
+  const pubsubConfig: GcpPubSubPublisherConfig = {
+    projectId: config.gcpProjectId,
+    mediaCleanupTopic: config.mediaCleanupTopic,
+  };
+  if (config.commandsIngestTopic !== undefined) {
+    pubsubConfig.commandsIngestTopic = config.commandsIngestTopic;
+  }
+  if (config.webhookProcessTopic !== undefined) {
+    pubsubConfig.webhookProcessTopic = config.webhookProcessTopic;
+  }
+  if (config.transcriptionTopic !== undefined) {
+    pubsubConfig.transcriptionTopic = config.transcriptionTopic;
+  }
+  return pubsubConfig;
 }
 
 /**
@@ -85,11 +104,7 @@ export function getServices(): ServiceContainer {
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
-    eventPublisher: new GcpPubSubPublisher(
-      serviceConfig.gcpProjectId,
-      serviceConfig.mediaCleanupTopic,
-      serviceConfig.commandsIngestTopic
-    ),
+    eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig.whatsappAccessToken,
       serviceConfig.whatsappPhoneNumberId

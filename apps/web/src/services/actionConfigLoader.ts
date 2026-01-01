@@ -59,7 +59,9 @@ async function fetchAndParseConfig(): Promise<ActionConfig> {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch action config: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch action config: ${String(response.status)} ${response.statusText}`
+    );
   }
 
   const yamlText = await response.text();
@@ -74,64 +76,72 @@ async function fetchAndParseConfig(): Promise<ActionConfig> {
 
 /**
  * Validates the structure of the loaded configuration.
+ * Uses `unknown` type to allow runtime type checking on parsed YAML.
  *
  * @param config - Configuration to validate
  * @throws Error if validation fails
  */
 function validateConfig(config: ActionConfig): void {
-  if (config.actions === null || typeof config.actions !== 'object') {
+  const c = config as unknown as Record<string, unknown>;
+  if (c['actions'] === null || typeof c['actions'] !== 'object') {
     throw new Error('Invalid config: missing or invalid "actions" section');
   }
 
-  if (config.types === null || typeof config.types !== 'object') {
+  if (c['types'] === null || typeof c['types'] !== 'object') {
     throw new Error('Invalid config: missing or invalid "types" section');
   }
 
   // Validate each action definition
-  for (const [actionId, action] of Object.entries(config.actions)) {
-    if (action.endpoint === null || typeof action.endpoint !== 'object') {
+  const actions = c['actions'] as Record<string, Record<string, unknown>>;
+  for (const [actionId, action] of Object.entries(actions)) {
+    if (action['endpoint'] === null || typeof action['endpoint'] !== 'object') {
       throw new Error(`Invalid action "${actionId}": missing endpoint`);
     }
 
-    if (typeof action.endpoint.path !== 'string') {
+    const endpoint = action['endpoint'] as Record<string, unknown>;
+    if (typeof endpoint['path'] !== 'string') {
       throw new Error(`Invalid action "${actionId}": endpoint.path must be string`);
     }
 
-    if (typeof action.endpoint.method !== 'string') {
+    if (typeof endpoint['method'] !== 'string') {
       throw new Error(`Invalid action "${actionId}": endpoint.method must be string`);
     }
 
-    if (action.ui === null || typeof action.ui !== 'object') {
+    if (action['ui'] === null || typeof action['ui'] !== 'object') {
       throw new Error(`Invalid action "${actionId}": missing ui`);
     }
 
-    if (typeof action.ui.label !== 'string') {
+    const ui = action['ui'] as Record<string, unknown>;
+    if (typeof ui['label'] !== 'string') {
       throw new Error(`Invalid action "${actionId}": ui.label must be string`);
     }
 
-    if (typeof action.ui.variant !== 'string') {
+    if (typeof ui['variant'] !== 'string') {
       throw new Error(`Invalid action "${actionId}": ui.variant must be string`);
     }
 
-    if (typeof action.ui.icon !== 'string') {
+    if (typeof ui['icon'] !== 'string') {
       throw new Error(`Invalid action "${actionId}": ui.icon must be string`);
     }
   }
 
   // Validate type mappings
-  for (const [typeName, typeConfig] of Object.entries(config.types)) {
-    if (!Array.isArray(typeConfig.actions)) {
+  const types = c['types'] as Record<string, Record<string, unknown>>;
+  for (const [typeName, typeConfig] of Object.entries(types)) {
+    if (!Array.isArray(typeConfig['actions'])) {
       throw new Error(`Invalid type "${typeName}": actions must be array`);
     }
 
-    for (const mapping of typeConfig.actions) {
+    for (const mapping of typeConfig['actions'] as { action?: unknown }[]) {
       if (typeof mapping.action !== 'string') {
         throw new Error(`Invalid type "${typeName}": action reference must be string`);
       }
 
       // Verify action exists
-      if (config.actions[mapping.action] === undefined) {
-        throw new Error(`Invalid type "${typeName}": references undefined action "${mapping.action}"`);
+      if (actions[mapping.action] === undefined) {
+        throw new Error(
+          `Invalid type "${typeName}": references undefined action "${mapping.action}"`
+        );
       }
     }
   }

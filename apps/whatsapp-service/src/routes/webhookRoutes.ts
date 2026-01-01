@@ -15,12 +15,7 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
-import {
-  ExtractLinkPreviewsUseCase,
-  ProcessAudioMessageUseCase,
-  ProcessImageMessageUseCase,
-  TranscribeAudioUseCase,
-} from '../domain/inbox/index.js';
+import { ProcessAudioMessageUseCase, ProcessImageMessageUseCase } from '../domain/inbox/index.js';
 import {
   extractAudioMedia,
   extractDisplayPhoneNumber,
@@ -236,11 +231,12 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         }
 
         // Persist webhook event with initial PENDING status
-        const { webhookEventRepository } = getServices();
+        const { webhookEventRepository, eventPublisher } = getServices();
+        const receivedAt = new Date().toISOString();
         const saveResult = await webhookEventRepository.saveEvent({
           payload: request.body,
           signatureValid: true,
-          receivedAt: new Date().toISOString(),
+          receivedAt,
           phoneNumberId,
           status: 'PENDING',
         });
@@ -252,8 +248,14 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         const savedEvent = saveResult.value;
 
-        // Process webhook asynchronously (don't block the response)
-        void processWebhookAsync(request, savedEvent, config);
+        // Publish to Pub/Sub for async processing
+        await eventPublisher.publishWebhookProcess({
+          type: 'whatsapp.webhook.process',
+          eventId: savedEvent.id,
+          payload: JSON.stringify(request.body),
+          phoneNumberId,
+          receivedAt,
+        });
 
         return await reply.ok({ received: true });
       }
@@ -264,10 +266,13 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 }
 
 /**
- * Process webhook asynchronously after returning 200 to Meta.
+ * Process webhook event synchronously.
  * Validates user mapping and routes to appropriate usecase.
+ *
+ * Exported for use by Pub/Sub endpoint /internal/whatsapp/pubsub/process-webhook.
+ * TODO: Refactor to accept payload directly (not FastifyRequest) for cleaner Pub/Sub integration.
  */
-async function processWebhookAsync(
+export async function processWebhookEvent(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
   config: Config
@@ -539,7 +544,8 @@ async function handleImageMessage(
 }
 
 /**
- * Handle audio message using ProcessAudioMessageUseCase and TranscribeAudioUseCase.
+ * Handle audio message using ProcessAudioMessageUseCase.
+ * Transcription is triggered via Pub/Sub event.
  */
 async function handleAudioMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
@@ -578,30 +584,19 @@ async function handleAudioMessage(
   );
 
   if (result.ok) {
-    // Start transcription in background (fire-and-forget)
-    const transcribeUsecase = new TranscribeAudioUseCase({
-      messageRepository: services.messageRepository,
-      mediaStorage: services.mediaStorage,
-      transcriptionService: services.transcriptionService,
-      whatsappCloudApi: services.whatsappCloudApi,
-      eventPublisher: services.eventPublisher,
-    });
-
-    // Get first phone number ID for sending transcription results
+    // Publish transcription event to Pub/Sub for async processing
     const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
     if (transcriptionPhoneNumberId !== undefined) {
-      void transcribeUsecase.execute(
-        {
-          messageId: result.value.messageId,
-          userId,
-          gcsPath: result.value.gcsPath,
-          mimeType: result.value.mimeType,
-          userPhoneNumber: fromNumber,
-          originalWaMessageId: waMessageId,
-          phoneNumberId: transcriptionPhoneNumberId,
-        },
-        request.log
-      );
+      await services.eventPublisher.publishTranscribeAudio({
+        type: 'whatsapp.audio.transcribe',
+        messageId: result.value.messageId,
+        userId,
+        gcsPath: result.value.gcsPath,
+        mimeType: result.value.mimeType,
+        userPhoneNumber: fromNumber,
+        originalWaMessageId: waMessageId,
+        phoneNumberId: transcriptionPhoneNumberId,
+      });
     }
 
     await sendConfirmationMessage(request, savedEvent, fromNumber, 'audio');
@@ -673,14 +668,14 @@ async function handleTextMessage(
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
 
-  // Publish command ingest event for text message (fire-and-forget)
+  // Publish command ingest event for text message
   const services = getServices();
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },
     'Publishing command.ingest event'
   );
 
-  void services.eventPublisher.publishCommandIngest({
+  await services.eventPublisher.publishCommandIngest({
     type: 'command.ingest',
     userId,
     sourceType: 'whatsapp_text',
@@ -689,20 +684,13 @@ async function handleTextMessage(
     timestamp,
   });
 
-  // Start link preview extraction in background (fire-and-forget)
-  const extractLinkPreviewsUseCase = new ExtractLinkPreviewsUseCase({
-    messageRepository: services.messageRepository,
-    linkPreviewFetcher: services.linkPreviewFetcher,
+  // Publish link preview extraction event to Pub/Sub
+  await services.eventPublisher.publishExtractLinkPreviews({
+    type: 'whatsapp.linkpreview.extract',
+    messageId: savedMessage.id,
+    userId,
+    text: messageText,
   });
-
-  void extractLinkPreviewsUseCase.execute(
-    {
-      messageId: savedMessage.id,
-      userId,
-      text: messageText,
-    },
-    request.log
-  );
 
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },

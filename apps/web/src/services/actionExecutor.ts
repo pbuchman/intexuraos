@@ -9,7 +9,11 @@ import { interpolateVariables } from './variableInterpolator';
 /**
  * Request function type (from useApiClient).
  */
-export type RequestFunction = <T>(baseUrl: string, path: string, options?: RequestOptions) => Promise<T>;
+export type RequestFunction = <T>(
+  baseUrl: string,
+  path: string,
+  options?: RequestOptions
+) => Promise<T>;
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';

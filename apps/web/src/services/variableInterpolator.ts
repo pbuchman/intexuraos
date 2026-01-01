@@ -81,12 +81,18 @@ function interpolateString(str: string, action: Action): string {
     const value = getNestedValue(action, trimmedPath);
 
     if (value === undefined || value === null) {
-      console.warn(`Variable interpolation: field "${trimmedPath}" is undefined or null`);
       return '';
     }
 
     // Convert to string for interpolation
-    return String(value);
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    // For objects/arrays/unknown, use JSON
+    return JSON.stringify(value);
   });
 }
 
