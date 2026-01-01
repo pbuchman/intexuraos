@@ -92,12 +92,17 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
       // Direct service calls use x-internal-auth header
-      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
       if (isPubSubPush) {
         // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
         request.log.info(
-          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
           'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
       } else {
@@ -240,12 +245,17 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
       // Direct service calls use x-internal-auth header
-      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
       if (isPubSubPush) {
         // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
         request.log.info(
-          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
           'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
       } else {

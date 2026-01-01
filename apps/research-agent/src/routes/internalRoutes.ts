@@ -79,14 +79,32 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 500,
       });
 
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn(
-          { reason: authResult.reason },
-          'Internal auth failed for actions/research endpoint'
+      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
+      // Direct service calls use x-internal-auth header
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+
+      if (isPubSubPush) {
+        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
+        request.log.info(
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+      } else {
+        // Direct service call: validate x-internal-auth header
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for actions/research endpoint'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
       }
 
       const body = request.body as PubSubMessage;

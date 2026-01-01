@@ -132,7 +132,7 @@ describe('Pub/Sub Routes', () => {
     });
 
     describe('Pub/Sub OIDC authentication', () => {
-      it('accepts Pub/Sub push with x-goog-pubsub-subscription-name header (no x-internal-auth)', async () => {
+      it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
         const body = createPubSubBody({
           type: 'whatsapp.message.send',
           userId: 'user-123',
@@ -147,7 +147,7 @@ describe('Pub/Sub Routes', () => {
           url: '/internal/whatsapp/pubsub/send-message',
           headers: {
             'content-type': 'application/json',
-            'x-goog-pubsub-subscription-name': 'projects/test/subscriptions/send-message-push',
+            from: 'noreply@google.com',
             // NOTE: NO x-internal-auth header - should still work via OIDC
           },
           payload: body,
@@ -162,7 +162,7 @@ describe('Pub/Sub Routes', () => {
         expect(messageSender.getSentMessages()[0]?.phoneNumber).toBe('+48123456789');
       });
 
-      it('rejects direct calls without x-internal-auth or Pub/Sub header', async () => {
+      it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
         const body = createPubSubBody({
           type: 'whatsapp.message.send',
           userId: 'user-123',
@@ -177,7 +177,7 @@ describe('Pub/Sub Routes', () => {
           url: '/internal/whatsapp/pubsub/send-message',
           headers: {
             'content-type': 'application/json',
-            // NO x-goog-pubsub-subscription-name
+            // NO from: noreply@google.com
             // NO x-internal-auth
           },
           payload: body,
@@ -369,6 +369,63 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(401);
       const responseBody = JSON.parse(response.body) as { error: string };
       expect(responseBody.error).toBe('Unauthorized');
+    });
+
+    describe('Pub/Sub OIDC authentication', () => {
+      it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
+        const gcsPaths = ['path/to/file1.jpg', 'path/to/file2_thumb.jpg'];
+        const body = createPubSubBody({
+          type: 'whatsapp.media.cleanup',
+          userId: 'user-123',
+          messageId: 'msg-123',
+          gcsPaths,
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/media-cleanup',
+          headers: {
+            'content-type': 'application/json',
+            from: 'noreply@google.com',
+            // NOTE: NO x-internal-auth header - should still work via OIDC
+          },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        const responseBody = JSON.parse(response.body) as {
+          success: boolean;
+          deletedCount: number;
+        };
+        expect(responseBody.success).toBe(true);
+        expect(responseBody.deletedCount).toBe(2);
+      });
+
+      it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
+        const body = createPubSubBody({
+          type: 'whatsapp.media.cleanup',
+          userId: 'user-123',
+          messageId: 'msg-123',
+          gcsPaths: ['path/to/file.jpg'],
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/media-cleanup',
+          headers: {
+            'content-type': 'application/json',
+            // NO from: noreply@google.com
+            // NO x-internal-auth
+          },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(401);
+        const responseBody = JSON.parse(response.body) as { error: string };
+        expect(responseBody.error).toBe('Unauthorized');
+      });
     });
 
     it('returns 400 when message data is not valid base64', async () => {

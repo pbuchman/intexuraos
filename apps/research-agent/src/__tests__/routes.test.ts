@@ -108,6 +108,43 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
+    describe('Pub/Sub OIDC authentication', () => {
+      it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
+        fakeResearchClient.setNextResearchId('research-123');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/actions/research',
+          headers: {
+            'content-type': 'application/json',
+            from: 'noreply@google.com',
+            // NOTE: NO x-internal-auth header - should still work via OIDC
+          },
+          payload: createValidPayload(),
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as { success: boolean; researchId: string };
+        expect(body.success).toBe(true);
+        expect(body.researchId).toBe('research-123');
+      });
+
+      it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/actions/research',
+          headers: {
+            'content-type': 'application/json',
+            // NO from: noreply@google.com
+            // NO x-internal-auth
+          },
+          payload: createValidPayload(),
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+    });
+
     it('returns 400 when message data is invalid base64', async () => {
       const response = await app.inject({
         method: 'POST',
