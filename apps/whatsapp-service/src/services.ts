@@ -33,6 +33,7 @@ export interface ServiceConfig {
   mediaBucket: string;
   gcpProjectId: string;
   mediaCleanupTopic: string;
+  commandsIngestTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
   speechmaticsApiKey: string;
@@ -86,7 +87,8 @@ export function getServices(): ServiceContainer {
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(
       serviceConfig.gcpProjectId,
-      serviceConfig.mediaCleanupTopic
+      serviceConfig.mediaCleanupTopic,
+      serviceConfig.commandsIngestTopic
     ),
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig.whatsappAccessToken,

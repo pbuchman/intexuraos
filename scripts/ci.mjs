@@ -18,7 +18,17 @@ const phases = [
   {
     name: 'Static Validation',
     parallel: true,
-    commands: ['verify:package-json', 'verify:boundaries', 'verify:common', 'verify:firestore'],
+    commands: [
+      'verify:package-json',
+      'verify:boundaries',
+      'verify:common',
+      'verify:firestore',
+      'verify:test-isolation',
+      'verify:vitest-config',
+      'verify:endpoints',
+      'verify:hash-routing',
+      'verify:terraform-secrets',
+    ],
   },
   {
     name: 'Type & Lint Checks',

@@ -14,6 +14,11 @@ import type {
   NotionServiceError,
   NotionTokenContext,
 } from '../infra/notion/notionServiceClient.js';
+import type {
+  PromptVaultSettingsPort,
+  PromptVaultSettings,
+  PromptVaultSettingsError,
+} from '../domain/promptvault/ports/index.js';
 
 export interface NotionConnectionPublic {
   promptVaultPageId: string;
@@ -68,20 +73,58 @@ export class FakeNotionServiceClient implements NotionServiceClient {
 /**
  * Fake PromptVault settings repository for testing.
  * Stores promptVaultPageId in memory.
+ * Implements PromptVaultSettingsPort for proper DI testing.
  */
-export class FakePromptVaultSettingsRepository {
-  private pageIds = new Map<string, string>();
+export class FakePromptVaultSettingsRepository implements PromptVaultSettingsPort {
+  private pageIds = new Map<string, { pageId: string; createdAt: string; updatedAt: string }>();
+  private getPageIdError: PromptVaultSettingsError | null = null;
+  private savePageIdError: PromptVaultSettingsError | null = null;
 
-  getPromptVaultPageId(userId: string): string | null {
-    return this.pageIds.get(userId) ?? null;
+  async getPromptVaultPageId(
+    userId: string
+  ): Promise<Result<string | null, PromptVaultSettingsError>> {
+    if (this.getPageIdError !== null) {
+      const error = this.getPageIdError;
+      this.getPageIdError = null;
+      return err(error);
+    }
+    const data = this.pageIds.get(userId);
+    return ok(data?.pageId ?? null);
   }
 
-  savePromptVaultPageId(userId: string, pageId: string): void {
-    this.pageIds.set(userId, pageId);
+  async savePromptVaultPageId(
+    userId: string,
+    pageId: string
+  ): Promise<Result<PromptVaultSettings, PromptVaultSettingsError>> {
+    if (this.savePageIdError !== null) {
+      const error = this.savePageIdError;
+      this.savePageIdError = null;
+      return err(error);
+    }
+    const now = new Date().toISOString();
+    const existing = this.pageIds.get(userId);
+    const createdAt = existing?.createdAt ?? now;
+    this.pageIds.set(userId, { pageId, createdAt, updatedAt: now });
+    return ok({ promptVaultPageId: pageId, createdAt, updatedAt: now });
+  }
+
+  setPageId(userId: string, pageId: string): void {
+    const now = new Date().toISOString();
+    this.pageIds.set(userId, { pageId, createdAt: now, updatedAt: now });
+  }
+
+  setGetPageIdError(error: PromptVaultSettingsError | null): void {
+    this.getPageIdError = error;
+  }
+
+  setSavePageIdError(error: PromptVaultSettingsError | null): void {
+    this.savePageIdError = error;
   }
 
   clear(): void {
     this.pageIds.clear();
+    this.getPageIdError = null;
+    this.savePageIdError = null;
   }
 }
 

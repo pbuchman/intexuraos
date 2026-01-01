@@ -7,7 +7,9 @@ output "service_accounts" {
     whatsapp_service             = google_service_account.whatsapp_service.email
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
-    llm_orchestrator_service     = google_service_account.llm_orchestrator_service.email
+    llm_orchestrator             = google_service_account.llm_orchestrator.email
+    commands_router              = google_service_account.commands_router.email
+    research_agent               = google_service_account.research_agent.email
   }
 }
 
@@ -41,8 +43,18 @@ output "mobile_notifications_service_sa" {
   value       = google_service_account.mobile_notifications_service.email
 }
 
-output "llm_orchestrator_service_sa" {
-  description = "LLM Orchestrator service service account email"
-  value       = google_service_account.llm_orchestrator_service.email
+output "llm_orchestrator_sa" {
+  description = "LLM Orchestrator service account email"
+  value       = google_service_account.llm_orchestrator.email
+}
+
+output "commands_router_sa" {
+  description = "Commands Router service account email"
+  value       = google_service_account.commands_router.email
+}
+
+output "research_agent_sa" {
+  description = "Research Agent service account email"
+  value       = google_service_account.research_agent.email
 }
 

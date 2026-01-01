@@ -48,6 +48,21 @@ export function checkSecrets(required: string[]): HealthCheck {
 }
 
 /**
+ * Validate required environment variables at startup.
+ * Throws if any required variables are missing or empty.
+ * Call this before buildServer() in index.ts to fail fast.
+ */
+export function validateRequiredEnv(required: string[]): void {
+  const missing = required.filter((k) => process.env[k] === undefined || process.env[k] === '');
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}\n` +
+        `Ensure these are set in Terraform env_vars or .envrc.local for local development.`
+    );
+  }
+}
+
+/**
  * Check Firestore connectivity.
  * Skips actual check in test environment.
  */

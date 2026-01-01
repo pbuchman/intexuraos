@@ -48,10 +48,12 @@ export default tseslint.config(
         { type: 'infra-firestore', pattern: ['packages/infra-firestore/src/**'], mode: 'folder' },
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
         { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
+        { type: 'infra-pubsub', pattern: ['packages/infra-pubsub/src/**'], mode: 'folder' },
         { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
-        { type: 'infra-llm-audit', pattern: ['packages/infra-llm-audit/src/**'], mode: 'folder' },
+        { type: 'llm-audit', pattern: ['packages/llm-audit/src/**'], mode: 'folder' },
+        { type: 'llm-contract', pattern: ['packages/llm-contract/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -75,16 +77,29 @@ export default tseslint.config(
             { from: 'infra-notion', allow: ['infra-notion', 'common-core', 'infra-firestore'] },
             // infra-whatsapp can import from common-core
             { from: 'infra-whatsapp', allow: ['infra-whatsapp', 'common-core'] },
-            // infra-gemini can import from common-core and infra-llm-audit
-            { from: 'infra-gemini', allow: ['infra-gemini', 'common-core', 'infra-llm-audit'] },
-            // infra-claude can import from common-core and infra-llm-audit
-            { from: 'infra-claude', allow: ['infra-claude', 'common-core', 'infra-llm-audit'] },
-            // infra-gpt can import from common-core and infra-llm-audit
-            { from: 'infra-gpt', allow: ['infra-gpt', 'common-core', 'infra-llm-audit'] },
-            // infra-llm-audit can import from common-core and infra-firestore
+            // infra-pubsub can import from common-core
+            { from: 'infra-pubsub', allow: ['infra-pubsub', 'common-core'] },
+            // llm-contract can import from common-core
+            { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
+            // infra-gemini can import from common-core, llm-audit, and llm-contract
             {
-              from: 'infra-llm-audit',
-              allow: ['infra-llm-audit', 'common-core', 'infra-firestore'],
+              from: 'infra-gemini',
+              allow: ['infra-gemini', 'common-core', 'llm-audit', 'llm-contract'],
+            },
+            // infra-claude can import from common-core, llm-audit, and llm-contract
+            {
+              from: 'infra-claude',
+              allow: ['infra-claude', 'common-core', 'llm-audit', 'llm-contract'],
+            },
+            // infra-gpt can import from common-core, llm-audit, and llm-contract
+            {
+              from: 'infra-gpt',
+              allow: ['infra-gpt', 'common-core', 'llm-audit', 'llm-contract'],
+            },
+            // llm-audit can import from common-core and infra-firestore
+            {
+              from: 'llm-audit',
+              allow: ['llm-audit', 'common-core', 'infra-firestore'],
             },
             // http-server can import from decomposed packages
             {
@@ -106,10 +121,12 @@ export default tseslint.config(
                 'infra-firestore',
                 'infra-notion',
                 'infra-whatsapp',
+                'infra-pubsub',
                 'infra-gemini',
                 'infra-claude',
                 'infra-gpt',
-                'infra-llm-audit',
+                'llm-audit',
+                'llm-contract',
                 'http-contracts',
                 'http-server',
                 'apps',
@@ -143,6 +160,8 @@ export default tseslint.config(
       'no-implied-eval': 'error',
       'no-return-await': 'off',
       '@typescript-eslint/return-await': ['error', 'always'],
+      // Rule 1.6: No empty catch blocks (all catch blocks must handle errors)
+      'no-empty': ['error', { allowEmptyCatch: false }],
       // Block deep imports into other packages' /src/ directories
       // Cross-package imports should use the public entrypoint (index.ts)
       // Also block cross-app imports (apps should not import from other apps)
@@ -170,12 +189,24 @@ export default tseslint.config(
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
         },
       ],
     },
   },
-  // Apps must use @intexuraos/infra-firestore singleton, not direct Firestore import
+  // Apps must use @intexuraos/infra-* wrappers, not direct SDK imports
   {
     files: ['apps/*/src/**/*.ts'],
     rules: {
@@ -187,6 +218,22 @@ export default tseslint.config(
               name: '@google-cloud/firestore',
               message:
                 'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: '@google/genai',
+              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+            },
+            {
+              name: 'openai',
+              message: 'Use @intexuraos/infra-gpt instead of importing OpenAI directly.',
+            },
+            {
+              name: '@anthropic-ai/sdk',
+              message: 'Use @intexuraos/infra-claude instead of importing Anthropic directly.',
+            },
+            {
+              name: '@notionhq/client',
+              message: 'Use @intexuraos/infra-notion instead of importing Notion directly.',
             },
           ],
           patterns: [
@@ -206,6 +253,79 @@ export default tseslint.config(
             {
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Rule 1.1: Packages must use Firestore singleton from @intexuraos/infra-firestore
+  {
+    files: ['packages/*/src/**/*.ts'],
+    ignores: ['packages/infra-firestore/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@google-cloud/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+            {
+              name: 'firebase-admin/firestore',
+              message:
+                'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // CRITICAL: Prevent Pub/Sub pull subscriptions - incompatible with Cloud Run
+  // Cloud Run scales to zero; pull subscriptions require persistent processes
+  // All Pub/Sub consumers must use HTTP push endpoints
+  {
+    files: ['apps/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='on'][arguments.0.value='message'][arguments.0.type='Literal']",
+          message:
+            'Pull subscriptions (.on("message")) are forbidden. Cloud Run scales to zero and cannot process pull subscriptions. Use HTTP push endpoints instead. See CLAUDE.md for pattern.',
+        },
+      ],
+    },
+  },
+  // Only whatsapp-service may use @intexuraos/infra-whatsapp directly
+  // All other apps must use @intexuraos/infra-pubsub to send messages via Pub/Sub
+  {
+    files: ['apps/*/src/**/*.ts'],
+    ignores: ['apps/whatsapp-service/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@intexuraos/infra-whatsapp',
+              message:
+                'Use @intexuraos/infra-pubsub WhatsApp publisher instead. Only whatsapp-service may use infra-whatsapp directly.',
             },
           ],
         },
@@ -270,6 +390,58 @@ export default tseslint.config(
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: [
+                '../infra/firestore/*',
+                '../infra/firestore/**',
+                '../../infra/firestore/*',
+                '../../infra/firestore/**',
+              ],
+              message:
+                'Routes must not import from infra/firestore directly. Access repositories via getServices() for proper DI.',
+            },
+            {
+              group: [
+                '../infra/whatsapp/*',
+                '../infra/whatsapp/**',
+                '../../infra/whatsapp/*',
+                '../../infra/whatsapp/**',
+              ],
+              message:
+                'Routes must not import from infra/whatsapp directly. Access WhatsApp client via getServices() for proper DI.',
+            },
+            {
+              group: [
+                '../infra/llm/*',
+                '../infra/llm/**',
+                '../../infra/llm/*',
+                '../../infra/llm/**',
+              ],
+              message:
+                'Routes must not import from infra/llm directly. Access LLM adapters via getServices() for proper DI.',
+            },
+            {
+              group: [
+                '../infra/notion/*',
+                '../infra/notion/**',
+                '../../infra/notion/*',
+                '../../infra/notion/**',
+              ],
+              message:
+                'Routes must not import from infra/notion directly. Access Notion client via getServices() for proper DI.',
+            },
           ],
         },
       ],
@@ -289,6 +461,22 @@ export default tseslint.config(
               message:
                 'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
             },
+            {
+              name: '@google/genai',
+              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+            },
+            {
+              name: 'openai',
+              message: 'Use @intexuraos/infra-gpt instead of importing OpenAI directly.',
+            },
+            {
+              name: '@anthropic-ai/sdk',
+              message: 'Use @intexuraos/infra-claude instead of importing Anthropic directly.',
+            },
+            {
+              name: '@notionhq/client',
+              message: 'Use @intexuraos/infra-notion instead of importing Notion directly.',
+            },
           ],
           patterns: [
             {
@@ -302,6 +490,31 @@ export default tseslint.config(
               ],
               message:
                 'Infra layer must not import from routes layer. Move shared code to domain or a common utility.',
+            },
+            {
+              group: [
+                '../firestore/*',
+                '../firestore/**',
+                '../../firestore/*',
+                '../../firestore/**',
+              ],
+              message:
+                'Infra adapters should receive repositories via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
+              group: ['../whatsapp/*', '../whatsapp/**', '../../whatsapp/*', '../../whatsapp/**'],
+              message:
+                'Infra adapters should receive WhatsApp client via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
+              group: ['../llm/*', '../llm/**', '../../llm/*', '../../llm/**'],
+              message:
+                'Infra adapters should receive LLM clients via function parameters, not import directly from other infra folders. Use dependency injection.',
+            },
+            {
+              group: ['../notion/*', '../notion/**', '../../notion/*', '../../notion/**'],
+              message:
+                'Infra adapters should receive Notion client via function parameters, not import directly from other infra folders. Use dependency injection.',
             },
             {
               group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
@@ -320,7 +533,108 @@ export default tseslint.config(
               group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/commands-router', '@intexuraos/commands-router/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/research-agent', '@intexuraos/research-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
+        },
+      ],
+    },
+  },
+  // Rule 1.2: Test isolation - tests must not make real network calls
+  {
+    files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='http'][callee.property.name='request']",
+          message: 'Tests must not make real HTTP requests. Use nock or fake service clients.',
+        },
+        {
+          selector: "CallExpression[callee.object.name='https'][callee.property.name='request']",
+          message: 'Tests must not make real HTTP requests. Use nock or fake service clients.',
+        },
+      ],
+    },
+  },
+  // Rule 1.3: No auth tokens in localStorage (use Auth0 SDK)
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/context/pwa-context.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name='localStorage'][callee.property.name='setItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message:
+            'Never store auth tokens in localStorage. Use Auth0 SDK for secure token storage.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='localStorage'][callee.property.name='getItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message: 'Never retrieve auth tokens from localStorage. Use Auth0 SDK hooks (useAuth0).',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='sessionStorage'][callee.property.name='setItem'][arguments.0.value=/token|auth|jwt|access|refresh/i]",
+          message:
+            'Never store auth tokens in sessionStorage. Use Auth0 SDK for secure token storage.',
+        },
+      ],
+    },
+  },
+  // Rule 1.4: TailwindCSS only (no inline styles)
+  {
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/pages/HomePage.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='style'][value.type='JSXExpressionContainer']",
+          message: 'Use TailwindCSS classes instead of inline style objects.',
+        },
+      ],
+    },
+  },
+  // Rule 1.5: Repositories should call getFirestore() in methods, not accept as constructor param
+  {
+    files: ['apps/*/src/infra/firestore/**/*.ts', 'packages/*/src/**/*Repository.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "MethodDefinition[key.name='constructor'] Parameter[typeAnnotation.typeAnnotation.typeName.name='Firestore']",
+          message:
+            'Repositories should call getFirestore() within methods, not accept Firestore as constructor parameter.',
+        },
+      ],
+    },
+  },
+  // Rule 1.7: Use error utilities instead of inline error extraction
+  {
+    files: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    ignores: ['packages/common-core/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "ConditionalExpression[test.operator='instanceof'][test.right.name='Error'][consequent.property.name='message']",
+          message:
+            'Use getErrorMessage(error, fallback) from @intexuraos/common-core instead of inline error extraction.',
         },
       ],
     },

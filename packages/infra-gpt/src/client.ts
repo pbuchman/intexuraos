@@ -6,23 +6,14 @@ import {
   ok,
   type Result,
 } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/infra-llm-audit';
+import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import type { LLMClient } from '@intexuraos/llm-contract';
 import type { GptConfig, GptError, ResearchResult, SynthesisInput } from './types.js';
+import { GPT_DEFAULTS } from './types.js';
 
-const DEFAULT_MODEL = 'gpt-4.1';
-const VALIDATION_MODEL = 'gpt-4.1-mini';
+export type GptClient = LLMClient;
+
 const MAX_TOKENS = 8192;
-
-export interface GptClient {
-  research(prompt: string): Promise<Result<ResearchResult, GptError>>;
-  generateTitle(prompt: string): Promise<Result<string, GptError>>;
-  synthesize(
-    originalPrompt: string,
-    reports: SynthesisInput[],
-    externalReports?: { content: string; model?: string }[]
-  ): Promise<Result<string, GptError>>;
-  validateKey(): Promise<Result<boolean, GptError>>;
-}
 
 function createRequestContext(
   method: string,
@@ -32,7 +23,6 @@ function createRequestContext(
   const requestId = crypto.randomUUID();
   const startTime = new Date();
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[GPT:${method}] Request`,
@@ -44,7 +34,6 @@ function createRequestContext(
     })
   );
 
-  // Create audit context for Firestore logging
   const auditContext = createAuditContext({
     provider: 'openai',
     model,
@@ -63,7 +52,6 @@ async function logSuccess(
   response: string,
   auditContext: AuditContext
 ): Promise<void> {
-  // Console logging
   // eslint-disable-next-line no-console
   console.info(
     `[GPT:${method}] Response`,
@@ -75,7 +63,6 @@ async function logSuccess(
     })
   );
 
-  // Firestore audit logging
   await auditContext.success({ response });
 }
 
@@ -88,7 +75,6 @@ async function logError(
 ): Promise<void> {
   const errorMessage = getErrorMessage(error, String(error));
 
-  // Console logging
   // eslint-disable-next-line no-console
   console.error(
     `[GPT:${method}] Error`,
@@ -99,26 +85,27 @@ async function logError(
     })
   );
 
-  // Firestore audit logging
   await auditContext.error({ error: errorMessage });
 }
 
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const modelName = config.model ?? DEFAULT_MODEL;
+  const defaultModel = config.defaultModel ?? GPT_DEFAULTS.defaultModel;
+  const validationModel = config.validationModel ?? GPT_DEFAULTS.validationModel;
+  const researchModel = config.researchModel ?? GPT_DEFAULTS.researchModel;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        modelName,
+        researchModel,
         researchPrompt
       );
 
       try {
         const response = await client.responses.create({
-          model: modelName,
+          model: researchModel,
           instructions:
             'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
           input: researchPrompt,
@@ -131,7 +118,6 @@ export function createGptClient(config: GptConfig): GptClient {
         });
 
         const content = response.output_text;
-
         const sources = extractSourcesFromResponse(response);
 
         await logSuccess('research', requestId, startTime, content, auditContext);
@@ -142,26 +128,25 @@ export function createGptClient(config: GptConfig): GptClient {
       }
     },
 
-    async generateTitle(prompt: string): Promise<Result<string, GptError>> {
-      const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+    async generate(prompt: string): Promise<Result<string, GptError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
-        'generateTitle',
-        modelName,
-        titlePrompt
+        'generate',
+        defaultModel,
+        prompt
       );
 
       try {
         const response = await client.chat.completions.create({
-          model: modelName,
-          max_tokens: 100,
-          messages: [{ role: 'user', content: titlePrompt }],
+          model: defaultModel,
+          max_completion_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const text = (response.choices[0]?.message.content ?? '').trim();
-        await logSuccess('generateTitle', requestId, startTime, text, auditContext);
+        const text = response.choices[0]?.message.content ?? '';
+        await logSuccess('generate', requestId, startTime, text, auditContext);
         return ok(text);
       } catch (error) {
-        await logError('generateTitle', requestId, startTime, error, auditContext);
+        await logError('generate', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
@@ -174,14 +159,14 @@ export function createGptClient(config: GptConfig): GptClient {
       const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, externalReports);
       const { requestId, startTime, auditContext } = createRequestContext(
         'synthesize',
-        modelName,
+        defaultModel,
         synthesisPrompt
       );
 
       try {
         const response = await client.chat.completions.create({
-          model: modelName,
-          max_tokens: MAX_TOKENS,
+          model: defaultModel,
+          max_completion_tokens: MAX_TOKENS,
           messages: [
             {
               role: 'system',
@@ -208,14 +193,14 @@ export function createGptClient(config: GptConfig): GptClient {
       const validatePrompt = `Introduce yourself as GPT and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm GPT."`;
       const { requestId, startTime, auditContext } = createRequestContext(
         'validateKey',
-        VALIDATION_MODEL,
+        validationModel,
         validatePrompt
       );
 
       try {
         const response = await client.chat.completions.create({
-          model: VALIDATION_MODEL,
-          max_tokens: 100,
+          model: validationModel,
+          max_completion_tokens: 100,
           messages: [{ role: 'user', content: validatePrompt }],
         });
 

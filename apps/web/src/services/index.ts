@@ -12,3 +12,4 @@ export {
   type SetLlmKeyResponse,
 } from './llmKeysApi.js';
 export * from './llmOrchestratorApi.js';
+export * from './commandsApi.js';

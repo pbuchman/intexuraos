@@ -101,14 +101,19 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 
 export async function buildServer(config: Config): Promise<FastifyInstance> {
   // Initialize service container with config
-  initServices({
+  const serviceConfig = {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     speechmaticsApiKey: config.speechmaticsApiKey,
-  });
+  };
+  if (config.commandsIngestTopic !== undefined) {
+    (serviceConfig as { commandsIngestTopic?: string }).commandsIngestTopic =
+      config.commandsIngestTopic;
+  }
+  initServices(serviceConfig);
 
   const app = Fastify({
     logger:

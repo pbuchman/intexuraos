@@ -67,53 +67,76 @@ Add service-specific dependencies as needed (e.g., `@google-cloud/pubsub`, `@int
 ### 3. Create Dockerfile
 
 ```dockerfile
+# IntexuraOS <Service Name> Dockerfile
+# Multi-stage build with esbuild bundling.
+
+# Stage 1: Build
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Copy all package.json files
 COPY package*.json ./
-COPY packages/common-core/package.json ./packages/common-core/
-COPY packages/common-http/package.json ./packages/common-http/
-COPY packages/http-contracts/package.json ./packages/http-contracts/
-COPY packages/http-server/package.json ./packages/http-server/
-COPY packages/infra-firestore/package.json ./packages/infra-firestore/
-COPY apps/<service-name>/package.json ./apps/<service-name>/
+COPY apps/<service-name>/package*.json ./apps/<service-name>/
+COPY packages/*/package*.json ./packages/
 
-RUN npm ci --workspace=@intexuraos/<service-name>
+# Install dependencies
+RUN npm ci
 
-COPY packages/common-core ./packages/common-core
-COPY packages/common-http ./packages/common-http
-COPY packages/http-contracts ./packages/http-contracts
-COPY packages/http-server ./packages/http-server
-COPY packages/infra-firestore ./packages/infra-firestore
-COPY apps/<service-name> ./apps/<service-name>
-COPY scripts ./scripts
-COPY tsconfig.json ./
+# Copy source files
+COPY tsconfig*.json ./
+COPY scripts/ ./scripts/
+COPY packages/ ./packages/
+COPY apps/<service-name>/ ./apps/<service-name>/
 
-RUN npm run build --workspace=@intexuraos/<service-name>
+# Build service (esbuild bundles everything into one file)
+RUN npm run build -w @intexuraos/<service-name>
 
+# Stage 2: Production
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/apps/<service-name>/dist ./dist
-COPY --from=builder /app/apps/<service-name>/package.json ./
+# Copy generated production package.json and install deps
+COPY --from=builder /app/apps/<service-name>/dist/package.json ./
+RUN npm install --omit=dev
+
+# Copy built file
+COPY --from=builder /app/apps/<service-name>/dist/index.js ./dist/
+COPY --from=builder /app/apps/<service-name>/dist/index.js.map ./dist/
 
 ENV NODE_ENV=production
+ENV PORT=8080
+
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 CMD ["node", "dist/index.js"]
 ```
 
-Adjust COPY statements based on which packages the service depends on.
+Note: The build script auto-generates `dist/package.json` with all transitive npm dependencies.
 
 ### 4. Create src/index.ts
 
 ```typescript
+import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
+
+// Fail-fast startup validation - crashes immediately if required vars are missing
+const REQUIRED_ENV = [
+  'GOOGLE_CLOUD_PROJECT', // Required for Firestore (remove if not using Firestore)
+  'AUTH_JWKS_URL',
+  'AUTH_ISSUER',
+  'AUTH_AUDIENCE',
+  // Add service-specific required vars here
+];
+
+validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -143,6 +166,27 @@ main().catch((error: unknown) => {
   process.exit(1);
 });
 ```
+
+**IMPORTANT:** The `validateRequiredEnv()` call runs at module load time, before `main()`. This ensures the service crashes immediately if required environment variables are missing, rather than starting and failing at runtime.
+
+**CRITICAL RULE:** The `REQUIRED_ENV` array MUST exactly match what you configure in Terraform:
+
+- Every key in Terraform's `secrets = {}` block → add to `REQUIRED_ENV`
+- Every key in Terraform's `env_vars = {}` block → add to `REQUIRED_ENV`
+- **ONLY include variables that are ACTUALLY USED in the codebase**
+- If a variable is configured in Terraform but never used → **remove from Terraform**, not from validation
+
+**Verification:**
+
+```bash
+# What Terraform configures:
+grep -A 20 "module \"<service-name>\"" terraform/environments/dev/main.tf | grep -E "secrets|env_vars" -A 5
+
+# What code actually uses:
+grep -r "process.env\[" apps/<service-name>/src --include="*.ts" --exclude-dir=__tests__
+```
+
+Both outputs must match exactly, or you have a misconfiguration.
 
 Note: Create separate `server.ts` and `config.ts` files. See existing services for patterns.
 
@@ -265,7 +309,67 @@ substitutions:
     }
 ```
 
-### 9. Register in API Docs Hub
+### 9. Create Cloud Build Deployment Script
+
+**CRITICAL:** Create `cloudbuild/scripts/deploy-<service-name>.sh` following this exact pattern:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=cloudbuild/scripts/lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
+SERVICE="<service-name>"
+CLOUD_RUN_SERVICE="intexuraos-<service-name>"
+
+require_env_vars REGION ARTIFACT_REGISTRY_URL COMMIT_SHA
+
+tag="$(deployment_tag)"
+image="${ARTIFACT_REGISTRY_URL}/${SERVICE}:${tag}"
+
+log "Deploying ${SERVICE} to Cloud Run"
+log "  Environment: ${ENVIRONMENT:-unset}"
+log "  Region: ${REGION}"
+log "  Image: ${image}"
+
+# Check if service exists (must be created by Terraform first)
+if ! gcloud run services describe "$CLOUD_RUN_SERVICE" --region="$REGION" &>/dev/null; then
+  log "ERROR: Service ${CLOUD_RUN_SERVICE} does not exist"
+  log "Run 'terraform apply' in terraform/environments/dev/ first to create the service with proper configuration"
+  exit 1
+fi
+
+gcloud run deploy "$CLOUD_RUN_SERVICE" \
+  --image="$image" \
+  --region="$REGION" \
+  --platform=managed \
+  --quiet
+
+log "Deployment complete for ${SERVICE}"
+```
+
+**Why this pattern is critical:**
+
+- **Service existence check:** Prevents creating misconfigured services if Terraform hasn't run
+- **No `--allow-unauthenticated` flag:** Auth settings are managed by Terraform, not deployment scripts
+- **Fail-fast:** Exits immediately with clear error if service doesn't exist
+
+**WRONG PATTERN (DO NOT USE):**
+
+```bash
+# ❌ Missing service existence check
+# ❌ Sets --allow-unauthenticated (should be Terraform-managed)
+gcloud run deploy "$CLOUD_RUN_SERVICE" \
+  --image="$image" \
+  --region="$REGION" \
+  --platform=managed \
+  --allow-unauthenticated \
+  --quiet
+```
+
+### 10. Register in API Docs Hub
 
 Edit `apps/api-docs-hub/src/config.ts`:
 
@@ -282,7 +386,31 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
 
 Note: Get the actual Cloud Run URL after first deployment.
 
-### 10. Add to Root tsconfig.json
+### 11. Create Service URL Secret (Post-Deployment)
+
+After first deployment, create a secret for the service URL so other services can call it:
+
+```bash
+# Get the Cloud Run URL (no trailing slash!)
+SERVICE_URL=$(gcloud run services describe intexuraos-<service-name> \
+  --region=europe-central2 \
+  --format='value(status.url)')
+
+# Create the secret
+echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
+
+# Or update existing secret
+echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
+```
+
+Also add to `.envrc.local.example` for local development:
+
+```bash
+# <Service Name> Service
+export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
+```
+
+### 12. Add to Root tsconfig.json
 
 Edit `tsconfig.json`:
 
@@ -295,7 +423,7 @@ Edit `tsconfig.json`:
 }
 ```
 
-### 11. Add to Local Dev Setup
+### 13. Add to Local Dev Setup
 
 Edit `scripts/dev.mjs` — add service to SERVICES array:
 
@@ -315,7 +443,7 @@ If service needs additional env vars, add them to `.envrc.local.example`:
 export INTEXURAOS_<SERVICE>_SOME_VAR=local-value
 ```
 
-### 12. Run Verification
+### 14. Run Verification
 
 ```bash
 npm install
@@ -335,6 +463,8 @@ cd terraform && terraform fmt -recursive && terraform validate
 - [ ] Service account in IAM module
 - [ ] CloudBuild trigger configured
 - [ ] Registered in api-docs-hub
+- [ ] Service URL secret created (post-deployment)
+- [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
 - [ ] `npm run ci` passes

@@ -9,6 +9,7 @@ import {
   ChevronUp,
   FileText,
   Filter,
+  Inbox,
   Key,
   LayoutDashboard,
   List,
@@ -44,7 +45,10 @@ const orchestratorItems: NavItem[] = [
   { to: '/research', label: 'Previous Researches', icon: List },
 ];
 
-const bottomNavItems: NavItem[] = [{ to: '/notes', label: 'Notes', icon: MessageSquare }];
+const bottomNavItems: NavItem[] = [
+  { to: '/inbox', label: 'Inbox', icon: Inbox },
+  { to: '/notes', label: 'Notes', icon: MessageSquare },
+];
 
 /**
  * Build URL search params from a notification filter.

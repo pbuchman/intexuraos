@@ -295,42 +295,128 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== llm-orchestrator-service =====
+  # ===== llm-orchestrator =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-llm-orchestrator-service'
+    id: 'build-push-llm-orchestrator'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator-service"' /workspace/affected.json 2>/dev/null; then
-          echo "=== Building llm-orchestrator-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building llm-orchestrator ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest \
-            -f apps/llm-orchestrator-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator-service:latest
+            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+            -f apps/llm-orchestrator/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
         else
-          echo "llm-orchestrator-service not affected, skipping."
+          echo "llm-orchestrator not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-llm-orchestrator-service'
-    waitFor: ['build-push-llm-orchestrator-service']
+    id: 'deploy-llm-orchestrator'
+    waitFor: ['build-push-llm-orchestrator']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator-service"' /workspace/affected.json 2>/dev/null; then
-          bash cloudbuild/scripts/deploy-llm-orchestrator-service.sh
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-llm-orchestrator.sh
         else
-          echo "llm-orchestrator-service not affected, skipping deploy."
+          echo "llm-orchestrator not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== commands-router =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-commands-router'
+    waitFor: ['detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"commands-router"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building commands-router ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+            -f apps/commands-router/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
+        else
+          echo "commands-router not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-commands-router'
+    waitFor: ['build-push-commands-router']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"commands-router"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-commands-router.sh
+        else
+          echo "commands-router not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== research-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-research-agent'
+    waitFor: ['detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"research-agent"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building research-agent ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/research-agent:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
+            -f apps/research-agent/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:latest
+        else
+          echo "research-agent not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-research-agent'
+    waitFor: ['build-push-research-agent']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"research-agent"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-research-agent.sh
+        else
+          echo "research-agent not affected, skipping deploy."
         fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
@@ -357,7 +443,8 @@ steps:
         INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
         INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
-        INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_SERVICE_URL)
+        INTEXURAOS_LLM_ORCHESTRATOR_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_URL)
+        INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
         EOF
           echo "Secrets written to /workspace/apps/web/.env"
         else

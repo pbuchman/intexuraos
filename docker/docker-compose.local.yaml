@@ -17,7 +17,13 @@ services:
         firebase emulators:start --project=demo-intexuraos;
       fi"
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8100']
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'require("http").get("http://localhost:8100", (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on("error", () => process.exit(1))',
+        ]
       interval: 5s
       timeout: 3s
       start_period: 30s
@@ -36,6 +42,23 @@ services:
       timeout: 3s
       start_period: 10s
       retries: 5
+
+  pubsub-ui:
+    build:
+      context: ../tools/pubsub-ui
+      dockerfile: Dockerfile
+    ports:
+      - '8105:8105'
+    environment:
+      - PUBSUB_EMULATOR_HOST=firebase-emulator:8102
+      - PUBSUB_PROJECT_ID=demo-intexuraos
+      - PORT=8105
+      - INTEXURAOS_INTERNAL_AUTH_TOKEN=local-dev-token
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
 
 volumes:
   gcs-data:

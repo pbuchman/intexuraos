@@ -1,4 +1,15 @@
+import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
+
+const REQUIRED_ENV = [
+  'GOOGLE_CLOUD_PROJECT',
+  'AUTH_JWKS_URL',
+  'AUTH_ISSUER',
+  'AUTH_AUDIENCE',
+  'INTEXURAOS_NOTION_SERVICE_URL',
+];
+
+validateRequiredEnv(REQUIRED_ENV);
 
 const PORT = Number(process.env['PORT'] ?? 8081);
 const HOST = process.env['HOST'] ?? '0.0.0.0';

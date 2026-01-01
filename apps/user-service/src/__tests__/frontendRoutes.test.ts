@@ -362,12 +362,27 @@ describe('Frontend Auth Routes', () => {
     });
 
     describe('when authenticated', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
         process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
         process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
         process.env['AUTH_JWKS_URL'] = jwksUrl;
         process.env['AUTH_ISSUER'] = issuer;
+
+        const { setServices } = await import('../services.js');
+        const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');
+
+        setServices({
+          authTokenRepository: new FakeAuthTokenRepository(),
+          userSettingsRepository: new FakeUserSettingsRepository(),
+          auth0Client: null,
+          encryptor: null,
+        });
+      });
+
+      afterEach(async () => {
+        const { resetServices } = await import('../services.js');
+        resetServices();
       });
 
       it('returns user info with all claims', { timeout: 20000 }, async () => {
