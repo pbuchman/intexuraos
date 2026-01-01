@@ -185,6 +185,7 @@ resource "google_project_service" "apis" {
     "cloudresourcemanager.googleapis.com",
     "storage.googleapis.com",
     "compute.googleapis.com",
+    "cloudscheduler.googleapis.com",
   ])
 
   project            = var.project_id
@@ -439,7 +440,7 @@ module "user_service" {
     AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
-    INTERNAL_AUTH_TOKEN             = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
@@ -797,6 +798,57 @@ module "github_wif" {
   depends_on = [
     google_project_service.apis,
     module.cloud_build,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Retry Pending Commands
+# -----------------------------------------------------------------------------
+
+resource "google_service_account" "cloud_scheduler" {
+  account_id   = "intexuraos-scheduler-${var.environment}"
+  display_name = "Cloud Scheduler Service Account"
+  description  = "Service account for Cloud Scheduler to invoke Cloud Run endpoints"
+}
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_commands_router" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.commands_router.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.commands_router]
+}
+
+resource "google_cloud_scheduler_job" "retry_pending_commands" {
+  name        = "intexuraos-retry-pending-commands-${var.environment}"
+  description = "Retry classification for commands stuck in pending_classification status"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.commands_router.service_url}/internal/router/retry-pending"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.commands_router.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_commands_router,
+    module.commands_router,
   ]
 }
 

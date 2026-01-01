@@ -1,5 +1,5 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { Command, CommandClassification } from '../../domain/models/command.js';
+import type { Command, CommandClassification, CommandStatus } from '../../domain/models/command.js';
 import type { CommandRepository } from '../../domain/ports/commandRepository.js';
 
 const COLLECTION = 'commands';
@@ -117,6 +117,18 @@ export function createFirestoreCommandRepository(): CommandRepository {
         .where('userId', '==', userId)
         .orderBy('createdAt', 'desc')
         .limit(100)
+        .get();
+
+      return snapshot.docs.map((doc) => toCommand(doc.id, doc.data() as CommandDoc));
+    },
+
+    async listByStatus(status: CommandStatus, limit = 100): Promise<Command[]> {
+      const db = getFirestore();
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where('status', '==', status)
+        .orderBy('createdAt', 'asc')
+        .limit(limit)
         .get();
 
       return snapshot.docs.map((doc) => toCommand(doc.id, doc.data() as CommandDoc));

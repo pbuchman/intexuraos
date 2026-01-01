@@ -936,6 +936,276 @@ describe('Commands Router Routes', () => {
     });
   });
 
+  describe('POST /internal/router/retry-pending', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 401 when internal auth token is wrong', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': 'wrong-token' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts OIDC Bearer token authentication (Cloud Scheduler)', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake-oidc-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns success with zero counts when no pending commands', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        skipped: number;
+        failed: number;
+        total: number;
+      };
+      expect(body.success).toBe(true);
+      expect(body.processed).toBe(0);
+      expect(body.skipped).toBe(0);
+      expect(body.failed).toBe(0);
+      expect(body.total).toBe(0);
+    });
+
+    it('classifies pending command when user now has API key', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:retry-1',
+        userId: 'user-retry-1',
+        sourceType: 'whatsapp_text',
+        externalId: 'retry-1',
+        text: 'Buy groceries',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeUserServiceClient.setApiKeys('user-retry-1', { google: 'new-gemini-key' });
+      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Buy groceries' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        skipped: number;
+        failed: number;
+        total: number;
+      };
+      expect(body.success).toBe(true);
+      expect(body.processed).toBe(1);
+      expect(body.skipped).toBe(0);
+      expect(body.failed).toBe(0);
+      expect(body.total).toBe(1);
+
+      const command = await fakeCommandRepo.getById('whatsapp_text:retry-1');
+      expect(command?.status).toBe('classified');
+      expect(command?.classification?.type).toBe('todo');
+
+      const actions = await fakeActionRepo.listByUserId('user-retry-1');
+      expect(actions).toHaveLength(1);
+      expect(actions[0]?.title).toBe('Buy groceries');
+    });
+
+    it('skips pending command when user still has no API key', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:retry-2',
+        userId: 'user-no-key-yet',
+        sourceType: 'whatsapp_text',
+        externalId: 'retry-2',
+        text: 'Research topic',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        skipped: number;
+      };
+      expect(body.success).toBe(true);
+      expect(body.processed).toBe(0);
+      expect(body.skipped).toBe(1);
+
+      const command = await fakeCommandRepo.getById('whatsapp_text:retry-2');
+      expect(command?.status).toBe('pending_classification');
+    });
+
+    it('marks command as failed when classification fails', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:retry-3',
+        userId: 'user-retry-fail',
+        sourceType: 'whatsapp_text',
+        externalId: 'retry-3',
+        text: 'This will fail',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeUserServiceClient.setApiKeys('user-retry-fail', { google: 'gemini-key' });
+      fakeClassifier.setFailNext(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        failed: number;
+      };
+      expect(body.success).toBe(true);
+      expect(body.processed).toBe(0);
+      expect(body.failed).toBe(1);
+
+      const command = await fakeCommandRepo.getById('whatsapp_text:retry-3');
+      expect(command?.status).toBe('failed');
+      expect(command?.failureReason).toBe('Simulated classification failure');
+    });
+
+    it('processes multiple pending commands', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:multi-1',
+        userId: 'user-multi-1',
+        sourceType: 'whatsapp_text',
+        externalId: 'multi-1',
+        text: 'First task',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:multi-2',
+        userId: 'user-multi-2',
+        sourceType: 'whatsapp_text',
+        externalId: 'multi-2',
+        text: 'Second task',
+        timestamp: '2025-01-01T12:01:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:01:00.000Z',
+        updatedAt: '2025-01-01T12:01:00.000Z',
+      });
+
+      fakeUserServiceClient.setApiKeys('user-multi-1', { google: 'key-1' });
+      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Task' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        skipped: number;
+        total: number;
+      };
+      expect(body.success).toBe(true);
+      expect(body.total).toBe(2);
+      expect(body.processed).toBe(1);
+      expect(body.skipped).toBe(1);
+    });
+
+    it('publishes action.created event for classified commands', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:retry-event',
+        userId: 'user-retry-event',
+        sourceType: 'whatsapp_text',
+        externalId: 'retry-event',
+        text: 'Research AI trends',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeUserServiceClient.setApiKeys('user-retry-event', { google: 'gemini-key' });
+      fakeClassifier.setResult({
+        type: 'research',
+        confidence: 0.95,
+        title: 'AI Trends Research',
+        selectedLlms: ['google', 'anthropic'],
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: '/internal/router/retry-pending',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      const publishedEvents = fakeEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.type).toBe('action.created');
+      expect(publishedEvents[0]?.actionType).toBe('research');
+      expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
+      expect(publishedEvents[0]?.payload.selectedLlms).toEqual(['google', 'anthropic']);
+    });
+  });
+
   describe('System endpoints', () => {
     it('GET /health returns 200', async () => {
       app = await buildServer();
