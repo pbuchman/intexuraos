@@ -366,6 +366,52 @@ module "pubsub_media_cleanup" {
   ]
 }
 
+# Topic for WhatsApp webhook async processing (fast operations)
+module "pubsub_whatsapp_webhook_process" {
+  source = "../../modules/pubsub-push"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-whatsapp-webhook-process-${var.environment}"
+  labels     = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 120
+
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# Topic for WhatsApp audio transcription (long-running operations up to 5 min)
+module "pubsub_whatsapp_transcription" {
+  source = "../../modules/pubsub-push"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-whatsapp-transcription-${var.environment}"
+  labels     = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 600
+
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
 # Topic for commands ingest (whatsapp -> commands-router)
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
@@ -584,6 +630,7 @@ module "whatsapp_service" {
   min_scale       = local.services.whatsapp_service.min_scale
   max_scale       = local.services.whatsapp_service.max_scale
   labels          = local.common_labels
+  timeout         = "900s"
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
 
@@ -605,6 +652,8 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
+    INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
     INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
   }
 
