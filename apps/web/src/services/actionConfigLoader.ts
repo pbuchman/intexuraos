@@ -129,10 +129,6 @@ function validateConfig(config: ActionConfig): void {
         throw new Error(`Invalid type "${typeName}": action reference must be string`);
       }
 
-      if (!Array.isArray(mapping.conditions)) {
-        throw new Error(`Invalid type "${typeName}": conditions must be array`);
-      }
-
       // Verify action exists
       if (config.actions[mapping.action] === undefined) {
         throw new Error(`Invalid type "${typeName}": references undefined action "${mapping.action}"`);
@@ -162,29 +158,7 @@ export function getFallbackConfig(): ActionConfig {
         },
       },
     },
-    types: {
-      research: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      note: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      todo: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      link: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      calendar: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      reminder: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-      unclassified: {
-        actions: [{ action: 'delete', conditions: [] }],
-      },
-    },
+    types: {},
   };
 }
 
