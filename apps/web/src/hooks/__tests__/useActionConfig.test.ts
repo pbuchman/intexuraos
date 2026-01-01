@@ -38,7 +38,11 @@ vi.mock('../../services/conditionEvaluator', () => ({
         return fieldValue === when.value;
       }
       if (when.op === 'gt') {
-        return typeof fieldValue === 'number' && typeof when.value === 'number' && fieldValue > when.value;
+        return (
+          typeof fieldValue === 'number' &&
+          typeof when.value === 'number' &&
+          fieldValue > when.value
+        );
       }
       return false;
     }
@@ -49,7 +53,12 @@ vi.mock('../../services/conditionEvaluator', () => ({
         if ('field' in child) {
           const fieldValue = action[child.field as keyof typeof action];
           if (child.op === 'eq') return fieldValue === child.value;
-          if (child.op === 'gt') return typeof fieldValue === 'number' && typeof child.value === 'number' && fieldValue > child.value;
+          if (child.op === 'gt')
+            return (
+              typeof fieldValue === 'number' &&
+              typeof child.value === 'number' &&
+              fieldValue > child.value
+            );
         }
         return false;
       });
@@ -141,7 +150,8 @@ describe('useActionConfig', () => {
   });
 
   it('uses fallback config on load error', async () => {
-    const { loadActionConfig, getFallbackConfig } = await import('../../services/actionConfigLoader');
+    const { loadActionConfig, getFallbackConfig } =
+      await import('../../services/actionConfigLoader');
     vi.mocked(loadActionConfig).mockRejectedValue(new Error('Load failed'));
     const fallback = vi.mocked(getFallbackConfig).mockReturnValue({
       actions: {

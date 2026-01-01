@@ -117,18 +117,12 @@ describe('interpolateVariables', () => {
     it('interpolates in deeply nested structures', () => {
       const template = {
         data: {
-          items: [
-            { name: '{{action.title}}' },
-            { name: '{{action.payload.prompt}}' },
-          ],
+          items: [{ name: '{{action.title}}' }, { name: '{{action.payload.prompt}}' }],
         },
       };
       const result = interpolateVariables(template, mockAction);
       expect(result['data']).toEqual({
-        items: [
-          { name: 'Test Title' },
-          { name: 'Test prompt' },
-        ],
+        items: [{ name: 'Test Title' }, { name: 'Test prompt' }],
       });
     });
   });

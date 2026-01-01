@@ -624,9 +624,10 @@ export default tseslint.config(
     },
   },
   // Rule 1.7: Use error utilities instead of inline error extraction
+  // Note: apps/web is excluded because common-core uses Node.js crypto which can't run in browser
   {
     files: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
-    ignores: ['packages/common-core/**'],
+    ignores: ['packages/common-core/**', 'apps/web/**'],
     rules: {
       'no-restricted-syntax': [
         'error',

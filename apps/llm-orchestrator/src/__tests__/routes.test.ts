@@ -60,15 +60,16 @@ describe('Research Routes - Unauthenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
-      processResearchAsync: (): void => {
-        /* noop - deprecated */
-      },
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      notificationSender: fakeNotificationSender,
+      createLlmProviders: () => ({}),
+      createSynthesizer: () => ({
+        synthesize: async (): Promise<string> => 'Synthesized content',
+      }),
       createTitleGenerator: (): TitleGenerator => ({
         generateTitle: async (): Promise<string> => 'Generated Title',
       }),
-      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 
@@ -970,15 +971,16 @@ describe('Internal Routes', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
-      processResearchAsync: (): void => {
-        /* noop - deprecated */
-      },
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      notificationSender: fakeNotificationSender,
+      createLlmProviders: () => ({}),
+      createSynthesizer: () => ({
+        synthesize: async (): Promise<string> => 'Synthesized content',
+      }),
       createTitleGenerator: (): TitleGenerator => ({
         generateTitle: async (): Promise<string> => 'Generated Title',
       }),
-      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 

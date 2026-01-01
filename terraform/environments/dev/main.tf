@@ -389,7 +389,7 @@ module "pubsub_whatsapp_webhook_process" {
   ]
 }
 
-# Topic for WhatsApp audio transcription (long-running operations up to 5 min)
+# Topic for WhatsApp audio transcription (long-running operations up to 15 min)
 module "pubsub_whatsapp_transcription" {
   source = "../../modules/pubsub-push"
 
@@ -400,7 +400,7 @@ module "pubsub_whatsapp_transcription" {
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
   push_audience              = module.whatsapp_service.service_url
-  ack_deadline_seconds       = 600
+  ack_deadline_seconds       = 900
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]

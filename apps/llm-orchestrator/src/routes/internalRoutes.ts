@@ -13,10 +13,8 @@ import {
   processResearch,
   type LlmProvider,
 } from '../domain/research/index.js';
-import { getServices } from '../services.js';
+import { getServices, type DecryptedApiKeys } from '../services.js';
 import { llmProviderSchema, researchSchema } from './schemas/index.js';
-import { createLlmProviders, createSynthesizer, createTitleGenerator } from '../infra/llm/index.js';
-import type { DecryptedApiKeys } from '../infra/user/index.js';
 
 interface CreateDraftResearchBody {
   userId: string;
@@ -219,15 +217,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let event: ResearchProcessEvent;
       try {
         const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        event = JSON.parse(decoded) as ResearchProcessEvent;
+        const parsed: unknown = JSON.parse(decoded);
+        if (
+          typeof parsed !== 'object' ||
+          parsed === null ||
+          !('type' in parsed) ||
+          (parsed as { type: unknown }).type !== 'research.process'
+        ) {
+          const eventType =
+            typeof parsed === 'object' && parsed !== null && 'type' in parsed
+              ? (parsed as { type: unknown }).type
+              : 'unknown';
+          request.log.warn({ type: eventType }, 'Unexpected event type');
+          return { success: false, error: 'Unexpected event type' };
+        }
+        event = parsed as ResearchProcessEvent;
       } catch {
         request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
         return { success: false, error: 'Invalid message format' };
-      }
-
-      if (event.type !== 'research.process') {
-        request.log.warn({ type: event.type }, 'Unexpected event type');
-        return { success: false, error: 'Unexpected event type' };
       }
 
       request.log.info(
@@ -240,7 +247,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Processing research event'
       );
 
-      const { researchRepo, userServiceClient, notificationSender } = getServices();
+      const services = getServices();
+      const { researchRepo, userServiceClient, notificationSender } = services;
 
       try {
         const researchResult = await researchRepo.findById(event.researchId);
@@ -267,8 +275,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: false, error: 'API key missing' };
         }
 
-        const llmProviders = createLlmProviders(apiKeys);
-        const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+        const llmProviders = services.createLlmProviders(apiKeys);
+        const synthesizer = services.createSynthesizer(synthesisProvider, synthesisKey);
 
         const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
@@ -281,7 +289,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
 
         if (apiKeys.google !== undefined) {
-          deps.titleGenerator = createTitleGenerator(apiKeys.google);
+          deps.titleGenerator = services.createTitleGenerator(apiKeys.google);
         }
 
         await processResearch(event.researchId, deps);
@@ -370,17 +378,26 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let event: LlmAnalyticsEvent;
       try {
         const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
-        event = JSON.parse(decoded) as LlmAnalyticsEvent;
+        const parsed: unknown = JSON.parse(decoded);
+        if (
+          typeof parsed !== 'object' ||
+          parsed === null ||
+          !('type' in parsed) ||
+          (parsed as { type: unknown }).type !== 'llm.report'
+        ) {
+          const eventType =
+            typeof parsed === 'object' && parsed !== null && 'type' in parsed
+              ? (parsed as { type: unknown }).type
+              : 'unknown';
+          request.log.warn({ type: eventType }, 'Unexpected analytics event type');
+          return { success: false };
+        }
+        event = parsed as LlmAnalyticsEvent;
       } catch {
         request.log.error(
           { messageId: body.message.messageId },
           'Failed to decode analytics message'
         );
-        return { success: false };
-      }
-
-      if (event.type !== 'llm.report') {
-        request.log.warn({ type: event.type }, 'Unexpected analytics event type');
         return { success: false };
       }
 

@@ -4,7 +4,11 @@
 
 import { useEffect, useState } from 'react';
 import type { Action } from '../types';
-import type { ActionConfig, ResolvedActionButton, UseActionConfigResult } from '../types/actionConfig';
+import type {
+  ActionConfig,
+  ResolvedActionButton,
+  UseActionConfigResult,
+} from '../types/actionConfig';
 import { evaluateCondition } from '../services/conditionEvaluator';
 import { loadActionConfig, getFallbackConfig } from '../services/actionConfigLoader';
 
@@ -38,7 +42,6 @@ export function useActionConfig(action: Action): UseActionConfigResult {
       } catch (err) {
         if (mounted) {
           const errorMessage = err instanceof Error ? err.message : 'Failed to load action config';
-          console.warn('Action config load failed, using fallback:', errorMessage);
           setConfig(getFallbackConfig());
           setError(errorMessage);
         }
@@ -74,7 +77,6 @@ function resolveButtons(action: Action, config: ActionConfig): ResolvedActionBut
   const typeConfig = config.types[action.type];
 
   if (typeConfig === undefined) {
-    console.warn(`No configuration found for action type "${action.type}", using fallback`);
     // Return only delete button as fallback
     const deleteAction = config.actions['delete'];
     if (deleteAction === undefined) {
@@ -99,7 +101,6 @@ function resolveButtons(action: Action, config: ActionConfig): ResolvedActionBut
     const actionDef = config.actions[mapping.action];
 
     if (actionDef === undefined) {
-      console.warn(`Action definition not found: "${mapping.action}"`);
       continue;
     }
 

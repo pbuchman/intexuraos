@@ -5,7 +5,13 @@
  */
 
 import type { Action } from '../types';
-import type { ConditionTree, Predicate, AllCondition, AnyCondition, NotCondition } from '../types/actionConfig';
+import type {
+  ConditionTree,
+  Predicate,
+  AllCondition,
+  AnyCondition,
+  NotCondition,
+} from '../types/actionConfig';
 
 /**
  * Evaluates a condition tree against an action.
@@ -16,7 +22,7 @@ import type { ConditionTree, Predicate, AllCondition, AnyCondition, NotCondition
  */
 export function evaluateCondition(action: Action, when?: ConditionTree): boolean {
   if (when === undefined) {
-    return true;  // No condition = always true
+    return true; // No condition = always true
   }
 
   // Check if predicate (has 'field' property)
@@ -37,8 +43,7 @@ export function evaluateCondition(action: Action, when?: ConditionTree): boolean
     return evaluateNot(action, when);
   }
 
-  // Unknown structure
-  console.warn('Unknown condition structure:', when);
+  // Unknown structure - return false as fallback
   return false;
 }
 
@@ -95,24 +100,32 @@ function evaluatePredicate(action: Action, predicate: Predicate): boolean {
       return fieldValue !== predicate.value;
 
     case 'gt':
-      return typeof fieldValue === 'number' &&
-             typeof predicate.value === 'number' &&
-             fieldValue > predicate.value;
+      return (
+        typeof fieldValue === 'number' &&
+        typeof predicate.value === 'number' &&
+        fieldValue > predicate.value
+      );
 
     case 'gte':
-      return typeof fieldValue === 'number' &&
-             typeof predicate.value === 'number' &&
-             fieldValue >= predicate.value;
+      return (
+        typeof fieldValue === 'number' &&
+        typeof predicate.value === 'number' &&
+        fieldValue >= predicate.value
+      );
 
     case 'lt':
-      return typeof fieldValue === 'number' &&
-             typeof predicate.value === 'number' &&
-             fieldValue < predicate.value;
+      return (
+        typeof fieldValue === 'number' &&
+        typeof predicate.value === 'number' &&
+        fieldValue < predicate.value
+      );
 
     case 'lte':
-      return typeof fieldValue === 'number' &&
-             typeof predicate.value === 'number' &&
-             fieldValue <= predicate.value;
+      return (
+        typeof fieldValue === 'number' &&
+        typeof predicate.value === 'number' &&
+        fieldValue <= predicate.value
+      );
 
     case 'in':
       return Array.isArray(predicate.value) && predicate.value.includes(fieldValue);
@@ -128,7 +141,6 @@ function evaluatePredicate(action: Action, predicate: Predicate): boolean {
     }
 
     default:
-      console.warn(`Unknown operator: ${String(predicate.op)}`);
       return false;
   }
 }

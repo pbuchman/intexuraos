@@ -42,14 +42,14 @@ export interface ActionConfigAction {
  * Predicate operators for condition evaluation.
  */
 export type PredicateOperator =
-  | 'eq'      // equality (===)
-  | 'neq'     // not equal (!==)
-  | 'gt'      // greater than
-  | 'gte'     // greater than or equal
-  | 'lt'      // less than
-  | 'lte'     // less than or equal
-  | 'in'      // value in array
-  | 'nin'     // value not in array
+  | 'eq' // equality (===)
+  | 'neq' // not equal (!==)
+  | 'gt' // greater than
+  | 'gte' // greater than or equal
+  | 'lt' // less than
+  | 'lte' // less than or equal
+  | 'in' // value in array
+  | 'nin' // value not in array
   | 'exists'; // field exists (not null/undefined)
 
 /**

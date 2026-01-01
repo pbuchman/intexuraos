@@ -89,7 +89,6 @@ export function ConfigurableActionButton({
       // Call success callback
       onSuccess?.();
     } catch (error) {
-      console.error('Action execution failed:', error);
       const err = error instanceof Error ? error : new Error('Unknown error');
       onError?.(err);
     } finally {
