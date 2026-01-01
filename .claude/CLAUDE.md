@@ -281,7 +281,7 @@ fastify.post('/internal/pubsub/my-topic', async (request, reply) => {
 
 **Why:** Cloud Run scales to zero. Pull subscriptions require persistent background processes. Messages accumulate and are never processed.
 
-**Reference Implementation:** See `apps/research-agent/src/routes/internalRoutes.ts`
+**Reference Implementation:** See `apps/actions-agent/src/routes/internalRoutes.ts`
 
 **Verification:** ESLint `no-restricted-syntax` rule fails build on pull subscription patterns.
 
