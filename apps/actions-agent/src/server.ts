@@ -18,7 +18,7 @@ const SERVICE_VERSION = '0.0.1';
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [
     {
-      url: 'https://intexuraos-research-agent-cj44trunra-lm.a.run.app',
+      url: 'https://intexuraos-actions-agent-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8080', description: 'Local' },

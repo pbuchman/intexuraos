@@ -1,4 +1,4 @@
-# IntexuraOS Research Agent Dockerfile
+# IntexuraOS Actions Agent Dockerfile
 # Multi-stage build with esbuild bundling.
 
 # Stage 1: Build
@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy all package.json files
 COPY package*.json ./
-COPY apps/research-agent/package*.json ./apps/research-agent/
+COPY apps/actions-agent/package*.json ./apps/actions-agent/
 COPY packages/*/package*.json ./packages/
 
 # Install dependencies
@@ -18,10 +18,10 @@ RUN npm ci
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
 COPY packages/ ./packages/
-COPY apps/research-agent/ ./apps/research-agent/
+COPY apps/actions-agent/ ./apps/actions-agent/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/research-agent
+RUN npm run build -w @intexuraos/actions-agent
 
 # Stage 2: Production
 FROM node:22-alpine
@@ -29,12 +29,12 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Copy generated production package.json and install deps
-COPY --from=builder /app/apps/research-agent/dist/package.json ./
+COPY --from=builder /app/apps/actions-agent/dist/package.json ./
 RUN npm install --omit=dev
 
 # Copy built file
-COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/
-COPY --from=builder /app/apps/research-agent/dist/index.js.map ./dist/
+COPY --from=builder /app/apps/actions-agent/dist/index.js ./dist/
+COPY --from=builder /app/apps/actions-agent/dist/index.js.map ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
