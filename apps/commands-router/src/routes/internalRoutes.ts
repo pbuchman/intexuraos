@@ -87,6 +87,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Direct service calls use x-internal-auth header
       const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
 
+      // Diagnostic logging to debug Pub/Sub auth detection
+      request.log.info(
+        {
+          isPubSubPush,
+          hasPubSubHeader: request.headers['x-goog-pubsub-subscription-name'] !== undefined,
+          headerValue: request.headers['x-goog-pubsub-subscription-name'],
+          allGoogHeaders: Object.keys(request.headers)
+            .filter((k) => k.startsWith('x-goog-'))
+            .reduce((acc: Record<string, unknown>, k) => {
+              acc[k] = request.headers[k];
+              return acc;
+            }, {}),
+        },
+        'Pub/Sub detection check'
+      );
+
       if (isPubSubPush) {
         // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
         // Just log that it's from Pub/Sub
