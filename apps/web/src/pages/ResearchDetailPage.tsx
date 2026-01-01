@@ -7,7 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useResearch } from '@/hooks';
-import { approveResearch } from '@/services/llmOrchestratorApi';
+import { approveResearch, deleteResearch } from '@/services/llmOrchestratorApi';
 import type { LlmResult, ResearchStatus } from '@/services/llmOrchestratorApi.types';
 
 /**
@@ -118,6 +118,9 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -141,6 +144,24 @@ export function ResearchDetailPage(): React.JSX.Element {
       setApproveError(err instanceof Error ? err.message : 'Failed to start research');
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const token = await getAccessToken();
+      await deleteResearch(token, id);
+      void navigate('/#/research');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete research');
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -207,7 +228,7 @@ export function ResearchDetailPage(): React.JSX.Element {
               onClick={(): void => {
                 void handleApprove();
               }}
-              disabled={approving}
+              disabled={approving || deleting}
               isLoading={approving}
             >
               <Play className="mr-2 h-4 w-4" />
@@ -216,17 +237,93 @@ export function ResearchDetailPage(): React.JSX.Element {
             <Button
               variant="secondary"
               onClick={(): void => {
-                void navigate('/#/llm-orchestrator');
+                void navigate(`/#/research/new?draftId=${research.id}`);
               }}
+              disabled={deleting}
             >
               Edit Draft
             </Button>
+            {showDeleteConfirm ? (
+              <>
+                <Button
+                  variant="danger"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Confirm Discard
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDeleteConfirm(true);
+                }}
+                disabled={deleting}
+              >
+                Discard
+              </Button>
+            )}
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-3">
+            {showDeleteConfirm ? (
+              <>
+                <Button
+                  variant="danger"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Confirm Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDeleteConfirm(true);
+                }}
+                disabled={deleting}
+              >
+                Delete
+              </Button>
+            )}
+          </div>
+        )}
 
         {approveError !== null && approveError !== '' ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {approveError}
+          </div>
+        ) : null}
+
+        {deleteError !== null && deleteError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {deleteError}
           </div>
         ) : null}
       </div>

@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
-import { useLlmKeys, useResearches } from '@/hooks';
-import type { LlmProvider } from '@/services/llmOrchestratorApi.types';
+import { useAuth } from '@/context';
+import { useLlmKeys } from '@/hooks';
+import { getResearch, saveDraft, updateDraft } from '@/services/llmOrchestratorApi';
+import type { LlmProvider, SaveDraftRequest } from '@/services/llmOrchestratorApi.types';
 
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
@@ -22,8 +24,12 @@ const PROVIDERS: ProviderOption[] = [
 
 export function LlmOrchestratorPage(): React.JSX.Element {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
-  const { createResearch, saveDraft } = useResearches();
+
+  const draftId = searchParams.get('draftId');
+  const isEditMode = draftId !== null && draftId !== '';
 
   const [prompt, setPrompt] = useState('');
   const [selectedLlms, setSelectedLlms] = useState<LlmProvider[]>([]);
@@ -31,7 +37,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [loading, setLoading] = useState(isEditMode);
   const [error, setError] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedPromptRef = useRef('');
 
   const addInputContext = (): void => {
     if (inputContexts.length < MAX_INPUT_CONTEXTS) {
@@ -52,8 +63,39 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       ? []
       : PROVIDERS.filter((p) => keys[p.id] !== null).map((p) => p.id);
 
-  // Auto-select all configured LLMs and set first configured as synthesis LLM
+  // Load draft if in edit mode
   useEffect(() => {
+    if (!isEditMode) {
+      setLoading(false);
+      return;
+    }
+
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const draft = await getResearch(token, draftId);
+
+        setPrompt(draft.prompt);
+        setSelectedLlms(draft.selectedLlms);
+        setSynthesisLlm(draft.synthesisLlm);
+        lastSavedPromptRef.current = draft.prompt;
+
+        // Load input contexts if exists
+        if (draft.inputContexts !== undefined && draft.inputContexts.length > 0) {
+          setInputContexts(draft.inputContexts.map((ctx) => ctx.content));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load draft');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [isEditMode, draftId, getAccessToken]);
+
+  // Auto-select all configured LLMs and set first configured as synthesis LLM (only for new research)
+  useEffect(() => {
+    if (isEditMode) return; // Skip auto-select when editing draft
+
     if (!keysLoading && keys !== null) {
       const configured = PROVIDERS.filter((p) => keys[p.id] !== null).map((p) => p.id);
       setSelectedLlms(configured);
@@ -62,7 +104,87 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         setSynthesisLlm(firstConfigured);
       }
     }
-  }, [keysLoading, keys]);
+  }, [keysLoading, keys, isEditMode]);
+
+  // Autosave function
+  const performAutosave = useCallback(async (): Promise<void> => {
+    if (!isEditMode || !hasUnsavedChanges || prompt.trim().length === 0) {
+      return;
+    }
+
+    try {
+      const token = await getAccessToken();
+      const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
+
+      const request: SaveDraftRequest = { prompt };
+      if (selectedLlms.length > 0) {
+        request.selectedLlms = selectedLlms;
+      }
+      if (synthesisLlm !== null) {
+        request.synthesisLlm = synthesisLlm;
+      }
+      if (validContexts.length > 0) {
+        request.inputContexts = validContexts.map((content) => ({ content }));
+      }
+
+      await updateDraft(token, draftId, request);
+
+      lastSavedPromptRef.current = prompt;
+      setHasUnsavedChanges(false);
+    } catch {
+      // Silently fail autosave - don't disrupt user
+    }
+  }, [
+    isEditMode,
+    draftId,
+    hasUnsavedChanges,
+    prompt,
+    selectedLlms,
+    synthesisLlm,
+    inputContexts,
+    getAccessToken,
+  ]);
+
+  // Track changes
+  useEffect(() => {
+    if (isEditMode && prompt !== lastSavedPromptRef.current) {
+      setHasUnsavedChanges(true);
+    }
+  }, [prompt, isEditMode]);
+
+  // 1-minute autosave interval
+  useEffect(() => {
+    if (!isEditMode) return undefined;
+
+    if (autosaveTimerRef.current !== null) {
+      clearInterval(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setInterval(() => {
+      void performAutosave();
+    }, 60000); // 1 minute
+
+    return (): void => {
+      if (autosaveTimerRef.current !== null) {
+        clearInterval(autosaveTimerRef.current);
+      }
+    };
+  }, [isEditMode, performAutosave]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return (): void => {
+      if (autosaveTimerRef.current !== null) {
+        clearInterval(autosaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handlePromptBlur = (): void => {
+    if (isEditMode && hasUnsavedChanges) {
+      void performAutosave();
+    }
+  };
 
   const isProviderAvailable = (provider: LlmProvider): boolean => {
     if (keysLoading || keys === null) return false;
@@ -96,19 +218,28 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setError(null);
 
     try {
+      const token = await getAccessToken();
       const contextObjects = validContexts.map((content) => ({ content }));
 
-      const request: Parameters<typeof createResearch>[0] = {
-        prompt,
-        selectedLlms,
-        synthesisLlm,
-      };
-      if (contextObjects.length > 0) {
-        request.inputContexts = contextObjects;
+      // If editing a draft, approve it to start research
+      if (isEditMode) {
+        const { approveResearch } = await import('@/services/llmOrchestratorApi');
+        const research = await approveResearch(token, draftId);
+        void navigate(`/research/${research.id}`);
+      } else {
+        // Create new research
+        const { createResearch } = await import('@/services/llmOrchestratorApi');
+        const request: Parameters<typeof createResearch>[1] = {
+          prompt,
+          selectedLlms,
+          synthesisLlm,
+        };
+        if (contextObjects.length > 0) {
+          request.inputContexts = contextObjects;
+        }
+        const research = await createResearch(token, request);
+        void navigate(`/research/${research.id}`);
       }
-
-      const research = await createResearch(request);
-      void navigate(`/research/${research.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create research');
     } finally {
@@ -126,11 +257,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setError(null);
 
     try {
+      const token = await getAccessToken();
       const contextObjects = validContexts.map((content) => ({ content }));
 
-      const request: Parameters<typeof saveDraft>[0] = {
-        prompt,
-      };
+      let resultId: string;
+
+      const request: SaveDraftRequest = { prompt };
       if (selectedLlms.length > 0) {
         request.selectedLlms = selectedLlms;
       }
@@ -141,8 +273,19 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         request.inputContexts = contextObjects;
       }
 
-      const result = await saveDraft(request);
-      void navigate(`/research/${result.id}`);
+      if (isEditMode) {
+        // Update existing draft
+        const updated = await updateDraft(token, draftId, request);
+        resultId = updated.id;
+        lastSavedPromptRef.current = prompt;
+        setHasUnsavedChanges(false);
+      } else {
+        // Create new draft
+        const result = await saveDraft(token, request);
+        resultId = result.id;
+      }
+
+      void navigate(`/research/${resultId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save draft');
     } finally {
@@ -165,11 +308,19 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">New Research</h2>
+        <h2 className="text-2xl font-bold text-slate-900">
+          {isEditMode ? 'Edit Research' : 'New Research'}
+        </h2>
         <p className="text-slate-600">
           Run your research prompt across multiple LLMs and get a synthesized report.
         </p>
       </div>
+
+      {loading ? (
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
+          Loading draft...
+        </div>
+      ) : null}
 
       {!hasAnyLlm && !keysLoading ? (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
@@ -197,6 +348,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               onChange={(e): void => {
                 setPrompt(e.target.value);
               }}
+              onBlur={handlePromptBlur}
               placeholder="Enter your research question or topic..."
               className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[150px]"
               rows={8}

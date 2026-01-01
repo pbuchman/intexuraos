@@ -178,6 +178,8 @@ export const saveDraftBodySchema = {
   },
 } as const;
 
+export const updateDraftBodySchema = saveDraftBodySchema;
+
 export const saveDraftResponseSchema = {
   type: 'object',
   properties: {

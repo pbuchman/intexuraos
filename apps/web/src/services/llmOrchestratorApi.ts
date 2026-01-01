@@ -66,6 +66,20 @@ export async function getResearch(accessToken: string, id: string): Promise<Rese
 }
 
 /**
+ * Update a draft research.
+ */
+export async function updateDraft(
+  accessToken: string,
+  id: string,
+  request: SaveDraftRequest
+): Promise<Research> {
+  return await apiRequest<Research>(config.llmOrchestratorUrl, `/research/${id}`, accessToken, {
+    method: 'PATCH',
+    body: request,
+  });
+}
+
+/**
  * Approve a draft research and start processing.
  */
 export async function approveResearch(accessToken: string, id: string): Promise<Research> {

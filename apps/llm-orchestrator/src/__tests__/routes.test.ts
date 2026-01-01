@@ -124,6 +124,21 @@ describe('Research Routes - Unauthenticated', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
+  it('PATCH /research/:id returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/research/test-id',
+      payload: {
+        prompt: 'Updated prompt',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
   it('DELETE /research/:id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
@@ -392,6 +407,143 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('PATCH /research/:id', () => {
+    it('updates draft research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        prompt: 'Original prompt',
+        title: 'Original Title',
+      });
+      fakeRepo.addResearch(draft);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Updated prompt',
+          selectedLlms: ['anthropic'],
+          synthesisLlm: 'google',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt).toBe('Updated prompt');
+      expect(body.data.selectedLlms).toEqual(['anthropic']);
+      expect(body.data.synthesisLlm).toBe('google');
+    });
+
+    it('regenerates title when prompt changes', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        prompt: 'Old prompt',
+        title: 'Old Title',
+      });
+      fakeRepo.addResearch(draft);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'New prompt for title generation test that is long enough',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.title).not.toBe('Old Title');
+      expect(body.data.title).toBe('New prompt for title generation test that is long enough');
+    });
+
+    it('returns 404 when research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Updated prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 when not owner', async () => {
+      const token = await createToken(OTHER_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-123',
+        userId: TEST_USER_ID,
+        status: 'draft',
+      });
+      fakeRepo.addResearch(draft);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Updated prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when trying to update non-draft', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/research-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Updated prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        payload: {
+          prompt: 'Updated prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
 
