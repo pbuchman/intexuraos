@@ -435,7 +435,7 @@ module "pubsub_commands_ingest" {
   ]
 }
 
-# Topic for research action events (commands-router -> research-agent)
+# Topic for research action events (commands-router -> actions-agent)
 module "pubsub_actions_research" {
   source = "../../modules/pubsub-push"
 
