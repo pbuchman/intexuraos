@@ -1,0 +1,159 @@
+# Action Configuration for IntexuraOS
+# Defines available actions and their mappings to action types
+
+# Global action definitions
+actions:
+  delete:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: DELETE
+    ui:
+      label: Delete
+      variant: danger
+      icon: Trash2
+
+  discard:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: DELETE
+    ui:
+      label: Discard
+      variant: secondary
+      icon: XCircle
+
+  create-research:
+    endpoint:
+      path: /llm/research
+      method: POST
+      body:
+        prompt: "{{action.payload.prompt}}"
+    ui:
+      label: Create Research
+      variant: primary
+      icon: Sparkles
+
+  approve-research:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: PATCH
+      body:
+        status: processing
+    ui:
+      label: Approve & Start
+      variant: primary
+      icon: Play
+
+  reject:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: PATCH
+      body:
+        status: rejected
+    ui:
+      label: Reject
+      variant: secondary
+      icon: XCircle
+
+  create-note:
+    endpoint:
+      path: /notion/notes
+      method: POST
+      body:
+        content: "{{action.payload.content}}"
+        title: "{{action.title}}"
+    ui:
+      label: Create Note
+      variant: primary
+      icon: FileText
+
+  create-todo:
+    endpoint:
+      path: /notion/todos
+      method: POST
+      body:
+        title: "{{action.title}}"
+        description: "{{action.payload.description}}"
+    ui:
+      label: Add to Tasks
+      variant: primary
+      icon: ListTodo
+
+# Type-specific action mappings with conditions
+types:
+  research:
+    actions:
+      - action: discard
+        conditions:
+          - "status == 'pending'"
+
+      - action: approve-research
+        conditions:
+          - "status == 'pending'"
+          - "confidence > 0.8"
+
+      - action: delete
+        conditions:
+          - "status == 'failed'"
+          - "status == 'rejected'"
+
+  note:
+    actions:
+      - action: create-note
+        conditions:
+          - "status == 'pending'"
+          - "confidence > 0.7"
+
+      - action: reject
+        conditions:
+          - "status == 'pending'"
+
+      - action: delete
+        conditions:
+          - "status == 'rejected'"
+          - "status == 'failed'"
+
+  todo:
+    actions:
+      - action: create-todo
+        conditions:
+          - "status == 'pending'"
+          - "confidence > 0.75"
+
+      - action: reject
+        conditions:
+          - "status == 'pending'"
+
+      - action: delete
+        conditions:
+          - "status == 'rejected'"
+          - "status == 'failed'"
+          - "status == 'completed'"
+
+  link:
+    actions:
+      - action: delete
+        conditions:
+          - "status == 'pending'"
+          - "status == 'rejected'"
+
+  calendar:
+    actions:
+      - action: delete
+        conditions:
+          - "status == 'pending'"
+          - "status == 'rejected'"
+
+  reminder:
+    actions:
+      - action: delete
+        conditions:
+          - "status == 'pending'"
+          - "status == 'rejected'"
+
+  unclassified:
+    actions:
+      - action: delete
+        conditions:
+          - "status == 'pending'"
+          - "status == 'rejected'"
+          - "status == 'failed'"
