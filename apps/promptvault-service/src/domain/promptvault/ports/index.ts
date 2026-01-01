@@ -15,3 +15,8 @@ export type {
   IdempotencyLedger,
   CreatePromptVaultNoteParams,
 } from './NotionPorts.js';
+export type {
+  PromptVaultSettingsError,
+  PromptVaultSettings,
+  PromptVaultSettingsPort,
+} from './PromptVaultSettingsPort.js';

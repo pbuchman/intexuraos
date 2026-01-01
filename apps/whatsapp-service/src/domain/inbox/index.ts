@@ -84,7 +84,9 @@ export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 // Events
 export type {
   AudioStoredEvent,
+  CommandIngestEvent,
   MediaCleanupEvent,
+  SendMessageEvent,
   TranscriptionCompletedEvent,
   WhatsAppEvent,
 } from './events/index.js';

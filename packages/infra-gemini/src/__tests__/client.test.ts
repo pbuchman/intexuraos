@@ -1,8 +1,3 @@
-/**
- * Tests for Gemini client.
- * Mocks @google/genai and @intexuraos/infra-llm-audit.
- */
-
 import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const mockGenerateContent = vi.fn();
@@ -13,15 +8,15 @@ vi.mock('@google/genai', () => ({
   },
 }));
 
-vi.mock('@intexuraos/infra-llm-audit', () => ({
+vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({
     success: vi.fn().mockResolvedValue(undefined),
     error: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
-const { createAuditContext } = await import('@intexuraos/infra-llm-audit');
-const { createGeminiClient } = await import('../client.js');
+const { createAuditContext } = await import('@intexuraos/llm-audit');
+const { createGeminiClient, GEMINI_DEFAULTS } = await import('../index.js');
 
 describe('createGeminiClient', () => {
   beforeEach(() => {
@@ -44,7 +39,7 @@ describe('createGeminiClient', () => {
       }
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gemini-2.0-flash',
+          model: GEMINI_DEFAULTS.researchModel,
           config: expect.objectContaining({
             tools: [{ googleSearch: {} }],
           }),
@@ -227,6 +222,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value).toBe('Generated response');
       }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: GEMINI_DEFAULTS.defaultModel,
+        })
+      );
     });
 
     it('handles null text response', async () => {
@@ -250,62 +250,6 @@ describe('createGeminiClient', () => {
       const result = await client.generate('Test');
 
       expect(result.ok).toBe(false);
-    });
-  });
-
-  describe('generateTitle', () => {
-    it('returns generated title', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'AI Research Overview',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Tell me about AI');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('AI Research Overview');
-      }
-    });
-
-    it('trims whitespace from title', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: '  Trimmed Title  ',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Trimmed Title');
-      }
-    });
-
-    it('returns error on API failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Network error'));
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-
-    it('handles null text response', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('');
-      }
     });
   });
 
@@ -426,6 +370,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value).toBe(true);
       }
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: GEMINI_DEFAULTS.validationModel,
+        })
+      );
     });
 
     it('returns true even with null text response', async () => {
@@ -455,18 +404,58 @@ describe('createGeminiClient', () => {
     });
   });
 
-  describe('custom model', () => {
-    it('uses custom model when provided', async () => {
+  describe('custom models', () => {
+    it('uses custom researchModel when provided', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Response',
+        candidates: [],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key', model: 'gemini-pro' });
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        researchModel: 'gemini-custom-research',
+      });
       await client.research('Test prompt');
 
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gemini-pro',
+          model: 'gemini-custom-research',
+        })
+      );
+    });
+
+    it('uses custom defaultModel when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Response',
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        defaultModel: 'gemini-custom-default',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-custom-default',
+        })
+      );
+    });
+
+    it('uses custom validationModel when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Response',
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        validationModel: 'gemini-custom-validation',
+      });
+      await client.validateKey();
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-custom-validation',
         })
       );
     });

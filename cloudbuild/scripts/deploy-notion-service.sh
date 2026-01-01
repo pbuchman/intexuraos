@@ -18,11 +18,17 @@ log "  Environment: ${ENVIRONMENT:-unset}"
 log "  Region: ${REGION}"
 log "  Image: ${image}"
 
+# Check if service exists (must be created by Terraform first)
+if ! gcloud run services describe "$CLOUD_RUN_SERVICE" --region="$REGION" &>/dev/null; then
+  log "ERROR: Service ${CLOUD_RUN_SERVICE} does not exist"
+  log "Run 'terraform apply' in terraform/environments/dev/ first to create the service with proper configuration"
+  exit 1
+fi
+
 gcloud run deploy "$CLOUD_RUN_SERVICE" \
   --image="$image" \
   --region="$REGION" \
   --platform=managed \
-  --allow-unauthenticated \
   --quiet
 
 log "Deployment complete for ${SERVICE}"

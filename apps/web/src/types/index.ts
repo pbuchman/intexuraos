@@ -171,7 +171,8 @@ export interface AppConfig {
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
-  llmOrchestratorServiceUrl: string;
+  llmOrchestratorUrl: string;
+  commandsRouterServiceUrl: string;
 }
 
 /**
@@ -226,4 +227,89 @@ export interface UserSettings {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Command classification type from commands-router
+ */
+export type CommandType =
+  | 'todo'
+  | 'research'
+  | 'note'
+  | 'link'
+  | 'calendar'
+  | 'reminder'
+  | 'unclassified';
+
+/**
+ * Command status
+ */
+export type CommandStatus = 'received' | 'classified' | 'failed';
+
+/**
+ * Command source type
+ */
+export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
+
+/**
+ * Command classification details
+ */
+export interface CommandClassification {
+  type: CommandType;
+  confidence: number;
+  classifiedAt: string;
+}
+
+/**
+ * Command from commands-router
+ */
+export interface Command {
+  id: string;
+  userId: string;
+  sourceType: CommandSourceType;
+  externalId: string;
+  text: string;
+  timestamp: string;
+  status: CommandStatus;
+  classification?: CommandClassification;
+  actionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Action status
+ */
+export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Action from commands-router
+ */
+export interface Action {
+  id: string;
+  userId: string;
+  commandId: string;
+  type: CommandType;
+  confidence: number;
+  title: string;
+  status: ActionStatus;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Commands list response
+ */
+export interface CommandsResponse {
+  commands: Command[];
+  nextCursor?: string;
+}
+
+/**
+ * Actions list response
+ */
+export interface ActionsResponse {
+  actions: Action[];
+  nextCursor?: string;
 }

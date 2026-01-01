@@ -9,6 +9,30 @@ import { useResearch } from '@/hooks';
 import type { LlmResult, ResearchStatus } from '@/services/llmOrchestratorApi.types';
 
 /**
+ * Format elapsed time in a human-readable format.
+ */
+function formatElapsedTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) {
+    return `${String(diffDays)}d ago`;
+  }
+  if (diffHours > 0) {
+    return `${String(diffHours)}h ago`;
+  }
+  if (diffMinutes > 0) {
+    return `${String(diffMinutes)}m ago`;
+  }
+  return 'just now';
+}
+
+/**
  * Strip markdown formatting from text for clean display.
  * Handles bold, italic, headers, code markers, and surrounding quotes.
  */
@@ -137,6 +161,13 @@ export function ResearchDetailPage(): React.JSX.Element {
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-2xl font-bold text-slate-900">{getDisplayTitle()}</h2>
           <ResearchStatusBadge status={research.status} />
+          <span className="text-sm text-slate-500">
+            {research.status === 'pending' || research.status === 'processing'
+              ? `Started ${formatElapsedTime(research.startedAt)}`
+              : research.completedAt !== undefined
+                ? `Finished ${formatElapsedTime(research.completedAt)}`
+                : `Started ${formatElapsedTime(research.startedAt)}`}
+          </span>
         </div>
       </div>
 

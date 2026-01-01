@@ -10,6 +10,7 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import {
   FakeNotionConnectionRepository,
   FakeNotionServiceClient,
+  FakePromptVaultSettingsRepository,
   MockNotionApiAdapter,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
@@ -90,6 +91,7 @@ export interface TestContext {
   connectionRepository: FakeNotionConnectionRepository;
   notionServiceClient: FakeNotionServiceClient;
   notionApi: MockNotionApiAdapter;
+  promptVaultSettings: FakePromptVaultSettingsRepository;
 }
 
 /**
@@ -104,6 +106,7 @@ export function setupTestContext(): TestContext {
     connectionRepository: null as unknown as FakeNotionConnectionRepository,
     notionServiceClient: null as unknown as FakeNotionServiceClient,
     notionApi: null as unknown as MockNotionApiAdapter,
+    promptVaultSettings: null as unknown as FakePromptVaultSettingsRepository,
   };
 
   beforeAll(async () => {
@@ -118,11 +121,11 @@ export function setupTestContext(): TestContext {
     context.connectionRepository = new FakeNotionConnectionRepository();
     context.notionServiceClient = new FakeNotionServiceClient();
     context.notionApi = new MockNotionApiAdapter();
+    context.promptVaultSettings = new FakePromptVaultSettingsRepository();
 
-    // Inject fake services for testing
-    // Use real promptRepository (will call real promptApi functions with mocked Notion Client)
     setServices({
       notionServiceClient: context.notionServiceClient,
+      promptVaultSettings: context.promptVaultSettings,
     });
 
     clearJwksCache();

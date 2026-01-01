@@ -10,8 +10,8 @@ import {
   type NotionError,
   type NotionLogger,
 } from '@intexuraos/infra-notion';
-import { getPromptVaultPageId } from '../firestore/promptVaultSettingsRepository.js';
 import type { NotionServiceClient } from './notionServiceClient.js';
+import type { PromptVaultSettingsPort } from '../../domain/promptvault/ports/index.js';
 
 // ============================================================================
 // Types
@@ -78,12 +78,13 @@ function joinTextChunks(chunks: string[]): string {
 
 async function getUserContext(
   userId: string,
-  notionServiceClient: NotionServiceClient
+  notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort
 ): Promise<Result<{ token: string; promptVaultPageId: string }, PromptVaultError>> {
   // Fetch token from notion-service and promptVaultPageId from local Firestore in parallel
   const [tokenContextResult, pageIdResult] = await Promise.all([
     notionServiceClient.getNotionToken(userId),
-    getPromptVaultPageId(userId),
+    promptVaultSettings.getPromptVaultPageId(userId),
   ]);
 
   // Check token context
@@ -134,9 +135,10 @@ export async function createPrompt(
   title: string,
   content: string,
   notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId, notionServiceClient);
+  const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
 
   const { token, promptVaultPageId } = ctx.value;
@@ -203,9 +205,10 @@ export async function createPrompt(
 export async function listPrompts(
   userId: string,
   notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort,
   logger?: NotionLogger
 ): Promise<Result<Prompt[], PromptVaultError>> {
-  const ctx = await getUserContext(userId, notionServiceClient);
+  const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
 
   const { token, promptVaultPageId } = ctx.value;
@@ -246,9 +249,10 @@ export async function getPrompt(
   userId: string,
   promptId: string,
   notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId, notionServiceClient);
+  const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
 
   return await getPromptById(ctx.value.token, promptId, logger);
@@ -313,9 +317,10 @@ export async function updatePrompt(
   promptId: string,
   update: { title?: string; content?: string },
   notionServiceClient: NotionServiceClient,
+  promptVaultSettings: PromptVaultSettingsPort,
   logger?: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
-  const ctx = await getUserContext(userId, notionServiceClient);
+  const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
 
   const { token } = ctx.value;

@@ -35,10 +35,16 @@ const SERVICES = [
   { name: 'whatsapp-service', port: 8113, color: '\x1b[32m' },
   { name: 'mobile-notifications-service', port: 8114, color: '\x1b[34m' },
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
-  { name: 'llm-orchestrator-service', port: 8116, color: '\x1b[96m' },
+  { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
+  { name: 'commands-router', port: 8117, color: '\x1b[93m' },
+  { name: 'research-agent', port: 8118, color: '\x1b[94m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
+
+const DOCKER_LOG_SERVICES = [
+  { name: 'pubsub-ui', container: 'docker-pubsub-ui-1', color: '\x1b[90m' },
+];
 
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
@@ -96,8 +102,9 @@ async function waitForEmulators() {
   const delayMs = 1000;
 
   const endpoints = [
-    { name: 'Firestore', url: 'http://localhost:8101' },
+    { name: 'Firebase (Firestore + Pub/Sub)', url: 'http://localhost:8100' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
+    { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
 
   for (const endpoint of endpoints) {
@@ -149,7 +156,44 @@ const API_DOCS_HUB_ENV = {
   NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
-  LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
+  RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
+};
+
+const COMMON_SERVICE_ENV = {
+  AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
+  AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
+  AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE ?? '',
+  AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
+  AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
+  INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
+};
+
+const SERVICE_ENV_MAPPINGS = {
+  'commands-router': {
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+  },
+  'llm-orchestrator': {
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'whatsapp-service': {
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-sub',
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
+    INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
+  },
+  'research-agent': {
+    COMMANDS_ROUTER_URL: 'http://localhost:8117',
+    LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+  },
 };
 
 function startService(service) {
@@ -161,9 +205,11 @@ function startService(service) {
 
   const env = {
     ...process.env,
+    ...COMMON_SERVICE_ENV,
+    ...(SERVICE_ENV_MAPPINGS[service.name] ?? {}),
+    ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
     PORT: String(service.port),
     NODE_ENV: 'development',
-    ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
   };
 
   const child = spawn('npx', ['tsx', 'watch', 'src/index.ts'], {
@@ -249,7 +295,46 @@ function startWebApp() {
   return child;
 }
 
+function followDockerLogs(service) {
+  const child = spawn('docker', ['logs', '-f', service.container], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const prefix = `[${service.name}]`.padEnd(30);
+
+  const processLine = (stream) => {
+    const rl = createInterface({ input: stream });
+    rl.on('line', (line) => {
+      log(prefix, line, service.color);
+    });
+  };
+
+  processLine(child.stdout);
+  processLine(child.stderr);
+
+  child.on('error', (error) => {
+    log(prefix, `Error: ${error.message}`, '\x1b[31m');
+  });
+
+  child.on('exit', (code, signal) => {
+    if (!shuttingDown) {
+      log(prefix, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
+    }
+    processes.delete(`docker-${service.name}`);
+  });
+
+  processes.set(`docker-${service.name}`, child);
+  log(prefix, 'Following docker logs...', service.color);
+
+  return child;
+}
+
 async function startAllServices() {
+  logOrchestrator('Following docker container logs...');
+  for (const dockerService of DOCKER_LOG_SERVICES) {
+    followDockerLogs(dockerService);
+  }
+
   logOrchestrator('Starting services...');
 
   for (const service of SERVICES) {
@@ -266,6 +351,7 @@ async function startAllServices() {
   console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
   console.log(`  API Docs:         ${BOLD}http://localhost:8115${RESET}`);
   console.log(`  Firebase UI:      http://localhost:8100`);
+  console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
   logOrchestrator('');
   logOrchestrator('Press Ctrl+C to stop all services');
 }

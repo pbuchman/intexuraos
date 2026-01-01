@@ -11,6 +11,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
+  CommandIngestEvent,
   EventPublisherPort,
   IgnoredReason,
   InboxError,
@@ -408,9 +409,11 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 export class FakeMediaStorage implements MediaStoragePort {
   private files = new Map<string, { buffer: Buffer; contentType: string }>();
   private signedUrls = new Map<string, string>();
+  private deletedPaths: string[] = [];
   private shouldFailUpload = false;
   private shouldFailThumbnailUpload = false;
   private shouldFailGetSignedUrl = false;
+  private shouldFailDelete = false;
 
   setFailUpload(fail: boolean): void {
     this.shouldFailUpload = fail;
@@ -422,6 +425,14 @@ export class FakeMediaStorage implements MediaStoragePort {
 
   setFailGetSignedUrl(fail: boolean): void {
     this.shouldFailGetSignedUrl = fail;
+  }
+
+  setFailDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  getDeletedPaths(): string[] {
+    return [...this.deletedPaths];
   }
 
   upload(
@@ -459,6 +470,10 @@ export class FakeMediaStorage implements MediaStoragePort {
   }
 
   delete(gcsPath: string): Promise<Result<void, InboxError>> {
+    if (this.shouldFailDelete) {
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
+    }
+    this.deletedPaths.push(gcsPath);
     this.files.delete(gcsPath);
     return Promise.resolve(ok(undefined));
   }
@@ -485,6 +500,8 @@ export class FakeMediaStorage implements MediaStoragePort {
   clear(): void {
     this.files.clear();
     this.signedUrls.clear();
+    this.deletedPaths = [];
+    this.shouldFailDelete = false;
   }
 }
 
@@ -493,9 +510,15 @@ export class FakeMediaStorage implements MediaStoragePort {
  */
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
+  private commandIngestEvents: CommandIngestEvent[] = [];
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
     this.mediaCleanupEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, InboxError>> {
+    this.commandIngestEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
@@ -503,8 +526,13 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.mediaCleanupEvents];
   }
 
+  getCommandIngestEvents(): CommandIngestEvent[] {
+    return [...this.commandIngestEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
+    this.commandIngestEvents = [];
   }
 }
 
@@ -513,8 +541,28 @@ export class FakeEventPublisher implements EventPublisherPort {
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
   private sentMessages: { phoneNumber: string; message: string }[] = [];
+  private shouldFail = false;
+  private shouldThrow = false;
+  private failError: InboxError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
+
+  setFail(fail: boolean, error?: InboxError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failError = error;
+    }
+  }
+
+  setThrow(shouldThrow: boolean): void {
+    this.shouldThrow = shouldThrow;
+  }
 
   sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, InboxError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
     this.sentMessages.push({ phoneNumber, message });
     return Promise.resolve(ok(undefined));
   }
@@ -525,6 +573,9 @@ export class FakeMessageSender implements WhatsAppMessageSender {
 
   clear(): void {
     this.sentMessages = [];
+    this.shouldFail = false;
+    this.shouldThrow = false;
+    this.failError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
   }
 }
 

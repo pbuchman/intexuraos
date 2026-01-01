@@ -23,6 +23,7 @@ import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { SpeechTranscriptionPort } from '../ports/transcription.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 
 /**
@@ -74,6 +75,7 @@ export interface TranscribeAudioDeps {
   mediaStorage: MediaStoragePort;
   transcriptionService: SpeechTranscriptionPort;
   whatsappCloudApi: WhatsAppCloudApiPort;
+  eventPublisher?: EventPublisherPort;
 }
 
 /**
@@ -338,7 +340,31 @@ export class TranscribeAudioUseCase {
         'Transcription completed successfully'
       );
 
-      // Step 6: Send transcript to user via WhatsApp
+      // Step 6: Publish command ingest event for voice message
+      if (this.deps.eventPublisher !== undefined) {
+        const publishResult = await this.deps.eventPublisher.publishCommandIngest({
+          type: 'command.ingest',
+          userId,
+          sourceType: 'whatsapp_voice',
+          externalId: originalWaMessageId,
+          text: transcript,
+          timestamp: startedAt,
+        });
+
+        if (publishResult.ok) {
+          logger.info(
+            { event: 'command_ingest_published', messageId, userId },
+            'Published command ingest event for voice message'
+          );
+        } else {
+          logger.error(
+            { event: 'command_ingest_publish_failed', messageId, error: publishResult.error },
+            'Failed to publish command ingest event'
+          );
+        }
+      }
+
+      // Step 7: Send transcript to user via WhatsApp
       await this.sendSuccessMessage(
         whatsappCloudApi,
         phoneNumberId,

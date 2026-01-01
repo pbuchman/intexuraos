@@ -59,7 +59,7 @@ describe('Internal Routes', () => {
     process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
     process.env['AUTH_JWKS_URL'] = jwksUrl;
     process.env['AUTH_ISSUER'] = issuer;
-    process.env['INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();
 
@@ -78,7 +78,7 @@ describe('Internal Routes', () => {
   afterEach(async () => {
     await app.close();
     resetServices();
-    delete process.env['INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 
   describe('GET /internal/users/:uid/llm-keys', () => {
@@ -199,8 +199,8 @@ describe('Internal Routes', () => {
       expect(body.anthropic).toBeNull();
     });
 
-    it('returns 401 when INTERNAL_AUTH_TOKEN is not configured', async () => {
-      delete process.env['INTERNAL_AUTH_TOKEN'];
+    it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
       app = await buildServer();
 
@@ -249,6 +249,36 @@ describe('Internal Routes', () => {
       };
       // Google key should be null due to decryption failure
       expect(body.google).toBeNull();
+    });
+  });
+
+  describe('POST /internal/users/:uid/llm-keys/:provider/last-used', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/users/user-123/llm-keys/google/last-used',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('updates llm last used timestamp for valid request', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/users/user-123/llm-keys/anthropic/last-used',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe('');
     });
   });
 });

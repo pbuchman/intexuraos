@@ -28,14 +28,13 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY apps/whatsapp-service/package*.json ./apps/whatsapp-service/
-
-# Install production dependencies only
-RUN npm ci --omit=dev -w @intexuraos/whatsapp-service
+# Copy generated production package.json and install deps
+COPY --from=builder /app/apps/whatsapp-service/dist/package.json ./
+RUN npm install --omit=dev
 
 # Copy built file
-COPY --from=builder /app/apps/whatsapp-service/dist ./apps/whatsapp-service/dist
+COPY --from=builder /app/apps/whatsapp-service/dist/index.js ./dist/
+COPY --from=builder /app/apps/whatsapp-service/dist/index.js.map ./dist/
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -45,4 +44,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["node", "apps/whatsapp-service/dist/index.js"]
+CMD ["node", "dist/index.js"]

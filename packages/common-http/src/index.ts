@@ -41,7 +41,12 @@ export { intexuraFastifyPlugin } from './http/fastifyPlugin.js';
 export { handleValidationError } from './http/validation.js';
 
 // Logger utilities
-export { shouldLogRequest, registerQuietHealthCheckLogging } from './http/logger.js';
+export {
+  shouldLogRequest,
+  registerQuietHealthCheckLogging,
+  logIncomingRequest,
+  type LogIncomingRequestOptions,
+} from './http/logger.js';
 
 // Auth utilities
 export { type JwtConfig, type VerifiedJwt, verifyJwt, clearJwksCache } from './auth/jwt.js';
@@ -52,3 +57,6 @@ export {
   tryAuth,
   fastifyAuthPlugin,
 } from './auth/fastifyAuthPlugin.js';
+
+// Internal service-to-service auth
+export { type InternalAuthResult, validateInternalAuth } from './auth/internalAuth.js';

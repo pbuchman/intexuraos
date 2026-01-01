@@ -16,7 +16,6 @@ import {
   type TestContext,
 } from './testUtils.js';
 import { vi } from 'vitest';
-import { ok } from '@intexuraos/common-core';
 import { FakeNotionServiceClient } from './fakes.js';
 
 // Mock Notion Client - must be defined at top level
@@ -66,16 +65,9 @@ vi.mock('@notionhq/client', () => {
   };
 });
 
-// Mock promptVaultSettingsRepository
-const mockGetPromptVaultPageId = vi.fn();
-vi.mock('../infra/firestore/promptVaultSettingsRepository.js', () => ({
-  getPromptVaultPageId: (...args: unknown[]): unknown => mockGetPromptVaultPageId(...args),
-  savePromptVaultPageId: vi.fn(),
-}));
-
 /**
  * Helper to set up a Notion connection directly through fakes.
- * Sets up token via FakeNotionServiceClient and pageId via mocked promptVaultSettingsRepository.
+ * Sets up token via FakeNotionServiceClient and pageId via FakePromptVaultSettingsRepository.
  */
 async function setupConnection(
   ctx: TestContext,
@@ -86,13 +78,8 @@ async function setupConnection(
   const fakeClient = ctx.notionServiceClient as FakeNotionServiceClient;
   fakeClient.setTokenContext(userId, { connected: true, token: 'secret-token' });
 
-  // Mock promptVaultPageId response
-  mockGetPromptVaultPageId.mockImplementation(async (uid: string) => {
-    if (uid === userId) {
-      return ok(pageId);
-    }
-    return ok(null);
-  });
+  // Set up promptVaultPageId via injected fake
+  ctx.promptVaultSettings.setPageId(userId, pageId);
 
   // Set up Notion API mocks for the page
   const pageTitle = pageId === 'vault-page-id' ? 'Prompt Vault' : 'Test Page';
@@ -148,7 +135,6 @@ describe('Prompt Routes', () => {
   const ctx = setupTestContext();
 
   beforeEach(() => {
-    mockGetPromptVaultPageId.mockReset();
     // Reset all Notion Client mocks
     mockNotionMethods.retrieve.mockReset();
     mockNotionMethods.create.mockReset();
@@ -229,7 +215,7 @@ describe('Prompt Routes', () => {
       // Set up token context with null token
       const fakeClient = ctx.notionServiceClient as FakeNotionServiceClient;
       fakeClient.setTokenContext('user-no-token', { connected: true, token: null });
-      mockGetPromptVaultPageId.mockResolvedValueOnce(ok('vault-page-id'));
+      ctx.promptVaultSettings.setPageId('user-no-token', 'vault-page-id');
 
       const response = await ctx.app.inject({
         method: 'GET',
@@ -278,13 +264,10 @@ describe('Prompt Routes', () => {
       const fakeClient = ctx.notionServiceClient as FakeNotionServiceClient;
       fakeClient.setTokenContext('user-pageid-error', { connected: true, token: 'secret-token' });
 
-      // Inject error for getPromptVaultPageId
-      mockGetPromptVaultPageId.mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Failed to get prompt vault page ID: Database error',
-        },
+      // Inject error for getPromptVaultPageId via fake
+      ctx.promptVaultSettings.setGetPageIdError({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get prompt vault page ID: Database error',
       });
 
       const response = await ctx.app.inject({
@@ -364,8 +347,7 @@ describe('Prompt Routes', () => {
         token: 'secret-token',
       });
 
-      // Mock promptVaultPageId as null
-      mockGetPromptVaultPageId.mockResolvedValueOnce(ok(null));
+      // Don't set pageId - the fake will return null by default
 
       const response = await ctx.app.inject({
         method: 'GET',

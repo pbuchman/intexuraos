@@ -39,8 +39,16 @@
       "description": "Auth0 refresh tokens (AES-256-GCM encrypted)"
     },
     "researches": {
-      "owner": "llm-orchestrator-service",
+      "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"
+    },
+    "commands": {
+      "owner": "commands-router",
+      "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
+    },
+    "actions": {
+      "owner": "commands-router",
+      "description": "Pending actions derived from classified commands"
     }
   }
 }

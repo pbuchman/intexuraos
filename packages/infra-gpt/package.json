@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
-    "@intexuraos/infra-llm-audit": "*",
+    "@intexuraos/llm-audit": "*",
+    "@intexuraos/llm-contract": "*",
     "openai": "^6.15.0"
   }
 }

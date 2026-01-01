@@ -2,7 +2,7 @@
 import * as esbuild from 'esbuild';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -52,6 +52,40 @@ function collectExternalDeps(pkgName, visited = new Set()) {
   return externals;
 }
 
+/**
+ * Recursively collect all npm dependencies WITH versions from workspace packages.
+ * Returns a Map of package name -> version for generating production package.json.
+ */
+function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
+  if (visited.has(pkgName)) return new Map();
+  visited.add(pkgName);
+
+  if (!pkgName.startsWith('@intexuraos/')) return new Map();
+
+  const shortName = pkgName.replace('@intexuraos/', '');
+  const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
+  const pkgPath = existsSync(appPath)
+    ? appPath
+    : resolve(rootDir, `packages/${shortName}/package.json`);
+
+  if (!existsSync(pkgPath)) return new Map();
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  const deps = { ...pkg.dependencies };
+  const externals = new Map();
+
+  for (const [dep, version] of Object.entries(deps)) {
+    if (dep.startsWith('@intexuraos/')) {
+      const subExternals = collectExternalDepsWithVersions(dep, visited);
+      subExternals.forEach((v, k) => externals.set(k, v));
+    } else {
+      externals.set(dep, version);
+    }
+  }
+
+  return externals;
+}
+
 // Collect all external npm deps (including transitive from workspace packages)
 const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
 
@@ -69,7 +103,22 @@ await esbuild.build({
   absWorkingDir: rootDir,
 });
 
+// Generate production package.json with all npm dependencies (including transitive)
+const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
+const prodPackageJson = {
+  name: `@intexuraos/${service}-prod`,
+  version: '1.0.0',
+  type: 'module',
+  dependencies: Object.fromEntries(depsWithVersions),
+};
+
+writeFileSync(
+  resolve(rootDir, `apps/${service}/dist/package.json`),
+  JSON.stringify(prodPackageJson, null, 2)
+);
+
 console.log(`Built ${service}`);
 console.log(
   `External packages (${String(externalPackages.length)}): ${externalPackages.join(', ')}`
 );
+console.log(`Generated dist/package.json with ${String(depsWithVersions.size)} dependencies`);

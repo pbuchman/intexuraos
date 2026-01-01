@@ -29,8 +29,16 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     displayName: 'Mobile Notifications Service API',
   },
   {
-    key: 'LLM_ORCHESTRATOR_SERVICE_OPENAPI_URL',
-    displayName: 'LLM Orchestrator Service API',
+    key: 'LLM_ORCHESTRATOR_OPENAPI_URL',
+    displayName: 'LLM Orchestrator API',
+  },
+  {
+    key: 'COMMANDS_ROUTER_OPENAPI_URL',
+    displayName: 'Commands Router API',
+  },
+  {
+    key: 'RESEARCH_AGENT_OPENAPI_URL',
+    displayName: 'Research Agent API',
   },
 ];
 

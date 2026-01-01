@@ -49,8 +49,12 @@ validate_dockerfile() {
 
     # Extract COPY commands for packages and check they exist
     while IFS= read -r line; do
+        # Skip glob patterns (packages/* or packages/) - these copy all packages
+        if [[ "$line" =~ COPY[[:space:]]+packages/\*/ ]] || [[ "$line" =~ COPY[[:space:]]+packages/[[:space:]] ]]; then
+            continue
+        fi
         # Match COPY commands like: COPY packages/xxx/package*.json
-        if [[ "$line" =~ COPY[[:space:]]+packages/([^/]+)/ ]]; then
+        if [[ "$line" =~ COPY[[:space:]]+packages/([^/\*]+)/ ]]; then
             local pkg="${BASH_REMATCH[1]}"
             local pkg_dir="${REPO_ROOT}/packages/${pkg}"
             if [[ ! -d "$pkg_dir" ]]; then
