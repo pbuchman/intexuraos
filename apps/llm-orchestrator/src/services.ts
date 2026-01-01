@@ -28,6 +28,7 @@ export interface ServiceContainer {
   processResearchAsync: (researchId: string) => void;
   userServiceClient: UserServiceClient;
   createTitleGenerator: (apiKey: string) => TitleGenerator;
+  notificationSender: NotificationSender;
 }
 
 let container: ServiceContainer | null = null;
@@ -167,5 +168,6 @@ export function initializeServices(): void {
     processResearchAsync,
     userServiceClient,
     createTitleGenerator,
+    notificationSender,
   };
 }
