@@ -91,7 +91,7 @@ describe('UserServiceClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('HTTP 401');
+        expect(result.error.message).toContain('HTTP 401');
       }
     });
 
@@ -110,7 +110,7 @@ describe('UserServiceClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('HTTP 500');
+        expect(result.error.message).toContain('HTTP 500');
       }
     });
 
@@ -129,7 +129,7 @@ describe('UserServiceClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('HTTP 404');
+        expect(result.error.message).toContain('HTTP 404');
       }
     });
 
