@@ -286,7 +286,13 @@ export interface Command {
 /**
  * Action status
  */
-export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
+export type ActionStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'rejected'
+  | 'archived';
 
 /**
  * Action from commands-router

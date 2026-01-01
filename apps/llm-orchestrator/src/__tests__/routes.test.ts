@@ -11,12 +11,15 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
+  createFakeLlmProviders,
+  createFakeSynthesizer,
+  createFakeTitleGenerator,
   FakeNotificationSender,
   FakeResearchEventPublisher,
   FakeResearchRepository,
   FakeUserServiceClient,
 } from './fakes.js';
-import type { Research, TitleGenerator } from '../domain/research/index.js';
+import type { Research } from '../domain/research/index.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -63,13 +66,9 @@ describe('Research Routes - Unauthenticated', () => {
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
-      createLlmProviders: () => ({}),
-      createSynthesizer: () => ({
-        synthesize: async (): Promise<string> => 'Synthesized content',
-      }),
-      createTitleGenerator: (): TitleGenerator => ({
-        generateTitle: async (): Promise<string> => 'Generated Title',
-      }),
+      createLlmProviders: () => createFakeLlmProviders(),
+      createSynthesizer: () => createFakeSynthesizer(),
+      createTitleGenerator: () => createFakeTitleGenerator(),
     };
     setServices(services);
 
@@ -230,15 +229,12 @@ describe('Research Routes - Authenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
-      processResearchAsync: (): void => {
-        /* noop - deprecated */
-      },
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
-      createTitleGenerator: (): TitleGenerator => ({
-        generateTitle: async (): Promise<string> => 'Generated Title',
-      }),
       notificationSender: fakeNotificationSender,
+      createLlmProviders: () => createFakeLlmProviders(),
+      createSynthesizer: () => createFakeSynthesizer(),
+      createTitleGenerator: () => createFakeTitleGenerator(),
     };
     setServices(services);
 
@@ -912,15 +908,12 @@ describe('System Endpoints', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
-      processResearchAsync: (): void => {
-        /* noop - deprecated */
-      },
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
-      createTitleGenerator: (): TitleGenerator => ({
-        generateTitle: async (): Promise<string> => 'Generated Title',
-      }),
       notificationSender: fakeNotificationSender,
+      createLlmProviders: () => createFakeLlmProviders(),
+      createSynthesizer: () => createFakeSynthesizer(),
+      createTitleGenerator: () => createFakeTitleGenerator(),
     };
     setServices(services);
 
@@ -974,13 +967,9 @@ describe('Internal Routes', () => {
       researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
-      createLlmProviders: () => ({}),
-      createSynthesizer: () => ({
-        synthesize: async (): Promise<string> => 'Synthesized content',
-      }),
-      createTitleGenerator: (): TitleGenerator => ({
-        generateTitle: async (): Promise<string> => 'Generated Title',
-      }),
+      createLlmProviders: () => createFakeLlmProviders(),
+      createSynthesizer: () => createFakeSynthesizer(),
+      createTitleGenerator: () => createFakeTitleGenerator(),
     };
     setServices(services);
 

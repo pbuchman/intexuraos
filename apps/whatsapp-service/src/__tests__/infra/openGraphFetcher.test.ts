@@ -242,7 +242,6 @@ describe('OpenGraphFetcher', () => {
       // Mock the global fetch to throw a non-Error value
       const originalFetch = global.fetch;
       global.fetch = (): never => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw 'string-error';
       };
 

@@ -1,6 +1,54 @@
 # Action Configuration for IntexuraOS
-# Actions will be defined incrementally based on workflow requirements.
+# Defines reusable actions and their UI behavior for different action types.
 
-actions: {}
+actions:
+  reject:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: PATCH
+      body:
+        status: rejected
+    ui:
+      label: Reject
+      variant: secondary
+      icon: XCircle
 
-types: {}
+  archive:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: PATCH
+      body:
+        status: archived
+    ui:
+      label: Archive
+      variant: secondary
+      icon: Archive
+
+  delete:
+    endpoint:
+      path: /router/actions/{actionId}
+      method: DELETE
+    ui:
+      label: Delete
+      variant: secondary
+      icon: Trash2
+
+types:
+  research:
+    actions:
+      # Reject - only for pending actions
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: pending
+
+      # Archive - for pending, completed, failed, rejected
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [pending, completed, failed, rejected]
+
+      # Delete - available for all statuses
+      - action: delete

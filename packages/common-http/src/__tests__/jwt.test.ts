@@ -5,9 +5,9 @@
  * complex and change between versions. The eslint rules are disabled for these
  * specific mock-related operations.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import { clearJwksCache, type JwtConfig, verifyJwt } from '../auth/jwt.js';

@@ -11,9 +11,8 @@ import {
 import type { Services } from '../services.js';
 
 export class FakeActionServiceClient implements ActionServiceClient {
-  private statusUpdates: Map<string, string> = new Map();
-  private actionUpdates: Map<string, { status: string; payload?: Record<string, unknown> }> =
-    new Map();
+  private statusUpdates = new Map<string, string>();
+  private actionUpdates = new Map<string, { status: string; payload?: Record<string, unknown> }>();
   private failNext = false;
   private failError: Error | null = null;
 
@@ -94,12 +93,12 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
 }
 
 export class FakeNotificationSender implements NotificationSender {
-  private notifications: Array<{
+  private notifications: {
     userId: string;
     researchId: string;
     title: string;
     draftUrl: string;
-  }> = [];
+  }[] = [];
   private failNext = false;
   private failError: Error | null = null;
 

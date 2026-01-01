@@ -312,10 +312,12 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     const existing = this.settings.get(userId);
     if (existing !== undefined) {
       if (existing.llmApiKeys !== undefined) {
-        delete existing.llmApiKeys[provider];
+        const { [provider]: _removed, ...rest } = existing.llmApiKeys;
+        existing.llmApiKeys = rest;
       }
       if (existing.llmTestResults !== undefined) {
-        delete existing.llmTestResults[provider];
+        const { [provider]: _removed, ...rest } = existing.llmTestResults;
+        existing.llmTestResults = rest;
       }
       existing.updatedAt = new Date().toISOString();
       this.settings.set(userId, existing);

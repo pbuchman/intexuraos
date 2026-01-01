@@ -147,7 +147,10 @@ describe('handleResearchAction usecase', () => {
 
     let callCount = 0;
     const originalUpdateAction = fakeActionClient.updateAction.bind(fakeActionClient);
-    fakeActionClient.updateAction = async (actionId, update) => {
+    fakeActionClient.updateAction = async (
+      actionId,
+      update
+    ): Promise<ReturnType<typeof originalUpdateAction>> => {
       callCount++;
       if (callCount === 1 && update.status === 'completed') {
         return { ok: false, error: new Error('Database unavailable') };

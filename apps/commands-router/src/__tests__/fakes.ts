@@ -18,8 +18,8 @@ import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendi
 import type { Services } from '../services.js';
 
 export class FakeCommandRepository implements CommandRepository {
-  private commands: Map<string, Command> = new Map();
-  private userCommands: Map<string, Command[]> = new Map();
+  private commands = new Map<string, Command>();
+  private userCommands = new Map<string, Command[]>();
 
   addCommand(command: Command): void {
     this.commands.set(command.id, command);
@@ -77,8 +77,8 @@ export class FakeCommandRepository implements CommandRepository {
 }
 
 export class FakeActionRepository implements ActionRepository {
-  private actions: Map<string, Action> = new Map();
-  private userActions: Map<string, Action[]> = new Map();
+  private actions = new Map<string, Action>();
+  private userActions = new Map<string, Action[]>();
 
   addAction(action: Action): void {
     this.actions.set(action.id, action);
@@ -151,7 +151,7 @@ export class FakeClassifier implements Classifier {
 }
 
 export class FakeUserServiceClient implements UserServiceClient {
-  private apiKeys: Map<string, UserApiKeys> = new Map();
+  private apiKeys = new Map<string, UserApiKeys>();
   private failNext = false;
 
   setApiKeys(userId: string, keys: UserApiKeys): void {

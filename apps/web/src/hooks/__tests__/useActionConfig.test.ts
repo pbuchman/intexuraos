@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useActionConfig } from '../useActionConfig';
 import type { Action } from '../../types';
-import type { ActionConfig } from '../../types/actionConfig';
+import type { ActionConfig, ConditionTree } from '../../types/actionConfig';
 
 // Mock modules
 vi.mock('../../services/actionConfigLoader', () => ({
@@ -49,7 +49,7 @@ vi.mock('../../services/conditionEvaluator', () => ({
 
     // Handle all condition
     if ('all' in when) {
-      return when.all.every((child: any) => {
+      return when.all.every((child: ConditionTree) => {
         if ('field' in child) {
           const fieldValue = action[child.field as keyof typeof action];
           if (child.op === 'eq') return fieldValue === child.value;
@@ -197,11 +197,16 @@ describe('useActionConfig', () => {
 
       // Handle all condition (approve-research: pending + high confidence)
       if ('all' in when) {
-        return when.all.every((child: any) => {
-          if (child.field === 'status' && child.op === 'eq') {
+        return when.all.every((child: ConditionTree) => {
+          if ('field' in child && child.field === 'status' && child.op === 'eq') {
             return action.status === child.value;
           }
-          if (child.field === 'confidence' && child.op === 'gt') {
+          if (
+            'field' in child &&
+            child.field === 'confidence' &&
+            child.op === 'gt' &&
+            typeof child.value === 'number'
+          ) {
             return action.confidence > child.value;
           }
           return false;
