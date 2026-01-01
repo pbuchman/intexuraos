@@ -1,24 +1,35 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Layout } from '@/components';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActionDetailModal, Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { ApiError, getActions, getCommands } from '@/services';
+import {
+  ApiError,
+  archiveCommand,
+  deleteAction,
+  deleteCommand,
+  getActions,
+  getCommands,
+  updateActionStatus,
+} from '@/services';
 import type { Action, Command, CommandType } from '@/types';
 import {
+  Archive,
+  Bell,
+  Calendar,
   CheckCircle,
   Clock,
   FileText,
+  HelpCircle,
   Inbox,
   Link,
   ListTodo,
+  Loader2,
   MessageSquare,
   Mic,
+  Play,
   RefreshCw,
   Search,
-  Calendar,
-  Bell,
-  HelpCircle,
+  Trash2,
   XCircle,
-  Loader2,
 } from 'lucide-react';
 
 type TabId = 'commands' | 'actions';
@@ -55,11 +66,15 @@ function getStatusIcon(status: string): React.JSX.Element {
       return <CheckCircle className={`${iconClass} text-green-500`} />;
     case 'pending':
     case 'received':
+    case 'pending_classification':
       return <Clock className={`${iconClass} text-amber-500`} />;
     case 'processing':
       return <Loader2 className={`${iconClass} text-blue-500 animate-spin`} />;
     case 'failed':
+    case 'rejected':
       return <XCircle className={`${iconClass} text-red-500`} />;
+    case 'archived':
+      return <Archive className={`${iconClass} text-slate-400`} />;
     default:
       return <HelpCircle className={`${iconClass} text-slate-400`} />;
   }
@@ -75,8 +90,25 @@ function formatDate(isoDate: string): string {
   });
 }
 
-function CommandItem({ command }: { command: Command }): React.JSX.Element {
+interface CommandItemProps {
+  command: Command;
+  onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
+  isDeleting: boolean;
+  isArchiving: boolean;
+}
+
+function CommandItem({
+  command,
+  onDelete,
+  onArchive,
+  isDeleting,
+  isArchiving,
+}: CommandItemProps): React.JSX.Element {
   const isVoice = command.sourceType === 'whatsapp_voice';
+  const deletableStatuses = ['received', 'pending_classification', 'failed'];
+  const canDelete = deletableStatuses.includes(command.status);
+  const canArchive = command.status === 'classified';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
@@ -104,14 +136,78 @@ function CommandItem({ command }: { command: Command }): React.JSX.Element {
             <span>{formatDate(command.createdAt)}</span>
           </div>
         </div>
+        <div className="flex shrink-0 gap-2">
+          {canDelete && (
+            <button
+              onClick={(): void => {
+                onDelete(command.id);
+              }}
+              disabled={isDeleting}
+              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              title="Delete command"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          )}
+          {canArchive && (
+            <button
+              onClick={(): void => {
+                onArchive(command.id);
+              }}
+              disabled={isArchiving}
+              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+              title="Archive command"
+            >
+              {isArchiving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Archive className="h-4 w-4" />
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ActionItem({ action }: { action: Action }): React.JSX.Element {
+interface ActionItemProps {
+  action: Action;
+  onClick: () => void;
+  onProceed: (id: string) => void;
+  onReject: (id: string) => void;
+  onDelete: (id: string) => void;
+  isUpdating: boolean;
+  isDeleting: boolean;
+}
+
+function ActionItem({
+  action,
+  onClick,
+  onProceed,
+  onReject,
+  onDelete,
+  isUpdating,
+  isDeleting,
+}: ActionItemProps): React.JSX.Element {
+  const isPending = action.status === 'pending';
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+    <div
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e): void => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClick();
+        }
+      }}
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
@@ -128,6 +224,55 @@ function ActionItem({ action }: { action: Action }): React.JSX.Element {
             <span>{formatDate(action.createdAt)}</span>
           </div>
         </div>
+        {isPending && (
+          <div
+            className="flex shrink-0 gap-2"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            <button
+              onClick={(): void => {
+                onProceed(action.id);
+              }}
+              disabled={isUpdating || isDeleting}
+              className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+              title="Proceed with action"
+            >
+              {isUpdating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
+              Proceed
+            </button>
+            <button
+              onClick={(): void => {
+                onReject(action.id);
+              }}
+              disabled={isUpdating || isDeleting}
+              className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+              title="Reject action"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Reject
+            </button>
+            <button
+              onClick={(): void => {
+                onDelete(action.id);
+              }}
+              disabled={isUpdating || isDeleting}
+              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              title="Delete action"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -135,7 +280,7 @@ function ActionItem({ action }: { action: Action }): React.JSX.Element {
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabId>('commands');
+  const [activeTab, setActiveTab] = useState<TabId>('actions');
   const [commands, setCommands] = useState<Command[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [commandsCursor, setCommandsCursor] = useState<string | undefined>(undefined);
@@ -144,6 +289,11 @@ export function InboxPage(): React.JSX.Element {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatingActionId, setUpdatingActionId] = useState<string | null>(null);
+  const [deletingActionId, setDeletingActionId] = useState<string | null>(null);
+  const [deletingCommandId, setDeletingCommandId] = useState<string | null>(null);
+  const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
+  const [selectedAction, setSelectedAction] = useState<Action | null>(null);
 
   const fetchData = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -209,6 +359,76 @@ export function InboxPage(): React.JSX.Element {
     }
   };
 
+  const handleProceedAction = async (actionId: string): Promise<void> => {
+    try {
+      setUpdatingActionId(actionId);
+      setError(null);
+      const token = await getAccessToken();
+      const updatedAction = await updateActionStatus(token, actionId, 'processing');
+      setActions((prev) => prev.map((a) => (a.id === actionId ? updatedAction : a)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to proceed with action');
+    } finally {
+      setUpdatingActionId(null);
+    }
+  };
+
+  const handleRejectAction = async (actionId: string): Promise<void> => {
+    try {
+      setUpdatingActionId(actionId);
+      setError(null);
+      const token = await getAccessToken();
+      const updatedAction = await updateActionStatus(token, actionId, 'rejected');
+      setActions((prev) => prev.map((a) => (a.id === actionId ? updatedAction : a)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to reject action');
+    } finally {
+      setUpdatingActionId(null);
+    }
+  };
+
+  const handleDeleteAction = async (actionId: string): Promise<void> => {
+    try {
+      setDeletingActionId(actionId);
+      setError(null);
+      const token = await getAccessToken();
+      await deleteAction(token, actionId);
+      setActions((prev) => prev.filter((a) => a.id !== actionId));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to delete action');
+    } finally {
+      setDeletingActionId(null);
+    }
+  };
+
+  const handleDeleteCommand = async (commandId: string): Promise<void> => {
+    try {
+      setDeletingCommandId(commandId);
+      setError(null);
+      const token = await getAccessToken();
+      await deleteCommand(token, commandId);
+      setCommands((prev) => prev.filter((c) => c.id !== commandId));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to delete command');
+    } finally {
+      setDeletingCommandId(null);
+    }
+  };
+
+  const handleArchiveCommand = async (commandId: string): Promise<void> => {
+    try {
+      setArchivingCommandId(commandId);
+      setError(null);
+      const token = await getAccessToken();
+      const updatedCommand = await archiveCommand(token, commandId);
+      setCommands((prev) => prev.map((c) => (c.id === commandId ? updatedCommand : c)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to archive command');
+    } finally {
+      setArchivingCommandId(null);
+    }
+  };
+
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -216,6 +436,34 @@ export function InboxPage(): React.JSX.Element {
   const handleRefresh = (): void => {
     void fetchData(true);
   };
+
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const currentCursor = activeTab === 'commands' ? commandsCursor : actionsCursor;
+  const handleLoadMore = activeTab === 'commands' ? loadMoreCommands : loadMoreActions;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting === true && currentCursor !== undefined && !isLoadingMore) {
+          void handleLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef !== null) {
+      observer.observe(currentRef);
+    }
+
+    return (): void => {
+      if (currentRef !== null) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [currentCursor, isLoadingMore, handleLoadMore]);
 
   if (isLoading) {
     return (
@@ -226,9 +474,6 @@ export function InboxPage(): React.JSX.Element {
       </Layout>
     );
   }
-
-  const currentCursor = activeTab === 'commands' ? commandsCursor : actionsCursor;
-  const handleLoadMore = activeTab === 'commands' ? loadMoreCommands : loadMoreActions;
 
   return (
     <Layout>
@@ -258,19 +503,6 @@ export function InboxPage(): React.JSX.Element {
       <div className="mb-4 flex border-b border-slate-200">
         <button
           onClick={(): void => {
-            setActiveTab('commands');
-          }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'commands'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
-          }`}
-        >
-          <MessageSquare className="h-4 w-4" />
-          Commands ({String(commands.length)})
-        </button>
-        <button
-          onClick={(): void => {
             setActiveTab('actions');
           }}
           className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
@@ -282,28 +514,23 @@ export function InboxPage(): React.JSX.Element {
           <ListTodo className="h-4 w-4" />
           Actions ({String(actions.length)})
         </button>
+        <button
+          onClick={(): void => {
+            setActiveTab('commands');
+          }}
+          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'commands'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+          }`}
+        >
+          <MessageSquare className="h-4 w-4" />
+          Commands ({String(commands.length)})
+        </button>
       </div>
 
       {/* Content */}
       <div className="space-y-3">
-        {activeTab === 'commands' && (
-          <>
-            {commands.length === 0 ? (
-              <Card title="">
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Inbox className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium text-slate-700">No commands yet</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Send a text or voice message via WhatsApp to create a command.
-                  </p>
-                </div>
-              </Card>
-            ) : (
-              commands.map((command) => <CommandItem key={command.id} command={command} />)
-            )}
-          </>
-        )}
-
         {activeTab === 'actions' && (
           <>
             {actions.length === 0 ? (
@@ -317,26 +544,91 @@ export function InboxPage(): React.JSX.Element {
                 </div>
               </Card>
             ) : (
-              actions.map((action) => <ActionItem key={action.id} action={action} />)
+              actions.map((action) => (
+                <ActionItem
+                  key={action.id}
+                  action={action}
+                  onClick={(): void => {
+                    setSelectedAction(action);
+                  }}
+                  onProceed={(id): void => {
+                    void handleProceedAction(id);
+                  }}
+                  onReject={(id): void => {
+                    void handleRejectAction(id);
+                  }}
+                  onDelete={(id): void => {
+                    void handleDeleteAction(id);
+                  }}
+                  isUpdating={updatingActionId === action.id}
+                  isDeleting={deletingActionId === action.id}
+                />
+              ))
+            )}
+          </>
+        )}
+
+        {activeTab === 'commands' && (
+          <>
+            {commands.length === 0 ? (
+              <Card title="">
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Inbox className="mb-4 h-12 w-12 text-slate-300" />
+                  <h3 className="text-lg font-medium text-slate-700">No commands yet</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Send a text or voice message via WhatsApp to create a command.
+                  </p>
+                </div>
+              </Card>
+            ) : (
+              commands.map((command) => (
+                <CommandItem
+                  key={command.id}
+                  command={command}
+                  onDelete={(id): void => {
+                    void handleDeleteCommand(id);
+                  }}
+                  onArchive={(id): void => {
+                    void handleArchiveCommand(id);
+                  }}
+                  isDeleting={deletingCommandId === command.id}
+                  isArchiving={archivingCommandId === command.id}
+                />
+              ))
             )}
           </>
         )}
       </div>
 
-      {/* Load more button */}
-      {currentCursor !== undefined ? (
-        <div className="mt-6 flex justify-center">
-          <Button
-            variant="secondary"
-            onClick={(): void => {
-              void handleLoadMore();
-            }}
-            isLoading={isLoadingMore}
-          >
-            Load More
-          </Button>
+      {/* Infinite scroll sentinel */}
+      {currentCursor !== undefined && (
+        <div ref={loadMoreRef} className="flex h-16 items-center justify-center">
+          {isLoadingMore && <Loader2 className="h-6 w-6 animate-spin text-blue-600" />}
         </div>
-      ) : null}
+      )}
+
+      {/* Action Detail Modal */}
+      {selectedAction !== null && (
+        <ActionDetailModal
+          action={selectedAction}
+          command={commands.find((c) => c.id === selectedAction.commandId)}
+          onClose={(): void => {
+            setSelectedAction(null);
+          }}
+          onProceed={(): void => {
+            void handleProceedAction(selectedAction.id);
+          }}
+          onReject={(): void => {
+            void handleRejectAction(selectedAction.id);
+          }}
+          onDelete={(): void => {
+            void handleDeleteAction(selectedAction.id);
+            setSelectedAction(null);
+          }}
+          isUpdating={updatingActionId === selectedAction.id}
+          isDeleting={deletingActionId === selectedAction.id}
+        />
+      )}
     </Layout>
   );
 }

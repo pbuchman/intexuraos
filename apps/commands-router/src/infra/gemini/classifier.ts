@@ -15,19 +15,25 @@ const VALID_TYPES: readonly CommandType[] = [
 
 const CLASSIFICATION_PROMPT = `You are a command classifier. Analyze the user's message and classify it into one of these categories:
 
-- todo: A task that needs to be done (e.g., "buy groceries", "call mom", "finish report")
-- research: A question or topic to research (e.g., "how does X work?", "find out about Y")
-- note: Information to remember or store (e.g., "meeting notes from today", "idea for project")
-- link: A URL or reference to save (e.g., contains a URL or asks to save a link)
-- calendar: A time-based event or appointment (e.g., "meeting tomorrow at 3pm", "dentist on Friday")
-- reminder: Something to be reminded about at a specific time (e.g., "remind me to X in 2 hours")
-- unclassified: Cannot be classified into any of the above categories
+CATEGORIES (in priority order - when multiple could apply, use the FIRST matching category):
+1. todo: A task that needs to be done (e.g., "buy groceries", "call mom", "finish report")
+2. research: A question or topic to research (e.g., "how does X work?", "find out about Y")
+3. calendar: A time-based event or appointment (e.g., "meeting tomorrow at 3pm", "dentist on Friday")
+4. reminder: Something to be reminded about at a specific time (e.g., "remind me to X in 2 hours")
+5. note: Information to remember or store (e.g., "meeting notes from today", "idea for project")
+6. link: A URL or reference to save (e.g., contains a URL or asks to save a link)
+7. unclassified: Cannot be classified into any of the above categories
+
+IMPORTANT: If a message could fit multiple categories, always choose the HIGHER priority category.
+For example: "research and write a report about AI" → todo (because there's a task to complete)
+             "schedule meeting to discuss project" → calendar (has calendar aspect, takes priority over todo)
 
 Respond with ONLY a JSON object in this exact format:
 {
   "type": "<category>",
   "confidence": <number between 0 and 1>,
-  "title": "<short descriptive title, max 50 chars>"
+  "title": "<short descriptive title, max 50 chars>",
+  "reasoning": "<1-2 sentences explaining why this classification was chosen>"
 }
 
 The confidence should reflect how certain you are about the classification:
@@ -36,7 +42,8 @@ The confidence should reflect how certain you are about the classification:
 - 0.5-0.7: Somewhat uncertain
 - Below 0.5: Use "unclassified" instead
 
-The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").`;
+The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").
+The reasoning should briefly explain what keywords or patterns led to this classification.`;
 
 const LLM_KEYWORDS: Record<LlmProvider, string[]> = {
   google: ['gemini', 'google'],
@@ -97,6 +104,7 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
         type: parsed.type,
         confidence: parsed.confidence,
         title: parsed.title,
+        reasoning: parsed.reasoning,
       };
       if (selectedLlms !== undefined) {
         classificationResult.selectedLlms = selectedLlms;
@@ -110,16 +118,26 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
 function parseClassifyResponse(
   response: string,
   validTypes: readonly CommandType[]
-): { type: CommandType; confidence: number; title: string } {
+): { type: CommandType; confidence: number; title: string; reasoning: string } {
   const jsonMatch = /\{[\s\S]*}/.exec(response);
   if (jsonMatch === null) {
-    return { type: 'unclassified', confidence: 0.5, title: 'Unknown' };
+    return {
+      type: 'unclassified',
+      confidence: 0.5,
+      title: 'Unknown',
+      reasoning: 'Failed to parse response',
+    };
   }
 
   const parsed: unknown = JSON.parse(jsonMatch[0]);
 
   if (typeof parsed !== 'object' || parsed === null) {
-    return { type: 'unclassified', confidence: 0.5, title: 'Unknown' };
+    return {
+      type: 'unclassified',
+      confidence: 0.5,
+      title: 'Unknown',
+      reasoning: 'Invalid response format',
+    };
   }
 
   const obj = parsed as Record<string, unknown>;
@@ -133,5 +151,8 @@ function parseClassifyResponse(
 
   const title = typeof obj['title'] === 'string' ? obj['title'].slice(0, 100) : 'Unknown';
 
-  return { type, confidence, title };
+  const reasoning =
+    typeof obj['reasoning'] === 'string' ? obj['reasoning'].slice(0, 500) : 'No reasoning provided';
+
+  return { type, confidence, title, reasoning };
 }

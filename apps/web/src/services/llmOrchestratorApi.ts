@@ -4,6 +4,7 @@ import type {
   CreateResearchRequest,
   ListResearchesResponse,
   Research,
+  SaveDraftRequest,
 } from './llmOrchestratorApi.types.js';
 
 /**
@@ -17,6 +18,24 @@ export async function createResearch(
     method: 'POST',
     body: request,
   });
+}
+
+/**
+ * Save a research as draft with auto-generated title.
+ */
+export async function saveDraft(
+  accessToken: string,
+  request: SaveDraftRequest
+): Promise<{ id: string }> {
+  return await apiRequest<{ id: string }>(
+    config.llmOrchestratorUrl,
+    '/research/draft',
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
 }
 
 /**
@@ -64,5 +83,6 @@ export type {
   LlmResult,
   Research,
   CreateResearchRequest,
+  SaveDraftRequest,
   ListResearchesResponse,
 } from './llmOrchestratorApi.types.js';

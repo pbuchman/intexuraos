@@ -10,7 +10,7 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
-import { FakeResearchRepository } from './fakes.js';
+import { FakeResearchRepository, FakeUserServiceClient } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
@@ -49,12 +49,14 @@ describe('Research Routes - Unauthenticated', () => {
     process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
     fakeRepo = new FakeResearchRepository();
+    const fakeUserServiceClient = new FakeUserServiceClient();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
         /* noop */
       },
+      userServiceClient: fakeUserServiceClient,
     };
     setServices(services);
 
@@ -107,6 +109,21 @@ describe('Research Routes - Unauthenticated', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
+  it('POST /research/draft returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/research/draft',
+      payload: {
+        prompt: 'Test prompt',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
   it('DELETE /research/:id returns 401 without auth', async () => {
     const response = await app.inject({
       method: 'DELETE',
@@ -128,6 +145,7 @@ describe('Research Routes - Authenticated', () => {
   const issuer = `https://${AUTH0_DOMAIN}/`;
 
   let fakeRepo: FakeResearchRepository;
+  let fakeUserServiceClient: FakeUserServiceClient;
   let processResearchCalled: boolean;
 
   async function createToken(sub: string): Promise<string> {
@@ -177,6 +195,7 @@ describe('Research Routes - Authenticated', () => {
     clearJwksCache();
 
     fakeRepo = new FakeResearchRepository();
+    fakeUserServiceClient = new FakeUserServiceClient();
     processResearchCalled = false;
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
@@ -184,6 +203,7 @@ describe('Research Routes - Authenticated', () => {
       processResearchAsync: (): void => {
         processResearchCalled = true;
       },
+      userServiceClient: fakeUserServiceClient,
     };
     setServices(services);
 
@@ -252,6 +272,119 @@ describe('Research Routes - Authenticated', () => {
           prompt: 'Test prompt',
           selectedLlms: ['google'],
           synthesisLlm: 'google',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('POST /research/draft', () => {
+    it.skip('creates draft with Google API key (title generation)', async () => {
+      // Skipped: Would require mocking Gemini API calls
+      // Title generation is tested indirectly through integration tests
+    });
+
+    it('creates draft without Google API key (fallback title)', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'This is a test prompt that will be used as fallback title',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        expect(saved.status).toBe('draft');
+        expect(saved.title).toBe('This is a test prompt that will be used as fallback title');
+      }
+    });
+
+    it('creates draft with optional fields', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedLlms: ['google', 'openai'],
+          synthesisLlm: 'anthropic',
+          externalReports: [{ content: 'Test report', model: 'Test Model' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        expect(saved.selectedLlms).toEqual(['google', 'openai']);
+        expect(saved.synthesisLlm).toBe('anthropic');
+        expect(saved.externalReports).toHaveLength(1);
+      }
+    });
+
+    it('uses default LLMs when not provided', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        expect(saved.selectedLlms).toEqual(['google', 'openai', 'anthropic']);
+        expect(saved.synthesisLlm).toBe('anthropic');
+      }
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 500 on save failure', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextSave(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
         },
       });
 
@@ -599,12 +732,14 @@ describe('System Endpoints', () => {
     process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
     const fakeRepo = new FakeResearchRepository();
+    const fakeUserServiceClient = new FakeUserServiceClient();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
         /* noop */
       },
+      userServiceClient: fakeUserServiceClient,
     };
     setServices(services);
 
@@ -649,12 +784,14 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
 
     fakeRepo = new FakeResearchRepository();
+    const fakeUserServiceClient = new FakeUserServiceClient();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
         /* noop */
       },
+      userServiceClient: fakeUserServiceClient,
     };
     setServices(services);
 

@@ -50,6 +50,16 @@ export class FakeCommandRepository implements CommandRepository {
     this.userCommands.set(userId, userList);
   }
 
+  async delete(id: string): Promise<void> {
+    const command = this.commands.get(id);
+    if (command !== undefined) {
+      this.commands.delete(id);
+      const userList = this.userCommands.get(command.userId) ?? [];
+      const filtered = userList.filter((c) => c.id !== id);
+      this.userCommands.set(command.userId, filtered);
+    }
+  }
+
   async listByUserId(userId: string): Promise<Command[]> {
     return this.userCommands.get(userId) ?? [];
   }
@@ -99,6 +109,16 @@ export class FakeActionRepository implements ActionRepository {
     this.userActions.set(userId, userList);
   }
 
+  async delete(id: string): Promise<void> {
+    const action = this.actions.get(id);
+    if (action !== undefined) {
+      this.actions.delete(id);
+      const userList = this.userActions.get(action.userId) ?? [];
+      const filtered = userList.filter((a) => a.id !== id);
+      this.userActions.set(action.userId, filtered);
+    }
+  }
+
   async listByUserId(userId: string): Promise<Action[]> {
     return this.userActions.get(userId) ?? [];
   }
@@ -109,6 +129,7 @@ export class FakeClassifier implements Classifier {
     type: 'todo',
     confidence: 0.9,
     title: 'Test Task',
+    reasoning: 'Contains task-related keywords indicating a todo item',
   };
   private failNext = false;
 

@@ -244,7 +244,12 @@ export type CommandType =
 /**
  * Command status
  */
-export type CommandStatus = 'received' | 'classified' | 'failed';
+export type CommandStatus =
+  | 'received'
+  | 'classified'
+  | 'pending_classification'
+  | 'failed'
+  | 'archived';
 
 /**
  * Command source type
@@ -257,6 +262,7 @@ export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
 export interface CommandClassification {
   type: CommandType;
   confidence: number;
+  reasoning: string;
   classifiedAt: string;
 }
 
@@ -280,7 +286,7 @@ export interface Command {
 /**
  * Action status
  */
-export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
 
 /**
  * Action from commands-router

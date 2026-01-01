@@ -1,5 +1,5 @@
 export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder';
-export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ActionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
 
 export interface Action {
   id: string;

@@ -115,6 +115,7 @@ export function createDraftResearch(params: {
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
   sourceActionId?: string;
+  externalReports?: ExternalReport[];
 }): Research {
   const now = new Date().toISOString();
   const research: Research = {
@@ -135,6 +136,10 @@ export function createDraftResearch(params: {
 
   if (params.sourceActionId !== undefined) {
     research.sourceActionId = params.sourceActionId;
+  }
+
+  if (params.externalReports !== undefined) {
+    research.externalReports = params.externalReports;
   }
 
   return research;

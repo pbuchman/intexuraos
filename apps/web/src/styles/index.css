@@ -42,3 +42,97 @@ body {
 .safe-area-inset-right {
   padding-right: env(safe-area-inset-right);
 }
+
+/* Enhanced prose styling for markdown content */
+.prose table {
+  @apply w-full border-collapse border border-slate-300 my-4;
+}
+
+.prose thead {
+  @apply bg-slate-100;
+}
+
+.prose th {
+  @apply border border-slate-300 px-4 py-2 text-left font-semibold text-slate-700;
+}
+
+.prose td {
+  @apply border border-slate-300 px-4 py-2 text-slate-600;
+}
+
+.prose tbody tr:nth-child(even) {
+  @apply bg-slate-50;
+}
+
+.prose tbody tr:hover {
+  @apply bg-slate-100;
+}
+
+.prose p {
+  @apply mb-4 leading-relaxed;
+}
+
+.prose h1 {
+  @apply text-2xl font-bold mt-8 mb-4 text-slate-900 border-b border-slate-200 pb-2;
+}
+
+.prose h2 {
+  @apply text-xl font-bold mt-6 mb-3 text-slate-900;
+}
+
+.prose h3 {
+  @apply text-lg font-semibold mt-5 mb-2 text-slate-800;
+}
+
+.prose h4 {
+  @apply text-base font-semibold mt-4 mb-2 text-slate-800;
+}
+
+.prose ul {
+  @apply my-4 pl-6 list-disc space-y-2;
+}
+
+.prose ol {
+  @apply my-4 pl-6 list-decimal space-y-2;
+}
+
+.prose li {
+  @apply text-slate-700;
+}
+
+.prose li > ul,
+.prose li > ol {
+  @apply mt-2 mb-0;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50 text-slate-700 italic;
+}
+
+.prose code:not(pre code) {
+  @apply bg-slate-100 px-1.5 py-0.5 rounded text-sm font-mono text-slate-800;
+}
+
+.prose pre {
+  @apply bg-slate-900 text-slate-100 p-4 rounded-lg my-4 overflow-x-auto;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0 text-sm;
+}
+
+.prose hr {
+  @apply my-8 border-slate-200;
+}
+
+.prose a {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+.prose strong {
+  @apply font-semibold text-slate-900;
+}
+
+.prose em {
+  @apply italic;
+}

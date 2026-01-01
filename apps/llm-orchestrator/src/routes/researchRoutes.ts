@@ -2,6 +2,7 @@
  * Research Routes
  *
  * POST   /research            - Create new research
+ * POST   /research/draft      - Save research as draft
  * GET    /research            - List user's researches
  * GET    /research/:id        - Get single research
  * POST   /research/:id/approve - Approve draft research
@@ -11,7 +12,9 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import {
+  createDraftResearch,
   deleteResearch,
+  type ExternalReport,
   getResearch,
   listResearches,
   type LlmProvider,
@@ -27,11 +30,20 @@ import {
   listResearchesQuerySchema,
   listResearchesResponseSchema,
   researchIdParamsSchema,
+  saveDraftBodySchema,
+  saveDraftResponseSchema,
 } from './schemas/index.js';
 
 interface CreateResearchBody {
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm?: LlmProvider;
+  externalReports?: { content: string; model?: string }[];
+}
+
+interface SaveDraftBody {
+  prompt: string;
+  selectedLlms?: LlmProvider[];
   synthesisLlm?: LlmProvider;
   externalReports?: { content: string; model?: string }[];
 }
@@ -89,6 +101,80 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       processResearchAsync(result.value.id);
 
       return await reply.code(201).ok(result.value);
+    }
+  );
+
+  // POST /research/draft
+  fastify.post(
+    '/research/draft',
+    {
+      schema: {
+        operationId: 'saveDraft',
+        summary: 'Save research as draft',
+        description: 'Save a research draft with auto-generated title for later completion.',
+        tags: ['research'],
+        body: saveDraftBodySchema,
+        response: {
+          201: saveDraftResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const body = request.body as SaveDraftBody;
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
+
+      // Get user's API keys to generate title
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+
+      // Generate title using Gemini if Google API key is available
+      let title: string;
+      if (apiKeys.google !== undefined) {
+        const titleGenerator = createTitleGenerator(apiKeys.google);
+        const titleResult = await titleGenerator.generateTitle(body.prompt);
+        title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+      } else {
+        // Fallback: use first 60 chars of prompt
+        title = body.prompt.slice(0, 60);
+      }
+
+      // Create draft research
+      const draftParams: Parameters<typeof createDraftResearch>[0] = {
+        id: generateId(),
+        userId: user.userId,
+        title,
+        prompt: body.prompt,
+        selectedLlms: body.selectedLlms ?? ['google', 'openai', 'anthropic'],
+        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+      };
+      if (body.externalReports !== undefined) {
+        const now = new Date().toISOString();
+        draftParams.externalReports = body.externalReports.map((report) => {
+          const externalReport: ExternalReport = {
+            id: generateId(),
+            content: report.content,
+            addedAt: now,
+          };
+          if (report.model !== undefined) {
+            externalReport.model = report.model;
+          }
+          return externalReport;
+        });
+      }
+      const draft = createDraftResearch(draftParams);
+
+      // Save draft
+      const saveResult = await researchRepo.save(draft);
+      if (!saveResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', saveResult.error.message);
+      }
+
+      return await reply.code(201).ok({ id: draft.id });
     }
   );
 

@@ -223,6 +223,7 @@ export function createProcessCommandUseCase(deps: {
           command.classification = {
             type: classification.type,
             confidence: classification.confidence,
+            reasoning: classification.reasoning,
             classifiedAt: new Date().toISOString(),
           };
           command.actionId = action.id;
@@ -238,6 +239,7 @@ export function createProcessCommandUseCase(deps: {
           command.classification = {
             type: 'unclassified',
             confidence: classification.confidence,
+            reasoning: classification.reasoning,
             classifiedAt: new Date().toISOString(),
           };
           command.status = 'classified';

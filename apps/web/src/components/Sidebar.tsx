@@ -31,8 +31,6 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const topNavItems: NavItem[] = [{ to: '/', label: 'System Health', icon: LayoutDashboard }];
-
 const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
@@ -43,11 +41,6 @@ const settingsItems: NavItem[] = [
 const orchestratorItems: NavItem[] = [
   { to: '/research/new', label: 'New Research', icon: Plus },
   { to: '/research', label: 'Previous Researches', icon: List },
-];
-
-const bottomNavItems: NavItem[] = [
-  { to: '/inbox', label: 'Inbox', icon: Inbox },
-  { to: '/notes', label: 'Notes', icon: MessageSquare },
 ];
 
 /**
@@ -206,24 +199,21 @@ export function Sidebar(): React.JSX.Element {
         </button>
 
         <nav className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
-          {/* Top nav items */}
-          {topNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end
-              className={({ isActive }): string =>
-                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`
-              }
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {!isCollapsed ? <span>{item.label}</span> : null}
-            </NavLink>
-          ))}
+          {/* Inbox - primary nav item */}
+          <NavLink
+            to="/inbox"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <Inbox className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Inbox</span> : null}
+          </NavLink>
 
           {/* LLM Orchestrator section (collapsible) */}
           <div className="pt-2">
@@ -274,54 +264,21 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Settings section (collapsible) */}
-          <div className="pt-2">
-            <button
-              onClick={(): void => {
-                setIsSettingsOpen(!isSettingsOpen);
-              }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/settings')
+          {/* Notes */}
+          <NavLink
+            to="/notes"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
                   ? 'bg-blue-50 text-blue-700'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Settings className="h-5 w-5 shrink-0" />
-              {!isCollapsed ? (
-                <>
-                  <span className="flex-1 text-left">Settings</span>
-                  {isSettingsOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </>
-              ) : null}
-            </button>
-
-            {/* Settings sub-items */}
-            {isSettingsOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
-                {settingsItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end
-                    className={({ isActive }): string =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                      }`
-                    }
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            ) : null}
-          </div>
+              }`
+            }
+          >
+            <MessageSquare className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Notes</span> : null}
+          </NavLink>
 
           {/* Notifications section (collapsible with saved filters) */}
           <div className="pt-2">
@@ -381,25 +338,71 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Bottom nav items */}
+          {/* System Health */}
           <div className="pt-2">
-            {bottomNavItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end
-                className={({ isActive }): string =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`
-                }
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!isCollapsed ? <span>{item.label}</span> : null}
-              </NavLink>
-            ))}
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }): string =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`
+              }
+            >
+              <LayoutDashboard className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? <span>System Health</span> : null}
+            </NavLink>
+          </div>
+
+          {/* Settings section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsSettingsOpen(!isSettingsOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/settings')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Settings className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Settings</span>
+                  {isSettingsOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Settings sub-items */}
+            {isSettingsOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                {settingsItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
           </div>
         </nav>
 

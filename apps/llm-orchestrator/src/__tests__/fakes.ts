@@ -10,6 +10,7 @@ import type {
   Research,
   ResearchRepository,
 } from '../domain/research/index.js';
+import type { DecryptedApiKeys, UserServiceClient } from '../infra/user/index.js';
 
 /**
  * In-memory fake implementation of ResearchRepository.
@@ -126,5 +127,50 @@ export class FakeResearchRepository implements ResearchRepository {
 
   clear(): void {
     this.researches.clear();
+  }
+}
+
+/**
+ * Fake implementation of UserServiceClient for testing.
+ */
+export class FakeUserServiceClient implements UserServiceClient {
+  private apiKeys: Map<string, DecryptedApiKeys> = new Map();
+  private phones: Map<string, string> = new Map();
+  private failNextGetApiKeys = false;
+
+  async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, Error>> {
+    if (this.failNextGetApiKeys) {
+      this.failNextGetApiKeys = false;
+      return err(new Error('Test getApiKeys failure'));
+    }
+    const keys = this.apiKeys.get(userId) ?? {};
+    return ok(keys);
+  }
+
+  async getWhatsAppPhone(userId: string): Promise<Result<string | null, Error>> {
+    const phone = this.phones.get(userId) ?? null;
+    return ok(phone);
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<Result<void, Error>> {
+    return ok(undefined);
+  }
+
+  // Test helpers
+  setApiKeys(userId: string, keys: DecryptedApiKeys): void {
+    this.apiKeys.set(userId, keys);
+  }
+
+  setPhone(userId: string, phone: string): void {
+    this.phones.set(userId, phone);
+  }
+
+  setFailNextGetApiKeys(fail: boolean): void {
+    this.failNextGetApiKeys = fail;
+  }
+
+  clear(): void {
+    this.apiKeys.clear();
+    this.phones.clear();
   }
 }

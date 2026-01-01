@@ -27,6 +27,7 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
+  draft: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Draft' },
   pending: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Pending' },
   processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
   completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },

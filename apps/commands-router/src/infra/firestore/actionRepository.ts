@@ -74,6 +74,12 @@ export function createFirestoreActionRepository(): ActionRepository {
       });
     },
 
+    async delete(id: string): Promise<void> {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION).doc(id);
+      await docRef.delete();
+    },
+
     async listByUserId(userId: string): Promise<Action[]> {
       const db = getFirestore();
       const snapshot = await db

@@ -16,6 +16,7 @@ import {
   type NotificationSender,
   processResearch,
   type ResearchRepository,
+  type TitleGenerator,
 } from './domain/research/index.js';
 
 /**
@@ -25,6 +26,8 @@ export interface ServiceContainer {
   researchRepo: ResearchRepository;
   generateId: () => string;
   processResearchAsync: (researchId: string) => void;
+  userServiceClient: UserServiceClient;
+  createTitleGenerator: (apiKey: string) => TitleGenerator;
 }
 
 let container: ServiceContainer | null = null;
@@ -162,5 +165,7 @@ export function initializeServices(): void {
     researchRepo,
     generateId: (): string => crypto.randomUUID(),
     processResearchAsync,
+    userServiceClient,
+    createTitleGenerator,
   };
 }

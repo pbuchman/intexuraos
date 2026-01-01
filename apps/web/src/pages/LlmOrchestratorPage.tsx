@@ -23,13 +23,14 @@ const PROVIDERS: ProviderOption[] = [
 export function LlmOrchestratorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { keys, loading: keysLoading } = useLlmKeys();
-  const { createResearch } = useResearches();
+  const { createResearch, saveDraft } = useResearches();
 
   const [prompt, setPrompt] = useState('');
   const [selectedLlms, setSelectedLlms] = useState<LlmProvider[]>([]);
   const [synthesisLlm, setSynthesisLlm] = useState<LlmProvider | null>(null);
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const addInputContext = (): void => {
@@ -115,6 +116,40 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     }
   };
 
+  const handleSaveDraft = async (): Promise<void> => {
+    if (prompt.trim().length === 0) {
+      setError('Prompt is required');
+      return;
+    }
+
+    setSavingDraft(true);
+    setError(null);
+
+    try {
+      const contextObjects = validContexts.map((content) => ({ content }));
+
+      const request: Parameters<typeof saveDraft>[0] = {
+        prompt,
+      };
+      if (selectedLlms.length > 0) {
+        request.selectedLlms = selectedLlms;
+      }
+      if (synthesisLlm !== null) {
+        request.synthesisLlm = synthesisLlm;
+      }
+      if (contextObjects.length > 0) {
+        request.inputContexts = contextObjects;
+      }
+
+      const result = await saveDraft(request);
+      void navigate(`/research/${result.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const hasAnyLlm = configuredProviders.length > 0;
   const hasLlmOrContext = selectedLlms.length > 0 || hasValidContexts;
   const canSubmit = prompt.length >= 10 && hasLlmOrContext && synthesisLlm !== null;
@@ -165,7 +200,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               placeholder="Enter your research question or topic..."
               className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[150px]"
               rows={8}
-              disabled={submitting}
+              disabled={submitting || savingDraft}
             />
             <p className="text-sm text-slate-500">{String(prompt.length)}/20000 characters</p>
           </div>
@@ -188,7 +223,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
                         handleProviderToggle(provider.id);
                       }
                     }}
-                    disabled={!available || submitting}
+                    disabled={!available || submitting || savingDraft}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                       !available
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -221,7 +256,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
                         setSynthesisLlm(provider.id);
                       }
                     }}
-                    disabled={!available || submitting}
+                    disabled={!available || submitting || savingDraft}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                       !available
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -255,7 +290,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
                     onClick={(): void => {
                       removeInputContext(idx);
                     }}
-                    disabled={submitting}
+                    disabled={submitting || savingDraft}
                     className="p-1 text-slate-400 hover:text-red-600 transition-colors"
                     title="Remove context"
                   >
@@ -270,7 +305,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
                   placeholder="Paste your reference content here..."
                   className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px]"
                   maxLength={MAX_CONTEXT_LENGTH}
-                  disabled={submitting}
+                  disabled={submitting || savingDraft}
                 />
                 <div className="text-xs text-slate-400 text-right">
                   {ctx.length.toLocaleString()}/{MAX_CONTEXT_LENGTH.toLocaleString()}
@@ -281,7 +316,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={addInputContext}
-                disabled={submitting}
+                disabled={submitting || savingDraft}
                 className="w-full py-2 px-4 rounded-lg border-2 border-dashed border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="h-4 w-4" />
@@ -298,10 +333,22 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         <div className="flex gap-3">
           <Button
             type="button"
+            variant="secondary"
+            onClick={(): void => {
+              void handleSaveDraft();
+            }}
+            disabled={prompt.trim().length === 0 || submitting || savingDraft}
+            isLoading={savingDraft}
+            title={prompt.trim().length === 0 ? 'Enter a prompt to save draft' : undefined}
+          >
+            Save as Draft
+          </Button>
+          <Button
+            type="button"
             onClick={(): void => {
               void handleSubmit();
             }}
-            disabled={!canSubmit || submitting}
+            disabled={!canSubmit || submitting || savingDraft}
             isLoading={submitting}
             title={getDisabledReason()}
           >
