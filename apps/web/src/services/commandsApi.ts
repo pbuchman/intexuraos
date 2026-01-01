@@ -47,7 +47,7 @@ export async function updateActionStatus(
     accessToken,
     {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: { status },
     }
   );
   return response.action;
@@ -78,7 +78,7 @@ export async function archiveCommand(accessToken: string, commandId: string): Pr
     accessToken,
     {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'archived' }),
+      body: { status: 'archived' },
     }
   );
   return response.command;
