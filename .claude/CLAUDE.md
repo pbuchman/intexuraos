@@ -1007,6 +1007,7 @@ validateRequiredEnv([
 | `infra-claude`    | Anthropic Claude API client             | `common-core/http` |
 | `infra-gemini`    | Google Gemini API client                | `common-core/http` |
 | `infra-gpt`       | OpenAI GPT API client                   | `common-core/http` |
+| `infra-pubsub`    | GCP Pub/Sub base publisher              | `common-core`      |
 
 ### Common Package Rules
 
@@ -1045,6 +1046,59 @@ validateRequiredEnv([
 - `@intexuraos/infra-claude`
 - `@intexuraos/infra-gemini`
 - `@intexuraos/infra-gpt`
+- `@intexuraos/infra-pubsub`
+
+---
+
+## Pub/Sub Publishers (`packages/infra-pubsub`)
+
+**All Pub/Sub publishers MUST extend `BasePubSubPublisher`.**
+
+### Creating a Publisher
+
+```ts-example
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+
+export class MyPublisher extends BasePubSubPublisher {
+  constructor(config: { projectId: string; topicName: string }) {
+    super({ projectId: config.projectId, loggerName: 'my-publisher' });
+    this.topicName = config.topicName;
+  }
+
+  async publishMyEvent(event: MyEvent): Promise<Result<void, PublishError>> {
+    return await this.publishToTopic(
+      this.topicName,
+      event,
+      { eventId: event.id },  // Context for logging
+      'my event'              // Human-readable description
+    );
+  }
+}
+```
+
+### Rules
+
+| Rule                                               | Verification            |
+| -------------------------------------------------- | ----------------------- |
+| Extend `BasePubSubPublisher`                       | `npm run verify:pubsub` |
+| Topic from env var                                 | Code review             |
+| Use `PublishError` from `@intexuraos/infra-pubsub` | ESLint                  |
+
+### Topic Configuration
+
+**❌ Wrong - hardcoded topic:**
+
+```ts-example
+const topicName = 'intexuraos-my-topic-dev';
+```
+
+**✅ Correct - from environment:**
+
+```ts-example
+const topicName = process.env['INTEXURAOS_PUBSUB_MY_TOPIC'];
+```
+
+**Full documentation:** [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
 
 ---
 

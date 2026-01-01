@@ -28,6 +28,7 @@ const phases = [
       'verify:endpoints',
       'verify:hash-routing',
       'verify:terraform-secrets',
+      'verify:pubsub',
     ],
   },
   {

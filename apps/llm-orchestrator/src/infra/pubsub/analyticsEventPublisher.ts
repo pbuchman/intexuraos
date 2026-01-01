@@ -1,6 +1,5 @@
-import { PubSub } from '@google-cloud/pubsub';
-import pino, { type LevelWithSilent } from 'pino';
-import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 
 export interface LlmAnalyticsEvent {
   type: 'llm.report';
@@ -13,66 +12,33 @@ export interface LlmAnalyticsEvent {
   durationMs: number;
 }
 
-export interface PublishError {
-  code: 'PUBLISH_FAILED';
-  message: string;
-}
-
 export interface AnalyticsEventPublisher {
   publishLlmAnalytics(event: LlmAnalyticsEvent): Promise<Result<void, PublishError>>;
 }
-
-function getLogLevel(nodeEnv: string | undefined): LevelWithSilent {
-  return nodeEnv === 'test' ? 'silent' : 'info';
-}
-
-const logger = pino({
-  name: 'analytics-event-publisher',
-  level: getLogLevel(process.env['NODE_ENV']),
-});
 
 export interface AnalyticsEventPublisherConfig {
   projectId: string;
   topicName: string;
 }
 
-export class AnalyticsEventPublisherImpl implements AnalyticsEventPublisher {
-  private readonly pubsub: PubSub;
+export class AnalyticsEventPublisherImpl
+  extends BasePubSubPublisher
+  implements AnalyticsEventPublisher
+{
   private readonly topicName: string;
 
   constructor(config: AnalyticsEventPublisherConfig) {
-    this.pubsub = new PubSub({ projectId: config.projectId });
+    super({ projectId: config.projectId, loggerName: 'analytics-event-publisher' });
     this.topicName = config.topicName;
   }
 
   async publishLlmAnalytics(event: LlmAnalyticsEvent): Promise<Result<void, PublishError>> {
-    try {
-      const topic = this.pubsub.topic(this.topicName);
-      const data = Buffer.from(JSON.stringify(event));
-
-      logger.debug(
-        { topic: this.topicName, provider: event.provider, model: event.model },
-        'Publishing LLM analytics event to Pub/Sub'
-      );
-
-      await topic.publishMessage({ data });
-
-      logger.debug(
-        { topic: this.topicName, provider: event.provider },
-        'Successfully published LLM analytics event'
-      );
-
-      return ok(undefined);
-    } catch (error) {
-      logger.error(
-        { topic: this.topicName, provider: event.provider, error: getErrorMessage(error) },
-        'Failed to publish LLM analytics event'
-      );
-      return err({
-        code: 'PUBLISH_FAILED',
-        message: `Failed to publish LLM analytics event: ${getErrorMessage(error, 'Unknown Pub/Sub error')}`,
-      });
-    }
+    return await this.publishToTopic(
+      this.topicName,
+      event,
+      { provider: event.provider, model: event.model },
+      'LLM analytics'
+    );
   }
 }
 

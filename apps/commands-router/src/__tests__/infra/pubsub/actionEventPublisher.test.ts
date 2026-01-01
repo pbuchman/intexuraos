@@ -1,17 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActionEventPublisher, getLogLevel } from '../../../infra/pubsub/actionEventPublisher.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActionEventPublisher } from '../../../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
 
 const mockPublishMessage = vi.fn();
 
 vi.mock('@google-cloud/pubsub', () => {
-  const mockTopicInstance = {
-    publishMessage: (args: unknown): Promise<string> => mockPublishMessage(args) as Promise<string>,
-  };
+  class MockTopic {
+    publishMessage = mockPublishMessage;
+  }
 
   class MockPubSub {
-    topic(): typeof mockTopicInstance {
-      return mockTopicInstance;
+    topic(): MockTopic {
+      return new MockTopic();
     }
   }
 
@@ -20,30 +20,23 @@ vi.mock('@google-cloud/pubsub', () => {
   };
 });
 
-describe('getLogLevel', () => {
-  it('returns silent for test environment', () => {
-    expect(getLogLevel('test')).toBe('silent');
-  });
-
-  it('returns info for non-test environments', () => {
-    expect(getLogLevel('development')).toBe('info');
-    expect(getLogLevel('production')).toBe('info');
-    expect(getLogLevel(undefined)).toBe('info');
-  });
-});
-
 describe('ActionEventPublisher', () => {
   let publisher: ActionEventPublisher;
 
   beforeEach(() => {
     mockPublishMessage.mockReset();
+    mockPublishMessage.mockResolvedValue('message-id-123');
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'] = 'test-research-topic';
     publisher = new ActionEventPublisher({ projectId: 'test-project' });
+  });
+
+  afterEach(() => {
+    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'];
+    vi.clearAllMocks();
   });
 
   describe('publishActionCreated', () => {
     it('publishes research action event successfully', async () => {
-      mockPublishMessage.mockResolvedValue('message-id-123');
-
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -136,8 +129,6 @@ describe('ActionEventPublisher', () => {
     });
 
     it('includes selectedLlms in event data', async () => {
-      mockPublishMessage.mockResolvedValue('message-id-456');
-
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-456',
