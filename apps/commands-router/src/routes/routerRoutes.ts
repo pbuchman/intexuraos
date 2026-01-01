@@ -259,7 +259,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { actionRepository } = getServices();
       const action = await actionRepository.getById(actionId);
 
-      if (action === null || action.userId !== user.userId) {
+      if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
@@ -330,7 +330,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { actionRepository } = getServices();
       const action = await actionRepository.getById(actionId);
 
-      if (action === null || action.userId !== user.userId) {
+      if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
@@ -410,7 +410,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { commandRepository } = getServices();
       const command = await commandRepository.getById(commandId);
 
-      if (command === null || command.userId !== user.userId) {
+      if (command?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Command not found');
       }
 
@@ -512,7 +512,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { commandRepository } = getServices();
       const command = await commandRepository.getById(commandId);
 
-      if (command === null || command.userId !== user.userId) {
+      if (command?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Command not found');
       }
 
