@@ -81,7 +81,7 @@ export function ConfigurableActionButton({
 
     try {
       // Get base URL from environment
-      const baseUrl = import.meta.env.INTEXURAOS_ROUTER_SERVICE_URL as string;
+      const baseUrl = import.meta.env['INTEXURAOS_ROUTER_SERVICE_URL'] as string;
 
       // Execute action
       await executeAction(button.endpoint, button.action, request, baseUrl);
