@@ -1,0 +1,21 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="CheckImageSize" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="ES6PreferShortImport" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="JSUnresolvedReference" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <scope name="Markdown Files" level="WEAK WARNING" enabled="false" />
+    </inspection_tool>
+    <inspection_tool class="JSUnusedGlobalSymbols" enabled="true" level="WARNING" enabled_by_default="true">
+      <scope name="Markdown Files" level="WARNING" enabled="false" />
+    </inspection_tool>
+    <inspection_tool class="TypeScriptValidateTypes" enabled="true" level="ERROR" enabled_by_default="true">
+      <scope name="Markdown Files" level="ERROR" enabled="false" />
+    </inspection_tool>
+    <inspection_tool class="TypeScriptUnresolvedReference" enabled="true" level="ERROR" enabled_by_default="true">
+      <scope name="Markdown Files" level="ERROR" enabled="false" />
+    </inspection_tool>
+  </profile>
+</component>
+
