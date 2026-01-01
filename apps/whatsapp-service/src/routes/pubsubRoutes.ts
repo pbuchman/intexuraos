@@ -3,7 +3,7 @@
  * Receives Pub/Sub push messages for outbound WhatsApp messaging.
  */
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { validateInternalAuth } from '@intexuraos/common-http';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { MediaCleanupEvent, SendMessageEvent } from '../domain/inbox/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
@@ -84,21 +84,33 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn(
-          {
-            reason: authResult.reason,
-            headers: {
-              'x-internal-auth':
-                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
-              'content-type': request.headers['content-type'],
-            },
-          },
-          'Pub/Sub auth failed for send-message endpoint'
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/whatsapp/pubsub/send-message',
+        bodyPreviewLength: 200,
+      });
+
+      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
+      // Direct service calls use x-internal-auth header
+      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+
+      if (isPubSubPush) {
+        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
+        request.log.info(
+          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+      } else {
+        // Direct service call: validate x-internal-auth header
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for pubsub/send-message endpoint'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
       }
 
       const body = request.body as PubSubPushMessage;
@@ -220,21 +232,33 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn(
-          {
-            reason: authResult.reason,
-            headers: {
-              'x-internal-auth':
-                request.headers['x-internal-auth'] !== undefined ? '[REDACTED]' : '[MISSING]',
-              'content-type': request.headers['content-type'],
-            },
-          },
-          'Pub/Sub auth failed for media-cleanup endpoint'
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/whatsapp/pubsub/media-cleanup',
+        bodyPreviewLength: 200,
+      });
+
+      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
+      // Direct service calls use x-internal-auth header
+      const isPubSubPush = request.headers['x-goog-pubsub-subscription-name'] !== undefined;
+
+      if (isPubSubPush) {
+        // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
+        request.log.info(
+          { subscription: request.headers['x-goog-pubsub-subscription-name'] },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+      } else {
+        // Direct service call: validate x-internal-auth header
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for pubsub/media-cleanup endpoint'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
       }
 
       const body = request.body as PubSubPushMessage;

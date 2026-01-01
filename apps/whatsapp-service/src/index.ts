@@ -7,14 +7,20 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   // Initialize services with config
-  initServices({
+  const serviceConfig: Parameters<typeof initServices>[0] = {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     speechmaticsApiKey: config.speechmaticsApiKey,
-  });
+  };
+
+  if (config.commandsIngestTopic !== undefined) {
+    serviceConfig.commandsIngestTopic = config.commandsIngestTopic;
+  }
+
+  initServices(serviceConfig);
 
   const app = await buildServer(config);
 

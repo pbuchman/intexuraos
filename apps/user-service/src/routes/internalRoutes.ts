@@ -7,26 +7,9 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
-
-/**
- * Validate internal service-to-service authentication.
- * Reads INTERNAL_AUTH_TOKEN at runtime to support test injection.
- */
-function validateInternalAuth(request: FastifyRequest): boolean {
-  const internalAuthToken = process.env['INTERNAL_AUTH_TOKEN'] ?? '';
-  if (internalAuthToken === '') {
-    request.log.warn('Internal auth failed: INTERNAL_AUTH_TOKEN not configured');
-    return false;
-  }
-  const authHeader = request.headers['x-internal-auth'];
-  if (authHeader !== internalAuthToken) {
-    request.log.warn('Internal auth failed: token mismatch');
-    return false;
-  }
-  return true;
-}
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /internal/users/:uid/llm-keys
@@ -67,7 +50,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request)) {
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/llm-keys',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for users/:uid/llm-keys endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
@@ -144,7 +139,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!validateInternalAuth(request)) {
+      // Log incoming request BEFORE auth check (for debugging)
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/llm-keys/:provider/last-used',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for llm-keys/:provider/last-used endpoint'
+        );
         reply.status(401);
         return { error: 'Unauthorized' };
       }
