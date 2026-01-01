@@ -484,7 +484,7 @@ describe('evaluateCondition', () => {
     });
 
     it('handles unknown condition structure', () => {
-      const when = { unknown: 'structure' } as ConditionTree;
+      const when = { unknown: 'structure' } as unknown as ConditionTree;
 
       expect(evaluateCondition(mockAction, when)).toBe(false);
     });

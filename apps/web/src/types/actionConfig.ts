@@ -117,8 +117,8 @@ export interface ActionConfigType {
 export interface ActionConfig {
   /** Global action definitions */
   actions: Record<string, ActionConfigAction>;
-  /** Type-specific action mappings */
-  types: Record<CommandType, ActionConfigType>;
+  /** Type-specific action mappings (partial to allow incremental population) */
+  types: Partial<Record<CommandType, ActionConfigType>>;
 }
 
 /**
