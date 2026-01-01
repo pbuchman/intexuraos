@@ -7,6 +7,10 @@ import {
   createProcessCommandUseCase,
   type ProcessCommandUseCase,
 } from './domain/usecases/processCommand.js';
+import {
+  createRetryPendingCommandsUseCase,
+  type RetryPendingCommandsUseCase,
+} from './domain/usecases/retryPendingCommands.js';
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createGeminiClassifier } from './infra/gemini/classifier.js';
@@ -20,6 +24,7 @@ export interface Services {
   userServiceClient: UserServiceClient;
   eventPublisher: EventPublisherPort;
   processCommandUseCase: ProcessCommandUseCase;
+  retryPendingCommandsUseCase: RetryPendingCommandsUseCase;
 }
 
 export interface ServiceConfig {
@@ -50,6 +55,14 @@ export function initServices(config: ServiceConfig): void {
     userServiceClient,
     eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
+      commandRepository,
+      actionRepository,
+      classifierFactory,
+      userServiceClient,
+      eventPublisher,
+      logger,
+    }),
+    retryPendingCommandsUseCase: createRetryPendingCommandsUseCase({
       commandRepository,
       actionRepository,
       classifierFactory,

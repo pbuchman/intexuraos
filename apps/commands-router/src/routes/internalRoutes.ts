@@ -299,5 +299,69 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.post(
+    '/internal/router/retry-pending',
+    {
+      schema: {
+        operationId: 'retryPendingClassifications',
+        summary: 'Retry pending command classifications',
+        description:
+          'Internal endpoint called by Cloud Scheduler. Retries classification for commands in pending_classification status.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Retry completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              processed: { type: 'number', description: 'Commands successfully classified' },
+              skipped: { type: 'number', description: 'Commands skipped (no API key)' },
+              failed: { type: 'number', description: 'Commands that failed classification' },
+              total: { type: 'number', description: 'Total pending commands found' },
+            },
+            required: ['success', 'processed', 'skipped', 'failed', 'total'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/router/retry-pending',
+        bodyPreviewLength: 200,
+      });
+
+      // Cloud Scheduler uses OIDC tokens validated by Cloud Run at infrastructure level.
+      // If request has Authorization header, Cloud Run already validated the OIDC token.
+      // Direct service calls use x-internal-auth header.
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn({ reason: authResult.reason }, 'Internal auth failed for retry-pending');
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
+      }
+
+      const { retryPendingCommandsUseCase } = getServices();
+      const result = await retryPendingCommandsUseCase.execute();
+
+      request.log.info(result, 'Retry pending classifications completed');
+
+      return { success: true, ...result };
+    }
+  );
+
   done();
 };

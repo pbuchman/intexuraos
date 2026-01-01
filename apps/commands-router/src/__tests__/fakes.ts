@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import pino from 'pino';
-import type { Command } from '../domain/models/command.js';
+import type { Command, CommandStatus } from '../domain/models/command.js';
 import type { Action } from '../domain/models/action.js';
 import type { CommandRepository } from '../domain/ports/commandRepository.js';
 import type { ActionRepository } from '../domain/ports/actionRepository.js';
@@ -14,6 +14,7 @@ import type { EventPublisherPort, PublishError } from '../domain/ports/eventPubl
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
 import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
+import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
 import type { Services } from '../services.js';
 
 export class FakeCommandRepository implements CommandRepository {
@@ -51,6 +52,17 @@ export class FakeCommandRepository implements CommandRepository {
 
   async listByUserId(userId: string): Promise<Command[]> {
     return this.userCommands.get(userId) ?? [];
+  }
+
+  async listByStatus(status: CommandStatus, limit = 100): Promise<Command[]> {
+    const matching: Command[] = [];
+    for (const command of this.commands.values()) {
+      if (command.status === status) {
+        matching.push(command);
+      }
+    }
+    matching.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return matching.slice(0, limit);
   }
 }
 
@@ -177,6 +189,14 @@ export function createFakeServices(deps: {
     userServiceClient: deps.userServiceClient,
     eventPublisher: deps.eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
+      commandRepository: deps.commandRepository,
+      actionRepository: deps.actionRepository,
+      classifierFactory,
+      userServiceClient: deps.userServiceClient,
+      eventPublisher: deps.eventPublisher,
+      logger,
+    }),
+    retryPendingCommandsUseCase: createRetryPendingCommandsUseCase({
       commandRepository: deps.commandRepository,
       actionRepository: deps.actionRepository,
       classifierFactory,

@@ -312,10 +312,11 @@ async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) =
 
   // Process webhook
   // ...
-}
+};
 ```
 
 **Why use `logIncomingRequest()` for webhooks:**
+
 - Automatic header redaction (sensitive auth headers)
 - Consistent logging format across all entry points
 - Body preview for debugging without logging full payload
@@ -421,6 +422,7 @@ async function processWebhookAsync(
 #### What to Log in Webhook Processing
 
 **Always log:**
+
 - Entry point with event/webhook ID
 - Extracted entities (user IDs, message IDs, types)
 - Validation failures with rejection reasons
@@ -430,12 +432,14 @@ async function processWebhookAsync(
 - Errors with full context
 
 **Use structured data:**
+
 - `eventId`: Webhook event identifier for correlation
 - `userId`, `messageId`, `fromNumber`: Entity IDs
 - `messageType`, `status`: State information
 - `reason`, `code`: Rejection/error reasons
 
 **Avoid logging:**
+
 - Full webhook payload (use previews)
 - Sensitive user data (PII, tokens, secrets)
 - Large binary data (media, attachments)
@@ -457,6 +461,7 @@ Always use `getErrorMessage()` from common-core:
 ```
 
 **Never use inline error extraction:**
+
 ```typescript
 // ❌ WRONG - violates ESLint rule
 error: error instanceof Error ? error.message : String(error),
@@ -468,6 +473,7 @@ error: getErrorMessage(error),
 #### Reference Implementation
 
 `apps/whatsapp-service/src/routes/webhookRoutes.ts` - Comprehensive webhook logging with:
+
 - Entry point logging via `logIncomingRequest()`
 - Asynchronous processing with full lifecycle logs
 - Structured data at all decision points
