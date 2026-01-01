@@ -26,23 +26,36 @@ vi.mock('../../services/actionConfigLoader', () => ({
 }));
 
 vi.mock('../../services/conditionEvaluator', () => ({
-  evaluateConditions: vi.fn((action, conditions) => {
-    // Simple mock: check each condition
-    if (conditions.length === 0) return true;
+  evaluateCondition: vi.fn((action, when) => {
+    // Simple mock: evaluate condition tree
+    if (when === undefined) return true;
 
-    return conditions.every((condition: string) => {
-      // Parse basic conditions
-      if (condition.includes("status == 'pending'")) {
-        return action.status === 'pending';
+    // Handle predicate
+    if ('field' in when) {
+      const fieldValue = action[when.field as keyof typeof action];
+
+      if (when.op === 'eq') {
+        return fieldValue === when.value;
       }
-      if (condition.includes("status == 'failed'")) {
-        return action.status === 'failed';
+      if (when.op === 'gt') {
+        return typeof fieldValue === 'number' && typeof when.value === 'number' && fieldValue > when.value;
       }
-      if (condition.includes('confidence > 0.8')) {
-        return action.confidence > 0.8;
-      }
-      return true;
-    });
+      return false;
+    }
+
+    // Handle all condition
+    if ('all' in when) {
+      return when.all.every((child: any) => {
+        if ('field' in child) {
+          const fieldValue = action[child.field as keyof typeof action];
+          if (child.op === 'eq') return fieldValue === child.value;
+          if (child.op === 'gt') return typeof fieldValue === 'number' && typeof child.value === 'number' && fieldValue > child.value;
+        }
+        return false;
+      });
+    }
+
+    return false;
   }),
 }));
 
@@ -82,9 +95,17 @@ describe('useActionConfig', () => {
     types: {
       research: {
         actions: [
-          { action: 'discard', conditions: ["status == 'pending'"] },
-          { action: 'approve-research', conditions: ["status == 'pending'", 'confidence > 0.8'] },
-          { action: 'delete', conditions: ["status == 'failed'"] },
+          { action: 'discard', when: { field: 'status', op: 'eq', value: 'pending' } },
+          {
+            action: 'approve-research',
+            when: {
+              all: [
+                { field: 'status', op: 'eq', value: 'pending' },
+                { field: 'confidence', op: 'gt', value: 0.8 },
+              ],
+            },
+          },
+          { action: 'delete', when: { field: 'status', op: 'eq', value: 'failed' } },
         ],
       },
       note: { actions: [] },
@@ -129,15 +150,7 @@ describe('useActionConfig', () => {
           ui: { label: 'Delete', variant: 'danger', icon: 'Trash2' },
         },
       },
-      types: {
-        research: { actions: [{ action: 'delete', conditions: [] }] },
-        note: { actions: [] },
-        todo: { actions: [] },
-        link: { actions: [] },
-        calendar: { actions: [] },
-        reminder: { actions: [] },
-        unclassified: { actions: [] },
-      },
+      types: {},
     });
 
     const { result } = renderHook(() => useActionConfig(mockAction));
@@ -154,18 +167,37 @@ describe('useActionConfig', () => {
 
   it('filters buttons based on conditions', async () => {
     const { loadActionConfig } = await import('../../services/actionConfigLoader');
-    const { evaluateConditions } = await import('../../services/conditionEvaluator');
+    const { evaluateCondition } = await import('../../services/conditionEvaluator');
 
     vi.mocked(loadActionConfig).mockResolvedValue(mockConfig);
-    vi.mocked(evaluateConditions).mockImplementation((action, conditions) => {
-      // Only approve-research passes (pending + high confidence)
-      if (conditions.includes('confidence > 0.8') && action.status === 'pending') {
-        return true;
+    vi.mocked(evaluateCondition).mockImplementation((action, when) => {
+      // If undefined, return true
+      if (when === undefined) return true;
+
+      // Handle predicate
+      if ('field' in when) {
+        if (when.field === 'status' && when.op === 'eq' && when.value === 'pending') {
+          return action.status === 'pending';
+        }
+        if (when.field === 'status' && when.op === 'eq' && when.value === 'failed') {
+          return action.status === 'failed';
+        }
+        return false;
       }
-      // Discard passes (just pending)
-      if (conditions.length === 1 && conditions[0] === "status == 'pending'") {
-        return true;
+
+      // Handle all condition (approve-research: pending + high confidence)
+      if ('all' in when) {
+        return when.all.every((child: any) => {
+          if (child.field === 'status' && child.op === 'eq') {
+            return action.status === child.value;
+          }
+          if (child.field === 'confidence' && child.op === 'gt') {
+            return action.confidence > child.value;
+          }
+          return false;
+        });
       }
+
       return false;
     });
 
