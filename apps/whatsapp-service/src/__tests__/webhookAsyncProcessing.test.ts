@@ -79,14 +79,6 @@ describe('Webhook async processing', () => {
     });
   }
 
-  /**
-   * @deprecated Use triggerWebhookProcessing() instead.
-   * Kept for compatibility with a few edge case tests.
-   */
-  async function waitForAsyncProcessing(ms = 100): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   describe('processWebhookAsync', () => {
     it('processes webhook and updates event status to USER_UNMAPPED when no user mapping exists', async () => {
       const payload = createWebhookPayload();

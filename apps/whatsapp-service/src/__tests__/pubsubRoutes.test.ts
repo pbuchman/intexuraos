@@ -2,7 +2,7 @@
  * Tests for Pub/Sub push subscription routes.
  * POST /internal/whatsapp/pubsub/send-message
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
@@ -41,7 +41,16 @@ function encodeEvent(event: unknown): string {
   return Buffer.from(JSON.stringify(event)).toString('base64');
 }
 
-function createPubSubBody(eventData: unknown): unknown {
+interface PubSubBody {
+  message: {
+    data: string;
+    messageId: string;
+    publishTime: string;
+  };
+  subscription: string;
+}
+
+function createPubSubBody(eventData: unknown): PubSubBody {
   return {
     message: {
       data: encodeEvent(eventData),

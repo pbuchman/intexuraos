@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import type { UserPhoneLookup } from '../../../infra/notification/WhatsAppNotificationSender.js';
 
 const mockPublishSendMessage = vi.fn();
 
@@ -22,18 +23,20 @@ describe('WhatsAppNotificationSender', () => {
     topicName: 'test-topic',
   };
 
-  let mockUserPhoneLookup: { getPhoneNumber: ReturnType<typeof vi.fn> };
+  let mockGetPhoneNumber: ReturnType<typeof vi.fn<(userId: string) => Promise<string | null>>>;
+  let mockUserPhoneLookup: UserPhoneLookup;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetPhoneNumber = vi.fn<(userId: string) => Promise<string | null>>();
     mockUserPhoneLookup = {
-      getPhoneNumber: vi.fn(),
+      getPhoneNumber: mockGetPhoneNumber,
     };
   });
 
   describe('sendResearchComplete', () => {
     it('sends message when user has phone number', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue('+1234567890');
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
@@ -49,7 +52,7 @@ describe('WhatsAppNotificationSender', () => {
     });
 
     it('returns error when user has no phone number', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue(null);
+      mockGetPhoneNumber.mockResolvedValue(null);
 
       const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
       const result = await sender.sendResearchComplete('user-123', 'research-456', 'Test');
@@ -62,7 +65,7 @@ describe('WhatsAppNotificationSender', () => {
     });
 
     it('returns error when send fails', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue('+1234567890');
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
       mockPublishSendMessage.mockResolvedValue(
         err({ code: 'PUBLISH_FAILED', message: 'Failed to publish' })
       );
@@ -77,7 +80,7 @@ describe('WhatsAppNotificationSender', () => {
     });
 
     it('formats message with title', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue('+1234567890');
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
@@ -91,7 +94,7 @@ describe('WhatsAppNotificationSender', () => {
     });
 
     it('uses default title when empty', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue('+1234567890');
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
@@ -105,7 +108,7 @@ describe('WhatsAppNotificationSender', () => {
     });
 
     it('includes Research Complete header in message', async () => {
-      mockUserPhoneLookup.getPhoneNumber.mockResolvedValue('+1234567890');
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);

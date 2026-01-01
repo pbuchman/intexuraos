@@ -74,7 +74,7 @@ function interpolateValue(value: unknown, action: Action): unknown {
  */
 function interpolateString(str: string, action: Action): string {
   // Match {{variable.path}} patterns
-  const pattern = /\{\{([^}]+)\}\}/g;
+  const pattern = /{{([^}]+)}}/g;
 
   return str.replace(pattern, (_match, path: string) => {
     const trimmedPath = path.trim();

@@ -26,8 +26,8 @@ describe('Logger utilities', () => {
 
   describe('logIncomingRequest', () => {
     let mockRequest: Partial<FastifyRequest>;
-    let loggedPayloads: Array<{ payload: unknown; message: string }>;
-    let debugLogs: Array<{ payload: unknown; message: string }>;
+    let loggedPayloads: { payload: unknown; message: string }[];
+    let debugLogs: { payload: unknown; message: string }[];
 
     beforeEach(() => {
       loggedPayloads = [];

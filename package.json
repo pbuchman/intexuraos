@@ -39,6 +39,7 @@
     "verify:hash-routing": "node scripts/verify-hash-routing.mjs",
     "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
     "verify:pubsub": "node scripts/verify-pubsub.mjs",
+    "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
     "install-hooks": "node scripts/install-hooks.mjs",
     "ci": "node scripts/ci.mjs"
   },

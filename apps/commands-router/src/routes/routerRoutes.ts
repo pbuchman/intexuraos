@@ -54,7 +54,10 @@ const actionSchema = {
     type: { type: 'string', enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'] },
     confidence: { type: 'number' },
     title: { type: 'string' },
-    status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed', 'rejected'] },
+    status: {
+      type: 'string',
+      enum: ['pending', 'processing', 'completed', 'failed', 'rejected', 'archived'],
+    },
     payload: { type: 'object' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
@@ -188,7 +191,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'updateActionStatus',
         summary: 'Update action status',
-        description: 'Update action status (proceed to processing or reject).',
+        description: 'Update action status (proceed to processing, reject, or archive).',
         tags: ['router'],
         params: {
           type: 'object',
@@ -200,7 +203,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         body: {
           type: 'object',
           properties: {
-            status: { type: 'string', enum: ['processing', 'rejected'] },
+            status: { type: 'string', enum: ['processing', 'rejected', 'archived'] },
           },
           required: ['status'],
         },
@@ -251,7 +254,7 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { actionId } = request.params as { actionId: string };
-      const { status } = request.body as { status: 'processing' | 'rejected' };
+      const { status } = request.body as { status: 'processing' | 'rejected' | 'archived' };
 
       const { actionRepository } = getServices();
       const action = await actionRepository.getById(actionId);

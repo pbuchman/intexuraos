@@ -46,11 +46,11 @@ describe('LlmAdapterFactory', () => {
       const providers = createLlmProviders(keys);
 
       expect(providers.google).toBeDefined();
-      expect((providers.google as { apiKey: string }).apiKey).toBe('google-key');
+      expect((providers.google as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect(providers.openai).toBeDefined();
-      expect((providers.openai as { apiKey: string }).apiKey).toBe('openai-key');
+      expect((providers.openai as unknown as { apiKey: string }).apiKey).toBe('openai-key');
       expect(providers.anthropic).toBeDefined();
-      expect((providers.anthropic as { apiKey: string }).apiKey).toBe('anthropic-key');
+      expect((providers.anthropic as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
     });
 
     it('creates only providers with available keys', () => {
@@ -80,19 +80,19 @@ describe('LlmAdapterFactory', () => {
     it('creates GeminiAdapter for google provider', () => {
       const synthesizer = createSynthesizer('google', 'google-key');
 
-      expect((synthesizer as { apiKey: string }).apiKey).toBe('google-key');
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
     });
 
     it('creates ClaudeAdapter for anthropic provider', () => {
       const synthesizer = createSynthesizer('anthropic', 'anthropic-key');
 
-      expect((synthesizer as { apiKey: string }).apiKey).toBe('anthropic-key');
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
     });
 
     it('creates GptAdapter for openai provider', () => {
       const synthesizer = createSynthesizer('openai', 'openai-key');
 
-      expect((synthesizer as { apiKey: string }).apiKey).toBe('openai-key');
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
     });
   });
 
@@ -100,7 +100,7 @@ describe('LlmAdapterFactory', () => {
     it('creates GeminiAdapter for title generation', () => {
       const generator = createTitleGenerator('google-key');
 
-      expect((generator as { apiKey: string }).apiKey).toBe('google-key');
+      expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
     });
   });
 });

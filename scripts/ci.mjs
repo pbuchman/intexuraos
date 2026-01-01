@@ -29,6 +29,7 @@ const phases = [
       'verify:hash-routing',
       'verify:terraform-secrets',
       'verify:pubsub',
+      'verify:workspace-deps',
     ],
   },
   {
