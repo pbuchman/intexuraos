@@ -1138,6 +1138,32 @@ terraform/
 3. `tf plan` (review before apply)
 4. Document in commit message
 
+### Image Management Architecture
+
+**Cloud Run images are managed by Cloud Build, NOT Terraform.**
+
+The `terraform/modules/cloud-run-service/main.tf` includes:
+
+```hcl
+lifecycle {
+  ignore_changes = [template[0].containers[0].image]
+}
+```
+
+**Workflow:**
+
+1. Terraform creates/updates service config (env vars, secrets, scaling)
+2. Cloud Build pushes new images to Artifact Registry
+3. Cloud Run auto-deploys when `:latest` tag is updated
+4. Terraform ignores image changes on subsequent applies
+
+**If you see "Image not found" errors:**
+
+- For NEW services: Run `./scripts/push-missing-images.sh` before `terraform apply`
+- For EXISTING services: Run `terraform refresh` to sync state from GCP
+
+See `docs/setup/02-terraform-bootstrap.md` for detailed troubleshooting.
+
 ### Web Hosting Gotcha
 
 When changing `terraform/modules/web-app`:
@@ -1732,12 +1758,12 @@ Two tsconfig files:
 
 **Key differences:**
 
-| Check                  | Production (`tsconfig.json`) | Tests (`tsconfig.tests-check.json`) |
-| ---------------------- | ---------------------------- | ----------------------------------- |
-| Command                | `npm run typecheck`          | `npm run typecheck:tests`           |
-| Runs in CI             | ✅ Yes                       | ✅ Yes                              |
-| Affects `npm run build`| ✅ Yes                       | ❌ No                               |
-| Strictness             | Full strict mode             | Full strict mode                    |
+| Check                   | Production (`tsconfig.json`) | Tests (`tsconfig.tests-check.json`) |
+| ----------------------- | ---------------------------- | ----------------------------------- |
+| Command                 | `npm run typecheck`          | `npm run typecheck:tests`           |
+| Runs in CI              | ✅ Yes                       | ✅ Yes                              |
+| Affects `npm run build` | ✅ Yes                       | ❌ No                               |
+| Strictness              | Full strict mode             | Full strict mode                    |
 
 **TypeScript errors in test files ARE REAL errors.** Fix them by:
 
@@ -1854,16 +1880,19 @@ Added proper redirect URL validation to prevent open redirect vulnerability.
 **ABSOLUTE RULE: NEVER push to remote without explicit user instruction.**
 
 **When user says "commit":**
+
 - Create git commit(s) locally
 - DO NOT push to remote
 - Inform user that changes are committed locally
 
 **When user says "commit and push":**
+
 - Create git commit(s) locally
 - Push to remote ONCE
 - Do not push again unless explicitly asked
 
 **When user says "push":**
+
 - Push current branch to remote
 - Only push once per instruction
 
@@ -1887,6 +1916,7 @@ User: "now push it"
 ```
 
 **Key Points:**
+
 - Commits are local operations (safe, reversible)
 - Pushes are remote operations (permanent, visible to team)
 - ALWAYS ask before pushing unless explicitly instructed
