@@ -32,7 +32,7 @@ interface RequestOptions {
  * @param endpoint - Endpoint configuration
  * @param action - Action to execute
  * @param request - Request function from useApiClient
- * @param baseUrl - Base URL for the API (e.g., import.meta.env.INTEXURAOS_ROUTER_SERVICE_URL)
+ * @param baseUrl - Base URL for the API (e.g., import.meta.env.INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
  * @returns Promise resolving to API response
  */
 export async function executeAction(

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActionDetailModal, Button, Card, Layout } from '@/components';
+import {
+  ActionDetailModal,
+  CommandDetailModal,
+  Button,
+  Card,
+  Layout,
+  ConfigurableActionButton,
+} from '@/components';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -11,6 +18,7 @@ import {
 } from '@/services';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
+import { useActionConfig } from '@/hooks/useActionConfig';
 import {
   Archive,
   Bell,
@@ -91,6 +99,7 @@ function formatDate(isoDate: string): string {
 
 interface CommandItemProps {
   command: Command;
+  onClick: () => void;
   onDelete: (id: string) => void;
   onArchive: (id: string) => void;
   isDeleting: boolean;
@@ -99,6 +108,7 @@ interface CommandItemProps {
 
 function CommandItem({
   command,
+  onClick,
   onDelete,
   onArchive,
   isDeleting,
@@ -110,7 +120,17 @@ function CommandItem({
   const canArchive = command.status === 'classified';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+    <div
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e): void => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClick();
+        }
+      }}
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
           {isVoice ? (
@@ -135,7 +155,12 @@ function CommandItem({
             <span>{formatDate(command.createdAt)}</span>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div
+          className="flex shrink-0 gap-2"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
           {canDelete && (
             <button
               onClick={(): void => {
@@ -177,11 +202,12 @@ function CommandItem({
 interface ActionItemProps {
   action: Action;
   onClick: () => void;
-  onDelete: (id: string) => void;
-  isDeleting: boolean;
+  onActionSuccess: (button: ResolvedActionButton) => void;
 }
 
-function ActionItem({ action, onClick, onDelete, isDeleting }: ActionItemProps): React.JSX.Element {
+function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): React.JSX.Element {
+  const { buttons } = useActionConfig(action);
+
   return (
     <div
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
@@ -211,25 +237,20 @@ function ActionItem({ action, onClick, onDelete, isDeleting }: ActionItemProps):
           </div>
         </div>
         <div
-          className="flex shrink-0 gap-2"
+          className="flex shrink-0 gap-1"
           onClick={(e): void => {
             e.stopPropagation();
           }}
         >
-          <button
-            onClick={(): void => {
-              onDelete(action.id);
-            }}
-            disabled={isDeleting}
-            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            title="Delete action"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </button>
+          {buttons.map((button) => (
+            <ConfigurableActionButton
+              key={button.id}
+              button={button}
+              onSuccess={(): void => {
+                onActionSuccess(button);
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -254,6 +275,7 @@ export function InboxPage(): React.JSX.Element {
   const [deletingCommandId, setDeletingCommandId] = useState<string | null>(null);
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
 
   useEffect(() => {
     localStorage.setItem('inbox-active-tab', activeTab);
@@ -487,10 +509,15 @@ export function InboxPage(): React.JSX.Element {
                   onClick={(): void => {
                     setSelectedAction(action);
                   }}
-                  onDelete={(id): void => {
-                    void handleDeleteAction(id);
+                  onActionSuccess={(button): void => {
+                    // If action is DELETE, remove from local state
+                    if (button.endpoint.method === 'DELETE') {
+                      setActions((prev) => prev.filter((a) => a.id !== button.action.id));
+                    } else if (button.endpoint.method === 'PATCH') {
+                      // If PATCH (archive, reject), refresh to get updated status
+                      void fetchData(true);
+                    }
                   }}
-                  isDeleting={deletingActionId === action.id}
                 />
               ))
             )}
@@ -514,6 +541,9 @@ export function InboxPage(): React.JSX.Element {
                 <CommandItem
                   key={command.id}
                   command={command}
+                  onClick={(): void => {
+                    setSelectedCommand(command);
+                  }}
                   onDelete={(id): void => {
                     void handleDeleteCommand(id);
                   }}
@@ -551,6 +581,16 @@ export function InboxPage(): React.JSX.Element {
             }
             // Close modal after action completes
             setSelectedAction(null);
+          }}
+        />
+      )}
+
+      {/* Command Detail Modal */}
+      {selectedCommand !== null && (
+        <CommandDetailModal
+          command={selectedCommand}
+          onClose={(): void => {
+            setSelectedCommand(null);
           }}
         />
       )}

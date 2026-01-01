@@ -43,7 +43,7 @@ types:
           op: eq
           value: pending
 
-      # Archive - for pending, completed, failed, rejected
+      # Archive - for pending, completed, failed, rejected (NOT archived)
       - action: archive
         when:
           field: status
