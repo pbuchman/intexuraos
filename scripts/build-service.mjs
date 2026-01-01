@@ -89,7 +89,7 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 // Collect all external npm deps (including transitive from workspace packages)
 const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
 
-await esbuild.build({
+const result = await esbuild.build({
   entryPoints: [resolve(rootDir, `apps/${service}/src/index.ts`)],
   bundle: true,
   platform: 'node',
@@ -101,7 +101,30 @@ await esbuild.build({
   mainFields: ['module', 'main'],
   conditions: ['import', 'node'],
   absWorkingDir: rootDir,
+  metafile: true,
 });
+
+// Detect npm packages that were bundled instead of marked external.
+// This catches missing dependency declarations that cause runtime errors.
+const bundledNpmPackages = new Set();
+for (const inputPath of Object.keys(result.metafile.inputs)) {
+  const match = inputPath.match(/^node_modules\/(@[^/]+\/[^/]+|[^/]+)/);
+  if (match) {
+    const pkgName = match[1];
+    if (!externalPackages.includes(pkgName)) {
+      bundledNpmPackages.add(pkgName);
+    }
+  }
+}
+
+if (bundledNpmPackages.size > 0) {
+  console.error('\nERROR: npm packages bundled instead of external:');
+  for (const pkg of bundledNpmPackages) {
+    console.error(`  - ${pkg}`);
+  }
+  console.error(`\nFix: Add missing packages to apps/${service}/package.json dependencies\n`);
+  process.exit(1);
+}
 
 // Generate production package.json with all npm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
