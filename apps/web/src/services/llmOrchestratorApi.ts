@@ -66,6 +66,18 @@ export async function getResearch(accessToken: string, id: string): Promise<Rese
 }
 
 /**
+ * Approve a draft research and start processing.
+ */
+export async function approveResearch(accessToken: string, id: string): Promise<Research> {
+  return await apiRequest<Research>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/approve`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
+/**
  * Delete a research by ID.
  */
 export async function deleteResearch(accessToken: string, id: string): Promise<void> {
