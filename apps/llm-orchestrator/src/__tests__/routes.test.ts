@@ -10,8 +10,13 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
-import { FakeResearchRepository, FakeUserServiceClient } from './fakes.js';
-import type { Research } from '../domain/research/index.js';
+import {
+  FakeNotificationSender,
+  FakeResearchEventPublisher,
+  FakeResearchRepository,
+  FakeUserServiceClient,
+} from './fakes.js';
+import type { Research, TitleGenerator } from '../domain/research/index.js';
 
 const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -50,13 +55,20 @@ describe('Research Routes - Unauthenticated', () => {
 
     fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
+    const fakeResearchEventPublisher = new FakeResearchEventPublisher();
+    const fakeNotificationSender = new FakeNotificationSender();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
-        /* noop */
+        /* noop - deprecated */
       },
+      researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      createTitleGenerator: (): TitleGenerator => ({
+        generateTitle: async (): Promise<string> => 'Generated Title',
+      }),
+      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 
@@ -161,7 +173,8 @@ describe('Research Routes - Authenticated', () => {
 
   let fakeRepo: FakeResearchRepository;
   let fakeUserServiceClient: FakeUserServiceClient;
-  let processResearchCalled: boolean;
+  let fakeResearchEventPublisher: FakeResearchEventPublisher;
+  let fakeNotificationSender: FakeNotificationSender;
 
   async function createToken(sub: string): Promise<string> {
     const builder = new jose.SignJWT({ sub })
@@ -211,14 +224,20 @@ describe('Research Routes - Authenticated', () => {
 
     fakeRepo = new FakeResearchRepository();
     fakeUserServiceClient = new FakeUserServiceClient();
-    processResearchCalled = false;
+    fakeResearchEventPublisher = new FakeResearchEventPublisher();
+    fakeNotificationSender = new FakeNotificationSender();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
-        processResearchCalled = true;
+        /* noop - deprecated */
       },
+      researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      createTitleGenerator: (): TitleGenerator => ({
+        generateTitle: async (): Promise<string> => 'Generated Title',
+      }),
+      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 
@@ -251,7 +270,8 @@ describe('Research Routes - Authenticated', () => {
       expect(body.data.id).toBe('generated-id-123');
       expect(body.data.userId).toBe(TEST_USER_ID);
       expect(body.data.prompt).toBe('Test prompt');
-      expect(processResearchCalled).toBe(true);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(1);
+      expect(fakeResearchEventPublisher.getPublishedEvents()[0]?.triggeredBy).toBe('create');
     });
 
     it('creates research with external reports', async () => {
@@ -703,7 +723,8 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('pending');
-      expect(processResearchCalled).toBe(true);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(1);
+      expect(fakeResearchEventPublisher.getPublishedEvents()[0]?.triggeredBy).toBe('approve');
     });
 
     it('returns 401 without auth', async () => {
@@ -885,13 +906,20 @@ describe('System Endpoints', () => {
 
     const fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
+    const fakeResearchEventPublisher = new FakeResearchEventPublisher();
+    const fakeNotificationSender = new FakeNotificationSender();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
-        /* noop */
+        /* noop - deprecated */
       },
+      researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      createTitleGenerator: (): TitleGenerator => ({
+        generateTitle: async (): Promise<string> => 'Generated Title',
+      }),
+      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 
@@ -937,13 +965,20 @@ describe('Internal Routes', () => {
 
     fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
+    const fakeResearchEventPublisher = new FakeResearchEventPublisher();
+    const fakeNotificationSender = new FakeNotificationSender();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       generateId: (): string => 'generated-id-123',
       processResearchAsync: (): void => {
-        /* noop */
+        /* noop - deprecated */
       },
+      researchEventPublisher: fakeResearchEventPublisher,
       userServiceClient: fakeUserServiceClient,
+      createTitleGenerator: (): TitleGenerator => ({
+        generateTitle: async (): Promise<string> => 'Generated Title',
+      }),
+      notificationSender: fakeNotificationSender,
     };
     setServices(services);
 

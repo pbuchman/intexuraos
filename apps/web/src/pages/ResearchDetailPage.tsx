@@ -110,6 +110,36 @@ function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   );
 }
 
+/**
+ * Render text with clickable links.
+ * Detects URLs and wraps them in anchor tags that open in new tabs.
+ */
+function renderPromptWithLinks(text: string): React.JSX.Element {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlPattern);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlPattern) !== null) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { research, loading, error, refresh } = useResearch(id ?? '');
@@ -329,7 +359,9 @@ export function ResearchDetailPage(): React.JSX.Element {
       </div>
 
       <Card title="Original Prompt" className="mb-6">
-        <p className="text-slate-700">{research.prompt}</p>
+        <p className="whitespace-pre-wrap text-slate-700">
+          {renderPromptWithLinks(research.prompt)}
+        </p>
       </Card>
 
       {showLlmStatus ? (

@@ -7,6 +7,10 @@ import { FirestoreResearchRepository } from './infra/research/index.js';
 import { createLlmProviders, createSynthesizer, createTitleGenerator } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
 import {
+  createResearchEventPublisher,
+  type ResearchEventPublisher,
+} from './infra/pubsub/index.js';
+import {
   createUserServiceClient,
   type DecryptedApiKeys,
   type UserServiceClient,
@@ -26,6 +30,7 @@ export interface ServiceContainer {
   researchRepo: ResearchRepository;
   generateId: () => string;
   processResearchAsync: (researchId: string) => void;
+  researchEventPublisher: ResearchEventPublisher;
   userServiceClient: UserServiceClient;
   createTitleGenerator: (apiKey: string) => TitleGenerator;
   notificationSender: NotificationSender;
@@ -103,8 +108,14 @@ export function initializeServices(): void {
 
   const notificationSender = createNotificationSender(userServiceClient);
 
+  const researchEventPublisher = createResearchEventPublisher({
+    projectId: process.env['GOOGLE_CLOUD_PROJECT'] ?? '',
+    topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
+  });
+
   /**
    * Process research asynchronously (fire and forget).
+   * @deprecated Use researchEventPublisher.publishProcessResearch() instead.
    */
   const processResearchAsync = (researchId: string): void => {
     void (async (): Promise<void> => {
@@ -166,6 +177,7 @@ export function initializeServices(): void {
     researchRepo,
     generateId: (): string => crypto.randomUUID(),
     processResearchAsync,
+    researchEventPublisher,
     userServiceClient,
     createTitleGenerator,
     notificationSender,

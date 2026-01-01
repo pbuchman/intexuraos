@@ -94,11 +94,17 @@ function interpolateString(str: string, action: Action): string {
  * Gets a nested value from an object using dot notation.
  *
  * @param obj - Object to get value from
- * @param path - Dot-separated path (e.g., "action.payload.prompt")
+ * @param path - Dot-separated path (e.g., "action.payload.prompt" or "payload.prompt")
  * @returns Value at path, or undefined if not found
  */
 function getNestedValue(obj: unknown, path: string): unknown {
-  const parts = path.split('.');
+  let parts = path.split('.');
+
+  // Remove "action" prefix if present (handles both "action.field" and "field" syntax)
+  if (parts[0] === 'action') {
+    parts = parts.slice(1);
+  }
+
   let current: unknown = obj;
 
   for (const part of parts) {

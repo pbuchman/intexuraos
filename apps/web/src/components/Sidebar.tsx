@@ -39,8 +39,8 @@ const settingsItems: NavItem[] = [
 ];
 
 const orchestratorItems: NavItem[] = [
-  { to: '/research/new', label: 'New Research', icon: Plus },
-  { to: '/research', label: 'Previous Researches', icon: List },
+  { to: '/research', label: 'Library', icon: List },
+  { to: '/research/new', label: 'New Study', icon: Plus },
 ];
 
 /**
@@ -230,7 +230,7 @@ export function Sidebar(): React.JSX.Element {
               <Sparkles className="h-5 w-5 shrink-0" />
               {!isCollapsed ? (
                 <>
-                  <span className="flex-1 text-left">LLM Research</span>
+                  <span className="flex-1 text-left">Research Studio</span>
                   {isOrchestratorOpen ? (
                     <ChevronUp className="h-4 w-4" />
                   ) : (

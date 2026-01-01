@@ -11,6 +11,8 @@ import type {
   ResearchRepository,
 } from '../domain/research/index.js';
 import type { DecryptedApiKeys, UserServiceClient } from '../infra/user/index.js';
+import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
+import type { NotificationSender } from '../domain/research/index.js';
 
 /**
  * In-memory fake implementation of ResearchRepository.
@@ -172,5 +174,56 @@ export class FakeUserServiceClient implements UserServiceClient {
   clear(): void {
     this.apiKeys.clear();
     this.phones.clear();
+  }
+}
+
+/**
+ * Fake implementation of ResearchEventPublisher for testing.
+ */
+export class FakeResearchEventPublisher implements ResearchEventPublisher {
+  private publishedEvents: ResearchProcessEvent[] = [];
+  private failNextPublish = false;
+
+  async publishProcessResearch(
+    event: ResearchProcessEvent
+  ): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
+    if (this.failNextPublish) {
+      this.failNextPublish = false;
+      return err({ code: 'PUBLISH_FAILED', message: 'Test publish failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+
+  getPublishedEvents(): ResearchProcessEvent[] {
+    return [...this.publishedEvents];
+  }
+
+  setFailNextPublish(fail: boolean): void {
+    this.failNextPublish = fail;
+  }
+
+  clear(): void {
+    this.publishedEvents = [];
+  }
+}
+
+/**
+ * Fake implementation of NotificationSender for testing.
+ */
+export class FakeNotificationSender implements NotificationSender {
+  private sentNotifications: Array<{ userId: string; title: string }> = [];
+
+  async sendResearchComplete(userId: string, researchTitle: string): Promise<Result<void, Error>> {
+    this.sentNotifications.push({ userId, title: researchTitle });
+    return ok(undefined);
+  }
+
+  getSentNotifications(): Array<{ userId: string; title: string }> {
+    return [...this.sentNotifications];
+  }
+
+  clear(): void {
+    this.sentNotifications = [];
   }
 }

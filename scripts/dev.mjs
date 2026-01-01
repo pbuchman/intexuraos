@@ -102,7 +102,7 @@ async function waitForEmulators() {
   const delayMs = 1000;
 
   const endpoints = [
-    { name: 'Firebase (Firestore + Pub/Sub)', url: 'http://localhost:8100' },
+    { name: 'Firestore', url: 'http://localhost:8101' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
     { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
@@ -349,7 +349,7 @@ async function startAllServices() {
   logOrchestrator(`All ${String(SERVICES.length)} services + web app started!`);
   logOrchestrator('');
   console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
-  console.log(`  API Docs:         ${BOLD}http://localhost:8115${RESET}`);
+  console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
   console.log(`  Firebase UI:      http://localhost:8100`);
   console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
   logOrchestrator('');

@@ -1,5 +1,6 @@
 /**
  * Tests for useActionConfig hook.
+ * @vitest-environment jsdom
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -26,8 +27,22 @@ vi.mock('../../services/actionConfigLoader', () => ({
 
 vi.mock('../../services/conditionEvaluator', () => ({
   evaluateConditions: vi.fn((action, conditions) => {
-    // Simple mock: return true if no conditions or if status is pending
-    return conditions.length === 0 || action.status === 'pending';
+    // Simple mock: check each condition
+    if (conditions.length === 0) return true;
+
+    return conditions.every((condition: string) => {
+      // Parse basic conditions
+      if (condition.includes("status == 'pending'")) {
+        return action.status === 'pending';
+      }
+      if (condition.includes("status == 'failed'")) {
+        return action.status === 'failed';
+      }
+      if (condition.includes('confidence > 0.8')) {
+        return action.confidence > 0.8;
+      }
+      return true;
+    });
   }),
 }));
 

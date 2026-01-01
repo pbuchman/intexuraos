@@ -82,7 +82,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, processResearchAsync } = getServices();
+      const { researchRepo, generateId, researchEventPublisher } = getServices();
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
@@ -99,8 +99,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      // Trigger async processing (fire and forget)
-      processResearchAsync(result.value.id);
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: result.value.id,
+        userId: user.userId,
+        triggeredBy: 'create',
+      });
 
       return await reply.code(201).ok(result.value);
     }
@@ -390,7 +395,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as ResearchIdParams;
-      const { researchRepo, processResearchAsync } = getServices();
+      const { researchRepo, researchEventPublisher } = getServices();
 
       const existing = await getResearch(params.id, { researchRepo });
 
@@ -416,7 +421,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
       }
 
-      processResearchAsync(params.id);
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: params.id,
+        userId: user.userId,
+        triggeredBy: 'approve',
+      });
 
       return await reply.ok(updateResult.value);
     }
