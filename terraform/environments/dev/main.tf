@@ -400,7 +400,7 @@ module "pubsub_whatsapp_transcription" {
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
   push_audience              = module.whatsapp_service.service_url
-  ack_deadline_seconds       = 900
+  ack_deadline_seconds       = 600 # Max allowed by GCP (transcription can take up to 5 min)
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -469,7 +469,7 @@ module "pubsub_research_process" {
   push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
   push_audience              = module.llm_orchestrator.service_url
-  ack_deadline_seconds       = 900
+  ack_deadline_seconds       = 600 # Max allowed by GCP (research processing can take several minutes)
 
   publisher_service_accounts = {
     llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]

@@ -73,7 +73,7 @@ describe('Webhook async processing', () => {
       url: '/internal/whatsapp/pubsub/process-webhook',
       headers: {
         'content-type': 'application/json',
-        'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
       },
       payload: JSON.stringify(pubsubPayload),
     });
