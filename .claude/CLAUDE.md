@@ -1849,6 +1849,52 @@ Added proper redirect URL validation to prevent open redirect vulnerability.
 
 ---
 
+## Git Push Policy
+
+**ABSOLUTE RULE: NEVER push to remote without explicit user instruction.**
+
+**When user says "commit":**
+- Create git commit(s) locally
+- DO NOT push to remote
+- Inform user that changes are committed locally
+
+**When user says "commit and push":**
+- Create git commit(s) locally
+- Push to remote ONCE
+- Do not push again unless explicitly asked
+
+**When user says "push":**
+- Push current branch to remote
+- Only push once per instruction
+
+**Examples:**
+
+```
+User: "fix that file and commit"
+✅ Fix file, git commit
+❌ DO NOT git push
+
+User: "commit and push the changes"
+✅ Fix files, git commit, git push ONCE
+❌ DO NOT push multiple times
+
+User: "commit that, then fix X and commit again"
+✅ First commit, fix X, second commit
+❌ DO NOT push without being asked
+
+User: "now push it"
+✅ git push
+```
+
+**Key Points:**
+- Commits are local operations (safe, reversible)
+- Pushes are remote operations (permanent, visible to team)
+- ALWAYS ask before pushing unless explicitly instructed
+- If you make multiple commits, ask before pushing: "I've made 3 commits. Should I push them to development?"
+- Never assume that committing implies pushing
+
+---
+
 ## Complex Tasks — Continuity Workflow
 
 For multi-step features or refactoring, use the continuity process:
