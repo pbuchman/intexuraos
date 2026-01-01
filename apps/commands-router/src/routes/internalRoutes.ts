@@ -281,6 +281,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const action = await actionRepository.getById(actionId);
       if (action === null) {
+        request.log.warn(
+          {
+            actionId,
+            timestamp: new Date().toISOString(),
+          },
+          'Action not found in Firestore'
+        );
         reply.status(404);
         return { error: 'Action not found' };
       }

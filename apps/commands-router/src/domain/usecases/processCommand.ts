@@ -161,7 +161,17 @@ export function createProcessCommandUseCase(deps: {
             'Created action from classification'
           );
 
+          logger.debug(
+            { commandId: command.id, actionId: action.id },
+            'Saving action to Firestore'
+          );
+
           await actionRepository.save(action);
+
+          logger.info(
+            { commandId: command.id, actionId: action.id },
+            'Action saved to Firestore successfully'
+          );
 
           const eventPayload: ActionCreatedEvent['payload'] = {
             prompt: input.text,
@@ -191,12 +201,24 @@ export function createProcessCommandUseCase(deps: {
             'Publishing action.created event to PubSub'
           );
 
-          await eventPublisher.publishActionCreated(event);
+          const publishResult = await eventPublisher.publishActionCreated(event);
 
-          logger.info(
-            { commandId: command.id, actionId: action.id },
-            'Action event published successfully'
-          );
+          if (!publishResult.ok) {
+            logger.error(
+              {
+                commandId: command.id,
+                actionId: action.id,
+                error: publishResult.error.message,
+              },
+              'Failed to publish action.created event'
+            );
+            // Continue processing - action is already saved
+          } else {
+            logger.info(
+              { commandId: command.id, actionId: action.id },
+              'Action event published successfully'
+            );
+          }
 
           command.classification = {
             type: classification.type,
