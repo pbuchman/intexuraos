@@ -1,9 +1,11 @@
 # Continuity Ledger: User Approval Workflow
 
 ## Goal
+
 Introduce user approval workflow for all actions - no automatic execution, explicit user approval required.
 
 ## Success Criteria
+
 - WhatsApp notifications on approval needed + completion
 - Web UI approval flow with confirmation dialogs
 - Synchronous execute endpoint
@@ -15,6 +17,7 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 ## Status
 
 ### Done
+
 - ✅ Tier 0-0: Added `awaiting_approval` status to ActionStatus enum (commands-router, web, actions-agent)
 - ✅ Tier 0-0: Created Action model in actions-agent
 - ✅ Tier 0-0: Created ActionRepository port and Firestore implementation in actions-agent
@@ -60,11 +63,14 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 3: Committed frontend changes (2 files)
 
 ### Now
+
 - ✅ All implementation tiers complete
 - ⚠️ CI check failing due to unrelated data-insights-service (other process working on this)
 
 ### Next (Prioritized)
+
 All tiers completed. Remaining work:
+
 1. Wait for data-insights-service work to complete (blocks full CI pass)
 2. Deploy to development environment
 3. End-to-end testing in deployed environment
@@ -75,26 +81,31 @@ All tiers completed. Remaining work:
 ## Key Decisions
 
 ### Decision 1: commands-router has NO Firestore access
+
 **Reasoning**: Clear responsibility boundary - actions-agent owns entire action lifecycle
 **Impact**: Requires POST /internal/actions endpoint for action creation
 **Alternative considered**: Allow commands-router to create via Firestore (rejected - violates ownership)
 
 ### Decision 2: Execute endpoint in actions-agent (not commands-router)
+
 **Reasoning**: Respects responsibility boundary, commands-router ends after classification
 **Impact**: Simpler architecture, direct UI → actions-agent communication
 **Alternative considered**: Route through commands-router (rejected - unnecessary hop)
 
 ### Decision 3: WhatsApp notifications via Pub/Sub (not HTTP)
+
 **Reasoning**: Async, reliable, existing pattern in llm-orchestrator
 **Impact**: Requires `@intexuraos/infra-pubsub` dependency
 **Alternative considered**: Direct HTTP to whatsapp-service (rejected - tight coupling)
 
 ### Decision 4: Synchronous execute endpoint
+
 **Reasoning**: UI needs immediate feedback with resource_url for navigation
 **Impact**: 5-minute timeout required, llm-orchestrator can be slow
 **Alternative considered**: Async with polling (rejected - poor UX)
 
 ### Decision 5: Duplicate Action type in each app
+
 **Reasoning**: Apps cannot import from other apps (architectural boundary)
 **Impact**: Type definitions duplicated in commands-router and actions-agent
 **Alternative considered**: Shared package (rejected - adds complexity)
@@ -104,15 +115,18 @@ All tiers completed. Remaining work:
 ## Open Questions
 
 ### Q1: Should we add approval workflow for other action types (todo, note, etc.)?
+
 **Status**: Deferred - research only for MVP
 **Notes**: Pattern established, easy to extend later
 
 ### Q2: What happens to actions created during deployment window?
+
 **Status**: Unresolved
 **Risk**: Medium - small window, low traffic
 **Mitigation**: Deploy during low-traffic period, manual cleanup if needed
 
 ### Q3: Should execute endpoint validate action type matches handler?
+
 **Status**: Resolved - Yes
 **Decision**: Return 400 if no handler registered for action type
 
@@ -121,6 +135,7 @@ All tiers completed. Remaining work:
 ## Progress Log
 
 ### 2026-01-02 (Session 4 - Continuation)
+
 - ✅ Completed Tier 2-3: Cleanup & Migration
   - Fixed routerRoutes.ts malformed GET /router/commands handler
   - Deleted PATCH /internal/actions/:actionId from commands-router
@@ -144,6 +159,7 @@ All tiers completed. Remaining work:
 - ⚠️ Full CI blocked by unrelated data-insights-service work (other process)
 
 ### 2026-01-02 (Session 3)
+
 - ✅ Completed Tier 1-2: WhatsApp Pub/Sub Integration
   - Created UserPhoneLookup port interface (domain/ports/userPhoneLookup.ts)
   - Implemented UserPhoneLookup adapter calling user-service internal API
@@ -168,6 +184,7 @@ All tiers completed. Remaining work:
 - ⚠️ Public route tests failing (11/34) - JWT mocking needs setup for new public routes
 
 ### 2026-01-02 (Session 2)
+
 - ✅ Completed Tier 1-0: Action Creation Endpoint
   - Added @intexuraos/infra-pubsub dependency
   - Created action event publisher infrastructure
@@ -182,12 +199,14 @@ All tiers completed. Remaining work:
   - Wrote 11 comprehensive tests covering all endpoints and edge cases
 
 ### 2026-01-02 02:30 UTC
+
 - Created continuity structure (023-user-approval-workflow)
 - Completed Tier 0-0: Status enum updates (commands-router + web + actions-agent)
 - Completed Tier 0-0: Moved action repository to actions-agent
 - Created action model and Firestore implementation
 
 ### Session Start
+
 - Exited plan mode with approved comprehensive plan
 - Identified need for continuity ledger structure
 - 16 subtasks identified from approved plan
@@ -203,21 +222,25 @@ None currently.
 ## Risks & Mitigation
 
 ### Risk 1: Firestore ownership verification fails
+
 **Likelihood**: Medium
 **Impact**: High - blocks deployment
 **Mitigation**: Run `npm run verify:firestore` after each change, test incrementally
 
 ### Risk 2: Pub/Sub message delivery delays
+
 **Likelihood**: Low
 **Impact**: Medium - delayed notifications
 **Mitigation**: Monitor Cloud Logging, Pub/Sub provides automatic retries
 
 ### Risk 3: Execute endpoint timeout
+
 **Likelihood**: Medium
 **Impact**: High - user sees error, action may succeed anyway
 **Mitigation**: 5-minute timeout, idempotent execution, clear error messages
 
 ### Risk 4: Breaking existing actions
+
 **Likelihood**: High
 **Impact**: Low - manual cleanup required
 **Mitigation**: Delete pending actions before deployment, document migration
@@ -249,12 +272,14 @@ None currently.
 ✅ **ALL IMPLEMENTATION COMPLETE**
 
 All tiers (0-0 through 3) are complete and committed. The user approval workflow is fully implemented:
+
 - Backend infrastructure (Tier 0-0, 1-0, 1-1, 1-2)
 - Execute endpoint and WhatsApp notifications (Tier 2-0)
 - Commands-router migration to HTTP client (Tier 2-1, 2-3)
 - Frontend UI with deep linking (Tier 3)
 
 Remaining work:
+
 1. Wait for data-insights-service Firestore collection declaration (blocks full CI)
 2. Deploy to development environment
 3. End-to-end testing in deployed environment

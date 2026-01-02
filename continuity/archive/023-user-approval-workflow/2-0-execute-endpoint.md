@@ -3,14 +3,17 @@
 ## Status: ⏳ PENDING
 
 ## Objective
+
 Create public POST /actions/:actionId/execute endpoint for user-initiated action execution with WhatsApp notifications.
 
 ## Dependencies
+
 - 0-0-setup (completed)
 - 1-1-public-action-endpoints (provides JWT auth setup)
 - 1-2-whatsapp-integration (provides notification capability)
 
 ## Tasks
+
 - [ ] Create executeResearchAction use case
 - [ ] Add POST /actions/:actionId/execute to publicRoutes.ts
 - [ ] Implement JWT authentication
@@ -24,13 +27,16 @@ Create public POST /actions/:actionId/execute endpoint for user-initiated action
 - [ ] Write integration tests
 
 ## Files to Create
+
 1. `apps/actions-agent/src/domain/usecases/executeResearchAction.ts` - Execute logic
 
 ## Files to Modify
+
 1. `apps/actions-agent/src/routes/publicRoutes.ts` - Add endpoint
 2. `apps/actions-agent/src/services.ts` - Add use case
 
 ## Execute Research Use Case Flow
+
 1. Fetch action from repository
 2. If status is `completed`: return existing resource_url (idempotency)
 3. Update status to `processing`
@@ -43,11 +49,13 @@ Create public POST /actions/:actionId/execute endpoint for user-initiated action
 7. Return final status + resource_url
 
 ## Resource URL Format
+
 - Draft research: `/#/research/{researchId}/edit`
 - Published research: `/#/research/{researchId}`
 - Determined by llm-orchestrator response status
 
 ## WhatsApp Notification
+
 ```typescript
 const phoneNumber = await userPhoneLookup.getPhoneNumber(action.userId);
 if (phoneNumber !== null) {
@@ -65,6 +73,7 @@ if (phoneNumber !== null) {
 ```
 
 ## Response Schema
+
 ```typescript
 {
   success: true,
@@ -77,6 +86,7 @@ if (phoneNumber !== null) {
 ```
 
 ## Verification
+
 - [ ] JWT authentication works
 - [ ] Returns 403 when user doesn't own action
 - [ ] Returns 400 for invalid status
@@ -88,13 +98,16 @@ if (phoneNumber !== null) {
 - [ ] Integration test passes
 
 ## Blocked By
+
 - 1-1-public-action-endpoints (JWT auth setup)
 - 1-2-whatsapp-integration (notification capability)
 
 ## Blocks
+
 - User approval flow (frontend needs this endpoint)
 
 ## Notes
+
 - **Synchronous execution** - wait for llm-orchestrator to complete
 - **5-minute timeout** - llm-orchestrator can be slow
 - **Idempotent** - safe to retry failed executions

@@ -110,7 +110,10 @@ describe('handleResearchAction usecase', () => {
       webAppUrl: 'https://app.intexuraos.com',
     });
 
-    fakeWhatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'WhatsApp unavailable' });
+    fakeWhatsappPublisher.setFailNext(true, {
+      code: 'PUBLISH_FAILED',
+      message: 'WhatsApp unavailable',
+    });
 
     const event = createEvent();
     const result = await usecase.execute(event);
