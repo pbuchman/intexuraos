@@ -52,21 +52,23 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 2-3: Updated FakeActionsAgentClient in test fakes
 - ✅ Tier 2-3: Commented out obsolete test blocks for deleted routes
 - ✅ Tier 2-3: Firestore ownership check NOW PASSES
+- ✅ Tier 2-3: Committed all Tier 2-3 changes (17 files)
+- ✅ Tier 3: Verified awaiting_approval status exists in frontend types
+- ✅ Tier 3: Updated action-config.yaml with approve/retry actions
+- ✅ Tier 3: Added inbox deep linking support (InboxPage.tsx)
+- ✅ Tier 3: Web app typecheck, lint, tests, and build all pass
+- ✅ Tier 3: Committed frontend changes (2 files)
 
 ### Now
-- ⏳ Ready to commit Tier 2-3 changes
+- ✅ All implementation tiers complete
+- ⚠️ CI check failing due to unrelated data-insights-service (other process working on this)
 
 ### Next (Prioritized)
-1. Tier 1-1: Move public action endpoints to actions-agent (GET, PATCH, DELETE)
-2. Tier 1-2: Add WhatsApp Pub/Sub integration to actions-agent
-3. Tier 2-0: Create execute endpoint POST /actions/:id/execute
-4. Tier 2-1: Create actions-agent client in commands-router
-5. Tier 2-1: Update classification flow to call actions-agent
-6. Tier 2-2: Update handleResearchAction with WhatsApp notifications
-7. Tier 2-3: Delete action repository from commands-router
-8. Tier 3: Update frontend (confirmation dialogs + inbox deep linking)
-9. Tier 3: Update action-config.yaml
-10. Tier 3: Full CI verification
+All tiers completed. Remaining work:
+1. Wait for data-insights-service work to complete (blocks full CI pass)
+2. Deploy to development environment
+3. End-to-end testing in deployed environment
+4. Archive continuity to continuity/archive/
 
 ---
 
@@ -117,6 +119,29 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 ---
 
 ## Progress Log
+
+### 2026-01-02 (Session 4 - Continuation)
+- ✅ Completed Tier 2-3: Cleanup & Migration
+  - Fixed routerRoutes.ts malformed GET /router/commands handler
+  - Deleted PATCH /internal/actions/:actionId from commands-router
+  - Removed ActionStatus import from internalRoutes.ts
+  - Fixed retryPendingCommands bug (stats.failed → failed)
+  - Fixed ActionsAgentClient type (removed unnecessary Result<T, Error> args)
+  - Fixed template literal expressions (String(response.status))
+  - Fixed all actions-agent typecheck errors (executeResearchAction, actionEvent, fakes, etc.)
+  - Rewrote handleResearchAction.test.ts for new implementation
+  - Deleted actionRepository and port from commands-router
+  - Updated test fakes (removed FakeActionRepository, added FakeActionsAgentClient)
+  - Commented out obsolete test blocks for deleted routes
+  - Firestore ownership check NOW PASSES
+  - Committed 17 files
+- ✅ Completed Tier 3: Frontend Updates
+  - Verified awaiting_approval status already exists in frontend types
+  - Updated action-config.yaml with approve/retry actions pointing to execute endpoint
+  - Added inbox deep linking support (reads ?action=id from URL hash)
+  - Verified web app typecheck, lint, tests, and build all pass
+  - Committed 2 frontend files
+- ⚠️ Full CI blocked by unrelated data-insights-service work (other process)
 
 ### 2026-01-02 (Session 3)
 - ✅ Completed Tier 1-2: WhatsApp Pub/Sub Integration
@@ -221,4 +246,15 @@ None currently.
 
 ## Continuation
 
-**DO NOT STOP.** After completing this task and updating the ledger, immediately proceed to task 2-1-coverage-verification.md without waiting for user input.
+✅ **ALL IMPLEMENTATION COMPLETE**
+
+All tiers (0-0 through 3) are complete and committed. The user approval workflow is fully implemented:
+- Backend infrastructure (Tier 0-0, 1-0, 1-1, 1-2)
+- Execute endpoint and WhatsApp notifications (Tier 2-0)
+- Commands-router migration to HTTP client (Tier 2-1, 2-3)
+- Frontend UI with deep linking (Tier 3)
+
+Remaining work:
+1. Wait for data-insights-service Firestore collection declaration (blocks full CI)
+2. Deploy to development environment
+3. End-to-end testing in deployed environment
