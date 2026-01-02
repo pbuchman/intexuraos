@@ -107,7 +107,7 @@ export function createRetryPendingCommandsUseCase(deps: {
                 },
                 'Failed to create action via actions-agent'
               );
-              stats.failed++;
+              failed++;
               continue;
             }
 

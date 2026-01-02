@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr, type Result } from '@intexuraos/common-core';
+import { isOk, isErr } from '@intexuraos/common-core';
 import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import {
   FakeActionServiceClient,
-  FakeResearchServiceClient,
-  FakeNotificationSender,
+  FakeUserPhoneLookup,
+  FakeWhatsAppSendPublisher,
 } from './fakes.js';
 
 describe('handleResearchAction usecase', () => {
   let fakeActionClient: FakeActionServiceClient;
-  let fakeResearchClient: FakeResearchServiceClient;
-  let fakeNotificationSender: FakeNotificationSender;
+  let fakeUserPhoneLookup: FakeUserPhoneLookup;
+  let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
     type: 'action.created',
@@ -30,79 +30,65 @@ describe('handleResearchAction usecase', () => {
 
   beforeEach(() => {
     fakeActionClient = new FakeActionServiceClient();
-    fakeResearchClient = new FakeResearchServiceClient();
-    fakeNotificationSender = new FakeNotificationSender();
+    fakeUserPhoneLookup = new FakeUserPhoneLookup();
+    fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
+    fakeUserPhoneLookup.setDefaultPhoneNumber('+1234567890');
   });
 
-  it('successfully processes research action with all steps', async () => {
+  it('sets action to awaiting_approval and sends WhatsApp notification', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
+      userPhoneLookup: fakeUserPhoneLookup,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
     });
-
-    fakeResearchClient.setNextResearchId('research-456');
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
-      expect(result.value.researchId).toBe('research-456');
+      expect(result.value.actionId).toBe('action-123');
     }
 
-    expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('processing');
+    const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
+    expect(actionUpdate?.status).toBe('awaiting_approval');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.phoneNumber).toBe('+1234567890');
+    expect(messages[0]?.message).toContain('ready for approval');
+    expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+  });
+
+  it('succeeds when user has no phone number (skips notification)', async () => {
+    fakeUserPhoneLookup.setDefaultPhoneNumber(null);
+
+    const usecase = createHandleResearchActionUseCase({
+      actionServiceClient: fakeActionClient,
+      userPhoneLookup: fakeUserPhoneLookup,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(isOk(result)).toBe(true);
 
     const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
-    expect(actionUpdate?.status).toBe('completed');
-    expect(actionUpdate?.payload).toEqual({ researchId: 'research-456' });
+    expect(actionUpdate?.status).toBe('awaiting_approval');
 
-    expect(fakeResearchClient.getLastCreateDraftParams()).toEqual({
-      userId: 'user-456',
-      title: 'Test Research',
-      prompt: 'What is quantum computing?',
-      selectedLlms: ['google', 'openai', 'anthropic'],
-      sourceActionId: 'action-123',
-    });
-
-    const notifications = fakeNotificationSender.getNotifications();
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0]).toEqual({
-      userId: 'user-456',
-      researchId: 'research-456',
-      title: 'Test Research',
-      draftUrl: 'https://app.intexuraos.com/#/research/research-456',
-    });
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(0);
   });
 
-  it('uses selected LLMs from payload when provided', async () => {
+  it('fails when marking action as awaiting_approval fails', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
-    });
-
-    const event = createEvent({
-      payload: {
-        prompt: 'Test prompt',
-        confidence: 0.9,
-        selectedLlms: ['google', 'anthropic'],
-      },
-    });
-
-    await usecase.execute(event);
-
-    expect(fakeResearchClient.getLastCreateDraftParams()?.selectedLlms).toEqual([
-      'google',
-      'anthropic',
-    ]);
-  });
-
-  it('fails when marking action as processing fails', async () => {
-    const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
+      userPhoneLookup: fakeUserPhoneLookup,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
     });
 
     fakeActionClient.setFailNext(true, new Error('Database unavailable'));
@@ -112,76 +98,26 @@ describe('handleResearchAction usecase', () => {
 
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toContain('Failed to mark action as processing');
+      expect(result.error.message).toContain('Failed to update action status');
     }
   });
 
-  it('fails when creating research draft fails and marks action as failed', async () => {
+  it('fails when WhatsApp publish fails', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
+      userPhoneLookup: fakeUserPhoneLookup,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
     });
 
-    fakeResearchClient.setFailNext(true, new Error('LLM service unavailable'));
+    fakeWhatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'WhatsApp unavailable' });
 
     const event = createEvent();
     const result = await usecase.execute(event);
 
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toContain('Failed to create research draft');
-    }
-
-    const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
-    expect(actionUpdate?.status).toBe('failed');
-    expect(actionUpdate?.payload).toEqual({ error: 'LLM service unavailable' });
-  });
-
-  it('fails when marking action as completed fails', async () => {
-    const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
-    });
-
-    let callCount = 0;
-    const originalUpdateAction = fakeActionClient.updateAction.bind(fakeActionClient);
-    fakeActionClient.updateAction = async (
-      actionId: string,
-      update: { status: string; payload?: Record<string, unknown> }
-    ): Promise<Result<void>> => {
-      callCount++;
-      if (callCount === 1 && update.status === 'completed') {
-        return { ok: false, error: new Error('Database unavailable') };
-      }
-      return await originalUpdateAction(actionId, update);
-    };
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
-      expect(result.error.message).toContain('Failed to mark action as completed');
-    }
-  });
-
-  it('fails when sending notification fails', async () => {
-    const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
-      researchServiceClient: fakeResearchClient,
-      notificationSender: fakeNotificationSender,
-    });
-
-    fakeNotificationSender.setFailNext(true, new Error('WhatsApp unavailable'));
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
-      expect(result.error.message).toContain('Failed to send notification');
+      expect(result.error.message).toContain('Failed to send WhatsApp notification');
     }
   });
 });

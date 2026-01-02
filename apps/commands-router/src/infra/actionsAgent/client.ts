@@ -17,12 +17,12 @@ export interface CreateActionParams {
 }
 
 export interface ActionsAgentClient {
-  createAction(params: CreateActionParams): Promise<Result<Action, Error>>;
+  createAction(params: CreateActionParams): Promise<Result<Action>>;
 }
 
 export function createActionsAgentClient(config: ActionsAgentClientConfig): ActionsAgentClient {
   return {
-    async createAction(params: CreateActionParams): Promise<Result<Action, Error>> {
+    async createAction(params: CreateActionParams): Promise<Result<Action>> {
       try {
         const response = await fetch(`${config.baseUrl}/internal/actions`, {
           method: 'POST',
@@ -37,7 +37,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
           const text = await response.text();
           return err(
             new Error(
-              `Failed to create action: ${response.status} ${response.statusText} - ${text}`
+              `Failed to create action: ${String(response.status)} ${response.statusText} - ${text}`
             )
           );
         }

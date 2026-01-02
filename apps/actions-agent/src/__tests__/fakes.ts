@@ -231,12 +231,12 @@ export class FakeUserPhoneLookup implements UserPhoneLookup {
 }
 
 export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
-  private sentMessages: Array<{
+  private sentMessages: {
     userId: string;
     phoneNumber: string;
     message: string;
     correlationId: string;
-  }> = [];
+  }[] = [];
   private failNext = false;
   private failError: PublishError | null = null;
 
@@ -293,7 +293,7 @@ export function createFakeServices(deps: {
     userPhoneLookup,
     whatsappPublisher,
     handleResearchActionUseCase,
-    executeResearchActionUseCase: () => {
+    executeResearchActionUseCase: (): never => {
       throw new Error('executeResearchActionUseCase not implemented in fake services');
     },
     research: handleResearchActionUseCase,

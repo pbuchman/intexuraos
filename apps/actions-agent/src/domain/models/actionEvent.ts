@@ -1,3 +1,5 @@
+import type { ActionType } from './action.js';
+
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
 
 export interface ActionCreatedEvent {
@@ -5,7 +7,7 @@ export interface ActionCreatedEvent {
   actionId: string;
   userId: string;
   commandId: string;
-  actionType: string;
+  actionType: ActionType;
   title: string;
   payload: {
     prompt: string;

@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { getHandlerForType } from '../domain/usecases/actionHandlerRegistry.js';
@@ -158,7 +159,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log.error(
           {
             actionId: action.id,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: getErrorMessage(error, 'Unknown error'),
           },
           'Failed to save action to Firestore'
         );
@@ -248,7 +249,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean' },
-              researchId: { type: 'string' },
+              actionId: { type: 'string' },
             },
             required: ['success'],
           },
@@ -384,13 +385,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info(
-        { actionId: eventData.actionId, actionType, researchId: result.value.researchId },
+        { actionId: result.value.actionId, actionType },
         'Action processed successfully'
       );
 
       return {
         success: true,
-        researchId: result.value.researchId,
+        actionId: result.value.actionId,
       };
     }
   );
