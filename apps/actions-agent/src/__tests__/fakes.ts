@@ -4,6 +4,7 @@ import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository } from '../domain/ports/actionRepository.js';
+import type { UserPhoneLookup } from '../domain/ports/userPhoneLookup.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionCreatedEvent, LlmProvider } from '../domain/models/actionEvent.js';
 import {
@@ -11,7 +12,7 @@ import {
   type HandleResearchActionUseCase,
 } from '../domain/usecases/handleResearchAction.js';
 import type { Services } from '../services.js';
-import type { PublishError } from '@intexuraos/infra-pubsub';
+import type { PublishError, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 
 export class FakeActionServiceClient implements ActionServiceClient {
@@ -209,12 +210,68 @@ export class FakeActionEventPublisher implements ActionEventPublisher {
   }
 }
 
+export class FakeUserPhoneLookup implements UserPhoneLookup {
+  private phoneNumbers = new Map<string, string | null>();
+  private defaultPhoneNumber: string | null = '+1234567890';
+
+  setPhoneNumber(userId: string, phoneNumber: string | null): void {
+    this.phoneNumbers.set(userId, phoneNumber);
+  }
+
+  setDefaultPhoneNumber(phoneNumber: string | null): void {
+    this.defaultPhoneNumber = phoneNumber;
+  }
+
+  async getPhoneNumber(userId: string): Promise<string | null> {
+    if (this.phoneNumbers.has(userId)) {
+      return this.phoneNumbers.get(userId) ?? null;
+    }
+    return this.defaultPhoneNumber;
+  }
+}
+
+export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
+  private sentMessages: Array<{
+    userId: string;
+    phoneNumber: string;
+    message: string;
+    correlationId: string;
+  }> = [];
+  private failNext = false;
+  private failError: PublishError | null = null;
+
+  getSentMessages(): typeof this.sentMessages {
+    return this.sentMessages;
+  }
+
+  setFailNext(fail: boolean, error?: PublishError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async publishSendMessage(params: {
+    userId: string;
+    phoneNumber: string;
+    message: string;
+    correlationId: string;
+  }): Promise<Result<void, PublishError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
+    }
+    this.sentMessages.push(params);
+    return ok(undefined);
+  }
+}
+
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
   researchServiceClient: FakeResearchServiceClient;
   notificationSender: FakeNotificationSender;
   actionRepository?: FakeActionRepository;
   actionEventPublisher?: FakeActionEventPublisher;
+  userPhoneLookup?: FakeUserPhoneLookup;
+  whatsappPublisher?: FakeWhatsAppSendPublisher;
 }): Services {
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
@@ -229,6 +286,8 @@ export function createFakeServices(deps: {
     notificationSender: deps.notificationSender,
     actionRepository: deps.actionRepository ?? new FakeActionRepository(),
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
+    userPhoneLookup: deps.userPhoneLookup ?? new FakeUserPhoneLookup(),
+    whatsappPublisher: deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher(),
     handleResearchActionUseCase,
     research: handleResearchActionUseCase,
   };

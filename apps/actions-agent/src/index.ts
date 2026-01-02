@@ -12,6 +12,8 @@ const REQUIRED_ENV = [
   'USER_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC',
+  'INTEXURAOS_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_WEB_APP_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -23,6 +25,8 @@ async function main(): Promise<void> {
     userServiceUrl: process.env['USER_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
     gcpProjectId: process.env['GOOGLE_CLOUD_PROJECT'] as string,
+    whatsappSendTopic: process.env['INTEXURAOS_WHATSAPP_SEND_TOPIC'] as string,
+    webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] as string,
   });
 
   const app = await buildServer();

@@ -2,6 +2,7 @@ import type { ActionServiceClient } from './domain/ports/actionServiceClient.js'
 import type { ResearchServiceClient } from './domain/ports/researchServiceClient.js';
 import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
+import type { UserPhoneLookup } from './domain/ports/userPhoneLookup.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -11,6 +12,8 @@ import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorCli
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
+import { createUserPhoneLookup } from './infra/userService/userPhoneLookup.js';
+import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -18,6 +21,8 @@ export interface Services {
   notificationSender: NotificationSender;
   actionRepository: ActionRepository;
   actionEventPublisher: ActionEventPublisher;
+  userPhoneLookup: UserPhoneLookup;
+  whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
@@ -29,6 +34,8 @@ export interface ServiceConfig {
   userServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
+  whatsappSendTopic: string;
+  webAppUrl: string;
 }
 
 let container: Services | null = null;
@@ -55,6 +62,16 @@ export function initServices(config: ServiceConfig): void {
     projectId: config.gcpProjectId,
   });
 
+  const userPhoneLookup = createUserPhoneLookup({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
+
+  const whatsappPublisher = createWhatsAppSendPublisher({
+    projectId: config.gcpProjectId,
+    topicName: config.whatsappSendTopic,
+  });
+
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
     actionServiceClient,
     researchServiceClient,
@@ -67,6 +84,8 @@ export function initServices(config: ServiceConfig): void {
     notificationSender,
     actionRepository,
     actionEventPublisher,
+    userPhoneLookup,
+    whatsappPublisher,
     handleResearchActionUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
