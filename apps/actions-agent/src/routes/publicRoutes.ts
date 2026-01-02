@@ -251,5 +251,106 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.post(
+    '/router/actions/:actionId/execute',
+    {
+      schema: {
+        operationId: 'executeAction',
+        summary: 'Execute action',
+        description:
+          'Execute an action (e.g., create research draft). Synchronous - waits for completion.',
+        tags: ['router'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+          },
+          required: ['actionId'],
+        },
+        response: {
+          200: {
+            description: 'Action executed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  actionId: { type: 'string' },
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  resource_url: { type: 'string' },
+                  error: { type: 'string' },
+                },
+                required: ['actionId', 'status'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { actionId: string } }>, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { actionId } = request.params;
+
+      const { actionRepository, executeResearchActionUseCase } = getServices();
+      const action = await actionRepository.getById(actionId);
+
+      if (action === null || action.userId !== user.userId) {
+        return await reply.fail('NOT_FOUND', 'Action not found');
+      }
+
+      if (action.type !== 'research') {
+        return await reply.fail('INVALID_REQUEST', `Action type ${action.type} not supported`);
+      }
+
+      const result = await executeResearchActionUseCase(actionId);
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok({
+        actionId,
+        ...result.value,
+      });
+    }
+  );
+
   done();
 };

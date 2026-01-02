@@ -7,6 +7,10 @@ import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
 } from './domain/usecases/handleResearchAction.js';
+import {
+  createExecuteResearchActionUseCase,
+  type ExecuteResearchActionUseCase,
+} from './domain/usecases/executeResearchAction.js';
 import { createCommandsRouterClient } from './infra/action/commandsRouterClient.js';
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
@@ -24,6 +28,7 @@ export interface Services {
   userPhoneLookup: UserPhoneLookup;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
+  executeResearchActionUseCase: ExecuteResearchActionUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
 }
@@ -74,8 +79,17 @@ export function initServices(config: ServiceConfig): void {
 
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
     actionServiceClient,
+    userPhoneLookup,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+  });
+
+  const executeResearchActionUseCase = createExecuteResearchActionUseCase({
+    actionRepository,
     researchServiceClient,
-    notificationSender,
+    userPhoneLookup,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
   });
 
   container = {
@@ -87,6 +101,7 @@ export function initServices(config: ServiceConfig): void {
     userPhoneLookup,
     whatsappPublisher,
     handleResearchActionUseCase,
+    executeResearchActionUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
   };

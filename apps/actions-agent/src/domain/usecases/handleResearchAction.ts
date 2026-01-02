@@ -1,12 +1,9 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../ports/actionServiceClient.js';
-import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
-import type { NotificationSender } from '../ports/notificationSender.js';
-import type { ActionCreatedEvent, LlmProvider } from '../models/actionEvent.js';
+import type { UserPhoneLookup } from '../ports/userPhoneLookup.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import pino from 'pino';
-
-const WEB_APP_BASE_URL = 'https://app.intexuraos.com';
-const DEFAULT_LLMS: LlmProvider[] = ['google', 'openai', 'anthropic'];
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
@@ -15,20 +12,21 @@ const logger = pino({
 
 export interface HandleResearchActionDeps {
   actionServiceClient: ActionServiceClient;
-  researchServiceClient: ResearchServiceClient;
-  notificationSender: NotificationSender;
+  userPhoneLookup: UserPhoneLookup;
+  whatsappPublisher: WhatsAppSendPublisher;
+  webAppUrl: string;
 }
 
 export interface HandleResearchActionUseCase {
-  execute(event: ActionCreatedEvent): Promise<Result<{ researchId: string }>>;
+  execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
 }
 
 export function createHandleResearchActionUseCase(
   deps: HandleResearchActionDeps
 ): HandleResearchActionUseCase {
   return {
-    async execute(event: ActionCreatedEvent): Promise<Result<{ researchId: string }>> {
-      const { actionServiceClient, researchServiceClient, notificationSender } = deps;
+    async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
+      const { actionServiceClient, userPhoneLookup, whatsappPublisher, webAppUrl } = deps;
 
       logger.info(
         {
@@ -38,133 +36,66 @@ export function createHandleResearchActionUseCase(
           title: event.title,
           actionType: event.actionType,
         },
-        'Starting research action processing'
+        'Setting action to awaiting_approval'
       );
 
-      // Step 1: Mark action as processing
-      logger.info({ actionId: event.actionId }, 'Step 1: Marking action as processing');
-      const processingResult = await actionServiceClient.updateActionStatus(
+      const result = await actionServiceClient.updateActionStatus(
         event.actionId,
-        'processing'
+        'awaiting_approval'
       );
-      if (!processingResult.ok) {
+
+      if (!result.ok) {
         logger.error(
           {
             actionId: event.actionId,
-            error: getErrorMessage(processingResult.error),
+            error: getErrorMessage(result.error),
           },
-          'Step 1 failed: Could not mark action as processing'
+          'Failed to set action to awaiting_approval'
         );
-        return err(
-          new Error(
-            `Failed to mark action as processing: ${getErrorMessage(processingResult.error)}`
-          )
-        );
+        return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
       }
-      logger.info({ actionId: event.actionId }, 'Step 1 completed: Action marked as processing');
 
-      // Step 2: Create draft research via LLM orchestrator
-      const selectedLlms = event.payload.selectedLlms ?? DEFAULT_LLMS;
+      logger.info({ actionId: event.actionId }, 'Action set to awaiting_approval');
+
+      const phoneNumber = await userPhoneLookup.getPhoneNumber(event.userId);
+      if (phoneNumber === null) {
+        logger.info(
+          { actionId: event.actionId, userId: event.userId },
+          'User not connected to WhatsApp, skipping notification'
+        );
+        return ok({ actionId: event.actionId });
+      }
+
+      const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
+      const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
+
       logger.info(
-        {
-          actionId: event.actionId,
-          selectedLlms,
-          promptLength: event.payload.prompt.length,
-        },
-        'Step 2: Creating research draft via LLM orchestrator'
+        { actionId: event.actionId, userId: event.userId, phoneNumber },
+        'Sending WhatsApp approval notification'
       );
-      const draftResult = await researchServiceClient.createDraft({
+
+      const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
-        title: event.title,
-        prompt: event.payload.prompt,
-        selectedLlms,
-        sourceActionId: event.actionId,
+        phoneNumber,
+        message,
+        correlationId: `action-approval-${event.actionId}`,
       });
 
-      if (!draftResult.ok) {
-        logger.error(
-          {
-            actionId: event.actionId,
-            error: getErrorMessage(draftResult.error),
-          },
-          'Step 2 failed: Research draft creation failed'
-        );
-        await actionServiceClient.updateAction(event.actionId, {
-          status: 'failed',
-          payload: { error: getErrorMessage(draftResult.error) },
-        });
-        return err(
-          new Error(`Failed to create research draft: ${getErrorMessage(draftResult.error)}`)
-        );
-      }
-
-      const researchId = draftResult.value.id;
-      logger.info(
-        { actionId: event.actionId, researchId },
-        'Step 2 completed: Research draft created'
-      );
-
-      // Step 3: Mark action as completed with research reference
-      logger.info({ actionId: event.actionId, researchId }, 'Step 3: Marking action as completed');
-      const completedResult = await actionServiceClient.updateAction(event.actionId, {
-        status: 'completed',
-        payload: { researchId },
-      });
-      if (!completedResult.ok) {
-        logger.error(
-          {
-            actionId: event.actionId,
-            researchId,
-            error: getErrorMessage(completedResult.error),
-          },
-          'Step 3 failed: Could not mark action as completed'
-        );
-        return err(
-          new Error(`Failed to mark action as completed: ${getErrorMessage(completedResult.error)}`)
-        );
-      }
-      logger.info(
-        { actionId: event.actionId, researchId },
-        'Step 3 completed: Action marked as completed'
-      );
-
-      // Step 4: Send notification to user
-      const draftUrl = `${WEB_APP_BASE_URL}/#/research/${researchId}`;
-      logger.info(
-        { actionId: event.actionId, userId: event.userId, researchId },
-        'Step 4: Sending notification to user'
-      );
-      const notificationResult = await notificationSender.sendDraftReady(
-        event.userId,
-        researchId,
-        event.title,
-        draftUrl
-      );
-      if (!notificationResult.ok) {
+      if (!publishResult.ok) {
         logger.error(
           {
             actionId: event.actionId,
             userId: event.userId,
-            researchId,
-            error: getErrorMessage(notificationResult.error),
+            error: publishResult.error.message,
           },
-          'Step 4 failed: Could not send notification'
+          'Failed to publish WhatsApp message (non-fatal)'
         );
-        return err(
-          new Error(`Failed to send notification: ${getErrorMessage(notificationResult.error)}`)
-        );
+        /* Best-effort notification - don't fail the action if notification fails */
+      } else {
+        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent');
       }
-      logger.info(
-        { actionId: event.actionId, userId: event.userId, researchId },
-        'Step 4 completed: Notification sent'
-      );
 
-      logger.info(
-        { actionId: event.actionId, researchId },
-        'Research action processing completed successfully'
-      );
-
-      return ok({ researchId });
+      return ok({ actionId: event.actionId });
     },
   };
 }

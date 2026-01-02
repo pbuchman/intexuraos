@@ -34,11 +34,19 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 1-2: Added INTEXURAOS_WHATSAPP_SEND_TOPIC and INTEXURAOS_WEB_APP_URL env vars
 - ✅ Tier 1-2: Created FakeUserPhoneLookup and FakeWhatsAppSendPublisher for testing
 - ✅ Tier 1-2: Wrote 4 comprehensive tests for UserPhoneLookup adapter
+- ✅ Tier 2-0: Created executeResearchAction use case (domain/usecases/executeResearchAction.ts)
+- ✅ Tier 2-0: Added executeResearchActionUseCase to services.ts
+- ✅ Tier 2-0: Created POST /router/actions/:actionId/execute endpoint in publicRoutes.ts
+- ✅ Tier 2-0: Updated handleResearchAction to only set awaiting_approval + send WhatsApp notification
+- ✅ Tier 2-0: Updated services.ts with new handleResearchAction dependencies
 
 ### Now
-- ⏳ Ready to start Tier 2-0: Create execute endpoint POST /actions/:id/execute
+- ⏳ Ready to start Tier 2-1: Create actions-agent client in commands-router
 - ⚠️ Note: Firestore ownership check failing - commands-router still has old actionRepository.ts
   - Will be resolved after Tier 2-1 (create actions-agent client) and Tier 2-3 (delete old repository)
+- ⚠️ Note: Public route tests failing (11/34 tests) - need JWT mocking setup
+  - Tests expect 200/404 but getting 401 (JWT validation failing with mock tokens)
+  - Will be fixed after understanding JWT test mocking pattern from other services
 
 ### Next (Prioritized)
 1. Tier 1-1: Move public action endpoints to actions-agent (GET, PATCH, DELETE)
@@ -111,7 +119,14 @@ Introduce user approval workflow for all actions - no automatic execution, expli
   - Added environment variables: INTEXURAOS_WHATSAPP_SEND_TOPIC, INTEXURAOS_WEB_APP_URL
   - Created FakeUserPhoneLookup and FakeWhatsAppSendPublisher for testing
   - Wrote 4 comprehensive tests for UserPhoneLookup adapter (success, 404, 500, network error)
+- ✅ Completed Tier 2-0: Execute Endpoint & Updated Handler
+  - Created executeResearchAction use case (creates draft, updates action, sends WhatsApp)
+  - Added POST /router/actions/:actionId/execute endpoint to publicRoutes.ts
+  - Simplified handleResearchAction to only set awaiting_approval + send approval notification
+  - Updated services.ts with new dependencies for both use cases
+  - Idempotency: execute can be called multiple times, returns existing resource_url if completed
 - ⚠️ Firestore ownership check failing - expected, will resolve after Tier 2 work
+- ⚠️ Public route tests failing (11/34) - JWT mocking needs setup for new public routes
 
 ### 2026-01-02 (Session 2)
 - ✅ Completed Tier 1-0: Action Creation Endpoint

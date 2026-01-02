@@ -273,11 +273,15 @@ export function createFakeServices(deps: {
   userPhoneLookup?: FakeUserPhoneLookup;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
 }): Services {
+  const userPhoneLookup = deps.userPhoneLookup ?? new FakeUserPhoneLookup();
+  const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
+
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
       actionServiceClient: deps.actionServiceClient,
-      researchServiceClient: deps.researchServiceClient,
-      notificationSender: deps.notificationSender,
+      userPhoneLookup,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
     });
 
   return {
@@ -286,9 +290,12 @@ export function createFakeServices(deps: {
     notificationSender: deps.notificationSender,
     actionRepository: deps.actionRepository ?? new FakeActionRepository(),
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
-    userPhoneLookup: deps.userPhoneLookup ?? new FakeUserPhoneLookup(),
-    whatsappPublisher: deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher(),
+    userPhoneLookup,
+    whatsappPublisher,
     handleResearchActionUseCase,
+    executeResearchActionUseCase: () => {
+      throw new Error('executeResearchActionUseCase not implemented in fake services');
+    },
     research: handleResearchActionUseCase,
   };
 }
