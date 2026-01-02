@@ -19,6 +19,12 @@ async function main(): Promise<void> {
   if (config.commandsIngestTopic !== undefined) {
     serviceConfig.commandsIngestTopic = config.commandsIngestTopic;
   }
+  if (config.webhookProcessTopic !== undefined) {
+    serviceConfig.webhookProcessTopic = config.webhookProcessTopic;
+  }
+  if (config.transcriptionTopic !== undefined) {
+    serviceConfig.transcriptionTopic = config.transcriptionTopic;
+  }
 
   initServices(serviceConfig);
 

@@ -8,6 +8,7 @@ services:
     volumes:
       - ../firebase.json:/home/node/firebase.json:ro
       - ../data/firestore-export:/data/firestore-export:ro
+      - firebase-cache:/home/node/.cache/firebase
     command: >
       sh -c "if [ -d /data/firestore-export ] && [ -n \"$$(ls -A /data/firestore-export 2>/dev/null)\" ]; then
         echo 'Importing Firestore data from /data/firestore-export...';
@@ -22,7 +23,7 @@ services:
           'CMD',
           'node',
           '-e',
-          'require("http").get("http://localhost:8100", (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on("error", () => process.exit(1))',
+          'require("http").get("http://localhost:8101", (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on("error", () => process.exit(1))',
         ]
       interval: 5s
       timeout: 3s
@@ -62,3 +63,4 @@ services:
 
 volumes:
   gcs-data:
+  firebase-cache:

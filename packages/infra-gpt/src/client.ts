@@ -112,7 +112,7 @@ export function createGptClient(config: GptConfig): GptClient {
           tools: [
             {
               type: 'web_search_preview',
-              search_context_size: 'high',
+              search_context_size: 'medium',
             },
           ],
         });

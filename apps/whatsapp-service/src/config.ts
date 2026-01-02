@@ -82,6 +82,18 @@ const configSchema = z.object({
   sendMessageTopic: z.string().optional(),
 
   /**
+   * Pub/Sub topic for webhook processing.
+   * Decouples webhook response from async processing.
+   */
+  webhookProcessTopic: z.string().optional(),
+
+  /**
+   * Pub/Sub topic for audio transcription.
+   * Triggers async transcription polling.
+   */
+  transcriptionTopic: z.string().optional(),
+
+  /**
    * Speechmatics API key for audio transcription.
    */
   speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
@@ -122,6 +134,8 @@ export function loadConfig(): Config {
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
+    webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
+    transcriptionTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });

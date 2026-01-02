@@ -14,6 +14,7 @@ interface CommandDoc {
   classification?: {
     type: string;
     confidence: number;
+    reasoning: string;
     classifiedAt: string;
   };
   actionId?: string;
@@ -39,6 +40,7 @@ function toCommand(id: string, doc: CommandDoc): Command {
     command.classification = {
       type: doc.classification.type as CommandClassification['type'],
       confidence: doc.classification.confidence,
+      reasoning: doc.classification.reasoning,
       classifiedAt: doc.classification.classifiedAt,
     };
   }
@@ -108,6 +110,12 @@ export function createFirestoreCommandRepository(): CommandRepository {
         ...toDoc(command),
         updatedAt: new Date().toISOString(),
       });
+    },
+
+    async delete(id: string): Promise<void> {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION).doc(id);
+      await docRef.delete();
     },
 
     async listByUserId(userId: string): Promise<Command[]> {

@@ -15,6 +15,7 @@ import {
 // Mock specific modules before importing health module
 vi.mock('@intexuraos/common-core', () => ({
   getErrorMessage: vi.fn((error: unknown) =>
+    // eslint-disable-next-line no-restricted-syntax -- Mocking getErrorMessage itself
     error instanceof Error ? error.message : 'Unknown error'
   ),
 }));

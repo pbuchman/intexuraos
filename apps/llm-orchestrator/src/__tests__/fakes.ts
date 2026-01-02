@@ -4,18 +4,27 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
+  LlmError,
   LlmProvider,
+  LlmResearchProvider,
+  LlmResearchResult,
   LlmResult,
+  LlmSynthesisProvider,
+  NotificationError,
   RepositoryError,
   Research,
   ResearchRepository,
+  TitleGenerator,
 } from '../domain/research/index.js';
+import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
+import type { NotificationSender } from '../domain/research/index.js';
 
 /**
  * In-memory fake implementation of ResearchRepository.
  */
 export class FakeResearchRepository implements ResearchRepository {
-  private researches: Map<string, Research> = new Map();
+  private researches = new Map<string, Research>();
   private failNextSave = false;
   private failNextFind = false;
   private failNextDelete = false;
@@ -127,4 +136,158 @@ export class FakeResearchRepository implements ResearchRepository {
   clear(): void {
     this.researches.clear();
   }
+}
+
+/**
+ * Fake implementation of UserServiceClient for testing.
+ */
+export class FakeUserServiceClient implements UserServiceClient {
+  private apiKeys = new Map<string, DecryptedApiKeys>();
+  private phones = new Map<string, string>();
+  private failNextGetApiKeys = false;
+
+  async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
+    if (this.failNextGetApiKeys) {
+      this.failNextGetApiKeys = false;
+      return err({ code: 'API_ERROR', message: 'Test getApiKeys failure' });
+    }
+    const keys = this.apiKeys.get(userId) ?? {};
+    return ok(keys);
+  }
+
+  async getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>> {
+    const phone = this.phones.get(userId) ?? null;
+    return ok(phone);
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
+    // Best effort - do nothing in tests
+  }
+
+  // Test helpers
+  setApiKeys(userId: string, keys: DecryptedApiKeys): void {
+    this.apiKeys.set(userId, keys);
+  }
+
+  setPhone(userId: string, phone: string): void {
+    this.phones.set(userId, phone);
+  }
+
+  setFailNextGetApiKeys(fail: boolean): void {
+    this.failNextGetApiKeys = fail;
+  }
+
+  clear(): void {
+    this.apiKeys.clear();
+    this.phones.clear();
+  }
+}
+
+/**
+ * Fake implementation of ResearchEventPublisher for testing.
+ */
+export class FakeResearchEventPublisher implements ResearchEventPublisher {
+  private publishedEvents: ResearchProcessEvent[] = [];
+  private failNextPublish = false;
+
+  async publishProcessResearch(
+    event: ResearchProcessEvent
+  ): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
+    if (this.failNextPublish) {
+      this.failNextPublish = false;
+      return err({ code: 'PUBLISH_FAILED', message: 'Test publish failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+
+  getPublishedEvents(): ResearchProcessEvent[] {
+    return [...this.publishedEvents];
+  }
+
+  setFailNextPublish(fail: boolean): void {
+    this.failNextPublish = fail;
+  }
+
+  clear(): void {
+    this.publishedEvents = [];
+  }
+}
+
+/**
+ * Fake implementation of NotificationSender for testing.
+ */
+export class FakeNotificationSender implements NotificationSender {
+  private sentNotifications: { userId: string; researchId: string; title: string }[] = [];
+
+  async sendResearchComplete(
+    userId: string,
+    researchId: string,
+    title: string
+  ): Promise<Result<void, NotificationError>> {
+    this.sentNotifications.push({ userId, researchId, title });
+    return ok(undefined);
+  }
+
+  getSentNotifications(): { userId: string; researchId: string; title: string }[] {
+    return [...this.sentNotifications];
+  }
+
+  clear(): void {
+    this.sentNotifications = [];
+  }
+}
+
+/**
+ * Create a fake LlmResearchProvider for testing.
+ */
+export function createFakeLlmResearchProvider(response = 'Research content'): LlmResearchProvider {
+  return {
+    async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+      return ok({ content: response });
+    },
+  };
+}
+
+/**
+ * Create fake LLM providers for all providers.
+ */
+export function createFakeLlmProviders(): Record<LlmProvider, LlmResearchProvider> {
+  return {
+    google: createFakeLlmResearchProvider('Google research result'),
+    openai: createFakeLlmResearchProvider('OpenAI research result'),
+    anthropic: createFakeLlmResearchProvider('Anthropic research result'),
+  };
+}
+
+/**
+ * Create a fake LlmSynthesisProvider for testing.
+ */
+export function createFakeSynthesizer(
+  synthesisResult = 'Synthesized content',
+  titleResult = 'Generated Title'
+): LlmSynthesisProvider {
+  return {
+    async synthesize(
+      _originalPrompt: string,
+      _reports: { model: string; content: string }[],
+      _externalReports?: { content: string; model?: string }[]
+    ): Promise<Result<string, LlmError>> {
+      return ok(synthesisResult);
+    },
+    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
+      return ok(titleResult);
+    },
+  };
+}
+
+/**
+ * Create a fake TitleGenerator for testing.
+ */
+export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenerator {
+  return {
+    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
+      return ok(title);
+    },
+  };
 }

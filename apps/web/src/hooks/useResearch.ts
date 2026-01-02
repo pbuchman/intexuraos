@@ -6,8 +6,13 @@ import {
   deleteResearch as deleteResearchApi,
   getResearch as getResearchApi,
   listResearches as listResearchesApi,
+  saveDraft as saveDraftApi,
 } from '@/services/llmOrchestratorApi';
-import type { CreateResearchRequest, Research } from '@/services/llmOrchestratorApi.types';
+import type {
+  CreateResearchRequest,
+  Research,
+  SaveDraftRequest,
+} from '@/services/llmOrchestratorApi.types';
 
 /**
  * Hook for fetching a single research by ID with auto-polling during processing.
@@ -84,6 +89,7 @@ export function useResearches(): {
   refresh: () => Promise<void>;
   deleteResearch: (id: string) => Promise<void>;
   createResearch: (request: CreateResearchRequest) => Promise<Research>;
+  saveDraft: (request: SaveDraftRequest) => Promise<{ id: string }>;
 } {
   const { getAccessToken } = useAuth();
   const [researches, setResearches] = useState<Research[]>([]);
@@ -146,6 +152,16 @@ export function useResearches(): {
     [getAccessToken]
   );
 
+  const saveDraft = useCallback(
+    async (request: SaveDraftRequest): Promise<{ id: string }> => {
+      const token = await getAccessToken();
+      const result = await saveDraftApi(token, request);
+      await refresh();
+      return result;
+    },
+    [getAccessToken, refresh]
+  );
+
   return {
     researches,
     loading,
@@ -155,5 +171,6 @@ export function useResearches(): {
     refresh,
     deleteResearch,
     createResearch,
+    saveDraft,
   };
 }

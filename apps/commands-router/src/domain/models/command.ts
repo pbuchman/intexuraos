@@ -1,5 +1,10 @@
 export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
-export type CommandStatus = 'received' | 'classified' | 'pending_classification' | 'failed';
+export type CommandStatus =
+  | 'received'
+  | 'classified'
+  | 'pending_classification'
+  | 'failed'
+  | 'archived';
 export type CommandType =
   | 'todo'
   | 'research'
@@ -12,6 +17,7 @@ export type CommandType =
 export interface CommandClassification {
   type: CommandType;
   confidence: number;
+  reasoning: string;
   classifiedAt: string;
 }
 

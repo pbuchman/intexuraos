@@ -195,6 +195,43 @@ export interface CommandIngestEvent {
 }
 
 /**
+ * Event published when a webhook needs async processing.
+ * Decouples webhook response from processing to avoid CPU throttling.
+ */
+export interface WebhookProcessEvent {
+  type: 'whatsapp.webhook.process';
+  eventId: string;
+  payload: string;
+  phoneNumberId: string;
+  receivedAt: string;
+}
+
+/**
+ * Event published when audio needs transcription.
+ * Triggers async transcription polling (up to 5 min).
+ */
+export interface TranscribeAudioEvent {
+  type: 'whatsapp.audio.transcribe';
+  messageId: string;
+  userId: string;
+  gcsPath: string;
+  mimeType: string;
+  userPhoneNumber: string;
+  originalWaMessageId: string;
+  phoneNumberId: string;
+}
+
+/**
+ * Event published when text message contains URLs for preview extraction.
+ */
+export interface ExtractLinkPreviewsEvent {
+  type: 'whatsapp.linkpreview.extract';
+  messageId: string;
+  userId: string;
+  text: string;
+}
+
+/**
  * Union of all event types for type safety.
  */
 export type WhatsAppEvent =
@@ -202,4 +239,7 @@ export type WhatsAppEvent =
   | MediaCleanupEvent
   | TranscriptionCompletedEvent
   | CommandIngestEvent
-  | SendMessageEvent;
+  | SendMessageEvent
+  | WebhookProcessEvent
+  | TranscribeAudioEvent
+  | ExtractLinkPreviewsEvent;

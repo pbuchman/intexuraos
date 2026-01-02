@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Research } from '../../../domain/research/index.js';
 
 const mockDocSet = vi.fn().mockResolvedValue(undefined);
 const mockDocGet = vi.fn();
@@ -46,7 +47,10 @@ describe('FirestoreResearchRepository', () => {
       const research = {
         id: 'research-1',
         userId: 'user-1',
+        title: 'Test Research',
         prompt: 'Test prompt',
+        selectedLlms: ['google' as const],
+        synthesisLlm: 'google' as const,
         status: 'pending' as const,
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -111,13 +115,36 @@ describe('FirestoreResearchRepository', () => {
 
   describe('findByUserId', () => {
     it('returns researches for user', async () => {
-      const researches = [
-        { id: 'research-1', userId: 'user-1' },
-        { id: 'research-2', userId: 'user-1' },
+      const researches: Research[] = [
+        {
+          id: 'research-1',
+          userId: 'user-1',
+          title: 'Test Research 1',
+          prompt: 'Test',
+          selectedLlms: ['google'],
+          synthesisLlm: 'google',
+          status: 'pending',
+          llmResults: [],
+          startedAt: '2024-01-01T00:00:00Z',
+        },
+        {
+          id: 'research-2',
+          userId: 'user-1',
+          title: 'Test Research 2',
+          prompt: 'Test',
+          selectedLlms: ['google'],
+          synthesisLlm: 'google',
+          status: 'pending',
+          llmResults: [],
+          startedAt: '2024-01-01T00:00:00Z',
+        },
       ];
 
       const mockQueryGet = vi.fn().mockResolvedValue({
-        docs: researches.map((r) => ({ id: r.id, data: () => r })),
+        docs: researches.map((r): { id: string; data: () => Research } => ({
+          id: r.id,
+          data: () => r,
+        })),
       });
 
       mockWhere.mockReturnValue({
@@ -212,7 +239,17 @@ describe('FirestoreResearchRepository', () => {
 
   describe('update', () => {
     it('updates research in Firestore', async () => {
-      const updatedResearch = { id: 'research-1', title: 'New Title' };
+      const updatedResearch: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'New Title',
+        prompt: 'Test',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        status: 'pending',
+        llmResults: [],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
       mockDocUpdate.mockResolvedValue(undefined);
       mockDocGet.mockResolvedValue({ exists: true, data: () => updatedResearch });
 
@@ -248,12 +285,19 @@ describe('FirestoreResearchRepository', () => {
 
   describe('updateLlmResult', () => {
     it('updates specific LLM result', async () => {
-      const research = {
+      const research: Research = {
         id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedLlms: ['google', 'anthropic'],
+        synthesisLlm: 'google',
+        status: 'pending',
         llmResults: [
-          { provider: 'google', status: 'pending' },
-          { provider: 'anthropic', status: 'pending' },
+          { provider: 'google', model: 'gemini-1.5-flash-002', status: 'pending' },
+          { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', status: 'pending' },
         ],
+        startedAt: '2024-01-01T00:00:00Z',
       };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });
       mockDocUpdate.mockResolvedValue(undefined);
@@ -263,14 +307,19 @@ describe('FirestoreResearchRepository', () => {
 
       const result = await repository.updateLlmResult('research-1', 'google', {
         status: 'completed',
-        content: 'Result content',
+        result: 'Result content',
       });
 
       expect(result.ok).toBe(true);
       expect(mockDocUpdate).toHaveBeenCalledWith({
         llmResults: [
-          { provider: 'google', status: 'completed', content: 'Result content' },
-          { provider: 'anthropic', status: 'pending' },
+          {
+            provider: 'google',
+            model: 'gemini-1.5-flash-002',
+            status: 'completed',
+            result: 'Result content',
+          },
+          { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', status: 'pending' },
         ],
       });
     });

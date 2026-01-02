@@ -31,9 +31,14 @@ variable "publisher_service_accounts" {
 }
 
 variable "ack_deadline_seconds" {
-  description = "Acknowledgement deadline in seconds"
+  description = "Acknowledgement deadline in seconds (GCP allows 10-600)"
   type        = number
   default     = 60
+
+  validation {
+    condition     = var.ack_deadline_seconds >= 10 && var.ack_deadline_seconds <= 600
+    error_message = "ack_deadline_seconds must be between 10 and 600 seconds (GCP Pub/Sub limit)."
+  }
 }
 
 variable "message_retention_duration" {

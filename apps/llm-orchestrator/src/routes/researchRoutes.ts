@@ -2,6 +2,7 @@
  * Research Routes
  *
  * POST   /research            - Create new research
+ * POST   /research/draft      - Save research as draft
  * GET    /research            - List user's researches
  * GET    /research/:id        - Get single research
  * POST   /research/:id/approve - Approve draft research
@@ -11,10 +12,13 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import {
+  createDraftResearch,
   deleteResearch,
+  type ExternalReport,
   getResearch,
   listResearches,
   type LlmProvider,
+  type Research,
   submitResearch,
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
@@ -27,11 +31,21 @@ import {
   listResearchesQuerySchema,
   listResearchesResponseSchema,
   researchIdParamsSchema,
+  saveDraftBodySchema,
+  saveDraftResponseSchema,
+  updateDraftBodySchema,
 } from './schemas/index.js';
 
 interface CreateResearchBody {
   prompt: string;
   selectedLlms: LlmProvider[];
+  synthesisLlm?: LlmProvider;
+  externalReports?: { content: string; model?: string }[];
+}
+
+interface SaveDraftBody {
+  prompt: string;
+  selectedLlms?: LlmProvider[];
   synthesisLlm?: LlmProvider;
   externalReports?: { content: string; model?: string }[];
 }
@@ -68,7 +82,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, processResearchAsync } = getServices();
+      const { researchRepo, generateId, researchEventPublisher } = getServices();
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
@@ -85,10 +99,190 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      // Trigger async processing (fire and forget)
-      processResearchAsync(result.value.id);
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: result.value.id,
+        userId: user.userId,
+        triggeredBy: 'create',
+      });
 
       return await reply.code(201).ok(result.value);
+    }
+  );
+
+  // POST /research/draft
+  fastify.post(
+    '/research/draft',
+    {
+      schema: {
+        operationId: 'saveDraft',
+        summary: 'Save research as draft',
+        description: 'Save a research draft with auto-generated title for later completion.',
+        tags: ['research'],
+        body: saveDraftBodySchema,
+        response: {
+          201: saveDraftResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const body = request.body as SaveDraftBody;
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
+
+      // Get user's API keys to generate title
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+
+      // Generate title using Gemini if Google API key is available
+      let title: string;
+      if (apiKeys.google !== undefined) {
+        const titleGenerator = createTitleGenerator(apiKeys.google);
+        const titleResult = await titleGenerator.generateTitle(body.prompt);
+        title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+      } else {
+        // Fallback: use first 60 chars of prompt
+        title = body.prompt.slice(0, 60);
+      }
+
+      // Create draft research
+      const draftParams: Parameters<typeof createDraftResearch>[0] = {
+        id: generateId(),
+        userId: user.userId,
+        title,
+        prompt: body.prompt,
+        selectedLlms: body.selectedLlms ?? ['google', 'openai', 'anthropic'],
+        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+      };
+      if (body.externalReports !== undefined) {
+        const now = new Date().toISOString();
+        draftParams.externalReports = body.externalReports.map((report) => {
+          const externalReport: ExternalReport = {
+            id: generateId(),
+            content: report.content,
+            addedAt: now,
+          };
+          if (report.model !== undefined) {
+            externalReport.model = report.model;
+          }
+          return externalReport;
+        });
+      }
+      const draft = createDraftResearch(draftParams);
+
+      // Save draft
+      const saveResult = await researchRepo.save(draft);
+      if (!saveResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', saveResult.error.message);
+      }
+
+      return await reply.code(201).ok({ id: draft.id });
+    }
+  );
+
+  // PATCH /research/:id
+  fastify.patch(
+    '/research/:id',
+    {
+      schema: {
+        operationId: 'updateDraft',
+        summary: 'Update draft research',
+        description: 'Update an existing draft research. Only drafts can be updated.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: updateDraftBodySchema,
+        response: {
+          200: getResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as { id: string };
+      const body = request.body as SaveDraftBody;
+      const { researchRepo, userServiceClient, createTitleGenerator } = getServices();
+
+      // Get existing research
+      const existingResult = await researchRepo.findById(id);
+      if (!existingResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', existingResult.error.message);
+      }
+      if (existingResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      const existing = existingResult.value;
+
+      // Check ownership
+      if (existing.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Not authorized to update this research');
+      }
+
+      // Can only update drafts
+      if (existing.status !== 'draft') {
+        return await reply.fail('CONFLICT', 'Can only update draft research');
+      }
+
+      // Get user's API keys to regenerate title if prompt changed
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+
+      // Regenerate title if prompt changed
+      let title = existing.title;
+      if (body.prompt !== existing.prompt) {
+        if (apiKeys.google !== undefined) {
+          const titleGenerator = createTitleGenerator(apiKeys.google);
+          const titleResult = await titleGenerator.generateTitle(body.prompt);
+          title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+        } else {
+          title = body.prompt.slice(0, 60);
+        }
+      }
+
+      // Update draft
+      const updates: Partial<Research> = {
+        title,
+        prompt: body.prompt,
+        selectedLlms: body.selectedLlms ?? existing.selectedLlms,
+        synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
+      };
+
+      if (body.externalReports !== undefined) {
+        const now = new Date().toISOString();
+        updates.externalReports = body.externalReports.map((report) => {
+          const externalReport: ExternalReport = {
+            id: crypto.randomUUID(),
+            content: report.content,
+            addedAt: now,
+          };
+          if (report.model !== undefined) {
+            externalReport.model = report.model;
+          }
+          return externalReport;
+        });
+      }
+
+      const updateResult = await researchRepo.update(id, updates);
+      if (!updateResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
+      }
+
+      // Return updated research
+      const updatedResult = await researchRepo.findById(id);
+      if (!updatedResult.ok || updatedResult.value === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to retrieve updated research');
+      }
+
+      return await reply.ok(updatedResult.value);
     }
   );
 
@@ -201,7 +395,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as ResearchIdParams;
-      const { researchRepo, processResearchAsync } = getServices();
+      const { researchRepo, researchEventPublisher } = getServices();
 
       const existing = await getResearch(params.id, { researchRepo });
 
@@ -227,7 +421,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', updateResult.error.message);
       }
 
-      processResearchAsync(params.id);
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: params.id,
+        userId: user.userId,
+        triggeredBy: 'approve',
+      });
 
       return await reply.ok(updateResult.value);
     }

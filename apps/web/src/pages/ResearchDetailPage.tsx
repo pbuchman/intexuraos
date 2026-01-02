@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { CheckCircle, Clock, FileText, Loader2, XCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { CheckCircle, Clock, FileText, Loader2, Play, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Button, Card, Layout } from '@/components';
+import { useAuth } from '@/context';
 import { useResearch } from '@/hooks';
+import { approveResearch, deleteResearch } from '@/services/llmOrchestratorApi';
 import type { LlmResult, ResearchStatus } from '@/services/llmOrchestratorApi.types';
 
 /**
@@ -53,6 +55,14 @@ interface StatusBadgeProps {
 }
 
 function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
+  if (status === 'draft') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-sm font-medium text-amber-700">
+        <FileText className="h-3.5 w-3.5" />
+        Draft
+      </span>
+    );
+  }
   if (status === 'pending') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-sm font-medium text-slate-700">
@@ -100,10 +110,47 @@ function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   );
 }
 
+/**
+ * Render text with clickable links.
+ * Detects URLs and wraps them in anchor tags that open in new tabs.
+ */
+function renderPromptWithLinks(text: string): React.JSX.Element {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlPattern);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlPattern) !== null) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { research, loading, error } = useResearch(id ?? '');
+  const { research, loading, error, refresh } = useResearch(id ?? '');
+  const { getAccessToken } = useAuth();
+  const navigate = useNavigate();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -111,6 +158,41 @@ export function ResearchDetailPage(): React.JSX.Element {
     setTimeout(() => {
       setCopiedSection(null);
     }, 2000);
+  };
+
+  const handleApprove = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setApproving(true);
+    setApproveError(null);
+
+    try {
+      const token = await getAccessToken();
+      await approveResearch(token, id);
+      await refresh();
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : 'Failed to start research');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const token = await getAccessToken();
+      await deleteResearch(token, id);
+      void navigate('/#/research');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete research');
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -169,10 +251,117 @@ export function ResearchDetailPage(): React.JSX.Element {
                 : `Started ${formatElapsedTime(research.startedAt)}`}
           </span>
         </div>
+
+        {research.status === 'draft' ? (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button
+              onClick={(): void => {
+                void handleApprove();
+              }}
+              disabled={approving || deleting}
+              isLoading={approving}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Start Research
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={(): void => {
+                void navigate(`/#/research/new?draftId=${research.id}`);
+              }}
+              disabled={deleting}
+            >
+              Edit Draft
+            </Button>
+            {showDeleteConfirm ? (
+              <>
+                <Button
+                  variant="danger"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Confirm Discard
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDeleteConfirm(true);
+                }}
+                disabled={deleting}
+              >
+                Discard
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-3">
+            {showDeleteConfirm ? (
+              <>
+                <Button
+                  variant="danger"
+                  onClick={(): void => {
+                    void handleDelete();
+                  }}
+                  disabled={deleting}
+                  isLoading={deleting}
+                >
+                  Confirm Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    setShowDeleteConfirm(false);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDeleteConfirm(true);
+                }}
+                disabled={deleting}
+              >
+                Delete
+              </Button>
+            )}
+          </div>
+        )}
+
+        {approveError !== null && approveError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {approveError}
+          </div>
+        ) : null}
+
+        {deleteError !== null && deleteError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {deleteError}
+          </div>
+        ) : null}
       </div>
 
       <Card title="Original Prompt" className="mb-6">
-        <p className="text-slate-700">{research.prompt}</p>
+        <p className="whitespace-pre-wrap text-slate-700">
+          {renderPromptWithLinks(research.prompt)}
+        </p>
       </Card>
 
       {showLlmStatus ? (

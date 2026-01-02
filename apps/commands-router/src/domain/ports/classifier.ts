@@ -5,6 +5,7 @@ export interface ClassificationResult {
   type: CommandType;
   confidence: number;
   title: string;
+  reasoning: string;
   selectedLlms?: LlmProvider[];
 }
 

@@ -352,6 +352,7 @@ describe('Commands Router Routes', () => {
         type: 'todo',
         confidence: 0.95,
         title: 'Buy groceries',
+        reasoning: 'Contains grocery shopping task',
       });
 
       const event = {
@@ -390,6 +391,7 @@ describe('Commands Router Routes', () => {
         type: 'unclassified',
         confidence: 0.3,
         title: 'Unknown',
+        reasoning: 'No clear intent detected',
       });
 
       const event = {
@@ -521,7 +523,12 @@ describe('Commands Router Routes', () => {
       app = await buildServer();
 
       fakeUserServiceClient.setApiKeys('user-with-key', { google: 'valid-gemini-key' });
-      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Test Task' });
+      fakeClassifier.setResult({
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Test Task',
+        reasoning: 'Contains task indicator',
+      });
 
       const event = {
         type: 'command.ingest',
@@ -596,7 +603,12 @@ describe('Commands Router Routes', () => {
         text: 'Test command',
         timestamp: '2025-01-01T12:00:00.000Z',
         status: 'classified',
-        classification: { type: 'note', confidence: 0.8, classifiedAt: '2025-01-01T12:00:01.000Z' },
+        classification: {
+          type: 'note',
+          confidence: 0.8,
+          reasoning: 'Information storage request',
+          classifiedAt: '2025-01-01T12:00:01.000Z',
+        },
         createdAt: '2025-01-01T12:00:00.000Z',
         updatedAt: '2025-01-01T12:00:01.000Z',
       });
@@ -612,7 +624,7 @@ describe('Commands Router Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { commands: Array<{ id: string; text: string }> };
+        data: { commands: { id: string; text: string }[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.commands).toHaveLength(1);
@@ -680,7 +692,7 @@ describe('Commands Router Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { actions: Array<{ id: string; title: string; type: string }> };
+        data: { actions: { id: string; title: string; type: string }[] };
       };
       expect(body.success).toBe(true);
       expect(body.data.actions).toHaveLength(1);
@@ -840,6 +852,7 @@ describe('Commands Router Routes', () => {
         type: 'research',
         confidence: 0.95,
         title: 'Research AI trends',
+        reasoning: 'Research query about AI trends',
       });
 
       const event = {
@@ -876,6 +889,7 @@ describe('Commands Router Routes', () => {
         type: 'unclassified',
         confidence: 0.3,
         title: 'Unknown',
+        reasoning: 'No clear intent detected',
       });
 
       const event = {
@@ -908,6 +922,7 @@ describe('Commands Router Routes', () => {
         type: 'research',
         confidence: 0.95,
         title: 'Research topic',
+        reasoning: 'Research query with LLM selection',
         selectedLlms: ['google', 'anthropic'],
       });
 
@@ -1014,7 +1029,12 @@ describe('Commands Router Routes', () => {
       });
 
       fakeUserServiceClient.setApiKeys('user-retry-1', { google: 'new-gemini-key' });
-      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Buy groceries' });
+      fakeClassifier.setResult({
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Buy groceries',
+        reasoning: 'Shopping task',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -1147,7 +1167,12 @@ describe('Commands Router Routes', () => {
       });
 
       fakeUserServiceClient.setApiKeys('user-multi-1', { google: 'key-1' });
-      fakeClassifier.setResult({ type: 'todo', confidence: 0.9, title: 'Task' });
+      fakeClassifier.setResult({
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Task',
+        reasoning: 'General task',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -1188,6 +1213,7 @@ describe('Commands Router Routes', () => {
         type: 'research',
         confidence: 0.95,
         title: 'AI Trends Research',
+        reasoning: 'Research query about AI trends',
         selectedLlms: ['google', 'anthropic'],
       });
 
@@ -1203,6 +1229,573 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents[0]?.actionType).toBe('research');
       expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
       expect(publishedEvents[0]?.payload.selectedLlms).toEqual(['google', 'anthropic']);
+    });
+  });
+
+  describe('PATCH /router/actions/:actionId (authenticated)', () => {
+    it('returns 401 when no auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        payload: { status: 'processing' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-1');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'processing' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when action belongs to different user', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-1');
+
+      fakeActionRepo.addAction({
+        id: 'action-other-user',
+        userId: 'other-user',
+        commandId: 'cmd-1',
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Other user action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-other-user',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'processing' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('updates action status to processing (proceed)', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-proceed');
+
+      fakeActionRepo.addAction({
+        id: 'action-proceed',
+        userId: 'user-proceed',
+        commandId: 'cmd-1',
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-proceed',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'processing' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('processing');
+
+      const updatedAction = await fakeActionRepo.getById('action-proceed');
+      expect(updatedAction?.status).toBe('processing');
+    });
+
+    it('updates action status to rejected', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-reject');
+
+      fakeActionRepo.addAction({
+        id: 'action-reject',
+        userId: 'user-reject',
+        commandId: 'cmd-1',
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-reject',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('rejected');
+
+      const updatedAction = await fakeActionRepo.getById('action-reject');
+      expect(updatedAction?.status).toBe('rejected');
+    });
+
+    it('updates action status to archived from pending', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-pending');
+
+      fakeActionRepo.addAction({
+        id: 'action-archive-pending',
+        userId: 'user-archive-pending',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-archive-pending',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('archived');
+
+      const updatedAction = await fakeActionRepo.getById('action-archive-pending');
+      expect(updatedAction?.status).toBe('archived');
+    });
+
+    it('updates action status to archived from completed', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-completed');
+
+      fakeActionRepo.addAction({
+        id: 'action-archive-completed',
+        userId: 'user-archive-completed',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'completed',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-archive-completed',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('archived');
+
+      const updatedAction = await fakeActionRepo.getById('action-archive-completed');
+      expect(updatedAction?.status).toBe('archived');
+    });
+
+    it('updates action status to archived from failed', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-failed');
+
+      fakeActionRepo.addAction({
+        id: 'action-archive-failed',
+        userId: 'user-archive-failed',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'failed',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-archive-failed',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('archived');
+
+      const updatedAction = await fakeActionRepo.getById('action-archive-failed');
+      expect(updatedAction?.status).toBe('archived');
+    });
+
+    it('updates action status to archived from rejected', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-rejected');
+
+      fakeActionRepo.addAction({
+        id: 'action-archive-rejected',
+        userId: 'user-archive-rejected',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Test Research',
+        status: 'rejected',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-archive-rejected',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('archived');
+
+      const updatedAction = await fakeActionRepo.getById('action-archive-rejected');
+      expect(updatedAction?.status).toBe('archived');
+    });
+  });
+
+  describe('DELETE /router/actions/:actionId (authenticated)', () => {
+    it('returns 401 when no auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/action-1',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-1');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('deletes action successfully', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-delete-action');
+
+      fakeActionRepo.addAction({
+        id: 'action-to-delete',
+        userId: 'user-delete-action',
+        commandId: 'cmd-1',
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Action to delete',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/action-to-delete',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const deletedAction = await fakeActionRepo.getById('action-to-delete');
+      expect(deletedAction).toBeNull();
+    });
+  });
+
+  describe('DELETE /router/commands/:commandId (authenticated)', () => {
+    it('returns 401 when no auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/cmd-1',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when command not found', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-1');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('deletes command with received status', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-delete-cmd');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-received',
+        userId: 'user-delete-cmd',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-1',
+        text: 'Test command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'received',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/cmd-received',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const deletedCmd = await fakeCommandRepo.getById('cmd-received');
+      expect(deletedCmd).toBeNull();
+    });
+
+    it('deletes command with pending_classification status', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-delete-pending');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-pending',
+        userId: 'user-delete-pending',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-2',
+        text: 'Pending command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'pending_classification',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/cmd-pending',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('deletes command with failed status', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-delete-failed');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-failed',
+        userId: 'user-delete-failed',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-3',
+        text: 'Failed command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'failed',
+        failureReason: 'Test failure',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/cmd-failed',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns 400 when trying to delete classified command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-delete-classified');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-classified',
+        userId: 'user-delete-classified',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-4',
+        text: 'Classified command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'classified',
+        classification: {
+          type: 'todo',
+          confidence: 0.9,
+          reasoning: 'Task detected',
+          classifiedAt: '2025-01-01T12:00:01.000Z',
+        },
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:01.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/commands/cmd-classified',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Cannot delete classified command');
+    });
+  });
+
+  describe('PATCH /router/commands/:commandId (authenticated)', () => {
+    it('returns 401 when no auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/commands/cmd-1',
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when command not found', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-1');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/commands/nonexistent',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('archives classified command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-to-archive',
+        userId: 'user-archive',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-archive',
+        text: 'Command to archive',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'classified',
+        classification: {
+          type: 'todo',
+          confidence: 0.9,
+          reasoning: 'Task detected',
+          classifiedAt: '2025-01-01T12:00:01.000Z',
+        },
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:01.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/commands/cmd-to-archive',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.command.status).toBe('archived');
+
+      const archivedCmd = await fakeCommandRepo.getById('cmd-to-archive');
+      expect(archivedCmd?.status).toBe('archived');
+    });
+
+    it('returns 400 when trying to archive non-classified command', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-archive-fail');
+
+      fakeCommandRepo.addCommand({
+        id: 'cmd-not-classified',
+        userId: 'user-archive-fail',
+        sourceType: 'whatsapp_text',
+        externalId: 'ext-not-classified',
+        text: 'Not classified command',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'received',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/commands/cmd-not-classified',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { status: 'archived' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Can only archive classified commands');
     });
   });
 

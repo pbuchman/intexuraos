@@ -93,6 +93,12 @@ variable "invoker_service_accounts" {
   default     = []
 }
 
+variable "timeout" {
+  description = "Request timeout (e.g., '300s' for 5 minutes, '900s' for 15 minutes)"
+  type        = string
+  default     = "300s"
+}
+
 variable "labels" {
   description = "Labels to apply to resources"
   type        = map(string)

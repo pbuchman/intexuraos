@@ -655,12 +655,15 @@ describe('TranscribeAudioUseCase', () => {
     it('handles event publish failure gracefully', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
-      const fakeEventPublisher = {
+      const fakeEventPublisher: TranscribeAudioDeps['eventPublisher'] = {
         publishMediaCleanup: vi.fn().mockResolvedValue({ ok: true }),
         publishCommandIngest: vi.fn().mockResolvedValue({
           ok: false,
           error: { code: 'INTERNAL_ERROR', message: 'Publish failed' },
         }),
+        publishWebhookProcess: vi.fn().mockResolvedValue({ ok: true }),
+        publishTranscribeAudio: vi.fn().mockResolvedValue({ ok: true }),
+        publishExtractLinkPreviews: vi.fn().mockResolvedValue({ ok: true }),
       };
       const depsWithPublisher: TranscribeAudioDeps = {
         ...deps,

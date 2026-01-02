@@ -3,7 +3,7 @@
  */
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
-export type ResearchStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ResearchStatus = 'draft' | 'pending' | 'processing' | 'completed' | 'failed';
 
 /**
  * Individual LLM result within a research.
@@ -56,6 +56,16 @@ export interface CreateResearchRequest {
   prompt: string;
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
+  inputContexts?: { content: string }[];
+}
+
+/**
+ * Request body for saving a research draft (only prompt required).
+ */
+export interface SaveDraftRequest {
+  prompt: string;
+  selectedLlms?: LlmProvider[];
+  synthesisLlm?: LlmProvider;
   inputContexts?: { content: string }[];
 }
 

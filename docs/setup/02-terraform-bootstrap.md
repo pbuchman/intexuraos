@@ -293,9 +293,53 @@ This is expected on first run. You must manually connect your GitHub repository 
 
 See [03-cloud-build-trigger.md](./03-cloud-build-trigger.md) for detailed instructions.
 
-### "Image not found" (Cloud Run)
+### "Image not found" (Cloud Run) - New Service
 
 Build and push the required images using the commands in Step 7 before running `terraform apply`.
+
+### "Image not found" (Cloud Run) - Existing Service
+
+If this error occurs on an **existing** service (not initial creation):
+
+```
+Error: Error waiting for Updating Service: Image '...:abc123...' not found.
+```
+
+**Cause:** Your local Terraform state references an image tag that doesn't exist in Artifact Registry.
+
+**Solutions:**
+
+1. **Refresh state from GCP** (Recommended):
+
+   ```bash
+   cd terraform/environments/dev
+   terraform refresh
+   terraform apply
+   ```
+
+2. **Push the missing image:**
+
+   ```bash
+   # Get the expected tag from error message
+   docker build --platform linux/amd64 -f apps/<service>/Dockerfile \
+     -t <full-image-url-from-error> .
+   docker push <full-image-url-from-error>
+   terraform apply
+   ```
+
+3. **Force state update** (if service works in GCP):
+
+   ```bash
+   # Import current state from GCP
+   terraform import 'module.<service>.google_cloud_run_v2_service.service' \
+     projects/<project>/locations/<region>/services/<service-name>
+   ```
+
+**Prevention:** The `ignore_changes` lifecycle rule in the Cloud Run module prevents this during normal operations. This error typically occurs when:
+
+- Terraform state was restored from backup
+- State file was shared between environments
+- Local state diverged from remote state
 
 ### "Container manifest type must support amd64/linux"
 

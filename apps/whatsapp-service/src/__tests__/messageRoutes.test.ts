@@ -162,7 +162,6 @@ describe('WhatsApp Message Routes', () => {
       await ctx.messageRepository.updateTranscription(userId, messageId, {
         status: 'completed',
         text: 'This is the transcribed text',
-        error: undefined,
       });
 
       const response = await ctx.app.inject({

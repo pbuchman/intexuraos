@@ -560,7 +560,7 @@ describe('createGptClient', () => {
       });
 
       const mockSuccess = vi.fn().mockResolvedValue(undefined);
-      (createAuditContext as MockInstance).mockReturnValue({
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
         success: mockSuccess,
         error: vi.fn(),
       });
@@ -581,7 +581,7 @@ describe('createGptClient', () => {
       mockResponsesCreate.mockRejectedValue(new Error('API error'));
 
       const mockError = vi.fn().mockResolvedValue(undefined);
-      (createAuditContext as MockInstance).mockReturnValue({
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
         success: vi.fn(),
         error: mockError,
       });
