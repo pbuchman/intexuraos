@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import nock from 'nock';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -10,6 +11,7 @@ import {
   FakeActionEventPublisher,
   createFakeServices,
 } from './fakes.js';
+import { createUserPhoneLookup } from '../infra/userService/userPhoneLookup.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
@@ -731,5 +733,74 @@ describe('Research Agent Routes', () => {
       const body = JSON.parse(response.body) as { openapi: string };
       expect(body.openapi).toBe('3.1.1');
     });
+  });
+});
+
+describe('UserPhoneLookup', () => {
+  afterEach(() => {
+    nock.cleanAll();
+  });
+
+  it('returns phone number when user exists', async () => {
+    const userServiceUrl = 'http://user-service.test';
+    const userPhoneLookup = createUserPhoneLookup({
+      baseUrl: userServiceUrl,
+      internalAuthToken: 'test-token',
+    });
+
+    nock(userServiceUrl)
+      .get('/internal/users/user-123/whatsapp-phone')
+      .matchHeader('x-internal-auth', 'test-token')
+      .reply(200, { phoneNumber: '+1234567890' });
+
+    const result = await userPhoneLookup.getPhoneNumber('user-123');
+
+    expect(result).toBe('+1234567890');
+  });
+
+  it('returns null when user not found (404)', async () => {
+    const userServiceUrl = 'http://user-service.test';
+    const userPhoneLookup = createUserPhoneLookup({
+      baseUrl: userServiceUrl,
+      internalAuthToken: 'test-token',
+    });
+
+    nock(userServiceUrl).get('/internal/users/user-404/whatsapp-phone').reply(404);
+
+    const result = await userPhoneLookup.getPhoneNumber('user-404');
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when request fails', async () => {
+    const userServiceUrl = 'http://user-service.test';
+    const userPhoneLookup = createUserPhoneLookup({
+      baseUrl: userServiceUrl,
+      internalAuthToken: 'test-token',
+    });
+
+    nock(userServiceUrl)
+      .get('/internal/users/user-error/whatsapp-phone')
+      .reply(500, 'Server Error');
+
+    const result = await userPhoneLookup.getPhoneNumber('user-error');
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when network error occurs', async () => {
+    const userServiceUrl = 'http://user-service.test';
+    const userPhoneLookup = createUserPhoneLookup({
+      baseUrl: userServiceUrl,
+      internalAuthToken: 'test-token',
+    });
+
+    nock(userServiceUrl)
+      .get('/internal/users/user-network/whatsapp-phone')
+      .replyWithError('Network failure');
+
+    const result = await userPhoneLookup.getPhoneNumber('user-network');
+
+    expect(result).toBeNull();
   });
 });

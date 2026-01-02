@@ -28,9 +28,17 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 1-1: Added action schema with awaiting_approval status
 - ✅ Tier 1-1: Registered public routes in server (routes/index.ts)
 - ✅ Tier 1-1: Wrote 11 comprehensive tests (auth, ownership, CRUD operations)
+- ✅ Tier 1-2: Created UserPhoneLookup port and adapter (user-service client)
+- ✅ Tier 1-2: Added WhatsAppSendPublisher from @intexuraos/infra-pubsub
+- ✅ Tier 1-2: Updated services.ts with userPhoneLookup and whatsappPublisher
+- ✅ Tier 1-2: Added INTEXURAOS_WHATSAPP_SEND_TOPIC and INTEXURAOS_WEB_APP_URL env vars
+- ✅ Tier 1-2: Created FakeUserPhoneLookup and FakeWhatsAppSendPublisher for testing
+- ✅ Tier 1-2: Wrote 4 comprehensive tests for UserPhoneLookup adapter
 
 ### Now
-- ⏳ Ready to start Tier 1-2: Add WhatsApp Pub/Sub integration to actions-agent
+- ⏳ Ready to start Tier 2-0: Create execute endpoint POST /actions/:id/execute
+- ⚠️ Note: Firestore ownership check failing - commands-router still has old actionRepository.ts
+  - Will be resolved after Tier 2-1 (create actions-agent client) and Tier 2-3 (delete old repository)
 
 ### Next (Prioritized)
 1. Tier 1-1: Move public action endpoints to actions-agent (GET, PATCH, DELETE)
@@ -93,6 +101,17 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 ---
 
 ## Progress Log
+
+### 2026-01-02 (Session 3)
+- ✅ Completed Tier 1-2: WhatsApp Pub/Sub Integration
+  - Created UserPhoneLookup port interface (domain/ports/userPhoneLookup.ts)
+  - Implemented UserPhoneLookup adapter calling user-service internal API
+  - Added WhatsAppSendPublisher from @intexuraos/infra-pubsub package
+  - Updated services.ts with userPhoneLookup and whatsappPublisher
+  - Added environment variables: INTEXURAOS_WHATSAPP_SEND_TOPIC, INTEXURAOS_WEB_APP_URL
+  - Created FakeUserPhoneLookup and FakeWhatsAppSendPublisher for testing
+  - Wrote 4 comprehensive tests for UserPhoneLookup adapter (success, 404, 500, network error)
+- ⚠️ Firestore ownership check failing - expected, will resolve after Tier 2 work
 
 ### 2026-01-02 (Session 2)
 - ✅ Completed Tier 1-0: Action Creation Endpoint
