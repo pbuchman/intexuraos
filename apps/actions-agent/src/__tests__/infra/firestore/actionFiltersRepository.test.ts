@@ -1,8 +1,5 @@
 /**
  * Tests for Firestore action filters repository.
- * Note: Tests for addOption/addOptions are limited because FakeFirestore
- * doesn't fully support FieldValue.arrayUnion. These methods are tested
- * indirectly via integration tests.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -61,20 +58,46 @@ describe('FirestoreActionFiltersRepository', () => {
   });
 
   describe('addOption', () => {
-    it('calls without error for new user', async () => {
-      await expect(repository.addOption('user-123', 'status', 'pending')).resolves.toBeUndefined();
+    it('adds option to empty user document', async () => {
+      await repository.addOption('user-123', 'status', 'pending');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result?.options.status).toContain('pending');
     });
 
-    it('calls without error for type field', async () => {
-      await expect(repository.addOption('user-123', 'type', 'research')).resolves.toBeUndefined();
+    it('adds type option and preserves it', async () => {
+      await repository.addOption('user-123', 'type', 'research');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result?.options.type).toContain('research');
+    });
+
+    it('does not duplicate existing option value', async () => {
+      await repository.addOption('user-123', 'status', 'pending');
+      await repository.addOption('user-123', 'status', 'pending');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result?.options.status).toEqual(['pending']);
     });
   });
 
   describe('addOptions', () => {
-    it('calls without error with multiple options', async () => {
-      await expect(
-        repository.addOptions('user-123', { status: 'pending', type: 'todo' })
-      ).resolves.toBeUndefined();
+    it('adds multiple options and stores them in nested structure', async () => {
+      await repository.addOptions('user-123', { status: 'pending', type: 'todo' });
+
+      const result = await repository.getByUserId('user-123');
+      expect(result?.options.status).toContain('pending');
+      expect(result?.options.type).toContain('todo');
+    });
+
+    it('merges with existing options', async () => {
+      await repository.addOption('user-123', 'status', 'pending');
+      await repository.addOptions('user-123', { status: 'completed', type: 'research' });
+
+      const result = await repository.getByUserId('user-123');
+      expect(result?.options.status).toContain('pending');
+      expect(result?.options.status).toContain('completed');
+      expect(result?.options.type).toContain('research');
     });
   });
 
