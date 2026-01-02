@@ -23,7 +23,7 @@ export interface ActionConfigUI {
   /** Button label text */
   label: string;
   /** Button styling variant */
-  variant: 'primary' | 'secondary' | 'danger';
+  variant: 'primary' | 'secondary' | 'danger' | 'success';
   /** Lucide icon name */
   icon: string;
 }
@@ -130,7 +130,7 @@ export interface ResolvedActionButton {
   /** Button label */
   label: string;
   /** Button variant */
-  variant: 'primary' | 'secondary' | 'danger';
+  variant: 'primary' | 'secondary' | 'danger' | 'success';
   /** Icon name */
   icon: string;
   /** Endpoint configuration */

@@ -10,6 +10,7 @@ import {
   type RunSynthesisDeps,
 } from '../../../../domain/research/usecases/runSynthesis.js';
 import type { Research } from '../../../../domain/research/models/index.js';
+import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
 
 function createMockDeps(): RunSynthesisDeps & {
   mockRepo: {
@@ -32,6 +33,7 @@ function createMockDeps(): RunSynthesisDeps & {
     update: vi.fn().mockResolvedValue(ok(undefined)),
     updateLlmResult: vi.fn().mockResolvedValue(ok(undefined)),
     findByUserId: vi.fn(),
+    clearShareInfo: vi.fn().mockResolvedValue(ok(undefined)),
     delete: vi.fn(),
   };
 
@@ -51,6 +53,9 @@ function createMockDeps(): RunSynthesisDeps & {
     researchRepo: mockRepo,
     synthesizer: mockSynthesizer,
     notificationSender: mockNotificationSender,
+    shareStorage: null,
+    shareConfig: null,
+    webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
     mockRepo,
     mockSynthesizer,
@@ -222,6 +227,7 @@ describe('runSynthesis', () => {
       synthesizedResult: 'Synthesized result',
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
+      shareInfo: undefined,
     });
   });
 
@@ -234,7 +240,8 @@ describe('runSynthesis', () => {
     expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
       'user-1',
       'research-1',
-      'Test Research'
+      'Test Research',
+      'https://app.example.com/#/research/research-1'
     );
   });
 
@@ -255,6 +262,9 @@ describe('runSynthesis', () => {
       researchRepo: deps.researchRepo,
       synthesizer: deps.synthesizer,
       notificationSender: deps.notificationSender,
+      shareStorage: null,
+      shareConfig: null,
+      webAppUrl: 'https://app.example.com',
     };
 
     const result = await runSynthesis('research-1', minimalDeps);
@@ -275,5 +285,120 @@ describe('runSynthesis', () => {
       [{ model: 'gemini-2.0-flash', content: '' }],
       undefined
     );
+  });
+
+  describe('with share storage', () => {
+    const shareConfig = {
+      shareBaseUrl: 'https://example.com/share/research',
+      staticAssetsUrl: 'https://static.example.com',
+    };
+
+    it('generates and uploads shareable HTML when share storage is configured', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockUpload = vi
+        .fn()
+        .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' }));
+      const mockShareStorage: ShareStoragePort = {
+        upload: mockUpload,
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockUpload).toHaveBeenCalledWith(
+        expect.stringMatching(/^research\/resear-[a-zA-Z0-9]+-test-research\.html$/),
+        expect.stringContaining('<!DOCTYPE html>')
+      );
+    });
+
+    it('includes shareInfo when upload succeeds', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.objectContaining({
+          shareToken: expect.any(String),
+          slug: 'test-research',
+          shareUrl: expect.stringContaining('https://example.com/share/research/'),
+          sharedAt: '2024-01-01T12:00:00.000Z',
+          gcsPath: 'research/abc123-token-test-research.html',
+        }),
+      });
+    });
+
+    it('sends notification with share URL when share storage is configured', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
+        'user-1',
+        'research-1',
+        'Test Research',
+        expect.stringContaining('https://example.com/share/research/')
+      );
+    });
+
+    it('continues without shareInfo when upload fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'STORAGE_ERROR' as const, message: 'Upload failed' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+      });
+    });
   });
 });

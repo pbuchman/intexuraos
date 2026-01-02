@@ -15,8 +15,8 @@ Coverage improvements complete. All metrics above 95% threshold.
 
 ## Subtask Registry
 
-| File                           | Status       | Description              |
-| ------------------------------ | ------------ | ------------------------ |
+| File                           | Status      | Description              |
+| ------------------------------ | ----------- | ------------------------ |
 | `1-0-tier1-quick-fixes.md`     | ✅ Complete | Single line/branch fixes |
 | `1-1-tier2-small-gaps.md`      | ⏸️ On Hold  | Defensive dead code      |
 | `1-2-tier3-small-functions.md` | ✅ Complete | Small function additions |
@@ -32,6 +32,7 @@ Coverage improvements complete. All metrics above 95% threshold.
 ## Analysis
 
 Most remaining uncovered lines are:
+
 - Module-level `LOG_LEVEL ?? 'info'` branches (not testable)
 - Defensive catch blocks for impossible error paths
 - URL parsing error handlers in try/catch blocks

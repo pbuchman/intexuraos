@@ -115,6 +115,17 @@ export class FakeResearchRepository implements ResearchRepository {
     return ok(undefined);
   }
 
+  async clearShareInfo(id: string): Promise<Result<Research, RepositoryError>> {
+    const existing = this.researches.get(id);
+    if (existing === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Research not found' });
+    }
+    const { shareInfo: _, ...rest } = existing;
+    const updated = rest as Research;
+    this.researches.set(id, updated);
+    return ok(updated);
+  }
+
   // Test helpers
   setFailNextSave(fail: boolean): void {
     this.failNextSave = fail;
@@ -225,7 +236,12 @@ export class FakeResearchEventPublisher implements ResearchEventPublisher {
  * Fake implementation of NotificationSender for testing.
  */
 export class FakeNotificationSender implements NotificationSender {
-  private sentNotifications: { userId: string; researchId: string; title: string }[] = [];
+  private sentNotifications: {
+    userId: string;
+    researchId: string;
+    title: string;
+    shareUrl: string;
+  }[] = [];
   private sentFailures: {
     userId: string;
     researchId: string;
@@ -236,9 +252,10 @@ export class FakeNotificationSender implements NotificationSender {
   async sendResearchComplete(
     userId: string,
     researchId: string,
-    title: string
+    title: string,
+    shareUrl: string
   ): Promise<Result<void, NotificationError>> {
-    this.sentNotifications.push({ userId, researchId, title });
+    this.sentNotifications.push({ userId, researchId, title, shareUrl });
     return ok(undefined);
   }
 
@@ -252,7 +269,12 @@ export class FakeNotificationSender implements NotificationSender {
     return ok(undefined);
   }
 
-  getSentNotifications(): { userId: string; researchId: string; title: string }[] {
+  getSentNotifications(): {
+    userId: string;
+    researchId: string;
+    title: string;
+    shareUrl: string;
+  }[] {
     return [...this.sentNotifications];
   }
 

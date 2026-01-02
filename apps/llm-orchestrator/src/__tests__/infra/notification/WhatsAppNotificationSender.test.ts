@@ -20,7 +20,6 @@ describe('WhatsAppNotificationSender', () => {
   const mockConfig = {
     projectId: 'test-project',
     topicName: 'test-topic',
-    webAppUrl: 'https://app.example.com',
   };
 
   beforeEach(() => {
@@ -32,7 +31,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      const result = await sender.sendResearchComplete('user-123', 'research-456', 'AI Research');
+      const result = await sender.sendResearchComplete(
+        'user-123',
+        'research-456',
+        'AI Research',
+        'https://share.example.com/research.html'
+      );
 
       expect(result.ok).toBe(true);
       expect(mockPublishSendMessage).toHaveBeenCalledWith({
@@ -46,7 +50,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendResearchComplete('user-123', 'research-456', 'My Research Title');
+      await sender.sendResearchComplete(
+        'user-123',
+        'research-456',
+        'My Research Title',
+        'https://share.example.com/research.html'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -59,7 +68,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendResearchComplete('user-123', 'research-456', '');
+      await sender.sendResearchComplete(
+        'user-123',
+        'research-456',
+        '',
+        'https://share.example.com/research.html'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -72,7 +86,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendResearchComplete('user-123', 'research-456', 'Test');
+      await sender.sendResearchComplete(
+        'user-123',
+        'research-456',
+        'Test',
+        'https://share.example.com/research.html'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -81,15 +100,22 @@ describe('WhatsAppNotificationSender', () => {
       );
     });
 
-    it('includes direct link to research in message', async () => {
+    it('includes share URL in message', async () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendResearchComplete('user-123', 'research-456', 'Test');
+      await sender.sendResearchComplete(
+        'user-123',
+        'research-456',
+        'Test',
+        'https://intexuraos.cloud/share/research/abc123-token-test.html'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('https://app.example.com/#/research/research-456'),
+          message: expect.stringContaining(
+            'https://intexuraos.cloud/share/research/abc123-token-test.html'
+          ),
         })
       );
     });

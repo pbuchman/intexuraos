@@ -18,3 +18,8 @@ export {
 } from './checkLlmCompletion.js';
 export { runSynthesis, type RunSynthesisDeps } from './runSynthesis.js';
 export { retryFailedLlms, type RetryFailedLlmsDeps, type RetryResult } from './retryFailedLlms.js';
+export {
+  unshareResearch,
+  type UnshareResearchDeps,
+  type UnshareResearchResult,
+} from './unshareResearch.js';

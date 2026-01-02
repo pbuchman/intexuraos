@@ -13,7 +13,8 @@ export class NoopNotificationSender implements NotificationSender {
   sendResearchComplete(
     _userId: string,
     _researchId: string,
-    _title: string
+    _title: string,
+    _shareUrl: string
   ): Promise<Result<void, NotificationError>> {
     return Promise.resolve(ok(undefined));
   }

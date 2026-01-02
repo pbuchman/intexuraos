@@ -5,164 +5,195 @@
 
 IntexuraOS uses multiple LLM providers for research, synthesis, and text generation.
 
-## Critical Requirement
+## Architecture Overview
 
-⚠️ **At least one provider API key is REQUIRED** for the project to function. Users must configure API keys for their chosen providers. The default synthesis provider is **Anthropic (Claude)**, but any configured provider can be selected.
+The LLM system follows a two-layer architecture:
+
+1. **Base Layer (`LLMClient`)** - Generic interface in `llm-contract` with 3 core methods
+2. **Adapter Layer** - Domain-specific extensions in `llm-orchestrator` for synthesis and title generation
 
 ## Providers Summary
 
-| Provider  | Package        | Required | Primary Use Case    | Research Model             | Default Model                |
-| --------- | -------------- | -------- | ------------------- | -------------------------- | ---------------------------- |
-| Google    | `infra-gemini` | No       | Research, Title Gen | `gemini-2.5-pro`           | `gemini-2.5-flash`           |
-| Anthropic | `infra-claude` | No       | Research, Synthesis | `claude-opus-4-5-20251101` | `claude-sonnet-4-5-20250929` |
-| OpenAI    | `infra-gpt`    | No       | Research            | `o4-mini-deep-research`    | `gpt-5.2`                    |
+| Provider  | Package        | Required | Primary Use Case    | Research Model             | Default Model                | Evaluate Model              |
+| --------- | -------------- | -------- | ------------------- | -------------------------- | ---------------------------- | --------------------------- |
+| Google    | `infra-gemini` | No       | Research, Synthesis | `gemini-2.5-pro`           | `gemini-2.5-flash`           | `gemini-2.5-flash-lite`     |
+| Anthropic | `infra-claude` | No       | Research            | `claude-opus-4-5-20251101` | `claude-sonnet-4-5-20250929` | `claude-haiku-4-5-20251001` |
+| OpenAI    | `infra-gpt`    | No       | Research            | `o4-mini-deep-research`    | `gpt-5.2`                    | `gpt-5-nano`                |
+
+**Note:** All providers are optional. Users configure which providers they want via API keys in settings.
+
+## Core Interface (`LLMClient`)
+
+**Location:** `packages/llm-contract/src/types.ts`
+
+```typescript
+export interface LLMClient {
+  research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
+  generate(prompt: string): Promise<Result<string, LLMError>>;
+  evaluate(prompt: string): Promise<Result<string, LLMError>>;
+}
+```
+
+### Method → Model Mapping
+
+| Method       | Model Config    | Purpose                                  | Token Limit |
+| ------------ | --------------- | ---------------------------------------- | ----------- |
+| `research()` | `researchModel` | Web-enabled research with sources        | 8192        |
+| `generate()` | `defaultModel`  | Standard text generation, synthesis      | 8192        |
+| `evaluate()` | `evaluateModel` | Fast validation, scoring, classification | 500         |
 
 ## Provider Details
 
 ### Google Gemini
 
-| Aspect               | Value                                                  |
-| -------------------- | ------------------------------------------------------ |
-| **Package**          | `packages/infra-gemini`                                |
-| **Research Model**   | `gemini-2.5-pro`                                       |
-| **Default Model**    | `gemini-2.5-flash`                                     |
-| **Validation Model** | `gemini-2.5-flash-lite`                                |
-| **API Key**          | User-specific (stored encrypted in Firestore)          |
-| **Adapter**          | `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts` |
-| **Web Search**       | `googleSearch` tool with grounding metadata            |
+| Aspect          | Value                                                  |
+| --------------- | ------------------------------------------------------ |
+| **Package**     | `packages/infra-gemini`                                |
+| **SDK**         | `@google/genai`                                        |
+| **API Key Env** | User-specific (stored encrypted in Firestore)          |
+| **Adapter**     | `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts` |
+
+**Models:**
+
+```typescript
+export const GEMINI_DEFAULTS = {
+  researchModel: 'gemini-2.5-pro',
+  defaultModel: 'gemini-2.5-flash',
+  evaluateModel: 'gemini-2.5-flash-lite',
+} as const;
+```
 
 **Capabilities:**
 
 - `research(prompt)` — Web-grounded research with sources from grounding metadata
-- `synthesize(prompt, results, contexts?)` — Combine multiple LLM results
 - `generate(prompt)` — Simple text generation
-- `generateTitle(prompt)` — Enhanced title generation with examples (preferred for titles)
+- `evaluate(prompt)` — Fast evaluation/validation tasks
 
-**Model Selection Rationale:**
-
-- `gemini-2.5-flash` — Fast, cost-effective for general generation
-- `gemini-2.5-pro` — More capable for deep research
-- Supports grounding with Google Search for up-to-date information
+**Web Search Tool:** Native `googleSearch` tool with grounding metadata
+**Source Extraction:** `response.candidates[0].groundingMetadata.groundingChunks[].web.uri`
 
 ### Anthropic Claude
 
-| Aspect               | Value                                                  |
-| -------------------- | ------------------------------------------------------ |
-| **Package**          | `packages/infra-claude`                                |
-| **Research Model**   | `claude-opus-4-5-20251101`                             |
-| **Default Model**    | `claude-sonnet-4-5-20250929`                           |
-| **Validation Model** | `claude-haiku-4-5-20251001`                            |
-| **API Key**          | User-specific (stored encrypted in Firestore)          |
-| **Adapter**          | `apps/llm-orchestrator/src/infra/llm/ClaudeAdapter.ts` |
-| **Web Search**       | `web_search_20250305` tool with URL extraction         |
+| Aspect          | Value                                                  |
+| --------------- | ------------------------------------------------------ |
+| **Package**     | `packages/infra-claude`                                |
+| **SDK**         | `@anthropic-ai/sdk`                                    |
+| **API Key Env** | User-specific (stored encrypted in Firestore)          |
+| **Adapter**     | `apps/llm-orchestrator/src/infra/llm/ClaudeAdapter.ts` |
+
+**Models:**
+
+```typescript
+export const CLAUDE_DEFAULTS = {
+  researchModel: 'claude-opus-4-5-20251101',
+  defaultModel: 'claude-sonnet-4-5-20250929',
+  evaluateModel: 'claude-haiku-4-5-20251001',
+} as const;
+```
 
 **Capabilities:**
 
 - `research(prompt)` — Research with web search tool
-- `synthesize(prompt, results, contexts?)` — Result synthesis (default synthesizer)
 - `generate(prompt)` — Text generation
-- `generateTitle(prompt)` — Title generation
+- `evaluate(prompt)` — Fast evaluation/validation tasks
 
-**Model Selection Rationale:**
-
-- Claude Opus 4.5 — Most capable for complex research tasks
-- Claude Sonnet 4.5 — Best balance of intelligence and speed for general tasks
-- Strong reasoning capabilities for synthesis and conflict resolution
+**Web Search Tool:** `web_search_20250305` (date-versioned tool)
+**Source Extraction:** URL regex from text + `web_search_tool_result` blocks
 
 ### OpenAI GPT
 
-| Aspect               | Value                                               |
-| -------------------- | --------------------------------------------------- |
-| **Package**          | `packages/infra-gpt`                                |
-| **Research Model**   | `o4-mini-deep-research`                             |
-| **Default Model**    | `gpt-5.2`                                           |
-| **Validation Model** | `gpt-4.1`                                           |
-| **API Key**          | User-specific (stored encrypted in Firestore)       |
-| **Adapter**          | `apps/llm-orchestrator/src/infra/llm/GptAdapter.ts` |
-| **Web Search**       | `web_search_preview` tool (medium context)          |
+| Aspect          | Value                                               |
+| --------------- | --------------------------------------------------- |
+| **Package**     | `packages/infra-gpt`                                |
+| **SDK**         | `openai`                                            |
+| **API Key Env** | User-specific (stored encrypted in Firestore)       |
+| **Adapter**     | `apps/llm-orchestrator/src/infra/llm/GptAdapter.ts` |
+
+**Models:**
+
+```typescript
+export const GPT_DEFAULTS = {
+  researchModel: 'o4-mini-deep-research',
+  defaultModel: 'gpt-5.2',
+  evaluateModel: 'gpt-5-nano',
+} as const;
+```
 
 **Capabilities:**
 
 - `research(prompt)` — Research with web search preview tool
-- `synthesize(prompt, results, contexts?)` — Result synthesis
 - `generate(prompt)` — Text generation
-- `generateTitle(prompt)` — Title generation
+- `evaluate(prompt)` — Fast evaluation/validation tasks
 
-**Model Selection Rationale:**
-
-- o4-mini-deep-research — Optimized for deep research tasks
-- GPT-5.2 — Fast, multimodal, widely compatible for general tasks
+**Web Search Tool:** `web_search_preview` with context size parameter
+**Source Extraction:** `output[].results[].url` from `web_search_call` items
+**Note:** Uses Responses API for research, Chat Completions for generate/evaluate
 
 ## Research Flow
 
 ```
-User submits research
-        |
-        v
-POST /research (researchRoutes.ts)
-        |
-        v
-submitResearch() creates Research doc
-        |
-        v
-Publish 'research.process' event to Pub/Sub
-        |
-        v
-POST /internal/llm/pubsub/process-research
-  → Fetch user API keys & search settings
-  → Generate title (Gemini preferred)
-  → For each selectedLlm: Publish 'llm.call' event
-        |
-        v (Parallel execution in separate Cloud Run instances)
-POST /internal/llm/pubsub/process-llm-call (one per LLM)
-  → Execute LLM research call
-  → Store result or error
-  → checkLlmCompletion()
-    ├─ If all_completed → runSynthesis()
-    ├─ If partial_failure → await user decision
-    └─ If all_failed → mark research failed
-        |
-        v
-runSynthesis() (triggered when ready)
-  → Fetch synthesis provider key
-  → Call synthesizer.synthesize(prompt, reports, externalReports)
-  → Store synthesizedResult
-  → Send notification
+User Submits Research
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ processResearch.ts                                          │
+│  ├─ Title generation (Google preferred, fallback to synth) │
+│  └─ Publish llm.call events to Pub/Sub (one per provider)  │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ▼ (parallel Pub/Sub events)
+┌─────────────────────────────────────────────────────────────┐
+│ /internal/llm/pubsub/process-llm-call (Cloud Run instances) │
+│  ├─ Fetch API keys from user-service                        │
+│  ├─ Create provider adapter (Claude/GPT/Gemini)            │
+│  ├─ Call adapter.research(prompt)                          │
+│  ├─ Calculate cost (token usage × pricing)                 │
+│  └─ checkLlmCompletion()                                   │
+│       ├─ All completed? → runSynthesis()                   │
+│       ├─ All failed? → Mark research failed                │
+│       └─ Partial failure? → Await user decision            │
+└─────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ runSynthesis.ts                                             │
+│  ├─ Gather completed results + external reports            │
+│  ├─ Build synthesis prompt (buildSynthesisPrompt)          │
+│  ├─ Call synthesizer.synthesize()                          │
+│  └─ Notify user                                            │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Search Modes
+## Adapter Layer (Extended Interface)
 
-| Mode    | Research Model Used                 | Use Case                         |
-| ------- | ----------------------------------- | -------------------------------- |
-| `deep`  | Provider's research model (default) | Thorough, comprehensive research |
-| `quick` | Provider's default model            | Faster, lighter responses        |
+**Location:** `apps/llm-orchestrator/src/infra/llm/`
 
-Search mode is configured per-user in settings and passed to the adapter factory when creating providers.
+Adapters wrap the base `LLMClient` and add domain-specific methods:
 
-## Adapter Architecture
+| Method            | Built On     | Purpose                            |
+| ----------------- | ------------ | ---------------------------------- |
+| `research()`      | `research()` | Direct delegation to client        |
+| `synthesize()`    | `generate()` | Combines multiple research results |
+| `generateTitle()` | `generate()` | Creates short title for research   |
 
-### Domain Interfaces (Ports)
+### Synthesis Prompt Builder
 
-**Location:** `apps/llm-orchestrator/src/domain/research/ports/llmProvider.ts`
+**Location:** `packages/common-core/src/prompts/synthesisPrompt.ts`
 
 ```typescript
-interface LlmResearchProvider {
-  research(prompt: string): Promise<Result<LlmResearchResult, LlmError>>;
-}
-
-interface LlmSynthesisProvider {
-  synthesize(
-    originalPrompt: string,
-    reports: { model: string; content: string }[],
-    externalReports?: { content: string; model?: string }[]
-  ): Promise<Result<string, LlmError>>;
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
-}
-
-interface TitleGenerator {
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
-}
+function buildSynthesisPrompt(
+  originalPrompt: string,
+  reports: { model: string; content: string }[],
+  externalReports?: { content: string }[]
+): string;
 ```
+
+**Prompt Structure:**
+
+1. Original Research Prompt
+2. External Reports (if provided, with conflict resolution guidelines)
+3. System Reports (from Claude, GPT, Gemini)
+4. Synthesis Task instructions
 
 ### Factory Pattern
 
@@ -175,44 +206,152 @@ interface TitleGenerator {
 | `createTitleGenerator()`   | Create title generator (always Gemini)     | `TitleGenerator`                           |
 | `createResearchProvider()` | Create research provider with search mode  | `LlmResearchProvider`                      |
 
-### Provider Selection Logic
+## Search Mode
 
-1. **Research providers** — Created for each provider with a configured API key
-2. **Title generator** — Always uses Gemini (falls back to synthesis provider if no Google key)
-3. **Synthesizer** — Uses `synthesisLlm` from research config (defaults to Anthropic)
+| Mode    | Model Used      | Use Case                          |
+| ------- | --------------- | --------------------------------- |
+| `deep`  | `researchModel` | Full research with web search     |
+| `quick` | `defaultModel`  | Faster research with faster model |
+
+Factory logic:
+
+```typescript
+if (searchMode === 'quick') {
+  // Override researchModel with defaultModel
+  return new GeminiAdapter(apiKey, GEMINI_DEFAULTS.defaultModel);
+}
+return new GeminiAdapter(apiKey); // Uses researchModel
+```
+
+## API Key Validation
+
+**Location:** `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`
+
+API key validation uses the fast `evaluate()` method (not `research()`):
+
+```typescript
+const VALIDATION_PROMPT = 'Say "API key validated" in exactly 3 words.';
+
+async validateKey(provider: LlmProvider, apiKey: string): Promise<Result<void, LlmValidationError>> {
+  const client = createClient(provider, apiKey);
+  const result = await client.evaluate(VALIDATION_PROMPT);
+  // Maps INVALID_KEY errors appropriately
+}
+```
+
+**Why `evaluate()`?**
+
+- Uses fastest/cheapest model (`evaluateModel`)
+- Response time: ~1-2 seconds vs 30+ seconds for `research()`
+- Minimal token usage
 
 ## Audit System
 
 **Package:** `packages/llm-audit`
 
-**Firestore Collection:** `llm_api_logs`
+All LLM calls are audited to Firestore `llm_api_logs` collection.
 
-**Control:** `INTEXURAOS_AUDIT_LLMS` environment variable (defaults to `true`)
+### Audit Fields
 
-All LLM calls are audited with:
+| Field          | Description                        |
+| -------------- | ---------------------------------- |
+| `provider`     | `google`, `openai`, `anthropic`    |
+| `model`        | Model identifier                   |
+| `method`       | `research`, `generate`, `evaluate` |
+| `prompt`       | Input prompt (full text)           |
+| `promptLength` | Character count                    |
+| `response`     | Output (on success)                |
+| `error`        | Error message (on failure)         |
+| `inputTokens`  | Tokens in prompt                   |
+| `outputTokens` | Tokens in response                 |
+| `durationMs`   | Call duration                      |
+| `status`       | `success` or `error`               |
+| `userId`       | Optional user context              |
+| `researchId`   | Optional research context          |
 
-| Field         | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `id`          | Unique audit log ID                             |
-| `provider`    | LLM provider name                               |
-| `model`       | Model identifier                                |
-| `method`      | Operation type (research, generate, synthesize) |
-| `prompt`      | Input prompt (or promptLength)                  |
-| `status`      | `success` or `error`                            |
-| `response`    | Output (or responseLength)                      |
-| `error`       | Error message if failed                         |
-| `startedAt`   | Request start timestamp                         |
-| `completedAt` | Request completion timestamp                    |
-| `durationMs`  | Call duration in milliseconds                   |
-| `userId`      | User ID (optional)                              |
-| `researchId`  | Research ID (optional)                          |
+### Audit Flow
 
-**Audit Flow:**
+```typescript
+// 1. Create context before API call
+const auditContext = createAuditContext({
+  provider: 'anthropic',
+  model: 'claude-opus-4-5-20251101',
+  method: 'research',
+  prompt: researchPrompt,
+  startedAt: new Date(),
+});
 
-1. Create audit context at request start with provider, model, method, prompt
-2. Execute LLM call
-3. Complete context with `.success(response)` or `.error(message)`
-4. Audit log written to Firestore
+try {
+  // 2. Make API call
+  const response = await client.messages.create({
+    /* ... */
+  });
+
+  // 3. Log success
+  await auditContext.success({
+    response: content,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+} catch (error) {
+  // 3. Log error
+  await auditContext.error({ error: errorMessage });
+}
+```
+
+### Configuration
+
+**Environment Variable:** `INTEXURAOS_AUDIT_LLMS`
+
+- Default: `true` (auditing enabled)
+- Set to `false`, `0`, or `no` to disable
+
+## Error Handling
+
+### Error Codes
+
+| Code             | HTTP Status | Description               | Handling           |
+| ---------------- | ----------- | ------------------------- | ------------------ |
+| `INVALID_KEY`    | 401         | API key invalid/expired   | Notify user        |
+| `RATE_LIMITED`   | 429         | Provider rate limit hit   | Retry with backoff |
+| `TIMEOUT`        | -           | Request timed out         | Skip provider      |
+| `OVERLOADED`     | 529         | Claude service overloaded | Skip provider      |
+| `CONTEXT_LENGTH` | 400         | GPT context exceeded      | Skip provider      |
+| `API_ERROR`      | 5xx         | Generic provider error    | Skip provider      |
+
+### Error Mapping by Provider
+
+**Claude:**
+
+- 401 → `INVALID_KEY`
+- 429 → `RATE_LIMITED`
+- 529 → `OVERLOADED`
+- Message contains "timeout" → `TIMEOUT`
+
+**GPT:**
+
+- 401 → `INVALID_KEY`
+- 429 → `RATE_LIMITED`
+- Code `context_length_exceeded` → `CONTEXT_LENGTH`
+- Message contains "timeout" → `TIMEOUT`
+
+**Gemini:**
+
+- Message contains "API_KEY" → `INVALID_KEY`
+- 429 or "quota" → `RATE_LIMITED`
+- Message contains "timeout" → `TIMEOUT`
+
+## Partial Failure Handling
+
+When some providers fail but others succeed:
+
+1. Research status set to `awaiting_confirmation`
+2. Failed providers stored with detection timestamp
+3. User can choose:
+   - **Retry** - Re-dispatch failed providers (max 2 retries)
+   - **Proceed** - Run synthesis with partial results
+
+**Location:** `apps/llm-orchestrator/src/domain/research/usecases/retryFailedLlms.ts`
 
 ## API Key Management
 
@@ -233,73 +372,83 @@ All LLM calls are audited with:
 | `/users/:uid/settings/llm-keys/:provider/test` | POST   | Test key with prompt |
 | `/users/:uid/settings/llm-keys/:provider`      | DELETE | Remove key           |
 
-**Key Retrieval at Runtime:**
+## Code Examples
 
+### Creating a Client
+
+```typescript
+import { createGeminiClient } from '@intexuraos/infra-gemini';
+
+const client = createGeminiClient({ apiKey: 'your-api-key' });
+
+// Research with web search
+const research = await client.research('What is quantum computing?');
+if (research.ok) {
+  console.log(research.value.content);
+  console.log(research.value.sources); // URLs from grounding
+}
+
+// Simple generation
+const text = await client.generate('Summarize this...');
+
+// Fast evaluation
+const score = await client.evaluate('Rate this content 1-10...');
 ```
-llm-orchestrator → GET /internal/users/{userId}/llm-keys → user-service
-                                                                |
-                                                                v
-                                                      Decrypt from Firestore
-                                                                |
-                                                                v
-                                                      Return { google?, openai?, anthropic? }
+
+### Using Adapters
+
+```typescript
+import { GeminiAdapter } from './infra/llm/GeminiAdapter';
+import { buildSynthesisPrompt } from '@intexuraos/common-core';
+
+const adapter = new GeminiAdapter(apiKey);
+
+// Research
+const research = await adapter.research(prompt);
+
+// Synthesize multiple results
+const synthesis = await adapter.synthesize(
+  originalPrompt,
+  [
+    { model: 'claude', content: claudeResult },
+    { model: 'gpt', content: gptResult },
+  ],
+  externalContexts // Optional
+);
+
+// Generate title
+const title = await adapter.generateTitle(prompt);
 ```
 
-## Error Handling
+### Parallel Research Execution
 
-| Error Code       | Meaning                          | Handling                   |
-| ---------------- | -------------------------------- | -------------------------- |
-| `API_ERROR`      | Generic provider error           | Log, skip provider         |
-| `TIMEOUT`        | Request timed out                | Skip provider, use others  |
-| `INVALID_KEY`    | API key invalid/expired          | Notify user, skip provider |
-| `RATE_LIMITED`   | Provider rate limit hit          | Log, skip provider         |
-| `OVERLOADED`     | Provider overloaded (Claude 529) | Retry or skip              |
-| `CONTEXT_LENGTH` | Input too long (GPT)             | Log, skip provider         |
+```typescript
+// From LlmAdapterFactory.ts
+const providers = createLlmProviders(userKeys, searchMode);
 
-**Provider-level Error Mapping:**
+// Dispatch to Pub/Sub for parallel execution
+for (const [provider, _] of Object.entries(providers)) {
+  await llmCallPublisher.publish({
+    researchId,
+    userId,
+    provider,
+    prompt,
+  });
+}
+```
 
-| Provider | HTTP 401    | HTTP 429     | HTTP 529   | Timeout |
-| -------- | ----------- | ------------ | ---------- | ------- |
-| Claude   | INVALID_KEY | RATE_LIMITED | OVERLOADED | TIMEOUT |
-| GPT      | INVALID_KEY | RATE_LIMITED | —          | TIMEOUT |
-| Gemini   | INVALID_KEY | RATE_LIMITED | —          | TIMEOUT |
+## Key Files Reference
 
-## Partial Failure Handling
-
-When some LLM calls succeed and others fail:
-
-1. **`all_completed`** — All LLMs succeeded → proceed to synthesis
-2. **`partial_failure`** — Mixed results → user chooses:
-   - `proceed` — Synthesize with successful results only
-   - `retry` — Retry failed providers (max 2 retries)
-   - `cancel` — Abort research
-3. **`all_failed`** — All LLMs failed → research marked as failed
-
-## Environment Variables
-
-| Variable                    | Purpose                            | Default                   |
-| --------------------------- | ---------------------------------- | ------------------------- |
-| `INTEXURAOS_ENCRYPTION_KEY` | AES-256 key for API key encryption | (required for production) |
-| `INTEXURAOS_AUDIT_LLMS`     | Enable/disable LLM audit logging   | `true`                    |
-
-## File Locations Summary
-
-| Purpose                 | File                                                                       |
-| ----------------------- | -------------------------------------------------------------------------- |
-| **Gemini Client**       | `packages/infra-gemini/src/client.ts`                                      |
-| **Claude Client**       | `packages/infra-claude/src/client.ts`                                      |
-| **GPT Client**          | `packages/infra-gpt/src/client.ts`                                         |
-| **Gemini Adapter**      | `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts`                     |
-| **Claude Adapter**      | `apps/llm-orchestrator/src/infra/llm/ClaudeAdapter.ts`                     |
-| **GPT Adapter**         | `apps/llm-orchestrator/src/infra/llm/GptAdapter.ts`                        |
-| **Adapter Factory**     | `apps/llm-orchestrator/src/infra/llm/LlmAdapterFactory.ts`                 |
-| **Domain Ports**        | `apps/llm-orchestrator/src/domain/research/ports/llmProvider.ts`           |
-| **Research Processing** | `apps/llm-orchestrator/src/domain/research/usecases/processResearch.ts`    |
-| **Synthesis Logic**     | `apps/llm-orchestrator/src/domain/research/usecases/runSynthesis.ts`       |
-| **Completion Check**    | `apps/llm-orchestrator/src/domain/research/usecases/checkLlmCompletion.ts` |
-| **Retry Logic**         | `apps/llm-orchestrator/src/domain/research/usecases/retryFailedLlms.ts`    |
-| **LLM Call Route**      | `apps/llm-orchestrator/src/routes/internalRoutes.ts:439-777`               |
-| **Audit Package**       | `packages/llm-audit/src/audit.ts`                                          |
-| **API Key Encryption**  | `apps/user-service/src/infra/firestore/encryption.ts`                      |
-| **User Settings Repo**  | `apps/user-service/src/infra/firestore/userSettingsRepository.ts`          |
-| **LLM Keys Routes**     | `apps/user-service/src/routes/llmKeysRoutes.ts`                            |
+| File                                                       | Purpose                    |
+| ---------------------------------------------------------- | -------------------------- |
+| `packages/llm-contract/src/types.ts`                       | Core `LLMClient` interface |
+| `packages/infra-claude/src/client.ts`                      | Claude implementation      |
+| `packages/infra-gpt/src/client.ts`                         | GPT implementation         |
+| `packages/infra-gemini/src/client.ts`                      | Gemini implementation      |
+| `packages/llm-audit/src/audit.ts`                          | Audit logging              |
+| `packages/common-core/src/prompts/synthesisPrompt.ts`      | Synthesis prompt builder   |
+| `packages/common-core/src/prompts/researchPrompt.ts`       | Research prompt builder    |
+| `apps/llm-orchestrator/src/infra/llm/*Adapter.ts`          | Provider adapters          |
+| `apps/llm-orchestrator/src/infra/llm/LlmAdapterFactory.ts` | Factory functions          |
+| `apps/llm-orchestrator/src/domain/research/usecases/*.ts`  | Research orchestration     |
+| `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`      | API key validation         |

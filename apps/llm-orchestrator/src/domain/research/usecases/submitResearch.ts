@@ -13,6 +13,7 @@ export interface SubmitResearchParams {
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
   externalReports?: { content: string; model?: string }[];
+  skipSynthesis?: boolean;
 }
 
 export interface SubmitResearchDeps {
@@ -33,6 +34,9 @@ export async function submitResearch(
   };
   if (params.externalReports !== undefined) {
     createParams.externalReports = params.externalReports;
+  }
+  if (params.skipSynthesis === true) {
+    createParams.skipSynthesis = true;
   }
   const research = createResearch(createParams);
 

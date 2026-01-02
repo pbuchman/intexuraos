@@ -11,3 +11,5 @@ export type {
 export type { NotificationError, NotificationSender } from './notification.js';
 
 export type { LlmPricing, PricingRepository } from './pricingRepository.js';
+
+export type { ShareStorageError, ShareStoragePort } from './shareStorage.js';

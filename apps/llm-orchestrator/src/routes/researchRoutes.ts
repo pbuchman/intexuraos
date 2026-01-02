@@ -8,6 +8,7 @@
  * POST   /research/:id/approve - Approve draft research
  * POST   /research/:id/confirm - Confirm partial failure decision
  * DELETE /research/:id        - Delete research
+ * DELETE /research/:id/share  - Remove public share access
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -24,6 +25,7 @@ import {
   retryFailedLlms,
   runSynthesis,
   submitResearch,
+  unshareResearch,
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
 import {
@@ -47,6 +49,7 @@ interface CreateResearchBody {
   selectedLlms: LlmProvider[];
   synthesisLlm?: LlmProvider;
   externalReports?: { content: string; model?: string }[];
+  skipSynthesis?: boolean;
 }
 
 interface SaveDraftBody {
@@ -102,6 +105,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
       if (body.externalReports !== undefined) {
         submitParams.externalReports = body.externalReports;
+      }
+      if (body.skipSynthesis === true) {
+        submitParams.skipSynthesis = true;
       }
       const result = await submitResearch(submitParams, { researchRepo, generateId });
 
@@ -475,7 +481,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
+        shareStorage,
+        shareConfig,
       } = getServices();
+      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
       const existing = await getResearch(id, { researchRepo });
 
@@ -531,6 +540,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             researchRepo,
             synthesizer,
             notificationSender,
+            shareStorage,
+            shareConfig,
+            webAppUrl,
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
             },
@@ -619,6 +631,53 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(null);
+    }
+  );
+
+  // DELETE /research/:id/share - Remove public share access
+  fastify.delete(
+    '/research/:id/share',
+    {
+      schema: {
+        operationId: 'unshareResearch',
+        summary: 'Remove public share access',
+        description:
+          'Remove public share access for a research by deleting the shared HTML and clearing shareInfo.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        response: {
+          200: deleteResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const params = request.params as ResearchIdParams;
+      const { researchRepo, shareStorage } = getServices();
+
+      const result = await unshareResearch(params.id, user.userId, {
+        researchRepo,
+        shareStorage,
+      });
+
+      if (!result.ok) {
+        if (result.error === 'Research not found') {
+          return await reply.fail('NOT_FOUND', result.error);
+        }
+        if (result.error === 'Access denied') {
+          return await reply.fail('FORBIDDEN', result.error);
+        }
+        if (result.error === 'Research is not shared') {
+          return await reply.fail('CONFLICT', result.error);
+        }
+        return await reply.fail('INTERNAL_ERROR', result.error ?? 'Failed to unshare');
       }
 
       return await reply.ok(null);

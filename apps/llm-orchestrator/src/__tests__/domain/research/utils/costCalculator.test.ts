@@ -36,7 +36,7 @@ describe('calculateCost', () => {
     const pricing: LlmPricing = {
       ...basePricing,
       inputPricePerMillion: 0.15,
-      outputPricePerMillion: 0.60,
+      outputPricePerMillion: 0.6,
     };
     const cost = calculateCost(333, 777, pricing);
     // Input: 333 * 0.15 / 1M = 0.00004995

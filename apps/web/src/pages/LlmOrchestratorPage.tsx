@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
@@ -40,6 +40,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [loading, setLoading] = useState(isEditMode);
   const [error, setError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showSingleProviderConfirm, setShowSingleProviderConfirm] = useState(false);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
@@ -228,6 +229,59 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
   const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
   const hasValidContexts = validContexts.length > 0;
+  const isSingleProviderNoContext = selectedLlms.length === 1 && !hasValidContexts;
+
+  const executeSubmit = async (skipSynthesis: boolean): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const token = await getAccessToken();
+      const contextObjects = validContexts.map((content) => ({ content }));
+
+      if (isEditMode) {
+        const { updateDraft: updateDraftFn, approveResearch } =
+          await import('@/services/llmOrchestratorApi');
+
+        const draftRequest: SaveDraftRequest = { prompt };
+        if (selectedLlms.length > 0) {
+          draftRequest.selectedLlms = selectedLlms;
+        }
+        if (synthesisLlm !== null) {
+          draftRequest.synthesisLlm = synthesisLlm;
+        }
+        if (contextObjects.length > 0) {
+          draftRequest.inputContexts = contextObjects;
+        }
+        await updateDraftFn(token, draftId, draftRequest);
+
+        const research = await approveResearch(token, draftId);
+        void navigate(`/research/${research.id}`);
+      } else {
+        if (synthesisLlm === null) {
+          throw new Error('Synthesis LLM is required');
+        }
+        const { createResearch } = await import('@/services/llmOrchestratorApi');
+        const request: Parameters<typeof createResearch>[1] = {
+          prompt,
+          selectedLlms,
+          synthesisLlm,
+        };
+        if (contextObjects.length > 0) {
+          request.inputContexts = contextObjects;
+        }
+        if (skipSynthesis) {
+          request.skipSynthesis = true;
+        }
+        const research = await createResearch(token, request);
+        void navigate(`/research/${research.id}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create research');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (): Promise<void> => {
     if (prompt.length < 10) {
@@ -243,52 +297,17 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       return;
     }
 
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const token = await getAccessToken();
-      const contextObjects = validContexts.map((content) => ({ content }));
-
-      // If editing a draft, save current state then approve to start research
-      if (isEditMode) {
-        const { updateDraft: updateDraftFn, approveResearch } =
-          await import('@/services/llmOrchestratorApi');
-
-        // Save current form state before approving
-        const draftRequest: SaveDraftRequest = {
-          prompt,
-          synthesisLlm,
-        };
-        if (selectedLlms.length > 0) {
-          draftRequest.selectedLlms = selectedLlms;
-        }
-        if (contextObjects.length > 0) {
-          draftRequest.inputContexts = contextObjects;
-        }
-        await updateDraftFn(token, draftId, draftRequest);
-
-        const research = await approveResearch(token, draftId);
-        void navigate(`/research/${research.id}`);
-      } else {
-        // Create new research
-        const { createResearch } = await import('@/services/llmOrchestratorApi');
-        const request: Parameters<typeof createResearch>[1] = {
-          prompt,
-          selectedLlms,
-          synthesisLlm,
-        };
-        if (contextObjects.length > 0) {
-          request.inputContexts = contextObjects;
-        }
-        const research = await createResearch(token, request);
-        void navigate(`/research/${research.id}`);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create research');
-    } finally {
-      setSubmitting(false);
+    if (isSingleProviderNoContext) {
+      setShowSingleProviderConfirm(true);
+      return;
     }
+
+    await executeSubmit(false);
+  };
+
+  const handleConfirmSingleProvider = async (): Promise<void> => {
+    setShowSingleProviderConfirm(false);
+    await executeSubmit(true);
   };
 
   const handleSaveDraft = async (): Promise<void> => {
@@ -552,6 +571,45 @@ export function LlmOrchestratorPage(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      {showSingleProviderConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Single Provider Research</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  You&apos;re about to run research with only one provider (
+                  {PROVIDERS.find((p) => p.id === selectedLlms[0])?.shortName ?? selectedLlms[0]})
+                  and no input context.
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Synthesis will be skipped since there&apos;s only one source. You&apos;ll see the
+                  raw LLM result without a synthesized report.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowSingleProviderConfirm(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={(): void => {
+                  void handleConfirmSingleProvider();
+                }}
+              >
+                Continue Anyway
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Layout>
   );
 }

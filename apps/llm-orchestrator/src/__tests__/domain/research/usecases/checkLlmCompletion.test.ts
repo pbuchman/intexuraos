@@ -23,6 +23,7 @@ function createMockDeps(): CheckLlmCompletionDeps & {
     update: vi.fn().mockResolvedValue(ok(undefined)),
     updateLlmResult: vi.fn().mockResolvedValue(ok(undefined)),
     findByUserId: vi.fn(),
+    clearShareInfo: vi.fn().mockResolvedValue(ok(undefined)),
     delete: vi.fn(),
   };
 
@@ -251,5 +252,27 @@ describe('checkLlmCompletion', () => {
       type: 'partial_failure',
       failedProviders: ['openai', 'anthropic'],
     });
+  });
+
+  it('ignores stale llmResults for providers not in selectedLlms', async () => {
+    const research = createTestResearch({
+      selectedLlms: ['google'],
+      llmResults: [
+        {
+          provider: 'google',
+          model: 'gemini-2.0-flash',
+          status: 'completed',
+          result: 'Google Result',
+        },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-3-opus', status: 'pending' },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await checkLlmCompletion('research-1', deps);
+
+    expect(result).toEqual({ type: 'all_completed' });
+    expect(deps.mockRepo.update).not.toHaveBeenCalled();
   });
 });

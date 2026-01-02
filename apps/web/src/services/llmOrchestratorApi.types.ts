@@ -50,6 +50,17 @@ export interface InputContext {
 }
 
 /**
+ * Public share information for a research.
+ */
+export interface ShareInfo {
+  shareToken: string;
+  slug: string;
+  shareUrl: string;
+  sharedAt: string;
+  gcsPath: string;
+}
+
+/**
  * Research document representing a multi-LLM research session.
  */
 export interface Research {
@@ -65,9 +76,11 @@ export interface Research {
   synthesizedResult?: string;
   synthesisError?: string;
   partialFailure?: PartialFailure;
+  shareInfo?: ShareInfo;
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
+  skipSynthesis?: boolean;
 }
 
 /**
@@ -78,6 +91,7 @@ export interface CreateResearchRequest {
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
   inputContexts?: { content: string }[];
+  skipSynthesis?: boolean;
 }
 
 /**

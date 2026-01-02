@@ -29,7 +29,8 @@ export async function checkLlmCompletion(
   }
 
   const research = researchResult.value;
-  const results = research.llmResults;
+  const selectedProviders = new Set(research.selectedLlms);
+  const results = research.llmResults.filter((r) => selectedProviders.has(r.provider));
 
   const completed = results.filter((r) => r.status === 'completed');
   const failed = results.filter((r) => r.status === 'failed');
