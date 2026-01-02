@@ -2,13 +2,12 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { Command, CommandSourceType } from '../models/command.js';
 import { createCommand, createCommandId } from '../models/command.js';
-import { createAction } from '../models/action.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
-import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
 import type { UserServiceClient } from '../../infra/user/index.js';
+import type { ActionsAgentClient } from '../../infra/actionsAgent/client.js';
 
 export interface ProcessCommandInput {
   userId: string;
@@ -29,7 +28,7 @@ export interface ProcessCommandUseCase {
 
 export function createProcessCommandUseCase(deps: {
   commandRepository: CommandRepository;
-  actionRepository: ActionRepository;
+  actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
   eventPublisher: EventPublisherPort;
@@ -37,7 +36,7 @@ export function createProcessCommandUseCase(deps: {
 }): ProcessCommandUseCase {
   const {
     commandRepository,
-    actionRepository,
+    actionsAgentClient,
     classifierFactory,
     userServiceClient,
     eventPublisher,
@@ -143,34 +142,40 @@ export function createProcessCommandUseCase(deps: {
         );
 
         if (classification.type !== 'unclassified') {
-          const action = createAction({
+          logger.info(
+            {
+              commandId: command.id,
+              actionType: classification.type,
+              title: classification.title,
+            },
+            'Creating action via actions-agent'
+          );
+
+          const actionResult = await actionsAgentClient.createAction({
             userId: input.userId,
             commandId: command.id,
             type: classification.type,
             confidence: classification.confidence,
             title: classification.title,
+            payload: {},
           });
 
-          logger.info(
-            {
-              commandId: command.id,
-              actionId: action.id,
-              actionType: action.type,
-              title: action.title,
-            },
-            'Created action from classification'
-          );
+          if (!actionResult.ok) {
+            logger.error(
+              {
+                commandId: command.id,
+                error: actionResult.error.message,
+              },
+              'Failed to create action via actions-agent'
+            );
+            throw actionResult.error;
+          }
 
-          logger.debug(
-            { commandId: command.id, actionId: action.id },
-            'Saving action to Firestore'
-          );
-
-          await actionRepository.save(action);
+          const action = actionResult.value;
 
           logger.info(
             { commandId: command.id, actionId: action.id },
-            'Action saved to Firestore successfully'
+            'Action created via actions-agent successfully'
           );
 
           const eventPayload: ActionCreatedEvent['payload'] = {

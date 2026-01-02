@@ -1,13 +1,12 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { CommandClassification } from '../models/command.js';
-import { createAction } from '../models/action.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
-import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
 import type { UserServiceClient } from '../../infra/user/index.js';
+import type { ActionsAgentClient } from '../../infra/actionsAgent/client.js';
 
 export interface RetryResult {
   processed: number;
@@ -22,7 +21,7 @@ export interface RetryPendingCommandsUseCase {
 
 export function createRetryPendingCommandsUseCase(deps: {
   commandRepository: CommandRepository;
-  actionRepository: ActionRepository;
+  actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
   eventPublisher: EventPublisherPort;
@@ -30,7 +29,7 @@ export function createRetryPendingCommandsUseCase(deps: {
 }): RetryPendingCommandsUseCase {
   const {
     commandRepository,
-    actionRepository,
+    actionsAgentClient,
     classifierFactory,
     userServiceClient,
     eventPublisher,
@@ -91,15 +90,28 @@ export function createRetryPendingCommandsUseCase(deps: {
           );
 
           if (classification.type !== 'unclassified') {
-            const action = createAction({
+            const actionResult = await actionsAgentClient.createAction({
               userId: command.userId,
               commandId: command.id,
               type: classification.type,
               confidence: classification.confidence,
               title: classification.title,
+              payload: {},
             });
 
-            await actionRepository.save(action);
+            if (!actionResult.ok) {
+              logger.error(
+                {
+                  commandId: command.id,
+                  error: actionResult.error.message,
+                },
+                'Failed to create action via actions-agent'
+              );
+              stats.failed++;
+              continue;
+            }
+
+            const action = actionResult.value;
 
             const eventPayload: ActionCreatedEvent['payload'] = {
               prompt: command.text,
