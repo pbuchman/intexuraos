@@ -229,13 +229,21 @@ export class FirestoreNotificationRepository implements NotificationRepository {
   ): Promise<Result<string[], RepositoryError>> {
     try {
       const db = getFirestore();
-      const snapshot = await db.collection(COLLECTION_NAME).where('userId', '==', userId).get();
+      // 💰 CostGuard: Limit scan to 1000 most recent docs and select only needed field
+      // This prevents full collection scans while capturing most distinct values
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('userId', '==', userId)
+        .orderBy('receivedAt', 'desc')
+        .limit(1000)
+        .select(field)
+        .get();
 
       const values = new Set<string>();
       for (const doc of snapshot.docs) {
-        const data = doc.data() as NotificationDoc;
+        const data = doc.data() as Pick<NotificationDoc, typeof field>;
         const value = data[field];
-        if (value.length > 0) {
+        if (typeof value === 'string' && value.length > 0) {
           values.add(value);
         }
       }

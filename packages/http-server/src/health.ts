@@ -81,14 +81,16 @@ export async function checkFirestore(): Promise<HealthCheck> {
 
   try {
     const db = getFirestore();
-    // Simple connectivity check with timeout
+    // 💰 CostGuard: Use lightweight doc read instead of listCollections()
+    // listCollections() scans ALL collections (expensive at scale)
+    // Reading a non-existent doc is a single read operation
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout((): void => {
         reject(new Error('Firestore health check timed out'));
       }, 3000);
     });
 
-    await Promise.race([db.listCollections(), timeoutPromise]);
+    await Promise.race([db.collection('_health_check').doc('ping').get(), timeoutPromise]);
     return {
       name: 'firestore',
       status: 'ok',

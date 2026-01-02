@@ -333,6 +333,7 @@ module "secret_manager" {
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
     "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
+    "INTEXURAOS_ACTIONS_AGENT_URL"                = "Actions Agent Cloud Run URL for commands-router"
   }
 
   depends_on = [google_project_service.apis]
@@ -827,6 +828,7 @@ module "commands_router" {
     AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
     AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    ACTIONS_AGENT_URL              = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_URL"]
   }
 
   env_vars = {

@@ -166,10 +166,14 @@ describe('Health Utilities', () => {
       delete process.env['VITEST'];
       process.env['NODE_ENV'] = 'production';
 
-      // Mock getFirestore to return a mock db
+      // Mock getFirestore to return a mock db with collection().doc().get()
       const { getFirestore } = await import('@intexuraos/infra-firestore');
       const mockDb = {
-        listCollections: vi.fn().mockResolvedValue([]),
+        collection: vi.fn().mockReturnValue({
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({ exists: false }),
+          }),
+        }),
       };
       vi.mocked(getFirestore).mockReturnValue(mockDb as unknown as ReturnType<typeof getFirestore>);
 
@@ -222,10 +226,14 @@ describe('Health Utilities', () => {
 
       const { getFirestore } = await import('@intexuraos/infra-firestore');
       const mockDb = {
-        listCollections: vi.fn().mockImplementation(
-          // eslint-disable-next-line @typescript-eslint/no-empty-function -- Intentionally never resolves to trigger timeout
-          () => new Promise(() => {})
-        ),
+        collection: vi.fn().mockReturnValue({
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockImplementation(
+              // eslint-disable-next-line @typescript-eslint/no-empty-function -- Intentionally never resolves to trigger timeout
+              () => new Promise(() => {})
+            ),
+          }),
+        }),
       };
       vi.mocked(getFirestore).mockReturnValue(mockDb as unknown as ReturnType<typeof getFirestore>);
 

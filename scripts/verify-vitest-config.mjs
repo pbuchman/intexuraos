@@ -40,7 +40,7 @@ function parseConfig() {
   }
 
   // Count exclusions in coverage.exclude (not test.exclude)
-  const excludeMatch = content.match(/coverage:\s*\{[\s\S]*?exclude:\s*\[([\s\S]*?)\]/);
+  const excludeMatch = content.match(/coverage:\s*\{[\s\S]*?exclude:\s*\[([\s\S]*?)]/);
   if (!excludeMatch) {
     throw new Error('Cannot parse coverage exclusions');
   }
