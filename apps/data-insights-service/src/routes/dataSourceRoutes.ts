@@ -5,9 +5,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
-import { getServices, getServiceConfig } from '../services.js';
-import { createUserServiceClient } from '../infra/user/userServiceClient.js';
-import { createTitleGenerationService } from '../infra/gemini/titleGenerationService.js';
+import { getServices } from '../services.js';
 import type { DataSource } from '../domain/dataSource/index.js';
 import {
   createDataSourceBodySchema,
@@ -299,14 +297,8 @@ export const dataSourceRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
         return;
       }
 
-      const config = getServiceConfig();
-      const userServiceClient = createUserServiceClient({
-        baseUrl: config.userServiceUrl,
-        internalAuthToken: config.internalAuthToken,
-      });
-      const titleService = createTitleGenerationService(userServiceClient);
-
-      const result = await titleService.generateTitle(user.userId, request.body.content);
+      const { titleGenerationService } = getServices();
+      const result = await titleGenerationService.generateTitle(user.userId, request.body.content);
 
       if (!result.ok) {
         const error = result.error;

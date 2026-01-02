@@ -4,6 +4,8 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
 import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepository.js';
+import { createUserServiceClient } from './infra/user/userServiceClient.js';
+import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
 
 const REQUIRED_ENV = ['GOOGLE_CLOUD_PROJECT', 'AUTH_JWKS_URL', 'AUTH_ISSUER', 'AUTH_AUDIENCE'];
 
@@ -12,15 +14,15 @@ validateRequiredEnv(REQUIRED_ENV);
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  initServices(
-    {
-      userServiceUrl: config.userServiceUrl,
-      internalAuthToken: config.internalAuthToken,
-    },
-    {
-      dataSourceRepository: new FirestoreDataSourceRepository(),
-    }
-  );
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
+
+  initServices({
+    dataSourceRepository: new FirestoreDataSourceRepository(),
+    titleGenerationService: createTitleGenerationService(userServiceClient),
+  });
 
   const app = await buildServer();
 

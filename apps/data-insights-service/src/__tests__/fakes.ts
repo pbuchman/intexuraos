@@ -11,6 +11,10 @@ import type {
   CreateDataSourceRequest,
   UpdateDataSourceRequest,
 } from '../domain/dataSource/index.js';
+import type {
+  TitleGenerationService,
+  TitleGenerationError,
+} from '../infra/gemini/titleGenerationService.js';
 
 /**
  * Fake DataSource repository for testing.
@@ -144,5 +148,33 @@ export class FakeDataSourceRepository implements DataSourceRepository {
 
   addDataSource(dataSource: DataSource): void {
     this.dataSources.set(dataSource.id, dataSource);
+  }
+}
+
+/**
+ * Fake TitleGenerationService for testing.
+ */
+export class FakeTitleGenerationService implements TitleGenerationService {
+  private generatedTitle = 'Generated Test Title';
+  private errorToReturn: TitleGenerationError | null = null;
+
+  setGeneratedTitle(title: string): void {
+    this.generatedTitle = title;
+  }
+
+  setError(error: TitleGenerationError | null): void {
+    this.errorToReturn = error;
+  }
+
+  generateTitle(
+    _userId: string,
+    _content: string
+  ): Promise<Result<string, TitleGenerationError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    return Promise.resolve(ok(this.generatedTitle));
   }
 }

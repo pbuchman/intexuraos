@@ -3,27 +3,22 @@
  * Provides dependency injection for domain adapters.
  */
 import type { DataSourceRepository } from './domain/dataSource/index.js';
+import type { TitleGenerationService } from './infra/gemini/titleGenerationService.js';
 
 /**
  * Service container holding all adapter instances.
  */
 export interface ServiceContainer {
   dataSourceRepository: DataSourceRepository;
-}
-
-export interface ServiceConfig {
-  userServiceUrl: string;
-  internalAuthToken: string;
+  titleGenerationService: TitleGenerationService;
 }
 
 let container: ServiceContainer | null = null;
-let serviceConfig: ServiceConfig | null = null;
 
 /**
- * Initialize services with config. Call this early in server startup.
+ * Initialize services. Call this early in server startup.
  */
-export function initServices(config: ServiceConfig, services: ServiceContainer): void {
-  serviceConfig = config;
+export function initServices(services: ServiceContainer): void {
   container = services;
 }
 
@@ -38,16 +33,6 @@ export function getServices(): ServiceContainer {
 }
 
 /**
- * Get the service configuration.
- */
-export function getServiceConfig(): ServiceConfig {
-  if (serviceConfig === null) {
-    throw new Error('Service config not initialized. Call initServices() first.');
-  }
-  return serviceConfig;
-}
-
-/**
  * Set a custom service container (for testing).
  */
 export function setServices(services: ServiceContainer): void {
@@ -55,16 +40,8 @@ export function setServices(services: ServiceContainer): void {
 }
 
 /**
- * Set a custom service config (for testing).
- */
-export function setServiceConfig(config: ServiceConfig): void {
-  serviceConfig = config;
-}
-
-/**
  * Reset the service container (for testing).
  */
 export function resetServices(): void {
   container = null;
-  serviceConfig = null;
 }

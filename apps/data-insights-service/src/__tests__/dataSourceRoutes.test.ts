@@ -1,15 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
-import nock from 'nock';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildServer } from '../server.js';
-import { setServices, resetServices, setServiceConfig } from '../services.js';
-import { FakeDataSourceRepository } from './fakes.js';
-import { ok } from '@intexuraos/common-core';
-
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockImplementation(() => ({
-    generate: vi.fn().mockResolvedValue(ok('Generated Test Title')),
-  })),
-}));
+import { setServices, resetServices } from '../services.js';
+import { FakeDataSourceRepository, FakeTitleGenerationService } from './fakes.js';
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -28,24 +20,15 @@ vi.mock('@intexuraos/common-http', async () => {
 
 describe('dataSourceRoutes', () => {
   let fakeRepo: FakeDataSourceRepository;
-
-  beforeAll(() => {
-    nock.disableNetConnect();
-    nock.enableNetConnect('127.0.0.1');
-  });
-
-  afterAll(() => {
-    nock.enableNetConnect();
-  });
+  let fakeTitleService: FakeTitleGenerationService;
 
   beforeEach(() => {
     fakeRepo = new FakeDataSourceRepository();
-    setServices({ dataSourceRepository: fakeRepo });
-    setServiceConfig({
-      userServiceUrl: 'http://localhost:8110',
-      internalAuthToken: 'test-token',
+    fakeTitleService = new FakeTitleGenerationService();
+    setServices({
+      dataSourceRepository: fakeRepo,
+      titleGenerationService: fakeTitleService,
     });
-    nock.cleanAll();
   });
 
   afterEach(() => {
@@ -438,10 +421,7 @@ describe('dataSourceRoutes', () => {
     it('generates a title from content', async () => {
       const app = await buildServer();
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { google: 'fake-api-key' });
+      fakeTitleService.setGeneratedTitle('AI Generated Title');
 
       const response = await app.inject({
         method: 'POST',
@@ -455,7 +435,7 @@ describe('dataSourceRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(true);
-      expect(body.data.title).toBeDefined();
+      expect(body.data.title).toBe('AI Generated Title');
     });
 
     it('requires authentication', async () => {
@@ -475,10 +455,10 @@ describe('dataSourceRoutes', () => {
     it('returns 503 when user has no Gemini API key', async () => {
       const app = await buildServer();
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { google: null });
+      fakeTitleService.setError({
+        code: 'NO_API_KEY',
+        message: 'Please configure your Gemini API key in settings first',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -510,10 +490,10 @@ describe('dataSourceRoutes', () => {
     it('handles user service errors', async () => {
       const app = await buildServer();
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(500);
+      fakeTitleService.setError({
+        code: 'USER_SERVICE_ERROR',
+        message: 'HTTP 500',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -530,16 +510,10 @@ describe('dataSourceRoutes', () => {
     it('handles Gemini generation errors', async () => {
       const app = await buildServer();
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { google: 'fake-api-key' });
-
-      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-      const mockCreate = createGeminiClient as ReturnType<typeof vi.fn>;
-      mockCreate.mockImplementationOnce(() => ({
-        generate: vi.fn().mockResolvedValue({ ok: false, error: { message: 'API rate limit exceeded' } }),
-      }));
+      fakeTitleService.setError({
+        code: 'GENERATION_ERROR',
+        message: 'API rate limit exceeded',
+      });
 
       const response = await app.inject({
         method: 'POST',
