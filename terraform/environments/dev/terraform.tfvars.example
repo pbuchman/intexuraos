@@ -27,7 +27,7 @@ github_connection_name = "github-pbuchman"
 enable_load_balancer = true
 
 # Domain name for the web app (requires DNS A record pointing to LB IP)
-web_app_domain = "intexuraos.pbuchman.com"
+web_app_domain = "intexuraos.cloud"
 
 # Enable LLM API audit logging (logs all LLM calls to Firestore)
 audit_llms = true

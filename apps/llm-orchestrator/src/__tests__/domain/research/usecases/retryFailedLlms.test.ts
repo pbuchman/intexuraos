@@ -58,7 +58,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
         status: 'completed',
         result: 'Google Result',
       },
-      { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Rate limit' },
+      { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Rate limit' },
     ],
     partialFailure: {
       failedProviders: ['openai'],
@@ -125,7 +125,12 @@ describe('retryFailedLlms', () => {
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Rate limit' },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'failed',
+          error: 'Rate limit',
+        },
       ],
       startedAt: '2024-01-01T10:00:00Z',
     };
@@ -217,7 +222,7 @@ describe('retryFailedLlms', () => {
       selectedLlms: ['google', 'openai', 'anthropic'],
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Error 1' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
         { provider: 'anthropic', model: 'claude-3-opus', status: 'failed', error: 'Error 2' },
       ],
       partialFailure: {

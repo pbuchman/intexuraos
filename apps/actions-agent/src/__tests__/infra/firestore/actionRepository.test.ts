@@ -162,4 +162,34 @@ describe('FirestoreActionRepository', () => {
       expect(result[0]?.status).toBe('pending');
     });
   });
+
+  describe('listByStatus', () => {
+    it('returns empty array when no actions with status', async () => {
+      await repository.save(createTestAction({ id: 'action-1', status: 'completed' }));
+
+      const result = await repository.listByStatus('pending');
+      expect(result).toEqual([]);
+    });
+
+    it('returns actions with matching status', async () => {
+      await repository.save(createTestAction({ id: 'action-1', status: 'pending' }));
+      await repository.save(createTestAction({ id: 'action-2', status: 'pending' }));
+      await repository.save(createTestAction({ id: 'action-3', status: 'completed' }));
+
+      const result = await repository.listByStatus('pending');
+
+      expect(result).toHaveLength(2);
+      expect(result.every((a) => a.status === 'pending')).toBe(true);
+    });
+
+    it('respects limit parameter', async () => {
+      await repository.save(createTestAction({ id: 'action-1', status: 'pending' }));
+      await repository.save(createTestAction({ id: 'action-2', status: 'pending' }));
+      await repository.save(createTestAction({ id: 'action-3', status: 'pending' }));
+
+      const result = await repository.listByStatus('pending', 2);
+
+      expect(result).toHaveLength(2);
+    });
+  });
 });

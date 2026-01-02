@@ -1,6 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../ports/actionServiceClient.js';
-import type { UserPhoneLookup } from '../ports/userPhoneLookup.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import pino from 'pino';
@@ -12,7 +11,6 @@ const logger = pino({
 
 export interface HandleResearchActionDeps {
   actionServiceClient: ActionServiceClient;
-  userPhoneLookup: UserPhoneLookup;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
 }
@@ -26,7 +24,7 @@ export function createHandleResearchActionUseCase(
 ): HandleResearchActionUseCase {
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      const { actionServiceClient, userPhoneLookup, whatsappPublisher, webAppUrl } = deps;
+      const { actionServiceClient, whatsappPublisher, webAppUrl } = deps;
 
       logger.info(
         {
@@ -57,26 +55,16 @@ export function createHandleResearchActionUseCase(
 
       logger.info({ actionId: event.actionId }, 'Action set to awaiting_approval');
 
-      const phoneNumber = await userPhoneLookup.getPhoneNumber(event.userId);
-      if (phoneNumber === null) {
-        logger.info(
-          { actionId: event.actionId, userId: event.userId },
-          'User not connected to WhatsApp, skipping notification'
-        );
-        return ok({ actionId: event.actionId });
-      }
-
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
       const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
 
       logger.info(
-        { actionId: event.actionId, userId: event.userId, phoneNumber },
+        { actionId: event.actionId, userId: event.userId },
         'Sending WhatsApp approval notification'
       );
 
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
-        phoneNumber,
         message,
         correlationId: `action-approval-${event.actionId}`,
       });

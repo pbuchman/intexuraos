@@ -45,7 +45,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello from test',
         correlationId: 'corr-123',
       });
@@ -58,7 +57,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       expect(publishedData['type']).toBe('whatsapp.message.send');
       expect(publishedData['userId']).toBe('user-123');
-      expect(publishedData['phoneNumber']).toBe('+48123456789');
       expect(publishedData['message']).toBe('Hello from test');
       expect(publishedData['correlationId']).toBe('corr-123');
       expect(publishedData['timestamp']).toBeDefined();
@@ -69,7 +67,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
       });
 
@@ -88,7 +85,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Reply message',
         replyToMessageId: 'wamid.original123',
       });
@@ -106,7 +102,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Simple message',
       });
 
@@ -123,7 +118,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
       });
 
@@ -141,7 +135,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
       });
 
@@ -159,7 +152,6 @@ describe('createWhatsAppSendPublisher', () => {
 
       const result = await publisher.publishSendMessage({
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
       });
 

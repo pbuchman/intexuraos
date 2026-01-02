@@ -40,10 +40,11 @@ describe('createGptClient', () => {
   });
 
   describe('research', () => {
-    it('returns research result with content', async () => {
+    it('returns research result with content and usage', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',
         output: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
@@ -52,6 +53,7 @@ describe('createGptClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
+        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockResponsesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -553,10 +555,11 @@ describe('createGptClient', () => {
   });
 
   describe('audit logging', () => {
-    it('calls audit context on success', async () => {
+    it('calls audit context on success with usage', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Response',
         output: [],
+        usage: { input_tokens: 150, output_tokens: 75 },
       });
 
       const mockSuccess = vi.fn().mockResolvedValue(undefined);
@@ -574,7 +577,12 @@ describe('createGptClient', () => {
           method: 'research',
         })
       );
-      expect(mockSuccess).toHaveBeenCalled();
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 150,
+          outputTokens: 75,
+        })
+      );
     });
 
     it('calls audit context on error', async () => {

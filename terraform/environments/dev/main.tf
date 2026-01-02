@@ -21,13 +21,15 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
 provider "google-beta" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
 # -----------------------------------------------------------------------------
@@ -82,7 +84,7 @@ variable "enable_load_balancer" {
 variable "web_app_domain" {
   description = "Domain name for the web app"
   type        = string
-  default     = "intexuraos.pbuchman.com"
+  default     = "intexuraos.cloud"
 }
 
 variable "audit_llms" {
@@ -254,7 +256,11 @@ module "web_app" {
   enable_load_balancer = var.enable_load_balancer
   domain               = var.web_app_domain
 
-  depends_on = [google_project_service.apis]
+  use_custom_certificate    = true
+  ssl_certificate_path      = "${path.module}/../../certs/intexuraos.cloud/fullchain.pem"
+  ssl_private_key_secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
+
+  depends_on = [google_project_service.apis, module.secret_manager]
 }
 
 # -----------------------------------------------------------------------------
@@ -339,6 +345,8 @@ module "secret_manager" {
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
     "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"
     "INTEXURAOS_FIREBASE_AUTH_DOMAIN" = "Firebase Auth domain"
+    # SSL certificate
+    "INTEXURAOS_SSL_PRIVATE_KEY" = "SSL certificate private key for intexuraos.cloud"
   }
 
   depends_on = [google_project_service.apis]
@@ -370,23 +378,26 @@ module "iam" {
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
-  source = "../../modules/pubsub"
+  source = "../../modules/pubsub-push"
 
   project_id     = var.project_id
   project_number = local.project_number
   topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
   labels         = local.common_labels
 
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 60
+
   publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-  subscriber_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
+    module.whatsapp_service,
   ]
 }
 
@@ -471,7 +482,7 @@ module "pubsub_actions_research" {
   topic_name     = "intexuraos-actions-research-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/research"
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
   push_audience              = module.actions_agent.service_url
 
@@ -729,8 +740,8 @@ module "whatsapp_service" {
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
@@ -742,7 +753,6 @@ module "whatsapp_service" {
     module.iam,
     module.secret_manager,
     module.whatsapp_media_bucket,
-    module.pubsub_media_cleanup,
     module.pubsub_commands_ingest,
   ]
 }
@@ -930,7 +940,7 @@ module "actions_agent" {
     INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
     INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
     INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
-    INTEXURAOS_WHATSAPP_SEND_TOPIC           = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   }
 
@@ -968,13 +978,15 @@ module "data_insights_service" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
+    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.user_service,
   ]
 }
 
@@ -1071,6 +1083,51 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
     google_project_service.apis,
     google_cloud_run_service_iam_member.scheduler_invokes_commands_router,
     module.commands_router,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Retry Pending Actions
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_actions_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.actions_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.actions_agent]
+}
+
+resource "google_cloud_scheduler_job" "retry_pending_actions" {
+  name        = "intexuraos-retry-pending-actions-${var.environment}"
+  description = "Retry processing for actions stuck in pending status"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.actions_agent.service_url}/internal/actions/retry-pending"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.actions_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_actions_agent,
+    module.actions_agent,
   ]
 }
 

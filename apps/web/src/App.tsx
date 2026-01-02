@@ -17,6 +17,7 @@ import {
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
+  ShareTargetPage,
   SystemHealthPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
@@ -185,6 +186,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <InboxPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/share-target"
+        element={
+          <ProtectedRoute>
+            <ShareTargetPage />
           </ProtectedRoute>
         }
       />

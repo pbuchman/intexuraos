@@ -20,6 +20,7 @@ import {
   deleteMessage,
   disconnectUserMapping,
   findById,
+  findPhoneByUserId,
   findUserByPhoneNumber,
   getMessage,
   getMessagesByUser,
@@ -78,6 +79,10 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
 
   async findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
     return await findUserByPhoneNumber(phoneNumber);
+  }
+
+  async findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>> {
+    return await findPhoneByUserId(userId);
   }
 
   async disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {

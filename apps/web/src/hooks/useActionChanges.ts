@@ -36,7 +36,7 @@ export interface UseActionChangesResult {
 // 💰 CostGuard: Maximum documents to fetch per query
 const MAX_QUERY_LIMIT = 100;
 
-export function useActionChanges(): UseActionChangesResult {
+export function useActionChanges(enabled = true): UseActionChangesResult {
   const { getAccessToken, user, isAuthenticated } = useAuth();
   const [changedActionIds, setChangedActionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +132,7 @@ export function useActionChanges(): UseActionChangesResult {
 
       if (!isVisibleRef.current) {
         cleanupListener();
-      } else if (isAuthenticated && user !== undefined) {
+      } else if (enabled && isAuthenticated && user !== undefined) {
         void setupListener();
       }
     };
@@ -141,19 +141,21 @@ export function useActionChanges(): UseActionChangesResult {
     return (): void => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isAuthenticated, user, setupListener, cleanupListener]);
+  }, [enabled, isAuthenticated, user, setupListener, cleanupListener]);
 
-  // Setup listener when authenticated and visible
+  // Setup listener when authenticated, visible, and enabled
   useEffect(() => {
-    if (isAuthenticated && user !== undefined && isVisibleRef.current) {
+    if (enabled && isAuthenticated && user !== undefined && isVisibleRef.current) {
       void setupListener();
+    } else {
+      cleanupListener();
     }
 
     // 💰 CostGuard: Cleanup listener on unmount to prevent memory leaks and ongoing reads
     return (): void => {
       cleanupListener();
     };
-  }, [isAuthenticated, user, setupListener, cleanupListener]);
+  }, [enabled, isAuthenticated, user, setupListener, cleanupListener]);
 
   return {
     changedActionIds,

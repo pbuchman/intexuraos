@@ -77,7 +77,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
       },
       {
         provider: 'openai',
-        model: 'o3-deep-research',
+        model: 'o4-mini-deep-research',
         status: 'completed',
         result: 'OpenAI Result',
       },
@@ -132,7 +132,7 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Error' },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Error' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -156,7 +156,7 @@ describe('runSynthesis', () => {
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Error' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

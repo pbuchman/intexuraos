@@ -4,6 +4,7 @@
  */
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
+import { FirestorePricingRepository } from './infra/pricing/index.js';
 import {
   createLlmProviders,
   createResearchProvider,
@@ -29,6 +30,7 @@ import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
   type NotificationSender,
+  type PricingRepository,
   type ResearchRepository,
   type SearchMode,
   type TitleGenerator,
@@ -39,6 +41,7 @@ import {
  */
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
+  pricingRepo: PricingRepository;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
@@ -87,8 +90,9 @@ export function resetServices(): void {
 /**
  * Create the notification sender based on environment configuration.
  * Uses Pub/Sub to send messages via whatsapp-service.
+ * Phone number lookup is handled internally by whatsapp-service.
  */
-function createNotificationSender(userServiceClient: UserServiceClient): NotificationSender {
+function createNotificationSender(): NotificationSender {
   const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'];
 
@@ -98,18 +102,10 @@ function createNotificationSender(userServiceClient: UserServiceClient): Notific
     whatsappSendTopic !== undefined &&
     whatsappSendTopic !== ''
   ) {
-    return new WhatsAppNotificationSender(
-      {
-        projectId: gcpProjectId,
-        topicName: whatsappSendTopic,
-      },
-      {
-        getPhoneNumber: async (userId: string): Promise<string | null> => {
-          const result = await userServiceClient.getWhatsAppPhone(userId);
-          return result.ok ? result.value : null;
-        },
-      }
-    );
+    return new WhatsAppNotificationSender({
+      projectId: gcpProjectId,
+      topicName: whatsappSendTopic,
+    });
   }
 
   return new NoopNotificationSender();
@@ -120,13 +116,14 @@ function createNotificationSender(userServiceClient: UserServiceClient): Notific
  */
 export function initializeServices(): void {
   const researchRepo = new FirestoreResearchRepository();
+  const pricingRepo = new FirestorePricingRepository();
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
   });
 
-  const notificationSender = createNotificationSender(userServiceClient);
+  const notificationSender = createNotificationSender();
 
   const researchEventPublisher = createResearchEventPublisher({
     projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
@@ -140,6 +137,7 @@ export function initializeServices(): void {
 
   container = {
     researchRepo,
+    pricingRepo,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,

@@ -410,5 +410,230 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.post(
+    '/internal/actions/process',
+    {
+      schema: {
+        operationId: 'processActionUnified',
+        summary: 'Process action from PubSub (unified)',
+        description:
+          'Unified internal endpoint for PubSub push. Accepts all action types and routes to appropriate handler if available.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            message: {
+              type: 'object',
+              properties: {
+                data: { type: 'string', description: 'Base64 encoded message data' },
+                messageId: { type: 'string' },
+                publishTime: { type: 'string' },
+              },
+              required: ['data', 'messageId'],
+            },
+            subscription: { type: 'string' },
+          },
+          required: ['message'],
+        },
+        response: {
+          200: {
+            description: 'Message acknowledged',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              actionId: { type: 'string' },
+              skipped: { type: 'boolean' },
+              reason: { type: 'string' },
+            },
+            required: ['success'],
+          },
+          400: {
+            description: 'Invalid message',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Processing failed',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions/process',
+        bodyPreviewLength: 500,
+      });
+
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+
+      if (isPubSubPush) {
+        request.log.info(
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
+        );
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for /internal/actions/process'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
+      }
+
+      const body = request.body as PubSubMessage;
+
+      let eventData: ActionCreatedEvent;
+      try {
+        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
+        eventData = JSON.parse(decoded) as ActionCreatedEvent;
+      } catch {
+        request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
+        reply.status(400);
+        return { error: 'Invalid message format' };
+      }
+
+      const parsedType = eventData.type as string;
+      if (parsedType !== 'action.created') {
+        request.log.warn(
+          {
+            type: parsedType,
+            actionId: eventData.actionId,
+            messageId: body.message.messageId,
+          },
+          'Unexpected event type'
+        );
+        reply.status(400);
+        return { error: 'Invalid event type' };
+      }
+
+      const services = getServices();
+      const handler = getHandlerForType(services, eventData.actionType);
+
+      if (handler === undefined) {
+        request.log.info(
+          {
+            actionType: eventData.actionType,
+            actionId: eventData.actionId,
+            messageId: body.message.messageId,
+          },
+          'No handler for action type, action stays in pending'
+        );
+        return {
+          success: true,
+          actionId: eventData.actionId,
+          skipped: true,
+          reason: 'no_handler',
+        };
+      }
+
+      const result = await handler.execute(eventData);
+
+      if (!result.ok) {
+        request.log.error(
+          { err: result.error, actionType: eventData.actionType, actionId: eventData.actionId },
+          'Failed to process action'
+        );
+        reply.status(500);
+        return { error: result.error.message };
+      }
+
+      request.log.info(
+        { actionId: result.value.actionId, actionType: eventData.actionType },
+        'Action processed successfully'
+      );
+
+      return {
+        success: true,
+        actionId: result.value.actionId,
+      };
+    }
+  );
+
+  fastify.post(
+    '/internal/actions/retry-pending',
+    {
+      schema: {
+        operationId: 'retryPendingActions',
+        summary: 'Retry pending actions',
+        description:
+          'Internal endpoint called by Cloud Scheduler to retry actions stuck in pending status.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Retry completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              processed: { type: 'number' },
+              skipped: { type: 'number' },
+              failed: { type: 'number' },
+              total: { type: 'number' },
+            },
+            required: ['success', 'processed', 'skipped', 'failed', 'total'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions/retry-pending',
+      });
+
+      const authHeader = request.headers.authorization;
+      const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+
+      if (isOidcAuth) {
+        request.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for /internal/actions/retry-pending'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
+      }
+
+      const services = getServices();
+      const result = await services.retryPendingActionsUseCase.execute();
+
+      request.log.info(result, 'Retry pending actions completed');
+
+      return {
+        success: true,
+        ...result,
+      };
+    }
+  );
+
   done();
 };

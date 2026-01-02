@@ -13,9 +13,15 @@ export interface LLMConfig {
   researchModel: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface ResearchResult {
   content: string;
   sources: string[];
+  usage?: TokenUsage;
 }
 
 export interface SynthesisInput {

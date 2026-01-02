@@ -158,16 +158,50 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             messageId: body.message.messageId,
             userId: eventData.userId,
             correlationId: eventData.correlationId,
-            phoneNumber: maskPhoneNumber(eventData.phoneNumber),
           },
           'Processing send message event'
         );
 
-        const { messageSender } = getServices();
-        const result = await messageSender.sendTextMessage(
-          eventData.phoneNumber,
-          eventData.message
+        const { userMappingRepository } = getServices();
+        const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
+        if (!phoneResult.ok) {
+          request.log.error(
+            {
+              messageId: body.message.messageId,
+              userId: eventData.userId,
+              correlationId: eventData.correlationId,
+              error: phoneResult.error.message,
+            },
+            'Failed to look up phone number for user'
+          );
+          reply.status(500);
+          return { error: 'Failed to look up phone number' };
+        }
+
+        if (phoneResult.value === null) {
+          request.log.warn(
+            {
+              messageId: body.message.messageId,
+              userId: eventData.userId,
+              correlationId: eventData.correlationId,
+            },
+            'User not connected to WhatsApp, skipping message'
+          );
+          return { success: true };
+        }
+
+        const phoneNumber = phoneResult.value;
+        request.log.info(
+          {
+            messageId: body.message.messageId,
+            userId: eventData.userId,
+            phoneNumber: maskPhoneNumber(phoneNumber),
+          },
+          'Found phone number for user'
         );
+
+        const { messageSender } = getServices();
+        const result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
 
         if (!result.ok) {
           request.log.error(

@@ -638,6 +638,107 @@ describe('Commands Router Routes', () => {
     });
   });
 
+  describe('POST /router/commands (create command)', () => {
+    it('returns 401 when no auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/commands',
+        payload: { text: 'Test shared content', source: 'pwa-shared' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when text is missing', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-pwa-1');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { source: 'pwa-shared' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when source is missing', async () => {
+      app = await buildServer();
+      const token = await createAccessToken('user-pwa-2');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'Test content' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('creates command from pwa-shared source', async () => {
+      app = await buildServer();
+      const userId = 'user-pwa-create';
+      const token = await createAccessToken(userId);
+      fakeUserServiceClient.setApiKeys(userId, { google: 'test-key' });
+
+      fakeClassifier.setResult({
+        type: 'note',
+        confidence: 0.85,
+        title: 'Shared Note',
+        reasoning: 'General information to note',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'Test shared content from PWA', source: 'pwa-shared' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { id: string; text: string; sourceType: string; status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.command.text).toBe('Test shared content from PWA');
+      expect(body.data.command.sourceType).toBe('pwa-shared');
+    });
+
+    it('processes command and classifies it', async () => {
+      app = await buildServer();
+      const userId = 'user-pwa-classify';
+      const token = await createAccessToken(userId);
+      fakeUserServiceClient.setApiKeys(userId, { google: 'test-key' });
+
+      fakeClassifier.setResult({
+        type: 'research',
+        confidence: 0.9,
+        title: 'Research Topic',
+        reasoning: 'Research request',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/commands',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { text: 'Research the latest news', source: 'pwa-shared' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { status: string; classification?: { type: string } } };
+      };
+      expect(body.data.command.status).toBe('classified');
+      expect(body.data.command.classification?.type).toBe('research');
+    });
+  });
+
   //   describe('GET /router/actions (authenticated)', () => {
   //     it('returns 401 when no auth header', async () => {
   //       app = await buildServer();

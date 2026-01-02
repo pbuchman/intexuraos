@@ -18,6 +18,7 @@ import {
   createFakeTitleGenerator,
   FakeLlmCallPublisher,
   FakeNotificationSender,
+  FakePricingRepository,
   FakeResearchEventPublisher,
   FakeResearchRepository,
   FakeUserServiceClient,
@@ -66,6 +67,7 @@ describe('Research Routes - Unauthenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      pricingRepo: new FakePricingRepository(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -248,6 +250,7 @@ describe('Research Routes - Authenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      pricingRepo: new FakePricingRepository(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -283,7 +286,7 @@ describe('Research Routes - Authenticated', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.id).toBe('generated-id-123');
@@ -308,7 +311,7 @@ describe('Research Routes - Authenticated', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.externalReports).toHaveLength(1);
@@ -354,7 +357,7 @@ describe('Research Routes - Authenticated', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
       expect(body.success).toBe(true);
 
@@ -381,7 +384,7 @@ describe('Research Routes - Authenticated', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
 
       const saved = fakeRepo.getAll()[0];
       expect(saved).toBeDefined();
@@ -404,13 +407,13 @@ describe('Research Routes - Authenticated', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(201);
 
       const saved = fakeRepo.getAll()[0];
       expect(saved).toBeDefined();
       if (saved !== undefined) {
         expect(saved.selectedLlms).toEqual(['google', 'openai', 'anthropic']);
-        expect(saved.synthesisLlm).toBe('anthropic');
+        expect(saved.synthesisLlm).toBe('google');
       }
     });
 
@@ -1017,7 +1020,12 @@ describe('Research Routes - Authenticated', () => {
             status: 'completed',
             result: 'Google result',
           },
-          { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Rate limit' },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'Rate limit',
+          },
         ],
         partialFailure: {
           failedProviders: ['openai'],
@@ -1279,6 +1287,7 @@ describe('Research Routes - Authenticated', () => {
       const newFakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
+        pricingRepo: new FakePricingRepository(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
@@ -1372,6 +1381,7 @@ describe('System Endpoints', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      pricingRepo: new FakePricingRepository(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -1431,6 +1441,7 @@ describe('Internal Routes', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      pricingRepo: new FakePricingRepository(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -1853,7 +1864,7 @@ describe('Internal Routes', () => {
         selectedLlms: ['google', 'openai'],
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
-          { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
         ],
       });
     }
@@ -1864,6 +1875,7 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -2253,7 +2265,7 @@ describe('Internal Routes', () => {
         selectedLlms: ['google', 'openai'],
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Done' },
-          { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -2291,7 +2303,7 @@ describe('Internal Routes', () => {
             status: 'failed',
             error: 'Previous failure',
           },
-          { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);

@@ -98,7 +98,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: user.userId,
         prompt: body.prompt,
         selectedLlms: body.selectedLlms,
-        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+        synthesisLlm: body.synthesisLlm ?? body.selectedLlms[0] ?? 'google',
       };
       if (body.externalReports !== undefined) {
         submitParams.externalReports = body.externalReports;
@@ -161,13 +161,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Create draft research
+      const resolvedSelectedLlms = body.selectedLlms ?? ['google', 'openai', 'anthropic'];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms ?? ['google', 'openai', 'anthropic'],
-        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+        selectedLlms: resolvedSelectedLlms,
+        synthesisLlm: body.synthesisLlm ?? resolvedSelectedLlms[0] ?? 'google',
       };
       if (body.externalReports !== undefined) {
         const now = new Date().toISOString();

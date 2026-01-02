@@ -46,6 +46,14 @@
       "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"
     },
+    "app_settings": {
+      "owner": "llm-orchestrator",
+      "description": "Application-wide settings including LLM pricing configuration"
+    },
+    "llm_api_logs": {
+      "owner": "llm-orchestrator",
+      "description": "LLM API call audit logs with token usage and cost tracking"
+    },
     "commands": {
       "owner": "commands-router",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"

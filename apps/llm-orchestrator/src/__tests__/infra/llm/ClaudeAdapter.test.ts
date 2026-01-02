@@ -131,8 +131,9 @@ describe('ClaudeAdapter', () => {
         expect(result.value).toBe('Generated Title');
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, descriptive title')
+        expect.stringContaining('Generate a short, concise title')
       );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'));
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
     });
 

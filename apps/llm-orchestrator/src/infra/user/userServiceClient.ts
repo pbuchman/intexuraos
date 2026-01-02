@@ -53,7 +53,6 @@ export interface ResearchSettings {
  */
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
-  getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>>;
   getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
 }
@@ -103,27 +102,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           code: 'NETWORK_ERROR',
           message,
         });
-      }
-    },
-
-    async getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>> {
-      try {
-        const response = await fetch(`${config.baseUrl}/internal/users/${userId}/whatsapp-phone`, {
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
-
-        if (!response.ok) {
-          // Not found is acceptable - return null
-          return ok(null);
-        }
-
-        const data = (await response.json()) as { phone?: string };
-        return ok(data.phone ?? null);
-      } catch {
-        // Network error returns null (best effort)
-        return ok(null);
       }
     },
 

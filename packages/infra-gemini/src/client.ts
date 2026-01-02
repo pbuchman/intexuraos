@@ -48,7 +48,8 @@ async function logSuccess(
   requestId: string,
   startTime: Date,
   response: string,
-  auditContext: AuditContext
+  auditContext: AuditContext,
+  usage?: { inputTokens: number; outputTokens: number }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -58,10 +59,17 @@ async function logSuccess(
       durationMs: Date.now() - startTime.getTime(),
       responseLength: response.length,
       responsePreview: response.slice(0, 200),
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
     })
   );
 
-  await auditContext.success({ response });
+  const auditParams: Parameters<typeof auditContext.success>[0] = { response };
+  if (usage !== undefined) {
+    auditParams.inputTokens = usage.inputTokens;
+    auditParams.outputTokens = usage.outputTokens;
+  }
+  await auditContext.success(auditParams);
 }
 
 async function logError(
@@ -112,9 +120,17 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
         const text = response.text ?? '';
         const sources = extractSourcesFromResponse(response);
+        const result: ResearchResult = { content: text, sources };
+        const usageMetadata = response.usageMetadata;
+        if (usageMetadata !== undefined) {
+          result.usage = {
+            inputTokens: usageMetadata.promptTokenCount ?? 0,
+            outputTokens: usageMetadata.candidatesTokenCount ?? 0,
+          };
+        }
 
-        await logSuccess('research', requestId, startTime, text, auditContext);
-        return ok({ content: text, sources });
+        await logSuccess('research', requestId, startTime, text, auditContext, result.usage);
+        return ok(result);
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));

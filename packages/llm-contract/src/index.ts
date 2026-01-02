@@ -6,6 +6,7 @@
 
 export type {
   LLMConfig,
+  TokenUsage,
   ResearchResult,
   SynthesisInput,
   LLMErrorCode,

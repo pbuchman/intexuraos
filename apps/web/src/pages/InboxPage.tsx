@@ -20,6 +20,7 @@ import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
+import { useCommandChanges } from '@/hooks/useCommandChanges';
 import {
   Archive,
   Bell,
@@ -281,20 +282,32 @@ export function InboxPage(): React.JSX.Element {
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
 
-  // 💰 CostGuard: Real-time action listener with Page Visibility API optimization
+  // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
   const {
     changedActionIds,
-    error: listenerError,
-    isListening,
-    clearChangedIds,
-  } = useActionChanges();
+    error: actionListenerError,
+    isListening: isActionsListening,
+    clearChangedIds: clearActionChangedIds,
+  } = useActionChanges(activeTab === 'actions');
+
+  // 💰 CostGuard: Real-time command listener - only enabled when Commands tab is active
+  const {
+    changedCommandIds,
+    error: commandListenerError,
+    isListening: isCommandsListening,
+    clearChangedIds: clearCommandChangedIds,
+  } = useCommandChanges(activeTab === 'commands');
+
+  const listenerError = activeTab === 'actions' ? actionListenerError : commandListenerError;
+  const isListening = activeTab === 'actions' ? isActionsListening : isCommandsListening;
 
   // Ref for debounce timeout
-  const debounceTimeoutRef = useRef<number | null>(null);
+  const actionsDebounceTimeoutRef = useRef<number | null>(null);
+  const commandsDebounceTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('inbox-active-tab', activeTab);
-  }, [activeTab]);
+  const previousTabRef = useRef<TabId>(activeTab);
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
 
   // 💰 CostGuard: Debounced batch fetch for changed actions
   // Waits 500ms for additional changes before making API call
@@ -306,7 +319,6 @@ export function InboxPage(): React.JSX.Element {
         const token = await getAccessToken();
         const fetchedActions = await batchGetActions(token, ids);
 
-        // Merge into local state
         setActions((prev) => {
           const updated = [...prev];
 
@@ -315,7 +327,6 @@ export function InboxPage(): React.JSX.Element {
             if (index >= 0) {
               updated[index] = changedAction;
             } else {
-              // New action - add to beginning
               updated.unshift(changedAction);
             }
           }
@@ -323,36 +334,64 @@ export function InboxPage(): React.JSX.Element {
           return updated;
         });
 
-        // Clear the processed IDs
-        clearChangedIds();
+        clearActionChangedIds();
       } catch {
         /* Best-effort batch fetch - silent fail */
       }
     },
-    [getAccessToken, clearChangedIds]
+    [getAccessToken, clearActionChangedIds]
   );
 
-  // 💰 CostGuard: Debounce effect for batch fetching
+  // 💰 CostGuard: Fetch changed commands by refreshing the list
+  const fetchChangedCommands = useCallback(async (): Promise<void> => {
+    try {
+      const token = await getAccessToken();
+      const response = await getCommands(token);
+      setCommands(response.commands);
+      setCommandsCursor(response.nextCursor);
+      clearCommandChangedIds();
+    } catch {
+      /* Best-effort fetch - silent fail */
+    }
+  }, [getAccessToken, clearCommandChangedIds]);
+
+  // 💰 CostGuard: Debounce effect for batch fetching actions
   useEffect(() => {
     if (changedActionIds.length === 0) return;
 
-    // Clear existing timeout
-    if (debounceTimeoutRef.current !== null) {
-      window.clearTimeout(debounceTimeoutRef.current);
+    if (actionsDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(actionsDebounceTimeoutRef.current);
     }
 
-    // Set new debounced timeout
-    debounceTimeoutRef.current = window.setTimeout(() => {
+    actionsDebounceTimeoutRef.current = window.setTimeout(() => {
       void fetchChangedActions(changedActionIds);
     }, DEBOUNCE_DELAY_MS);
 
-    // Cleanup on unmount
     return (): void => {
-      if (debounceTimeoutRef.current !== null) {
-        window.clearTimeout(debounceTimeoutRef.current);
+      if (actionsDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(actionsDebounceTimeoutRef.current);
       }
     };
   }, [changedActionIds, fetchChangedActions]);
+
+  // 💰 CostGuard: Debounce effect for fetching changed commands
+  useEffect(() => {
+    if (changedCommandIds.length === 0) return;
+
+    if (commandsDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(commandsDebounceTimeoutRef.current);
+    }
+
+    commandsDebounceTimeoutRef.current = window.setTimeout(() => {
+      void fetchChangedCommands();
+    }, DEBOUNCE_DELAY_MS);
+
+    return (): void => {
+      if (commandsDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(commandsDebounceTimeoutRef.current);
+      }
+    };
+  }, [changedCommandIds, fetchChangedCommands]);
 
   const fetchData = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -449,6 +488,17 @@ export function InboxPage(): React.JSX.Element {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  // Handle tab switching: save to localStorage and refresh data
+  useEffect(() => {
+    localStorage.setItem('inbox-active-tab', activeTab);
+
+    // Refresh data when switching tabs (but not on initial load)
+    if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
+      void fetchData(true);
+    }
+    previousTabRef.current = activeTab;
+  }, [activeTab, fetchData]);
 
   // Deep linking: open action modal from URL query parameter
   useEffect(() => {

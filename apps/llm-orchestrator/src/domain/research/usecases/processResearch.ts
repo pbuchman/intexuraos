@@ -8,6 +8,12 @@ import type { PublishError } from '@intexuraos/infra-pubsub';
 import type { LlmProvider } from '../models/index.js';
 import type { LlmSynthesisProvider, ResearchRepository, TitleGenerator } from '../ports/index.js';
 
+interface MinimalLogger {
+  info(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  debug(obj: object, msg: string): void;
+}
+
 export interface LlmCallPublisher {
   publishLlmCall(event: {
     type: 'llm.call';
@@ -21,6 +27,7 @@ export interface LlmCallPublisher {
 export interface ProcessResearchDeps {
   researchRepo: ResearchRepository;
   llmCallPublisher: LlmCallPublisher;
+  logger: MinimalLogger;
   titleGenerator?: TitleGenerator;
   synthesizer?: LlmSynthesisProvider;
   reportLlmSuccess?: (provider: LlmProvider) => void;
@@ -37,20 +44,31 @@ export async function processResearch(
 
   const research = researchResult.value;
 
-  // Update status to processing
-  await deps.researchRepo.update(researchId, { status: 'processing' });
+  // Update status to processing and reset startedAt to now
+  await deps.researchRepo.update(researchId, {
+    status: 'processing',
+    startedAt: new Date().toISOString(),
+  });
 
   // Generate title (use dedicated titleGenerator if available, else fall back to synthesizer)
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
+  const titleSource = deps.titleGenerator !== undefined ? 'google' : research.synthesisLlm;
   if (titleGen !== undefined) {
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
       await deps.researchRepo.update(researchId, { title: titleResult.value });
+      deps.logger.info({ researchId, provider: titleSource }, 'Title generated successfully');
       if (deps.reportLlmSuccess !== undefined) {
-        const titleProvider = deps.titleGenerator !== undefined ? 'google' : research.synthesisLlm;
-        deps.reportLlmSuccess(titleProvider);
+        deps.reportLlmSuccess(titleSource);
       }
+    } else {
+      deps.logger.warn(
+        { researchId, provider: titleSource, error: titleResult.error },
+        'Title generation failed, using default title'
+      );
     }
+  } else {
+    deps.logger.debug({ researchId }, 'Title generation skipped, no generator available');
   }
 
   // Dispatch LLM calls to Pub/Sub (runs in separate Cloud Run instances)

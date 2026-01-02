@@ -13,6 +13,7 @@ export interface RetryResult {
   skipped: number;
   failed: number;
   total: number;
+  skipReasons: Record<string, number>;
 }
 
 export interface RetryPendingCommandsUseCase {
@@ -47,6 +48,7 @@ export function createRetryPendingCommandsUseCase(deps: {
       let processed = 0;
       let skipped = 0;
       let failed = 0;
+      const skipReasons: Record<string, number> = {};
 
       for (const command of pendingCommands) {
         logger.info(
@@ -62,6 +64,7 @@ export function createRetryPendingCommandsUseCase(deps: {
             'Failed to fetch API keys, skipping command'
           );
           skipped++;
+          skipReasons['api_keys_fetch_failed'] = (skipReasons['api_keys_fetch_failed'] ?? 0) + 1;
           continue;
         }
 
@@ -71,6 +74,7 @@ export function createRetryPendingCommandsUseCase(deps: {
             'User still has no Google API key, skipping'
           );
           skipped++;
+          skipReasons['no_google_api_key'] = (skipReasons['no_google_api_key'] ?? 0) + 1;
           continue;
         }
 
@@ -174,7 +178,13 @@ export function createRetryPendingCommandsUseCase(deps: {
         }
       }
 
-      const result: RetryResult = { processed, skipped, failed, total: pendingCommands.length };
+      const result: RetryResult = {
+        processed,
+        skipped,
+        failed,
+        total: pendingCommands.length,
+        skipReasons,
+      };
 
       logger.info(result, 'Retry of pending classifications completed');
 

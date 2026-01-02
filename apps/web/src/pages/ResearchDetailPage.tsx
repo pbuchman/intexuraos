@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -230,7 +230,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       await deleteResearch(token, id);
-      void navigate('/#/research');
+      void navigate('/research');
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete research');
       setShowDeleteConfirm(false);
@@ -256,7 +256,23 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
+  useEffect(() => {
+    if (research !== null && research.status === 'draft') {
+      void navigate(`/research/new?draftId=${research.id}`, { replace: true });
+    }
+  }, [research, navigate]);
+
   if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (research !== null && research.status === 'draft') {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -425,9 +441,11 @@ export function ResearchDetailPage(): React.JSX.Element {
       </div>
 
       <Card title="Original Prompt" className="mb-6">
-        <p className="whitespace-pre-wrap text-slate-700">
-          {renderPromptWithLinks(research.prompt)}
-        </p>
+        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic">
+          <p className="whitespace-pre-wrap text-slate-700">
+            {renderPromptWithLinks(research.prompt)}
+          </p>
+        </blockquote>
       </Card>
 
       {showLlmStatus ? (
@@ -540,6 +558,9 @@ function ProcessingStatus({
       return `(${(result.durationMs / 1000).toFixed(1)}s)`;
     }
     if (result.status === 'processing') {
+      if (result.startedAt !== undefined) {
+        return `Started ${formatElapsedTime(result.startedAt)}, processing...`;
+      }
       return 'Processing...';
     }
     if (result.status === 'pending') {
@@ -579,6 +600,21 @@ function StatusDot({ status }: { status: string }): React.JSX.Element {
   return <div className={`h-3 w-3 rounded-full ${colors[status] ?? 'bg-slate-300'}`} />;
 }
 
+function formatTokenCount(count: number): string {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return String(count);
+}
+
+function formatCost(cost: number): string {
+  return `$${cost.toFixed(4)}`;
+}
+
+function formatNumber(num: number): string {
+  return num.toLocaleString();
+}
+
 interface LlmResultCardProps {
   result: LlmResult;
   onCopy: (text: string) => void;
@@ -588,24 +624,58 @@ interface LlmResultCardProps {
 function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
 
+  const hasTokenInfo = result.inputTokens !== undefined && result.outputTokens !== undefined;
+  const hasCost = result.costUsd !== undefined;
+
   return (
     <div className="rounded-lg border border-slate-200">
       <button
         onClick={(): void => {
           setExpanded(!expanded);
         }}
-        className="flex w-full items-center justify-between p-4 hover:bg-slate-50"
+        className="flex w-full cursor-pointer items-center justify-between p-4 hover:bg-slate-50"
       >
         <div className="flex items-center gap-3">
           <StatusDot status={result.status} />
           <span className="font-medium capitalize">{result.provider}</span>
           <span className="text-sm text-slate-500">{result.model}</span>
+          {hasTokenInfo ? (
+            <span className="text-sm text-slate-400">
+              {formatTokenCount(result.inputTokens ?? 0)} /{' '}
+              {formatTokenCount(result.outputTokens ?? 0)} tokens
+            </span>
+          ) : null}
+          {hasCost ? (
+            <span className="text-sm font-medium text-green-600">
+              {formatCost(result.costUsd ?? 0)}
+            </span>
+          ) : null}
         </div>
         <span className="text-slate-400">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && result.result !== undefined && result.result !== '' ? (
         <div className="border-t border-slate-200 p-4">
+          {hasTokenInfo ? (
+            <div className="mb-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+              <span>
+                Input: <strong>{formatNumber(result.inputTokens ?? 0)}</strong> tokens
+              </span>
+              <span className="text-slate-300">|</span>
+              <span>
+                Output: <strong>{formatNumber(result.outputTokens ?? 0)}</strong> tokens
+              </span>
+              {hasCost ? (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span>
+                    Cost:{' '}
+                    <strong className="text-green-600">{formatCost(result.costUsd ?? 0)}</strong>
+                  </span>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <div className="mb-2 flex justify-end">
             <Button
               variant="secondary"

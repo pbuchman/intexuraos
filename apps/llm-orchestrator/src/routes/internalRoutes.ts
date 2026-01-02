@@ -14,6 +14,7 @@ import {
   createDraftResearch,
   processResearch,
   runSynthesis,
+  calculateCost,
   type LlmProvider,
 } from '../domain/research/index.js';
 import { getServices, type DecryptedApiKeys } from '../services.js';
@@ -138,7 +139,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title: body.title,
         prompt: body.prompt,
         selectedLlms: body.selectedLlms,
-        synthesisLlm: 'anthropic',
+        synthesisLlm: body.selectedLlms[0] ?? 'google',
       };
       if (body.sourceActionId !== undefined) {
         createParams.sourceActionId = body.sourceActionId;
@@ -301,6 +302,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
           llmCallPublisher: services.llmCallPublisher,
+          logger: request.log,
           synthesizer,
           reportLlmSuccess: (provider): void => {
             void userServiceClient.reportLlmSuccess(research.userId, provider);
@@ -424,7 +426,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       try {
         await userServiceClient.reportLlmSuccess(event.userId, event.provider);
-        request.log.debug({ provider: event.provider, userId: event.userId }, 'Analytics reported');
+        request.log.info({ provider: event.provider, userId: event.userId }, 'Analytics reported');
       } catch (error) {
         request.log.warn(
           { provider: event.provider, error: getErrorMessage(error) },
@@ -662,12 +664,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: true };
         }
 
+        const usage = llmResult.value.usage;
         request.log.info(
           {
             researchId: event.researchId,
             provider: event.provider,
             durationMs,
             contentLength: llmResult.value.content.length,
+            inputTokens: usage?.inputTokens,
+            outputTokens: usage?.outputTokens,
           },
           'LLM research call succeeded'
         );
@@ -681,6 +686,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (llmResult.value.sources !== undefined) {
           updateData.sources = llmResult.value.sources;
         }
+
+        if (usage !== undefined) {
+          updateData.inputTokens = usage.inputTokens;
+          updateData.outputTokens = usage.outputTokens;
+
+          const model = existingResult?.model;
+          if (model !== undefined) {
+            const pricing = await services.pricingRepo.findByProviderAndModel(
+              event.provider,
+              model
+            );
+            if (pricing !== null) {
+              updateData.costUsd = calculateCost(usage.inputTokens, usage.outputTokens, pricing);
+            } else {
+              request.log.warn(
+                { provider: event.provider, model },
+                'Pricing not found for model, cost not calculated'
+              );
+            }
+          }
+        }
+
         await researchRepo.updateLlmResult(event.researchId, event.provider, updateData);
 
         void userServiceClient.reportLlmSuccess(event.userId, event.provider);

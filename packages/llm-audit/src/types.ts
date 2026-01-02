@@ -23,6 +23,10 @@ export interface LlmAuditLog {
   responseLength?: number;
   error?: string;
 
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+
   startedAt: string;
   completedAt: string;
   durationMs: number;
@@ -51,6 +55,9 @@ export interface CreateAuditLogParams {
  */
 export interface CompleteAuditLogSuccessParams {
   response: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
 }
 
 /**

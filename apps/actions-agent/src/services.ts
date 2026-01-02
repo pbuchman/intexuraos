@@ -3,7 +3,6 @@ import type { ResearchServiceClient } from './domain/ports/researchServiceClient
 import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ActionFiltersRepository } from './domain/ports/actionFiltersRepository.js';
-import type { UserPhoneLookup } from './domain/ports/userPhoneLookup.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -12,13 +11,17 @@ import {
   createExecuteResearchActionUseCase,
   type ExecuteResearchActionUseCase,
 } from './domain/usecases/executeResearchAction.js';
+import {
+  createRetryPendingActionsUseCase,
+  type RetryPendingActionsUseCase,
+} from './domain/usecases/retryPendingActions.js';
+import pino from 'pino';
 import { createCommandsRouterClient } from './infra/action/commandsRouterClient.js';
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createFirestoreActionFiltersRepository } from './infra/firestore/actionFiltersRepository.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
-import { createUserPhoneLookup } from './infra/userService/userPhoneLookup.js';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
 export interface Services {
@@ -28,10 +31,10 @@ export interface Services {
   actionRepository: ActionRepository;
   actionFiltersRepository: ActionFiltersRepository;
   actionEventPublisher: ActionEventPublisher;
-  userPhoneLookup: UserPhoneLookup;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
+  retryPendingActionsUseCase: RetryPendingActionsUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
 }
@@ -71,11 +74,6 @@ export function initServices(config: ServiceConfig): void {
     projectId: config.gcpProjectId,
   });
 
-  const userPhoneLookup = createUserPhoneLookup({
-    baseUrl: config.userServiceUrl,
-    internalAuthToken: config.internalAuthToken,
-  });
-
   const whatsappPublisher = createWhatsAppSendPublisher({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
@@ -83,7 +81,6 @@ export function initServices(config: ServiceConfig): void {
 
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
     actionServiceClient,
-    userPhoneLookup,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
   });
@@ -91,9 +88,15 @@ export function initServices(config: ServiceConfig): void {
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
     actionRepository,
     researchServiceClient,
-    userPhoneLookup,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
+  });
+
+  const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
+    actionRepository,
+    actionEventPublisher,
+    actionHandlerRegistry: { research: handleResearchActionUseCase },
+    logger: pino({ name: 'retryPendingActions' }),
   });
 
   container = {
@@ -103,10 +106,10 @@ export function initServices(config: ServiceConfig): void {
     actionRepository,
     actionFiltersRepository,
     actionEventPublisher,
-    userPhoneLookup,
     whatsappPublisher,
     handleResearchActionUseCase,
     executeResearchActionUseCase,
+    retryPendingActionsUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
   };

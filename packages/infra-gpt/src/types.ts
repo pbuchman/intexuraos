@@ -14,5 +14,5 @@ export interface GptConfig {
 export const GPT_DEFAULTS = {
   defaultModel: 'gpt-5.2',
   validationModel: 'gpt-4.1',
-  researchModel: 'o3-deep-research',
+  researchModel: 'o4-mini-deep-research',
 } as const;

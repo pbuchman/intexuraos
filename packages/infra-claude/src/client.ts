@@ -50,7 +50,8 @@ async function logSuccess(
   requestId: string,
   startTime: Date,
   response: string,
-  auditContext: AuditContext
+  auditContext: AuditContext,
+  usage?: { inputTokens: number; outputTokens: number }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -60,10 +61,17 @@ async function logSuccess(
       durationMs: Date.now() - startTime.getTime(),
       responseLength: response.length,
       responsePreview: response.slice(0, 200),
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
     })
   );
 
-  await auditContext.success({ response });
+  const auditParams: Parameters<typeof auditContext.success>[0] = { response };
+  if (usage !== undefined) {
+    auditParams.inputTokens = usage.inputTokens;
+    auditParams.outputTokens = usage.outputTokens;
+  }
+  await auditContext.success(auditParams);
 }
 
 async function logError(
@@ -122,9 +130,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
         const sources = extractSourcesFromClaudeResponse(response);
+        const usage = {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        };
 
-        await logSuccess('research', requestId, startTime, content, auditContext);
-        return ok({ content, sources });
+        await logSuccess('research', requestId, startTime, content, auditContext, usage);
+        return ok({ content, sources, usage });
       } catch (error) {
         await logError('research', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));

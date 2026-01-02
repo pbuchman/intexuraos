@@ -168,3 +168,26 @@ export async function isUserConnected(userId: string): Promise<Result<boolean, I
     });
   }
 }
+
+export async function findPhoneByUserId(
+  userId: string
+): Promise<Result<string | null, InboxError>> {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
+    if (!doc.exists) return ok(null);
+
+    const data = doc.data() as WhatsAppUserMappingDoc;
+    if (!data.connected) return ok(null);
+
+    const firstPhone = data.phoneNumbers[0];
+    if (firstPhone === undefined) return ok(null);
+
+    return ok(firstPhone);
+  } catch (error) {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: `Failed to find phone: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
