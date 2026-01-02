@@ -1,16 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActionDetailModal, Button, Card, Layout } from '@/components';
+import {
+  ActionDetailModal,
+  CommandDetailModal,
+  Button,
+  Card,
+  Layout,
+  ConfigurableActionButton,
+} from '@/components';
 import { useAuth } from '@/context';
 import {
   ApiError,
   archiveCommand,
-  deleteAction,
+  batchGetActions,
   deleteCommand,
   getActions,
   getCommands,
 } from '@/services';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
+import { useActionConfig } from '@/hooks/useActionConfig';
+import { useActionChanges } from '@/hooks/useActionChanges';
+import { useCommandChanges } from '@/hooks/useCommandChanges';
 import {
   Archive,
   Bell,
@@ -25,6 +35,7 @@ import {
   Loader2,
   MessageSquare,
   Mic,
+  Radio,
   RefreshCw,
   Search,
   Trash2,
@@ -91,6 +102,7 @@ function formatDate(isoDate: string): string {
 
 interface CommandItemProps {
   command: Command;
+  onClick: () => void;
   onDelete: (id: string) => void;
   onArchive: (id: string) => void;
   isDeleting: boolean;
@@ -99,6 +111,7 @@ interface CommandItemProps {
 
 function CommandItem({
   command,
+  onClick,
   onDelete,
   onArchive,
   isDeleting,
@@ -110,7 +123,17 @@ function CommandItem({
   const canArchive = command.status === 'classified';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm">
+    <div
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e): void => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClick();
+        }
+      }}
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
           {isVoice ? (
@@ -135,7 +158,12 @@ function CommandItem({
             <span>{formatDate(command.createdAt)}</span>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div
+          className="flex shrink-0 gap-2"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
           {canDelete && (
             <button
               onClick={(): void => {
@@ -177,11 +205,12 @@ function CommandItem({
 interface ActionItemProps {
   action: Action;
   onClick: () => void;
-  onDelete: (id: string) => void;
-  isDeleting: boolean;
+  onActionSuccess: (button: ResolvedActionButton) => void;
 }
 
-function ActionItem({ action, onClick, onDelete, isDeleting }: ActionItemProps): React.JSX.Element {
+function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): React.JSX.Element {
+  const { buttons } = useActionConfig(action);
+
   return (
     <div
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
@@ -211,30 +240,28 @@ function ActionItem({ action, onClick, onDelete, isDeleting }: ActionItemProps):
           </div>
         </div>
         <div
-          className="flex shrink-0 gap-2"
+          className="flex shrink-0 gap-1"
           onClick={(e): void => {
             e.stopPropagation();
           }}
         >
-          <button
-            onClick={(): void => {
-              onDelete(action.id);
-            }}
-            disabled={isDeleting}
-            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            title="Delete action"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </button>
+          {buttons.map((button) => (
+            <ConfigurableActionButton
+              key={button.id}
+              button={button}
+              onSuccess={(): void => {
+                onActionSuccess(button);
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>
   );
 }
+
+// 💰 CostGuard: Debounce delay for batch fetching changed actions
+const DEBOUNCE_DELAY_MS = 500;
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -250,14 +277,121 @@ export function InboxPage(): React.JSX.Element {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deletingActionId, setDeletingActionId] = useState<string | null>(null);
   const [deletingCommandId, setDeletingCommandId] = useState<string | null>(null);
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
+  const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
 
+  // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
+  const {
+    changedActionIds,
+    error: actionListenerError,
+    isListening: isActionsListening,
+    clearChangedIds: clearActionChangedIds,
+  } = useActionChanges(activeTab === 'actions');
+
+  // 💰 CostGuard: Real-time command listener - only enabled when Commands tab is active
+  const {
+    changedCommandIds,
+    error: commandListenerError,
+    isListening: isCommandsListening,
+    clearChangedIds: clearCommandChangedIds,
+  } = useCommandChanges(activeTab === 'commands');
+
+  const listenerError = activeTab === 'actions' ? actionListenerError : commandListenerError;
+  const isListening = activeTab === 'actions' ? isActionsListening : isCommandsListening;
+
+  // Ref for debounce timeout
+  const actionsDebounceTimeoutRef = useRef<number | null>(null);
+  const commandsDebounceTimeoutRef = useRef<number | null>(null);
+
+  const previousTabRef = useRef<TabId>(activeTab);
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
+
+  // 💰 CostGuard: Debounced batch fetch for changed actions
+  // Waits 500ms for additional changes before making API call
+  const fetchChangedActions = useCallback(
+    async (ids: string[]): Promise<void> => {
+      if (ids.length === 0) return;
+
+      try {
+        const token = await getAccessToken();
+        const fetchedActions = await batchGetActions(token, ids);
+
+        setActions((prev) => {
+          const updated = [...prev];
+
+          for (const changedAction of fetchedActions) {
+            const index = updated.findIndex((a) => a.id === changedAction.id);
+            if (index >= 0) {
+              updated[index] = changedAction;
+            } else {
+              updated.unshift(changedAction);
+            }
+          }
+
+          return updated;
+        });
+
+        clearActionChangedIds();
+      } catch {
+        /* Best-effort batch fetch - silent fail */
+      }
+    },
+    [getAccessToken, clearActionChangedIds]
+  );
+
+  // 💰 CostGuard: Fetch changed commands by refreshing the list
+  const fetchChangedCommands = useCallback(async (): Promise<void> => {
+    try {
+      const token = await getAccessToken();
+      const response = await getCommands(token);
+      setCommands(response.commands);
+      setCommandsCursor(response.nextCursor);
+      clearCommandChangedIds();
+    } catch {
+      /* Best-effort fetch - silent fail */
+    }
+  }, [getAccessToken, clearCommandChangedIds]);
+
+  // 💰 CostGuard: Debounce effect for batch fetching actions
   useEffect(() => {
-    localStorage.setItem('inbox-active-tab', activeTab);
-  }, [activeTab]);
+    if (changedActionIds.length === 0) return;
+
+    if (actionsDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(actionsDebounceTimeoutRef.current);
+    }
+
+    actionsDebounceTimeoutRef.current = window.setTimeout(() => {
+      void fetchChangedActions(changedActionIds);
+    }, DEBOUNCE_DELAY_MS);
+
+    return (): void => {
+      if (actionsDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(actionsDebounceTimeoutRef.current);
+      }
+    };
+  }, [changedActionIds, fetchChangedActions]);
+
+  // 💰 CostGuard: Debounce effect for fetching changed commands
+  useEffect(() => {
+    if (changedCommandIds.length === 0) return;
+
+    if (commandsDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(commandsDebounceTimeoutRef.current);
+    }
+
+    commandsDebounceTimeoutRef.current = window.setTimeout(() => {
+      void fetchChangedCommands();
+    }, DEBOUNCE_DELAY_MS);
+
+    return (): void => {
+      if (commandsDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(commandsDebounceTimeoutRef.current);
+      }
+    };
+  }, [changedCommandIds, fetchChangedCommands]);
 
   const fetchData = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -323,20 +457,6 @@ export function InboxPage(): React.JSX.Element {
     }
   };
 
-  const handleDeleteAction = async (actionId: string): Promise<void> => {
-    try {
-      setDeletingActionId(actionId);
-      setError(null);
-      const token = await getAccessToken();
-      await deleteAction(token, actionId);
-      setActions((prev) => prev.filter((a) => a.id !== actionId));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to delete action');
-    } finally {
-      setDeletingActionId(null);
-    }
-  };
-
   const handleDeleteCommand = async (commandId: string): Promise<void> => {
     try {
       setDeletingCommandId(commandId);
@@ -368,6 +488,36 @@ export function InboxPage(): React.JSX.Element {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  // Handle tab switching: save to localStorage and refresh data
+  useEffect(() => {
+    localStorage.setItem('inbox-active-tab', activeTab);
+
+    // Refresh data when switching tabs (but not on initial load)
+    if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
+      void fetchData(true);
+    }
+    previousTabRef.current = activeTab;
+  }, [activeTab, fetchData]);
+
+  // Deep linking: open action modal from URL query parameter
+  useEffect(() => {
+    const hash = window.location.hash;
+    const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+    if (queryString === '') {
+      return;
+    }
+
+    const params = new URLSearchParams(queryString);
+    const actionId = params.get('action');
+
+    if (actionId !== null && actions.length > 0) {
+      const action = actions.find((a) => a.id === actionId);
+      if (action !== undefined) {
+        setSelectedAction(action);
+      }
+    }
+  }, [actions]);
 
   const handleRefresh = (): void => {
     void fetchData(true);
@@ -416,7 +566,15 @@ export function InboxPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
-          <p className="text-slate-600">Your commands and pending actions</p>
+          <div className="flex items-center gap-2">
+            <p className="text-slate-600">Your commands and pending actions</p>
+            {isListening && (
+              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
         </div>
         <Button
           variant="secondary"
@@ -428,6 +586,13 @@ export function InboxPage(): React.JSX.Element {
           Refresh
         </Button>
       </div>
+
+      {/* Real-time listener error warning */}
+      {listenerError !== null && listenerError !== '' ? (
+        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700">
+          Real-time updates paused: {listenerError}
+        </div>
+      ) : null}
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
@@ -487,10 +652,15 @@ export function InboxPage(): React.JSX.Element {
                   onClick={(): void => {
                     setSelectedAction(action);
                   }}
-                  onDelete={(id): void => {
-                    void handleDeleteAction(id);
+                  onActionSuccess={(button): void => {
+                    // If action is DELETE, remove from local state
+                    if (button.endpoint.method === 'DELETE') {
+                      setActions((prev) => prev.filter((a) => a.id !== button.action.id));
+                    } else if (button.endpoint.method === 'PATCH') {
+                      // If PATCH (archive, reject), refresh to get updated status
+                      void fetchData(true);
+                    }
                   }}
-                  isDeleting={deletingActionId === action.id}
                 />
               ))
             )}
@@ -514,6 +684,9 @@ export function InboxPage(): React.JSX.Element {
                 <CommandItem
                   key={command.id}
                   command={command}
+                  onClick={(): void => {
+                    setSelectedCommand(command);
+                  }}
                   onDelete={(id): void => {
                     void handleDeleteCommand(id);
                   }}
@@ -551,6 +724,16 @@ export function InboxPage(): React.JSX.Element {
             }
             // Close modal after action completes
             setSelectedAction(null);
+          }}
+        />
+      )}
+
+      {/* Command Detail Modal */}
+      {selectedCommand !== null && (
+        <CommandDetailModal
+          command={selectedCommand}
+          onClose={(): void => {
+            setSelectedCommand(null);
           }}
         />
       )}

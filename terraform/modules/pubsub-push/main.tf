@@ -95,12 +95,7 @@ resource "google_pubsub_topic_iam_member" "publisher" {
 # This is required for dead-lettering to work
 resource "google_pubsub_topic_iam_member" "dlq_publisher" {
   project = var.project_id
-  topic   = google_pubsub_topic.dlq.name
+  topic   = google_pubsub_topic.dlq.id
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
-}
-
-# Get project number for Pub/Sub service account
-data "google_project" "current" {
-  project_id = var.project_id
+  member  = "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }

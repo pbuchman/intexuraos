@@ -1,4 +1,4 @@
-import type { Action } from '../models/action.js';
+import type { Action, ActionStatus } from '../models/action.js';
 
 export interface ActionRepository {
   getById(id: string): Promise<Action | null>;
@@ -6,4 +6,5 @@ export interface ActionRepository {
   update(action: Action): Promise<void>;
   delete(id: string): Promise<void>;
   listByUserId(userId: string): Promise<Action[]>;
+  listByStatus(status: ActionStatus, limit?: number): Promise<Action[]>;
 }

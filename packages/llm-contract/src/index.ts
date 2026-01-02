@@ -1,8 +1,15 @@
+/**
+ * @intexuraos/llm-contract
+ *
+ * Common types and interfaces for LLM client implementations.
+ */
+
 export type {
-  LLMClient,
   LLMConfig,
-  LLMError,
-  LLMErrorCode,
+  TokenUsage,
   ResearchResult,
   SynthesisInput,
+  LLMErrorCode,
+  LLMError,
+  LLMClient,
 } from './types.js';

@@ -91,5 +91,17 @@ export function createFirestoreActionRepository(): ActionRepository {
 
       return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
     },
+
+    async listByStatus(status: Action['status'], limit = 100): Promise<Action[]> {
+      const db = getFirestore();
+      const snapshot = await db
+        .collection(COLLECTION)
+        .where('status', '==', status)
+        .orderBy('createdAt', 'asc')
+        .limit(limit)
+        .get();
+
+      return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
+    },
   };
 }

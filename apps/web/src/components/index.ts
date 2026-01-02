@@ -1,4 +1,6 @@
 export { ActionDetailModal } from './ActionDetailModal.js';
+export { CommandDetailModal } from './CommandDetailModal.js';
+export { ConfigurableActionButton } from './ConfigurableActionButton.js';
 export { Header } from './Header.js';
 export { Sidebar } from './Sidebar.js';
 export { Layout } from './Layout.js';

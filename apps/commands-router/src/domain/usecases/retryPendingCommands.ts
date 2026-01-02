@@ -1,19 +1,19 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { CommandClassification } from '../models/command.js';
-import { createAction } from '../models/action.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
-import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
 import type { UserServiceClient } from '../../infra/user/index.js';
+import type { ActionsAgentClient } from '../../infra/actionsAgent/client.js';
 
 export interface RetryResult {
   processed: number;
   skipped: number;
   failed: number;
   total: number;
+  skipReasons: Record<string, number>;
 }
 
 export interface RetryPendingCommandsUseCase {
@@ -22,7 +22,7 @@ export interface RetryPendingCommandsUseCase {
 
 export function createRetryPendingCommandsUseCase(deps: {
   commandRepository: CommandRepository;
-  actionRepository: ActionRepository;
+  actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
   eventPublisher: EventPublisherPort;
@@ -30,7 +30,7 @@ export function createRetryPendingCommandsUseCase(deps: {
 }): RetryPendingCommandsUseCase {
   const {
     commandRepository,
-    actionRepository,
+    actionsAgentClient,
     classifierFactory,
     userServiceClient,
     eventPublisher,
@@ -48,6 +48,7 @@ export function createRetryPendingCommandsUseCase(deps: {
       let processed = 0;
       let skipped = 0;
       let failed = 0;
+      const skipReasons: Record<string, number> = {};
 
       for (const command of pendingCommands) {
         logger.info(
@@ -63,6 +64,7 @@ export function createRetryPendingCommandsUseCase(deps: {
             'Failed to fetch API keys, skipping command'
           );
           skipped++;
+          skipReasons['api_keys_fetch_failed'] = (skipReasons['api_keys_fetch_failed'] ?? 0) + 1;
           continue;
         }
 
@@ -72,6 +74,7 @@ export function createRetryPendingCommandsUseCase(deps: {
             'User still has no Google API key, skipping'
           );
           skipped++;
+          skipReasons['no_google_api_key'] = (skipReasons['no_google_api_key'] ?? 0) + 1;
           continue;
         }
 
@@ -91,15 +94,28 @@ export function createRetryPendingCommandsUseCase(deps: {
           );
 
           if (classification.type !== 'unclassified') {
-            const action = createAction({
+            const actionResult = await actionsAgentClient.createAction({
               userId: command.userId,
               commandId: command.id,
               type: classification.type,
               confidence: classification.confidence,
               title: classification.title,
+              payload: {},
             });
 
-            await actionRepository.save(action);
+            if (!actionResult.ok) {
+              logger.error(
+                {
+                  commandId: command.id,
+                  error: actionResult.error.message,
+                },
+                'Failed to create action via actions-agent'
+              );
+              failed++;
+              continue;
+            }
+
+            const action = actionResult.value;
 
             const eventPayload: ActionCreatedEvent['payload'] = {
               prompt: command.text,
@@ -162,7 +178,13 @@ export function createRetryPendingCommandsUseCase(deps: {
         }
       }
 
-      const result: RetryResult = { processed, skipped, failed, total: pendingCommands.length };
+      const result: RetryResult = {
+        processed,
+        skipped,
+        failed,
+        total: pendingCommands.length,
+        skipReasons,
+      };
 
       logger.info(result, 'Retry of pending classifications completed');
 

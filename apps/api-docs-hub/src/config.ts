@@ -20,24 +20,24 @@ interface EnvVar {
 }
 
 const REQUIRED_ENV_VARS: EnvVar[] = [
-  { key: 'USER_SERVICE_OPENAPI_URL', displayName: 'User Service API' },
-  { key: 'PROMPTVAULT_SERVICE_OPENAPI_URL', displayName: 'PromptVault Service API' },
-  { key: 'NOTION_SERVICE_OPENAPI_URL', displayName: 'Notion Service API' },
-  { key: 'WHATSAPP_SERVICE_OPENAPI_URL', displayName: 'WhatsApp Service API' },
+  { key: 'INTEXURAOS_USER_SERVICE_OPENAPI_URL', displayName: 'User Service API' },
+  { key: 'INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL', displayName: 'PromptVault Service API' },
+  { key: 'INTEXURAOS_NOTION_SERVICE_OPENAPI_URL', displayName: 'Notion Service API' },
+  { key: 'INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL', displayName: 'WhatsApp Service API' },
   {
-    key: 'MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
+    key: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
     displayName: 'Mobile Notifications Service API',
   },
   {
-    key: 'LLM_ORCHESTRATOR_OPENAPI_URL',
+    key: 'INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL',
     displayName: 'LLM Orchestrator API',
   },
   {
-    key: 'COMMANDS_ROUTER_OPENAPI_URL',
+    key: 'INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL',
     displayName: 'Commands Router API',
   },
   {
-    key: 'ACTIONS_AGENT_OPENAPI_URL',
+    key: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
     displayName: 'Actions Agent API',
   },
 ];

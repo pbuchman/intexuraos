@@ -173,6 +173,11 @@ export interface AppConfig {
   mobileNotificationsServiceUrl: string;
   llmOrchestratorUrl: string;
   commandsRouterServiceUrl: string;
+  actionsAgentUrl: string;
+  dataInsightsServiceUrl: string;
+  firebaseProjectId: string;
+  firebaseApiKey: string;
+  firebaseAuthDomain: string;
 }
 
 /**
@@ -207,7 +212,7 @@ export interface MobileNotificationsConnectResponse {
 }
 
 /**
- * Notification filter configuration.
+ * Notification filter configuration (legacy - from user-service).
  * Requires a unique name and at least one filter criterion.
  */
 export interface NotificationFilter {
@@ -215,6 +220,36 @@ export interface NotificationFilter {
   app?: string;
   source?: string;
   title?: string;
+}
+
+/**
+ * Saved notification filter from mobile-notifications-service.
+ */
+export interface SavedNotificationFilter {
+  id: string;
+  name: string;
+  app?: string;
+  device?: string;
+  source?: string;
+  title?: string;
+  createdAt: string;
+}
+
+/**
+ * Notification filter options from mobile-notifications-service.
+ */
+export interface NotificationFilterOptions {
+  app: string[];
+  device: string[];
+  source: string[];
+}
+
+/**
+ * Notification filters data from mobile-notifications-service.
+ */
+export interface NotificationFiltersData {
+  options: NotificationFilterOptions;
+  savedFilters: SavedNotificationFilter[];
 }
 
 /**
@@ -254,7 +289,7 @@ export type CommandStatus =
 /**
  * Command source type
  */
-export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
+export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
 
 /**
  * Command classification details
@@ -288,6 +323,7 @@ export interface Command {
  */
 export type ActionStatus =
   | 'pending'
+  | 'awaiting_approval'
   | 'processing'
   | 'completed'
   | 'failed'
@@ -324,4 +360,39 @@ export interface CommandsResponse {
 export interface ActionsResponse {
   actions: Action[];
   nextCursor?: string;
+}
+
+/**
+ * Custom data source from data-insights-service
+ */
+export interface DataSource {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a data source
+ */
+export interface CreateDataSourceRequest {
+  title: string;
+  content: string;
+}
+
+/**
+ * Request to update a data source
+ */
+export interface UpdateDataSourceRequest {
+  title?: string;
+  content?: string;
+}
+
+/**
+ * Response from generate title endpoint
+ */
+export interface GenerateTitleResponse {
+  title: string;
 }

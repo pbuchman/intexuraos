@@ -29,7 +29,11 @@ output "web_app_dns_a_record_hint" {
 }
 
 output "web_app_cert_name" {
-  description = "Managed SSL certificate resource name (check status: gcloud compute ssl-certificates describe <name>)"
-  value       = var.enable_load_balancer && var.domain != "" ? google_compute_managed_ssl_certificate.web_app[0].name : null
+  description = "SSL certificate resource name (check status: gcloud compute ssl-certificates describe <name>)"
+  value = var.enable_load_balancer && var.domain != "" ? (
+    var.use_custom_certificate
+    ? google_compute_ssl_certificate.custom[0].name
+    : google_compute_managed_ssl_certificate.web_app[0].name
+  ) : null
 }
 

@@ -6,13 +6,8 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import {
-  deleteNotification,
-  type DistinctFilterField,
-  getDistinctFilterValues,
-  listNotifications,
-} from '../domain/notifications/index.js';
-import { filterValuesResponseSchema, listNotificationsResponseSchema } from './schemas.js';
+import { deleteNotification, listNotifications } from '../domain/notifications/index.js';
+import { listNotificationsResponseSchema } from './schemas.js';
 
 interface ListQuerystring {
   limit?: number;
@@ -24,10 +19,6 @@ interface ListQuerystring {
 
 interface DeleteParams {
   notification_id: string;
-}
-
-interface FilterValuesQuerystring {
-  field: DistinctFilterField;
 }
 
 export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -225,92 +216,6 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       reply.status(204);
       return await reply.send();
-    }
-  );
-
-  // GET /mobile-notifications/filter-values
-  fastify.get<{ Querystring: FilterValuesQuerystring }>(
-    '/mobile-notifications/filter-values',
-    {
-      schema: {
-        operationId: 'getFilterValues',
-        summary: 'Get distinct filter values',
-        description:
-          'Get distinct values for a filterable field. Used to populate filter dropdowns.',
-        tags: ['mobile-notifications'],
-        security: [{ bearerAuth: [] }],
-        querystring: {
-          type: 'object',
-          required: ['field'],
-          properties: {
-            field: {
-              type: 'string',
-              enum: ['app', 'source'],
-              description: 'The field to get distinct values for',
-            },
-          },
-        },
-        response: {
-          200: {
-            description: 'Filter values retrieved successfully',
-            type: 'object',
-            required: ['success', 'data'],
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: filterValuesResponseSchema,
-            },
-          },
-          400: {
-            description: 'Invalid field parameter',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { $ref: 'ErrorBody#' },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { $ref: 'ErrorBody#' },
-            },
-          },
-          500: {
-            description: 'Internal error',
-            type: 'object',
-            required: ['success', 'error'],
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { $ref: 'ErrorBody#' },
-            },
-          },
-        },
-      },
-    },
-    async (
-      request: FastifyRequest<{ Querystring: FilterValuesQuerystring }>,
-      reply: FastifyReply
-    ) => {
-      const user = await requireAuth(request, reply);
-      if (user === null) {
-        return;
-      }
-
-      const { field } = request.query;
-
-      const result = await getDistinctFilterValues(
-        { userId: user.userId, field },
-        getServices().notificationRepository
-      );
-
-      if (!result.ok) {
-        return await reply.fail(result.error.code, result.error.message);
-      }
-
-      return await reply.ok({ values: result.value });
     }
   );
 

@@ -92,14 +92,3 @@ export const listNotificationsResponseSchema = {
     nextCursor: { type: 'string' },
   },
 } as const;
-
-export const filterValuesResponseSchema = {
-  type: 'object',
-  required: ['values'],
-  properties: {
-    values: {
-      type: 'array',
-      items: { type: 'string' },
-    },
-  },
-} as const;

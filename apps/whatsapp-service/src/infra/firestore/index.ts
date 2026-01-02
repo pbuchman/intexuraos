@@ -16,6 +16,7 @@ export {
   saveUserMapping,
   getUserMapping,
   findUserByPhoneNumber,
+  findPhoneByUserId,
   disconnectUserMapping,
   isUserConnected,
 } from './userMappingRepository.js';

@@ -9,7 +9,16 @@ export const llmProviderSchema = {
 
 export const researchStatusSchema = {
   type: 'string',
-  enum: ['draft', 'pending', 'processing', 'completed', 'failed'],
+  enum: [
+    'draft',
+    'pending',
+    'processing',
+    'awaiting_confirmation',
+    'retrying',
+    'synthesizing',
+    'completed',
+    'failed',
+  ],
 } as const;
 
 export const llmResultSchema = {
@@ -38,6 +47,31 @@ export const inputContextSchema = {
   required: ['id', 'content', 'addedAt'],
 } as const;
 
+export const externalReportSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    content: { type: 'string' },
+    model: { type: 'string', nullable: true },
+    addedAt: { type: 'string' },
+  },
+  required: ['id', 'content', 'addedAt'],
+} as const;
+
+export const partialFailureSchema = {
+  type: 'object',
+  properties: {
+    failedProviders: {
+      type: 'array',
+      items: llmProviderSchema,
+    },
+    userDecision: { type: 'string', enum: ['proceed', 'retry', 'cancel'], nullable: true },
+    detectedAt: { type: 'string' },
+    retryCount: { type: 'number' },
+  },
+  required: ['failedProviders', 'detectedAt', 'retryCount'],
+} as const;
+
 export const researchSchema = {
   type: 'object',
   properties: {
@@ -60,8 +94,14 @@ export const researchSchema = {
       items: inputContextSchema,
       nullable: true,
     },
+    externalReports: {
+      type: 'array',
+      items: externalReportSchema,
+      nullable: true,
+    },
     synthesizedResult: { type: 'string', nullable: true },
     synthesisError: { type: 'string', nullable: true },
+    partialFailure: { ...partialFailureSchema, nullable: true },
     startedAt: { type: 'string' },
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },

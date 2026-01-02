@@ -92,7 +92,7 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (config === null) {
         return await reply.fail(
           'MISCONFIGURED',
-          'Auth0 is not configured. Set AUTH0_DOMAIN, AUTH0_CLIENT_ID.'
+          'Auth0 is not configured. Set INTEXURAOS_AUTH0_DOMAIN, INTEXURAOS_AUTH0_CLIENT_ID.'
         );
       }
 

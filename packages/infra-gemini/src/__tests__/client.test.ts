@@ -24,10 +24,14 @@ describe('createGeminiClient', () => {
   });
 
   describe('research', () => {
-    it('returns research result with content', async () => {
+    it('returns research result with content and usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',
         candidates: [],
+        usageMetadata: {
+          promptTokenCount: 100,
+          candidatesTokenCount: 50,
+        },
       });
 
       const client = createGeminiClient({ apiKey: 'test-key' });
@@ -36,6 +40,7 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
+        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -84,6 +89,25 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.sources).toEqual([]);
+      }
+    });
+
+    it('handles usageMetadata with undefined token counts', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Content',
+        candidates: [],
+        usageMetadata: {
+          promptTokenCount: undefined,
+          candidatesTokenCount: undefined,
+        },
+      });
+
+      const client = createGeminiClient({ apiKey: 'test-key' });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
       }
     });
 
@@ -462,10 +486,14 @@ describe('createGeminiClient', () => {
   });
 
   describe('audit logging', () => {
-    it('calls audit context on success', async () => {
+    it('calls audit context on success with usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Response',
         candidates: [],
+        usageMetadata: {
+          promptTokenCount: 150,
+          candidatesTokenCount: 75,
+        },
       });
 
       const mockSuccess = vi.fn().mockResolvedValue(undefined);
@@ -483,7 +511,12 @@ describe('createGeminiClient', () => {
           method: 'research',
         })
       );
-      expect(mockSuccess).toHaveBeenCalled();
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 150,
+          outputTokens: 75,
+        })
+      );
     });
 
     it('calls audit context on error', async () => {

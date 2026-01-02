@@ -17,8 +17,8 @@ export interface Auth0Config {
  * Load Auth0 config from environment.
  */
 export function loadAuth0Config(): Auth0Config | null {
-  const domain = process.env['AUTH0_DOMAIN'];
-  const clientId = process.env['AUTH0_CLIENT_ID'];
+  const domain = process.env['INTEXURAOS_AUTH0_DOMAIN'];
+  const clientId = process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
 
   if (domain === undefined || domain === '' || clientId === undefined || clientId === '') {
     return null;

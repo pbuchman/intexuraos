@@ -21,13 +21,15 @@ terraform {
 }
 
 provider "google" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
 provider "google-beta" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
 # -----------------------------------------------------------------------------
@@ -82,7 +84,7 @@ variable "enable_load_balancer" {
 variable "web_app_domain" {
   description = "Domain name for the web app"
   type        = string
-  default     = "intexuraos.pbuchman.com"
+  default     = "intexuraos.cloud"
 }
 
 variable "audit_llms" {
@@ -92,10 +94,20 @@ variable "audit_llms" {
 }
 
 # -----------------------------------------------------------------------------
+# Data Sources
+# -----------------------------------------------------------------------------
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+# -----------------------------------------------------------------------------
 # Locals
 # -----------------------------------------------------------------------------
 
 locals {
+  project_number = data.google_project.current.number
+
   services = {
     user_service = {
       name      = "intexuraos-user-service"
@@ -156,6 +168,13 @@ locals {
     actions_agent = {
       name      = "intexuraos-actions-agent"
       app_path  = "apps/actions-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
+    data_insights_service = {
+      name      = "intexuraos-data-insights-service"
+      app_path  = "apps/data-insights-service"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -237,7 +256,11 @@ module "web_app" {
   enable_load_balancer = var.enable_load_balancer
   domain               = var.web_app_domain
 
-  depends_on = [google_project_service.apis]
+  use_custom_certificate    = true
+  ssl_certificate_path      = "${path.module}/../../certs/intexuraos.cloud/fullchain.pem"
+  ssl_private_key_secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
+
+  depends_on = [google_project_service.apis, module.secret_manager]
 }
 
 # -----------------------------------------------------------------------------
@@ -316,6 +339,14 @@ module "secret_manager" {
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
     "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
+    "INTEXURAOS_ACTIONS_AGENT_URL"                = "Actions Agent Cloud Run URL for commands-router"
+    "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
+    # Firebase configuration for web app
+    "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
+    "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"
+    "INTEXURAOS_FIREBASE_AUTH_DOMAIN" = "Firebase Auth domain"
+    # SSL certificate
+    "INTEXURAOS_SSL_PRIVATE_KEY" = "SSL certificate private key for intexuraos.cloud"
   }
 
   depends_on = [google_project_service.apis]
@@ -347,22 +378,26 @@ module "iam" {
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
-  source = "../../modules/pubsub"
+  source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-media-cleanup-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+  ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
-    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
-  }
-  subscriber_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
+    module.whatsapp_service,
   ]
 }
 
@@ -370,9 +405,10 @@ module "pubsub_media_cleanup" {
 module "pubsub_whatsapp_webhook_process" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-webhook-process-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-webhook-process-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -393,9 +429,10 @@ module "pubsub_whatsapp_webhook_process" {
 module "pubsub_whatsapp_transcription" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-whatsapp-transcription-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-transcription-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcribe-audio"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -416,9 +453,10 @@ module "pubsub_whatsapp_transcription" {
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-commands-ingest-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-commands-ingest-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.commands_router.service_url}/internal/router/commands"
   push_service_account_email = module.iam.service_accounts["commands_router"]
@@ -439,11 +477,12 @@ module "pubsub_commands_ingest" {
 module "pubsub_actions_research" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-actions-research-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-actions-research-${var.environment}"
+  labels         = local.common_labels
 
-  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/research"
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
   push_audience              = module.actions_agent.service_url
 
@@ -462,9 +501,10 @@ module "pubsub_actions_research" {
 module "pubsub_research_process" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-research-process-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-research-process-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
@@ -486,9 +526,10 @@ module "pubsub_research_process" {
 module "pubsub_llm_analytics" {
   source = "../../modules/pubsub-push"
 
-  project_id = var.project_id
-  topic_name = "intexuraos-llm-analytics-${var.environment}"
-  labels     = local.common_labels
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-llm-analytics-${var.environment}"
+  labels         = local.common_labels
 
   push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/report-analytics"
   push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
@@ -503,6 +544,56 @@ module "pubsub_llm_analytics" {
     google_project_service.apis,
     module.iam,
     module.llm_orchestrator,
+  ]
+}
+
+# Topic for individual LLM research calls (llm-orchestrator -> llm-orchestrator)
+module "pubsub_llm_call" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-llm-call-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-llm-call"
+  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
+  push_audience              = module.llm_orchestrator.service_url
+  ack_deadline_seconds       = 600
+
+  publisher_service_accounts = {
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.llm_orchestrator,
+  ]
+}
+
+# Topic for sending WhatsApp messages (actions-agent, llm-orchestrator -> whatsapp-service)
+module "pubsub_whatsapp_send" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-send-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+
+  publisher_service_accounts = {
+    actions_agent    = module.iam.service_accounts["actions_agent"]
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.whatsapp_service,
   ]
 }
 
@@ -527,18 +618,18 @@ module "user_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/user-service:latest"
 
   secrets = {
-    AUTH0_DOMAIN                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
-    AUTH0_CLIENT_ID                 = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
-    AUTH_JWKS_URL                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                     = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH0_DOMAIN         = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
+    INTEXURAOS_AUTH0_CLIENT_ID      = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
+    INTEXURAOS_AUTH_JWKS_URL        = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE        = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
     INTEXURAOS_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
   }
 
   depends_on = [
@@ -564,14 +655,14 @@ module "promptvault_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT          = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID     = var.project_id
     INTEXURAOS_NOTION_SERVICE_URL = module.notion_service.service_url
   }
 
@@ -600,14 +691,14 @@ module "notion_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notion-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
   }
 
   depends_on = [
@@ -635,9 +726,9 @@ module "whatsapp_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/whatsapp-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL                       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_WHATSAPP_VERIFY_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_VERIFY_TOKEN"]
     INTEXURAOS_WHATSAPP_APP_SECRET      = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_APP_SECRET"]
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN    = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_ACCESS_TOKEN"]
@@ -647,10 +738,10 @@ module "whatsapp_service" {
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT                         = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET             = module.whatsapp_media_bucket.bucket_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = module.pubsub_media_cleanup.topic_name
-    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = module.pubsub_media_cleanup.subscription_name
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC        = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION = "intexuraos-whatsapp-media-cleanup-${var.environment}-push"
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
@@ -662,7 +753,6 @@ module "whatsapp_service" {
     module.iam,
     module.secret_manager,
     module.whatsapp_media_bucket,
-    module.pubsub_media_cleanup,
     module.pubsub_commands_ingest,
   ]
 }
@@ -684,13 +774,13 @@ module "mobile_notifications_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
 
   secrets = {
-    AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER   = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
   }
 
   depends_on = [
@@ -718,14 +808,15 @@ module "api_docs_hub" {
 
   # Plain env vars for OpenAPI URLs (not secrets)
   env_vars = {
-    USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
-    PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
-    NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
-    WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
-    MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
-    LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
-    COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
-    ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
+    INTEXURAOS_USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
+    INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
+    INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
+    INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
+    INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
+    INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
+    INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
+    INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
+    INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -739,6 +830,7 @@ module "api_docs_hub" {
     module.llm_orchestrator,
     module.commands_router,
     module.actions_agent,
+    module.data_insights_service,
   ]
 }
 
@@ -760,17 +852,19 @@ module "llm_orchestrator" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator:latest"
 
   secrets = {
-    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    USER_SERVICE_URL               = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_USER_SERVICE_URL    = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT                     = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID                = var.project_id
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC = "intexuraos-research-process-${var.environment}"
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_LLM_CALL_TOPIC         = "intexuraos-llm-call-${var.environment}"
   }
 
   depends_on = [
@@ -797,15 +891,16 @@ module "commands_router" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-router:latest"
 
   secrets = {
-    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_ACTIONS_AGENT_URL   = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_URL"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
-    USER_SERVICE_URL     = module.user_service.service_url
+    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
+    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
   }
 
   depends_on = [
@@ -833,17 +928,20 @@ module "actions_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/actions-agent:latest"
 
   secrets = {
-    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
-    COMMANDS_ROUTER_URL  = module.commands_router.service_url
-    LLM_ORCHESTRATOR_URL = module.llm_orchestrator.service_url
-    USER_SERVICE_URL     = module.user_service.service_url
+    INTEXURAOS_GCP_PROJECT_ID                = var.project_id
+    INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL   = module.commands_router.service_url
+    INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
+    INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
+    INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   }
 
   depends_on = [
@@ -852,6 +950,42 @@ module "actions_agent" {
     module.secret_manager,
     module.commands_router,
     module.llm_orchestrator,
+    module.user_service,
+  ]
+}
+
+# Data Insights Service - Analytics aggregation from other services
+module "data_insights_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.data_insights_service.name
+  service_account = module.iam.service_accounts["data_insights_service"]
+  port            = local.services.data_insights_service.port
+  min_scale       = local.services.data_insights_service.min_scale
+  max_scale       = local.services.data_insights_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-service:latest"
+
+  secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
+    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
     module.user_service,
   ]
 }
@@ -953,8 +1087,117 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Scheduler - Retry Pending Actions
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_actions_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.actions_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.actions_agent]
+}
+
+resource "google_cloud_scheduler_job" "retry_pending_actions" {
+  name        = "intexuraos-retry-pending-actions-${var.environment}"
+  description = "Retry processing for actions stuck in pending status"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.actions_agent.service_url}/internal/actions/retry-pending"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.actions_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_actions_agent,
+    module.actions_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Firebase Authentication (Identity Platform)
+# -----------------------------------------------------------------------------
+
+resource "google_identity_platform_config" "default" {
+  provider = google-beta
+  project  = var.project_id
+
+  sign_in {
+    allow_duplicate_emails = false
+
+    anonymous {
+      enabled = false
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# -----------------------------------------------------------------------------
+# Firebase Web App
+# -----------------------------------------------------------------------------
+
+resource "google_firebase_web_app" "web" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "IntexuraOS Web (${var.environment})"
+
+  depends_on = [google_identity_platform_config.default]
+}
+
+data "google_firebase_web_app_config" "web" {
+  provider   = google-beta
+  project    = var.project_id
+  web_app_id = google_firebase_web_app.web.app_id
+}
+
+# Auto-populate Firebase secrets from Terraform
+resource "google_secret_manager_secret_version" "firebase_api_key" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_API_KEY"]
+  secret_data = data.google_firebase_web_app_config.web.api_key
+}
+
+resource "google_secret_manager_secret_version" "firebase_auth_domain" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_AUTH_DOMAIN"]
+  secret_data = data.google_firebase_web_app_config.web.auth_domain
+}
+
+resource "google_secret_manager_secret_version" "firebase_project_id" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_PROJECT_ID"]
+  secret_data = var.project_id
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
+
+output "firebase_api_key" {
+  description = "Firebase API key for web app"
+  value       = data.google_firebase_web_app_config.web.api_key
+  sensitive   = true
+}
+
+output "firebase_auth_domain" {
+  description = "Firebase Auth domain for web app"
+  value       = data.google_firebase_web_app_config.web.auth_domain
+}
 
 output "artifact_registry_url" {
   description = "Artifact Registry URL"
@@ -1004,6 +1247,11 @@ output "commands_router_url" {
 output "actions_agent_url" {
   description = "Actions Agent Service URL"
   value       = module.actions_agent.service_url
+}
+
+output "data_insights_service_url" {
+  description = "Data Insights Service URL"
+  value       = module.data_insights_service.service_url
 }
 
 output "firestore_database" {

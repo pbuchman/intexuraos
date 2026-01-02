@@ -1,6 +1,12 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { Action, ActionsResponse, Command, CommandsResponse } from '@/types';
+import type {
+  Action,
+  ActionsResponse,
+  Command,
+  CommandSourceType,
+  CommandsResponse,
+} from '@/types';
 
 export async function getCommands(
   accessToken: string,
@@ -33,7 +39,7 @@ export async function getActions(
   const queryString = params.toString();
   const path = queryString !== '' ? `/router/actions?${queryString}` : '/router/actions';
 
-  return await apiRequest<ActionsResponse>(config.commandsRouterServiceUrl, path, accessToken);
+  return await apiRequest<ActionsResponse>(config.actionsAgentUrl, path, accessToken);
 }
 
 export async function updateActionStatus(
@@ -42,7 +48,7 @@ export async function updateActionStatus(
   status: 'processing' | 'rejected'
 ): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
-    config.commandsRouterServiceUrl,
+    config.actionsAgentUrl,
     `/router/actions/${actionId}`,
     accessToken,
     {
@@ -55,7 +61,7 @@ export async function updateActionStatus(
 
 export async function deleteAction(accessToken: string, actionId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
-    config.commandsRouterServiceUrl,
+    config.actionsAgentUrl,
     `/router/actions/${actionId}`,
     accessToken,
     { method: 'DELETE' }
@@ -79,6 +85,41 @@ export async function archiveCommand(accessToken: string, commandId: string): Pr
     {
       method: 'PATCH',
       body: { status: 'archived' },
+    }
+  );
+  return response.command;
+}
+
+// 💰 CostGuard: Batch endpoint prevents N+1 API calls
+// Fetches up to 50 actions in single request instead of 50 individual requests
+export async function batchGetActions(accessToken: string, actionIds: string[]): Promise<Action[]> {
+  if (actionIds.length === 0) {
+    return [];
+  }
+
+  const response = await apiRequest<{ actions: Action[] }>(
+    config.actionsAgentUrl,
+    '/router/actions/batch',
+    accessToken,
+    {
+      method: 'POST',
+      body: { actionIds },
+    }
+  );
+  return response.actions;
+}
+
+export async function createCommand(
+  accessToken: string,
+  params: { text: string; source: CommandSourceType }
+): Promise<Command> {
+  const response = await apiRequest<{ command: Command }>(
+    config.commandsRouterServiceUrl,
+    '/router/commands',
+    accessToken,
+    {
+      method: 'POST',
+      body: params,
     }
   );
   return response.command;

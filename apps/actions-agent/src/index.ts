@@ -3,24 +3,30 @@ import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
-  'GOOGLE_CLOUD_PROJECT',
-  'AUTH_JWKS_URL',
-  'AUTH_ISSUER',
-  'AUTH_AUDIENCE',
-  'COMMANDS_ROUTER_URL',
-  'LLM_ORCHESTRATOR_URL',
-  'USER_SERVICE_URL',
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL',
+  'INTEXURAOS_LLM_ORCHESTRATOR_URL',
+  'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC',
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_WEB_APP_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   initServices({
-    commandsRouterUrl: process.env['COMMANDS_ROUTER_URL'] as string,
-    llmOrchestratorUrl: process.env['LLM_ORCHESTRATOR_URL'] as string,
-    userServiceUrl: process.env['USER_SERVICE_URL'] as string,
+    commandsRouterUrl: process.env['INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'] as string,
+    llmOrchestratorUrl: process.env['INTEXURAOS_LLM_ORCHESTRATOR_URL'] as string,
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
+    gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
+    whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] as string,
+    webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] as string,
   });
 
   const app = await buildServer();

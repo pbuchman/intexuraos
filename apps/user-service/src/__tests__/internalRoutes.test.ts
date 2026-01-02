@@ -11,16 +11,16 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeEncryptor, FakeUserSettingsRepository } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let jwksUrl: string;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
@@ -54,11 +54,11 @@ describe('Internal Routes', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();
@@ -279,6 +279,120 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(204);
       expect(response.body).toBe('');
+    });
+  });
+
+  describe('GET /internal/users/:uid/research-settings', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/research-settings',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when internal auth token is wrong', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/research-settings',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns default searchMode when user has no settings', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-no-settings/research-settings',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { searchMode: string };
+      expect(body.searchMode).toBe('deep');
+    });
+
+    it('returns default searchMode when repository fails', async () => {
+      fakeSettingsRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-error/research-settings',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { searchMode: string };
+      expect(body.searchMode).toBe('deep');
+    });
+
+    it('returns default searchMode when settings exist but no researchSettings', async () => {
+      const userId = 'user-no-research-settings';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/research-settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { searchMode: string };
+      expect(body.searchMode).toBe('deep');
+    });
+
+    it('returns configured searchMode from user settings', async () => {
+      const userId = 'user-with-research-settings';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        researchSettings: { searchMode: 'quick' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/research-settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { searchMode: string };
+      expect(body.searchMode).toBe('quick');
     });
   });
 });

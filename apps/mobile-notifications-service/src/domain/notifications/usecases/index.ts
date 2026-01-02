@@ -20,7 +20,3 @@ export {
   type DeleteNotificationInput,
   type DeleteNotificationError,
 } from './deleteNotification.js';
-export {
-  getDistinctFilterValues,
-  type GetDistinctFilterValuesInput,
-} from './getDistinctFilterValues.js';

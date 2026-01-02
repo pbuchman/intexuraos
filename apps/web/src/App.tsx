@@ -6,6 +6,8 @@ import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/componen
 import { config } from '@/config';
 import {
   ApiKeysSettingsPage,
+  DataSourceFormPage,
+  DataSourcesListPage,
   HomePage,
   InboxPage,
   LlmOrchestratorPage,
@@ -15,6 +17,7 @@ import {
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
+  ShareTargetPage,
   SystemHealthPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
@@ -152,12 +155,45 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
+      {/* Data Insights routes */}
+      <Route
+        path="/data-insights"
+        element={
+          <ProtectedRoute>
+            <DataSourcesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/new"
+        element={
+          <ProtectedRoute>
+            <DataSourceFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/:id"
+        element={
+          <ProtectedRoute>
+            <DataSourceFormPage />
+          </ProtectedRoute>
+        }
+      />
       {/* Feature routes */}
       <Route
         path="/inbox"
         element={
           <ProtectedRoute>
             <InboxPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/share-target"
+        element={
+          <ProtectedRoute>
+            <ShareTargetPage />
           </ProtectedRoute>
         }
       />

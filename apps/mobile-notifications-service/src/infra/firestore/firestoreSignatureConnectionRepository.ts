@@ -106,7 +106,12 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
   async findByUserId(userId: string): Promise<Result<SignatureConnection[], RepositoryError>> {
     try {
       const db = getFirestore();
-      const snapshot = await db.collection(COLLECTION_NAME).where('userId', '==', userId).get();
+      // 💰 CostGuard: Limit to 100 devices per user (reasonable upper bound)
+      const snapshot = await db
+        .collection(COLLECTION_NAME)
+        .where('userId', '==', userId)
+        .limit(100)
+        .get();
 
       const connections: SignatureConnection[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data() as SignatureConnectionDoc;

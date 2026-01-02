@@ -249,6 +249,15 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
   }
 
+  findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>> {
+    const mapping = this.mappings.get(userId);
+    if (mapping === undefined) return Promise.resolve(ok(null));
+    if (!mapping.connected) return Promise.resolve(ok(null));
+    const firstPhone = mapping.phoneNumbers[0];
+    if (firstPhone === undefined) return Promise.resolve(ok(null));
+    return Promise.resolve(ok(firstPhone));
+  }
+
   disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
     if (this.shouldFailDisconnect) {
       return Promise.resolve(

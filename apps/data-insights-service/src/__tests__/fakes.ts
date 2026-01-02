@@ -1,0 +1,177 @@
+/**
+ * Fake repositories for data-insights-service testing.
+ *
+ * These fakes implement domain port interfaces with in-memory storage.
+ */
+import type { Result } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
+import type {
+  DataSource,
+  DataSourceRepository,
+  CreateDataSourceRequest,
+  UpdateDataSourceRequest,
+} from '../domain/dataSource/index.js';
+import type {
+  TitleGenerationService,
+  TitleGenerationError,
+} from '../infra/gemini/titleGenerationService.js';
+
+/**
+ * Fake DataSource repository for testing.
+ */
+export class FakeDataSourceRepository implements DataSourceRepository {
+  private dataSources = new Map<string, DataSource>();
+  private idCounter = 1;
+  private shouldFailCreate = false;
+  private shouldFailGet = false;
+  private shouldFailList = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
+
+  setFailNextCreate(fail: boolean): void {
+    this.shouldFailCreate = fail;
+  }
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextList(fail: boolean): void {
+    this.shouldFailList = fail;
+  }
+
+  setFailNextUpdate(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  create(userId: string, request: CreateDataSourceRequest): Promise<Result<DataSource, string>> {
+    if (this.shouldFailCreate) {
+      this.shouldFailCreate = false;
+      return Promise.resolve(err('Simulated create failure'));
+    }
+
+    const id = `ds-${String(this.idCounter++)}`;
+    const now = new Date();
+    const dataSource: DataSource = {
+      id,
+      userId,
+      title: request.title,
+      content: request.content,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.dataSources.set(id, dataSource);
+    return Promise.resolve(ok(dataSource));
+  }
+
+  getById(id: string, userId: string): Promise<Result<DataSource | null, string>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err('Simulated get failure'));
+    }
+
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(ok(null));
+    }
+
+    return Promise.resolve(ok(dataSource));
+  }
+
+  listByUserId(userId: string): Promise<Result<DataSource[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return Promise.resolve(err('Simulated list failure'));
+    }
+
+    const dataSources = Array.from(this.dataSources.values())
+      .filter((ds) => ds.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return Promise.resolve(ok(dataSources));
+  }
+
+  update(
+    id: string,
+    userId: string,
+    request: UpdateDataSourceRequest
+  ): Promise<Result<DataSource, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err('Simulated update failure'));
+    }
+
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(err('Data source not found'));
+    }
+
+    const updated: DataSource = {
+      ...dataSource,
+      title: request.title ?? dataSource.title,
+      content: request.content ?? dataSource.content,
+      updatedAt: new Date(),
+    };
+
+    this.dataSources.set(id, updated);
+    return Promise.resolve(ok(updated));
+  }
+
+  delete(id: string, userId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err('Simulated delete failure'));
+    }
+
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(err('Data source not found'));
+    }
+
+    this.dataSources.delete(id);
+    return Promise.resolve(ok(undefined));
+  }
+
+  clear(): void {
+    this.dataSources.clear();
+    this.idCounter = 1;
+  }
+
+  getAll(): DataSource[] {
+    return Array.from(this.dataSources.values());
+  }
+
+  addDataSource(dataSource: DataSource): void {
+    this.dataSources.set(dataSource.id, dataSource);
+  }
+}
+
+/**
+ * Fake TitleGenerationService for testing.
+ */
+export class FakeTitleGenerationService implements TitleGenerationService {
+  private generatedTitle = 'Generated Test Title';
+  private errorToReturn: TitleGenerationError | null = null;
+
+  setGeneratedTitle(title: string): void {
+    this.generatedTitle = title;
+  }
+
+  setError(error: TitleGenerationError | null): void {
+    this.errorToReturn = error;
+  }
+
+  generateTitle(_userId: string, _content: string): Promise<Result<string, TitleGenerationError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    return Promise.resolve(ok(this.generatedTitle));
+  }
+}

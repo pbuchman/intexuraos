@@ -3,6 +3,11 @@ variable "project_id" {
   type        = string
 }
 
+variable "project_number" {
+  description = "GCP project number (for Pub/Sub service account IAM)"
+  type        = string
+}
+
 variable "topic_name" {
   description = "Name for the Pub/Sub topic"
   type        = string

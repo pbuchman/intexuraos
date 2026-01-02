@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import {
   disconnectUserMapping,
+  findPhoneByUserId,
   findUserByPhoneNumber,
   getUserMapping,
   isUserConnected,
@@ -184,6 +185,40 @@ describe('userMappingRepository', () => {
     });
   });
 
+  describe('findPhoneByUserId', () => {
+    it('returns null for non-existent user', async () => {
+      const result = await findPhoneByUserId('unknown');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns null for disconnected user', async () => {
+      await saveUserMapping('user-123', ['15551234567']);
+      await disconnectUserMapping('user-123');
+
+      const result = await findPhoneByUserId('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns first phone number for connected user', async () => {
+      await saveUserMapping('user-123', ['15551234567', '15559999999']);
+
+      const result = await findPhoneByUserId('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('15551234567');
+      }
+    });
+  });
+
   describe('error handling', () => {
     it('returns error when saveUserMapping fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('DB error') });
@@ -234,6 +269,17 @@ describe('userMappingRepository', () => {
       fakeFirestore.configure({ errorToThrow: new Error('Read error') });
 
       const result = await isUserConnected('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERSISTENCE_ERROR');
+      }
+    });
+
+    it('returns error when findPhoneByUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await findPhoneByUserId('user-123');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

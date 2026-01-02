@@ -21,6 +21,7 @@
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@intexuraos/infra-firestore": "*",
+    "@intexuraos/infra-pubsub": "*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"

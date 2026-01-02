@@ -64,13 +64,13 @@ Create `.env.local` in the repository root (gitignored):
 # DO NOT COMMIT THIS FILE
 
 # GCP Project (for Firestore and Secret Manager)
-GOOGLE_CLOUD_PROJECT=your-project-id
+INTEXURAOS_GCP_PROJECT_ID=your-project-id
 
 # Auth configuration (can use secrets or direct values for local)
 # Option A: Direct values (faster, no GCP calls)
-AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
-AUTH_ISSUER=https://your-tenant.auth0.com/
-AUTH_AUDIENCE=urn:intexuraos:api
+INTEXURAOS_AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
+INTEXURAOS_AUTH_ISSUER=https://your-tenant.auth0.com/
+INTEXURAOS_AUTH_AUDIENCE=urn:intexuraos:api
 
 # Option B: Use Secret Manager (comment out Option A)
 # AUTH_USE_SECRET_MANAGER=true

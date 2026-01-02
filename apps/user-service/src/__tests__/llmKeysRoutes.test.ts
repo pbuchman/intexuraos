@@ -18,16 +18,16 @@ import {
   FakeUserSettingsRepository,
 } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('LLM Keys Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let privateKey: jose.KeyLike;
   let jwksUrl: string;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
@@ -39,7 +39,7 @@ describe('LLM Keys Routes', () => {
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
-      .setAudience(AUTH_AUDIENCE)
+      .setAudience(INTEXURAOS_AUTH_AUDIENCE)
       .setExpirationTime('1h');
 
     return await builder.sign(privateKey);
@@ -74,11 +74,11 @@ describe('LLM Keys Routes', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
     clearJwksCache();
 
@@ -896,6 +896,46 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-anthropic';
+      const anthropicKey = 'sk-ant-api1234567890abcdefgh';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          anthropic: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      fakeLlmValidator.setTestResponse('Hello! I am Claude.');
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/anthropic/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string; testedAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! I am Claude.');
     });
 
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {

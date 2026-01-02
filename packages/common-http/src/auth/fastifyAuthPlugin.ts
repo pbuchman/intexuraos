@@ -55,7 +55,7 @@ export async function requireAuth(
   if (jwtConfig === null) {
     void reply.fail(
       'MISCONFIGURED',
-      'Authentication is not configured. Set AUTH_JWKS_URL, AUTH_ISSUER, AUTH_AUDIENCE.'
+      'Authentication is not configured. Set INTEXURAOS_AUTH_JWKS_URL, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_AUDIENCE.'
     );
     return null;
   }
@@ -128,9 +128,9 @@ const authPlugin: FastifyPluginCallback = (
   _opts: Record<string, unknown>,
   done: (err?: Error) => void
 ): void => {
-  const jwksUrl = process.env['AUTH_JWKS_URL'];
-  const issuer = process.env['AUTH_ISSUER'];
-  const audience = process.env['AUTH_AUDIENCE'];
+  const jwksUrl = process.env['INTEXURAOS_AUTH_JWKS_URL'];
+  const issuer = process.env['INTEXURAOS_AUTH_ISSUER'];
+  const audience = process.env['INTEXURAOS_AUTH_AUDIENCE'];
 
   if (
     jwksUrl !== undefined &&
@@ -149,7 +149,9 @@ const authPlugin: FastifyPluginCallback = (
     fastify.log.info('JWT auth configured with JWKS URL: %s', jwksUrl);
   } else {
     fastify.decorate('jwtConfig', null);
-    fastify.log.warn('JWT auth not configured. Set AUTH_JWKS_URL, AUTH_ISSUER, AUTH_AUDIENCE.');
+    fastify.log.warn(
+      'JWT auth not configured. Set INTEXURAOS_AUTH_JWKS_URL, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_AUDIENCE.'
+    );
   }
 
   done();

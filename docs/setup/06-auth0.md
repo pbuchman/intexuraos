@@ -45,7 +45,7 @@ The API defines the audience identifier used for token validation.
 2. Click **Create API**
 3. Configure:
    - **Name**: `IntexuraOS API`
-   - **Identifier**: `urn:intexuraos:api` (this is your `AUTH_AUDIENCE`)
+   - **Identifier**: `urn:intexuraos:api` (this is your `INTEXURAOS_AUTH_AUDIENCE`)
    - **Signing Algorithm**: `RS256`
 4. Click **Create**
 
@@ -76,7 +76,7 @@ This application is for **testing APIs via Swagger UI** and CLI tools using Devi
 ### Application Settings
 
 1. Go to **Settings** tab
-2. Note the **Client ID** (this is your `AUTH0_CLIENT_ID`)
+2. Note the **Client ID** (this is your `INTEXURAOS_AUTH0_CLIENT_ID`)
 3. Scroll to **Application URIs**:
    - No callback URLs needed for Device Flow
 4. Scroll to **Advanced Settings** → **Grant Types**
@@ -207,12 +207,12 @@ The provided redirect_uri is not in the list of allowed callback URLs.
 
 From your tenant domain, derive:
 
-| Variable        | Value                                                    |
-| --------------- | -------------------------------------------------------- |
-| `AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
-| `AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
-| `AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_AUDIENCE` | `urn:intexuraos:api` (from API Identifier)               |
+| Variable                   | Value                                                    |
+| -------------------------- | -------------------------------------------------------- |
+| `INTEXURAOS_AUTH0_DOMAIN`  | `your-tenant.eu.auth0.com`                               |
+| `INTEXURAOS_AUTH_ISSUER`   | `https://your-tenant.eu.auth0.com/`                      |
+| `INTEXURAOS_AUTH_JWKS_URL` | `https://your-tenant.eu.auth0.com/.well-known/jwks.json` |
+| `INTEXURAOS_AUTH_AUDIENCE` | `urn:intexuraos:api` (from API Identifier)               |
 
 ## 6. Generate Encryption Key for Refresh Tokens
 
@@ -243,27 +243,27 @@ Terraform creates the secrets; you populate them with actual values using `gclou
 export PROJECT_ID=your-gcp-project-id
 
 # Set your Auth0 configuration values
-export AUTH0_DOMAIN="your-tenant.eu.auth0.com"
-export AUTH0_CLIENT_ID="your-native-app-client-id"
+export INTEXURAOS_AUTH0_DOMAIN="your-tenant.eu.auth0.com"
+export INTEXURAOS_AUTH0_CLIENT_ID="your-native-app-client-id"
 export AUTH0_AUDIENCE="urn:intexuraos:api"
 export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
 
 # Populate secret versions (Terraform created the secrets, we add values)
 
 # Auth0 domain (tenant) - required for user-service DAF endpoints
-echo -n "${AUTH0_DOMAIN}" | \
+echo -n "${INTEXURAOS_AUTH0_DOMAIN}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
 
 # Auth0 client ID (from Native app) - required for user-service DAF endpoints
-echo -n "${AUTH0_CLIENT_ID}" | \
+echo -n "${INTEXURAOS_AUTH0_CLIENT_ID}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=- --project=$PROJECT_ID
 
 # Auth JWKS URL - required for JWT verification
-echo -n "https://${AUTH0_DOMAIN}/.well-known/jwks.json" | \
+echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/.well-known/jwks.json" | \
   gcloud secrets versions add INTEXURAOS_AUTH_JWKS_URL --data-file=- --project=$PROJECT_ID
 
 # Auth issuer - required for JWT verification
-echo -n "https://${AUTH0_DOMAIN}/" | \
+echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/" | \
   gcloud secrets versions add INTEXURAOS_AUTH_ISSUER --data-file=- --project=$PROJECT_ID
 
 # Auth audience - required for JWT verification
@@ -482,7 +482,7 @@ curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
 
 **Causes:**
 
-- `AUTH_AUDIENCE` doesn't match API Identifier in Auth0
+- `INTEXURAOS_AUTH_AUDIENCE` doesn't match API Identifier in Auth0
 - Missing trailing slash or protocol mismatch
 
 **Fix:** Verify API Identifier in Auth0 Dashboard matches exactly.
@@ -493,7 +493,7 @@ curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
 
 **Causes:**
 
-- `AUTH_ISSUER` doesn't include trailing slash
+- `INTEXURAOS_AUTH_ISSUER` doesn't include trailing slash
 - Wrong region in domain (e.g., `.us.` vs `.eu.`)
 
 **Fix:** Use exact format: `https://your-tenant.region.auth0.com/`
@@ -542,7 +542,7 @@ curl -X POST "https://your-tenant.eu.auth0.com/api/v2/device-credentials/{id}" \
 
 **Causes:**
 
-- `AUTH_JWKS_URL` points to wrong tenant
+- `INTEXURAOS_AUTH_JWKS_URL` points to wrong tenant
 - JWKS endpoint unreachable
 
 **Fix:** Verify JWKS URL is accessible:
@@ -562,11 +562,11 @@ curl https://your-tenant.eu.auth0.com/.well-known/jwks.json
 **Fix:** Set all required environment variables:
 
 ```bash
-export AUTH0_DOMAIN=your-tenant.eu.auth0.com
-export AUTH0_CLIENT_ID=your-client-id
-export AUTH_JWKS_URL=https://your-tenant.eu.auth0.com/.well-known/jwks.json
-export AUTH_ISSUER=https://your-tenant.eu.auth0.com/
-export AUTH_AUDIENCE=urn:intexuraos:api
+export INTEXURAOS_AUTH0_DOMAIN=your-tenant.eu.auth0.com
+export INTEXURAOS_AUTH0_CLIENT_ID=your-client-id
+export INTEXURAOS_AUTH_JWKS_URL=https://your-tenant.eu.auth0.com/.well-known/jwks.json
+export INTEXURAOS_AUTH_ISSUER=https://your-tenant.eu.auth0.com/
+export INTEXURAOS_AUTH_AUDIENCE=urn:intexuraos:api
 export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 ```
 
@@ -597,20 +597,20 @@ export INTEXURAOS_TOKEN_ENCRYPTION_KEY=your-base64-key
 
 | Variable                          | Description                               | Example                                                     |
 | --------------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
-| `AUTH0_DOMAIN`                    | Auth0 tenant domain                       | `intexuraos-dev.eu.auth0.com`                               |
-| `AUTH0_CLIENT_ID`                 | Native app client ID                      | `abc123...`                                                 |
-| `AUTH_AUDIENCE`                   | API identifier (default for device flow)  | `urn:intexuraos:api`                                        |
-| `AUTH_JWKS_URL`                   | JWKS endpoint URL for token verification  | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`                     | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
+| `INTEXURAOS_AUTH0_DOMAIN`         | Auth0 tenant domain                       | `intexuraos-dev.eu.auth0.com`                               |
+| `INTEXURAOS_AUTH0_CLIENT_ID`      | Native app client ID                      | `abc123...`                                                 |
+| `INTEXURAOS_AUTH_AUDIENCE`        | API identifier (default for device flow)  | `urn:intexuraos:api`                                        |
+| `INTEXURAOS_AUTH_JWKS_URL`        | JWKS endpoint URL for token verification  | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `INTEXURAOS_AUTH_ISSUER`          | Token issuer for verification             | `https://intexuraos-dev.eu.auth0.com/`                      |
 | `INTEXURAOS_TOKEN_ENCRYPTION_KEY` | AES-256 encryption key (base64, 32 bytes) | `k7J9mL2nP4qR6s...`                                         |
 
 ### promptvault-service (and other protected services)
 
-| Variable        | Description       | Example                                                     |
-| --------------- | ----------------- | ----------------------------------------------------------- |
-| `AUTH_JWKS_URL` | JWKS endpoint URL | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`   | Token issuer      | `https://intexuraos-dev.eu.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected audience | `urn:intexuraos:api`                                        |
+| Variable                   | Description       | Example                                                     |
+| -------------------------- | ----------------- | ----------------------------------------------------------- |
+| `INTEXURAOS_AUTH_JWKS_URL` | JWKS endpoint URL | `https://intexuraos-dev.eu.auth0.com/.well-known/jwks.json` |
+| `INTEXURAOS_AUTH_ISSUER`   | Token issuer      | `https://intexuraos-dev.eu.auth0.com/`                      |
+| `INTEXURAOS_AUTH_AUDIENCE` | Expected audience | `urn:intexuraos:api`                                        |
 
 ## 13. Troubleshooting Checklist
 

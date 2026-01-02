@@ -3,7 +3,7 @@ import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { HandleResearchActionUseCase } from './handleResearchAction.js';
 
 export interface ActionHandler {
-  execute(event: ActionCreatedEvent): Promise<Result<{ researchId: string }>>;
+  execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
 }
 
 export interface ActionHandlerRegistry {

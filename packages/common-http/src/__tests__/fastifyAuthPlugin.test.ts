@@ -32,9 +32,9 @@ describe('Fastify Auth Plugin', () => {
 
   describe('plugin registration', () => {
     it('configures JWT when all env vars are set', async () => {
-      process.env['AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://auth.example.com/';
-      process.env['AUTH_AUDIENCE'] = 'https://api.example.com';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.example.com';
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -48,9 +48,9 @@ describe('Fastify Auth Plugin', () => {
     });
 
     it('sets jwtConfig to null when env vars are missing', async () => {
-      delete process.env['AUTH_JWKS_URL'];
-      delete process.env['AUTH_ISSUER'];
-      delete process.env['AUTH_AUDIENCE'];
+      delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
+      delete process.env['INTEXURAOS_AUTH_ISSUER'];
+      delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -60,9 +60,9 @@ describe('Fastify Auth Plugin', () => {
     });
 
     it('sets jwtConfig to null when env vars are empty strings', async () => {
-      process.env['AUTH_JWKS_URL'] = '';
-      process.env['AUTH_ISSUER'] = '';
-      process.env['AUTH_AUDIENCE'] = '';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = '';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = '';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = '';
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -72,9 +72,9 @@ describe('Fastify Auth Plugin', () => {
     });
 
     it('sets jwtConfig to null when only some env vars are set', async () => {
-      process.env['AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
-      delete process.env['AUTH_ISSUER'];
-      process.env['AUTH_AUDIENCE'] = 'https://api.example.com';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
+      delete process.env['INTEXURAOS_AUTH_ISSUER'];
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.example.com';
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -86,9 +86,9 @@ describe('Fastify Auth Plugin', () => {
 
   describe('requireAuth', () => {
     beforeEach(async () => {
-      process.env['AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://auth.example.com/';
-      process.env['AUTH_AUDIENCE'] = 'https://api.example.com';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.example.com';
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -123,7 +123,7 @@ describe('Fastify Auth Plugin', () => {
     it('returns null and sends MISCONFIGURED when jwtConfig is null', async () => {
       // Create a new app without auth config
       await app.close();
-      delete process.env['AUTH_JWKS_URL'];
+      delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -279,9 +279,9 @@ describe('Fastify Auth Plugin', () => {
 
   describe('tryAuth', () => {
     beforeEach(async () => {
-      process.env['AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://auth.example.com/';
-      process.env['AUTH_AUDIENCE'] = 'https://api.example.com';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.example.com';
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);
@@ -317,7 +317,7 @@ describe('Fastify Auth Plugin', () => {
 
     it('returns null when jwtConfig is null', async () => {
       await app.close();
-      delete process.env['AUTH_JWKS_URL'];
+      delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
 
       app = Fastify({ logger: false });
       await app.register(intexuraFastifyPlugin);

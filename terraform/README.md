@@ -40,7 +40,7 @@ terraform apply
 ## Modules
 
 | Module              | Purpose                                           |
-|---------------------|---------------------------------------------------|
+| ------------------- | ------------------------------------------------- |
 | `artifact-registry` | Docker image registry for Cloud Run services      |
 | `cloud-build`       | CI/CD trigger for automatic deployments           |
 | `cloud-run-service` | Cloud Run service with Secret Manager integration |

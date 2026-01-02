@@ -44,6 +44,7 @@ describe('createClaudeClient', () => {
           { type: 'text', text: 'Research findings about AI.' },
           { type: 'text', text: 'See https://example.com for more.' },
         ],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
@@ -53,6 +54,7 @@ describe('createClaudeClient', () => {
       if (result.ok) {
         expect(result.value.content).toContain('Research findings about AI');
         expect(result.value.sources).toContain('https://example.com');
+        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -71,6 +73,7 @@ describe('createClaudeClient', () => {
             content: [{ url: 'https://source1.com' }, { url: 'https://source2.com' }],
           },
         ],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
@@ -92,6 +95,7 @@ describe('createClaudeClient', () => {
             content: 'encrypted_content_string',
           },
         ],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
@@ -107,6 +111,7 @@ describe('createClaudeClient', () => {
     it('deduplicates sources', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'See https://example.com and https://example.com again.' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
@@ -437,6 +442,7 @@ describe('createClaudeClient', () => {
     it('calls audit context on success', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const mockSuccess = vi.fn().mockResolvedValue(undefined);

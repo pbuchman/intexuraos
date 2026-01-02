@@ -17,9 +17,9 @@ describe('user-service OpenAPI contract', () => {
 
   beforeAll(async () => {
     // Set required env vars
-    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-    process.env['AUTH0_CLIENT_ID'] = 'test-client';
-    process.env['AUTH_AUDIENCE'] = 'https://api.test.com';
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.test.com';
 
     app = await buildServer();
     const response = await app.inject({
@@ -31,9 +31,9 @@ describe('user-service OpenAPI contract', () => {
 
   afterAll(async () => {
     await app.close();
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
   });
 
   it('has no "Default Response" placeholders', () => {

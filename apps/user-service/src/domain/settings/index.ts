@@ -2,7 +2,7 @@
  * User-service domain layer - Settings module.
  *
  * Provides:
- * - models/    Domain entities (UserSettings, NotificationFilter, SettingsError)
+ * - models/    Domain entities (UserSettings, SettingsError)
  * - ports/     Interfaces for external dependencies (UserSettingsRepository)
  * - usecases/  Business logic (getUserSettings, updateUserSettings)
  */
@@ -10,12 +10,14 @@
 // Models
 export type {
   UserSettings,
-  NotificationFilter,
-  NotificationSettings,
   LlmProvider,
   LlmApiKeys,
   LlmTestResult,
   LlmTestResults,
+  SearchMode,
+  ResearchSettings,
+  NotificationFilter,
+  NotificationSettings,
 } from './models/UserSettings.js';
 export { createDefaultSettings } from './models/UserSettings.js';
 export type { SettingsError, SettingsErrorCode } from './models/SettingsError.js';

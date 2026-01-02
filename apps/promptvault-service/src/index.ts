@@ -2,10 +2,10 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 
 const REQUIRED_ENV = [
-  'GOOGLE_CLOUD_PROJECT',
-  'AUTH_JWKS_URL',
-  'AUTH_ISSUER',
-  'AUTH_AUDIENCE',
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_NOTION_SERVICE_URL',
 ];
 

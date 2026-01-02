@@ -1,4 +1,4 @@
-export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
+export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
 export type CommandStatus =
   | 'received'
   | 'classified'
