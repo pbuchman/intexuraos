@@ -3,7 +3,11 @@
  */
 
 import { ok, type Result } from '@intexuraos/common-core';
-import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
+import type {
+  LlmProvider,
+  NotificationError,
+  NotificationSender,
+} from '../../domain/research/index.js';
 
 export class NoopNotificationSender implements NotificationSender {
   sendResearchComplete(
@@ -11,7 +15,15 @@ export class NoopNotificationSender implements NotificationSender {
     _researchId: string,
     _title: string
   ): Promise<Result<void, NotificationError>> {
-    /* Silently succeed - notifications are optional */
+    return Promise.resolve(ok(undefined));
+  }
+
+  sendLlmFailure(
+    _userId: string,
+    _researchId: string,
+    _provider: LlmProvider,
+    _error: string
+  ): Promise<Result<void, NotificationError>> {
     return Promise.resolve(ok(undefined));
   }
 }

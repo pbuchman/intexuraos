@@ -3,7 +3,24 @@
  */
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
-export type ResearchStatus = 'draft' | 'pending' | 'processing' | 'completed' | 'failed';
+export type ResearchStatus =
+  | 'draft'
+  | 'pending'
+  | 'processing'
+  | 'awaiting_confirmation'
+  | 'retrying'
+  | 'synthesizing'
+  | 'completed'
+  | 'failed';
+
+export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
+
+export interface PartialFailure {
+  failedProviders: LlmProvider[];
+  userDecision?: PartialFailureDecision;
+  detectedAt: string;
+  retryCount: number;
+}
 
 /**
  * Individual LLM result within a research.
@@ -44,6 +61,7 @@ export interface Research {
   inputContexts?: InputContext[];
   synthesizedResult?: string;
   synthesisError?: string;
+  partialFailure?: PartialFailure;
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
@@ -75,4 +93,12 @@ export interface SaveDraftRequest {
 export interface ListResearchesResponse {
   items: Research[];
   nextCursor?: string;
+}
+
+/**
+ * Response from confirming partial failure action.
+ */
+export interface ConfirmPartialFailureResponse {
+  action: PartialFailureDecision;
+  message: string;
 }

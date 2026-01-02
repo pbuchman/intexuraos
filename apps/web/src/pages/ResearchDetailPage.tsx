@@ -1,14 +1,32 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle, Clock, FileText, Loader2, Play, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  FileText,
+  Loader2,
+  Play,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useResearch } from '@/hooks';
-import { approveResearch, deleteResearch } from '@/services/llmOrchestratorApi';
-import type { LlmResult, ResearchStatus } from '@/services/llmOrchestratorApi.types';
+import {
+  approveResearch,
+  confirmPartialFailure,
+  deleteResearch,
+} from '@/services/llmOrchestratorApi';
+import type {
+  LlmResult,
+  PartialFailure,
+  PartialFailureDecision,
+  ResearchStatus,
+} from '@/services/llmOrchestratorApi.types';
 
 /**
  * Format elapsed time in a human-readable format.
@@ -76,6 +94,30 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
       <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Processing
+      </span>
+    );
+  }
+  if (status === 'awaiting_confirmation') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-sm font-medium text-orange-700">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        Action Required
+      </span>
+    );
+  }
+  if (status === 'retrying') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        Retrying
+      </span>
+    );
+  }
+  if (status === 'synthesizing') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-2.5 py-1 text-sm font-medium text-purple-700">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Synthesizing
       </span>
     );
   }
@@ -151,6 +193,8 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -195,6 +239,23 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
+  const handleConfirm = async (action: PartialFailureDecision): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setConfirming(true);
+    setConfirmError(null);
+
+    try {
+      const token = await getAccessToken();
+      await confirmPartialFailure(token, id, action);
+      await refresh();
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : 'Failed to confirm action');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -218,8 +279,13 @@ export function ResearchDetailPage(): React.JSX.Element {
     );
   }
 
-  const isProcessing = research.status === 'pending' || research.status === 'processing';
-  const showLlmStatus = isProcessing || research.status === 'failed';
+  const isProcessing =
+    research.status === 'pending' ||
+    research.status === 'processing' ||
+    research.status === 'retrying' ||
+    research.status === 'synthesizing';
+  const showLlmStatus =
+    isProcessing || research.status === 'failed' || research.status === 'awaiting_confirmation';
 
   const getDisplayTitle = (): string => {
     if (research.title !== '') {
@@ -244,7 +310,7 @@ export function ResearchDetailPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900">{getDisplayTitle()}</h2>
           <ResearchStatusBadge status={research.status} />
           <span className="text-sm text-slate-500">
-            {research.status === 'pending' || research.status === 'processing'
+            {isProcessing || research.status === 'awaiting_confirmation'
               ? `Started ${formatElapsedTime(research.startedAt)}`
               : research.completedAt !== undefined
                 ? `Finished ${formatElapsedTime(research.completedAt)}`
@@ -267,7 +333,7 @@ export function ResearchDetailPage(): React.JSX.Element {
             <Button
               variant="secondary"
               onClick={(): void => {
-                void navigate(`/#/research/new?draftId=${research.id}`);
+                void navigate(`/research/new?draftId=${research.id}`);
               }}
               disabled={deleting}
             >
@@ -368,6 +434,15 @@ export function ResearchDetailPage(): React.JSX.Element {
         <ProcessingStatus
           llmResults={research.llmResults}
           title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
+        />
+      ) : null}
+
+      {research.status === 'awaiting_confirmation' && research.partialFailure !== undefined ? (
+        <PartialFailureConfirmation
+          partialFailure={research.partialFailure}
+          onConfirm={handleConfirm}
+          confirming={confirming}
+          error={confirmError}
         />
       ) : null}
 
@@ -572,5 +647,89 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
         </div>
       ) : null}
     </div>
+  );
+}
+
+interface PartialFailureConfirmationProps {
+  partialFailure: PartialFailure;
+  onConfirm: (action: PartialFailureDecision) => Promise<void>;
+  confirming: boolean;
+  error: string | null;
+}
+
+function PartialFailureConfirmation({
+  partialFailure,
+  onConfirm,
+  confirming,
+  error,
+}: PartialFailureConfirmationProps): React.JSX.Element {
+  const failedProviders = partialFailure.failedProviders
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(', ');
+
+  const canRetry = partialFailure.retryCount < 2;
+
+  return (
+    <Card className="mb-6 border-orange-200 bg-orange-50">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+        <div className="flex-1">
+          <h3 className="font-semibold text-orange-800">Partial Failure Detected</h3>
+          <p className="mt-1 text-sm text-orange-700">
+            {failedProviders} failed during research. You can proceed with available results, retry
+            the failed providers, or cancel.
+          </p>
+
+          {partialFailure.retryCount > 0 ? (
+            <p className="mt-2 text-sm text-orange-600">
+              Retry attempts: {String(partialFailure.retryCount)}/2
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button
+              onClick={(): void => {
+                void onConfirm('proceed');
+              }}
+              disabled={confirming}
+              isLoading={confirming}
+            >
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Proceed with Available
+            </Button>
+
+            {canRetry ? (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  void onConfirm('retry');
+                }}
+                disabled={confirming}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry Failed ({failedProviders})
+              </Button>
+            ) : null}
+
+            <Button
+              variant="danger"
+              onClick={(): void => {
+                void onConfirm('cancel');
+              }}
+              disabled={confirming}
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              Cancel Research
+            </Button>
+          </div>
+
+          {error !== null && error !== '' ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -406,8 +406,7 @@ export function Sidebar(): React.JSX.Element {
           {/* System Health */}
           <div className="pt-2">
             <NavLink
-              to="/"
-              end
+              to="/system-health"
               className={({ isActive }): string =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive

@@ -33,7 +33,7 @@ export async function getActions(
   const queryString = params.toString();
   const path = queryString !== '' ? `/router/actions?${queryString}` : '/router/actions';
 
-  return await apiRequest<ActionsResponse>(config.commandsRouterServiceUrl, path, accessToken);
+  return await apiRequest<ActionsResponse>(config.actionsAgentUrl, path, accessToken);
 }
 
 export async function updateActionStatus(
@@ -42,7 +42,7 @@ export async function updateActionStatus(
   status: 'processing' | 'rejected'
 ): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
-    config.commandsRouterServiceUrl,
+    config.actionsAgentUrl,
     `/router/actions/${actionId}`,
     accessToken,
     {
@@ -55,7 +55,7 @@ export async function updateActionStatus(
 
 export async function deleteAction(accessToken: string, actionId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
-    config.commandsRouterServiceUrl,
+    config.actionsAgentUrl,
     `/router/actions/${actionId}`,
     accessToken,
     { method: 'DELETE' }

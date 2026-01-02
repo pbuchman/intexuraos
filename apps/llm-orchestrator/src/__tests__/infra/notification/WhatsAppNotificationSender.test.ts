@@ -121,4 +121,83 @@ describe('WhatsAppNotificationSender', () => {
       );
     });
   });
+
+  describe('sendLlmFailure', () => {
+    it('sends message when user has phone number', async () => {
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
+      const result = await sender.sendLlmFailure('user-123', 'research-456', 'google', 'API Error');
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishSendMessage).toHaveBeenCalledWith({
+        userId: 'user-123',
+        phoneNumber: '+1234567890',
+        message: expect.stringContaining('Google'),
+        correlationId: 'research-failure-research-456',
+      });
+    });
+
+    it('returns error when user has no phone number', async () => {
+      mockGetPhoneNumber.mockResolvedValue(null);
+
+      const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
+      const result = await sender.sendLlmFailure(
+        'user-123',
+        'research-456',
+        'openai',
+        'Rate limit'
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('USER_NOT_CONNECTED');
+      }
+      expect(mockPublishSendMessage).not.toHaveBeenCalled();
+    });
+
+    it('returns error when send fails', async () => {
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
+      mockPublishSendMessage.mockResolvedValue(
+        err({ code: 'PUBLISH_FAILED', message: 'Failed to publish' })
+      );
+
+      const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
+      const result = await sender.sendLlmFailure('user-123', 'research-456', 'anthropic', 'Error');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('SEND_FAILED');
+      }
+    });
+
+    it('includes provider name in message', async () => {
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
+      await sender.sendLlmFailure('user-123', 'research-456', 'openai', 'Timeout');
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('OpenAI'),
+        })
+      );
+    });
+
+    it('includes error message in notification', async () => {
+      mockGetPhoneNumber.mockResolvedValue('+1234567890');
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = new WhatsAppNotificationSender(mockConfig, mockUserPhoneLookup);
+      await sender.sendLlmFailure('user-123', 'research-456', 'google', 'Rate limit exceeded');
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Rate limit exceeded'),
+        })
+      );
+    });
+  });
 });

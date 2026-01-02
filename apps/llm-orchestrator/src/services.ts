@@ -4,9 +4,19 @@
  */
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
-import { createLlmProviders, createSynthesizer, createTitleGenerator } from './infra/llm/index.js';
+import {
+  createLlmProviders,
+  createResearchProvider,
+  createSynthesizer,
+  createTitleGenerator,
+} from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
-import { createResearchEventPublisher, type ResearchEventPublisher } from './infra/pubsub/index.js';
+import {
+  createLlmCallPublisher,
+  createResearchEventPublisher,
+  type LlmCallPublisher,
+  type ResearchEventPublisher,
+} from './infra/pubsub/index.js';
 import {
   createUserServiceClient,
   type DecryptedApiKeys as InfraDecryptedApiKeys,
@@ -31,12 +41,18 @@ export interface ServiceContainer {
   researchRepo: ResearchRepository;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
+  llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
   notificationSender: NotificationSender;
   createLlmProviders: (
     apiKeys: InfraDecryptedApiKeys,
     searchMode?: SearchMode
   ) => Record<LlmProvider, LlmResearchProvider>;
+  createResearchProvider: (
+    provider: LlmProvider,
+    apiKey: string,
+    searchMode?: SearchMode
+  ) => LlmResearchProvider;
   createSynthesizer: (provider: LlmProvider, apiKey: string) => LlmSynthesisProvider;
   createTitleGenerator: (apiKey: string) => TitleGenerator;
 }
@@ -117,13 +133,20 @@ export function initializeServices(): void {
     topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
   });
 
+  const llmCallPublisher = createLlmCallPublisher({
+    projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
+    topicName: process.env['INTEXURAOS_PUBSUB_LLM_CALL_TOPIC'] ?? '',
+  });
+
   container = {
     researchRepo,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
+    llmCallPublisher,
     userServiceClient,
     notificationSender,
     createLlmProviders,
+    createResearchProvider,
     createSynthesizer,
     createTitleGenerator,
   };
