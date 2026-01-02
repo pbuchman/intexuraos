@@ -6,13 +6,13 @@ export type {
 
 export interface ClaudeConfig {
   apiKey: string;
-  defaultModel?: string;
-  validationModel?: string;
   researchModel?: string;
+  defaultModel?: string;
+  evaluateModel?: string;
 }
 
 export const CLAUDE_DEFAULTS = {
-  defaultModel: 'claude-sonnet-4-5-20250929',
-  validationModel: 'claude-haiku-4-5-20251001',
   researchModel: 'claude-opus-4-5-20251101',
+  defaultModel: 'claude-sonnet-4-5-20250929',
+  evaluateModel: 'claude-haiku-4-5-20251001',
 } as const;

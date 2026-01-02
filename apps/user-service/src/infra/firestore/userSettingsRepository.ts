@@ -93,6 +93,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (settings.llmApiKeys !== undefined) {
         doc.llmApiKeys = settings.llmApiKeys;
       }
+      if (settings.llmTestResults !== undefined) {
+        doc.llmTestResults = settings.llmTestResults;
+      }
       if (settings.researchSettings !== undefined) {
         doc.researchSettings = settings.researchSettings;
       }

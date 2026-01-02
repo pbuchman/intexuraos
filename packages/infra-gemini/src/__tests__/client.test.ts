@@ -277,93 +277,24 @@ describe('createGeminiClient', () => {
     });
   });
 
-  describe('synthesize', () => {
-    it('returns synthesized content', async () => {
+  describe('evaluate', () => {
+    it('returns evaluation result', async () => {
       mockGenerateContent.mockResolvedValue({
-        text: 'Synthesized research report.',
+        text: 'Evaluation response.',
       });
 
       const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Original prompt', [
-        { model: 'GPT-4', content: 'GPT findings' },
-        { model: 'Claude', content: 'Claude findings' },
-      ]);
+      const result = await client.evaluate('Rate this content');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Synthesized research report.');
+        expect(result.value).toBe('Evaluation response.');
       }
-    });
-
-    it('includes external reports in synthesis', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Combined synthesis.',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'GPT-4', content: 'GPT findings' }],
-        [{ content: 'External findings', model: 'Custom Model' }]
-      );
-
-      expect(result.ok).toBe(true);
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          contents: expect.stringContaining('External LLM Reports'),
+          model: GEMINI_DEFAULTS.evaluateModel,
         })
       );
-    });
-
-    it('handles external reports without model name', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Synthesis result.',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'GPT-4', content: 'GPT findings' }],
-        [{ content: 'Anonymous external report' }]
-      );
-
-      expect(result.ok).toBe(true);
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          contents: expect.stringContaining('unknown source'),
-        })
-      );
-    });
-
-    it('includes conflict resolution guidelines with external reports', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Result',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      await client.synthesize(
-        'Prompt',
-        [{ model: 'GPT', content: 'Content' }],
-        [{ content: 'External' }]
-      );
-
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          contents: expect.stringContaining('Conflict Resolution Guidelines'),
-        })
-      );
-    });
-
-    it('returns error on API failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Server error'));
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
     });
 
     it('handles null text response', async () => {
@@ -372,54 +303,19 @@ describe('createGeminiClient', () => {
       });
 
       const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toBe('');
       }
     });
-  });
 
-  describe('validateKey', () => {
-    it('returns true when key is valid', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: "Hi! I'm Gemini.",
-      });
-
-      const client = createGeminiClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe(true);
-      }
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: GEMINI_DEFAULTS.validationModel,
-        })
-      );
-    });
-
-    it('returns true even with null text response', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const client = createGeminiClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe(true);
-      }
-    });
-
-    it('returns error when key is invalid', async () => {
+    it('returns error on failure', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Invalid API_KEY'));
 
-      const client = createGeminiClient({ apiKey: 'invalid-key' });
-      const result = await client.validateKey();
+      const client = createGeminiClient({ apiKey: 'test-key' });
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -466,20 +362,20 @@ describe('createGeminiClient', () => {
       );
     });
 
-    it('uses custom validationModel when provided', async () => {
+    it('uses custom evaluateModel when provided', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Response',
       });
 
       const client = createGeminiClient({
         apiKey: 'test-key',
-        validationModel: 'gemini-custom-validation',
+        evaluateModel: 'gemini-custom-evaluate',
       });
-      await client.validateKey();
+      await client.evaluate('Test prompt');
 
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gemini-custom-validation',
+          model: 'gemini-custom-evaluate',
         })
       );
     });
