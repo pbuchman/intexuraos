@@ -1,6 +1,6 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Action } from '../../domain/models/action.js';
-import type { ActionRepository } from '../../domain/ports/actionRepository.js';
+import type { ActionRepository, ListByUserIdOptions } from '../../domain/ports/actionRepository.js';
 
 const COLLECTION = 'actions';
 
@@ -80,14 +80,15 @@ export function createFirestoreActionRepository(): ActionRepository {
       await docRef.delete();
     },
 
-    async listByUserId(userId: string): Promise<Action[]> {
+    async listByUserId(userId: string, options?: ListByUserIdOptions): Promise<Action[]> {
       const db = getFirestore();
-      const snapshot = await db
-        .collection(COLLECTION)
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(100)
-        .get();
+      let query = db.collection(COLLECTION).where('userId', '==', userId);
+
+      if (options?.status !== undefined && options.status.length > 0) {
+        query = query.where('status', 'in', options.status);
+      }
+
+      const snapshot = await query.orderBy('createdAt', 'desc').limit(100).get();
 
       return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
     },

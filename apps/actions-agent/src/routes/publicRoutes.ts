@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
+import type { ActionStatus } from '../domain/models/action.js';
 
 const actionSchema = {
   type: 'object',
@@ -41,6 +42,16 @@ const actionSchema = {
   ],
 } as const;
 
+const validStatuses: ActionStatus[] = [
+  'pending',
+  'awaiting_approval',
+  'processing',
+  'completed',
+  'failed',
+  'rejected',
+  'archived',
+];
+
 export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
     '/router/actions',
@@ -48,8 +59,19 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'listActions',
         summary: 'List actions',
-        description: 'List actions for the authenticated user.',
+        description:
+          'List actions for the authenticated user. Use status param to filter by status (comma-separated).',
         tags: ['router'],
+        querystring: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              description:
+                'Comma-separated list of statuses to filter by (e.g., pending,awaiting_approval)',
+            },
+          },
+        },
         response: {
           200: {
             description: 'List of actions',
@@ -89,8 +111,18 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
+      const { status } = request.query as { status?: string };
       const { actionRepository } = getServices();
-      const actions = await actionRepository.listByUserId(user.userId);
+
+      let statusFilter: ActionStatus[] | undefined;
+      if (status !== undefined) {
+        statusFilter = status
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s): s is ActionStatus => validStatuses.includes(s as ActionStatus));
+      }
+
+      const actions = await actionRepository.listByUserId(user.userId, { status: statusFilter });
 
       return await reply.ok({ actions });
     }

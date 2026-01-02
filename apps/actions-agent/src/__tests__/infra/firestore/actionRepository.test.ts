@@ -161,6 +161,68 @@ describe('FirestoreActionRepository', () => {
       expect(result[0]?.type).toBe('research');
       expect(result[0]?.status).toBe('pending');
     });
+
+    it('filters by single status', async () => {
+      await repository.save(
+        createTestAction({ id: 'action-1', userId: 'user-123', status: 'pending' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-2', userId: 'user-123', status: 'completed' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-3', userId: 'user-123', status: 'failed' })
+      );
+
+      const result = await repository.listByUserId('user-123', { status: ['pending'] });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.status).toBe('pending');
+    });
+
+    it('filters by multiple statuses', async () => {
+      await repository.save(
+        createTestAction({ id: 'action-1', userId: 'user-123', status: 'pending' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-2', userId: 'user-123', status: 'completed' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-3', userId: 'user-123', status: 'failed' })
+      );
+
+      const result = await repository.listByUserId('user-123', {
+        status: ['pending', 'completed'],
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.every((a) => a.status === 'pending' || a.status === 'completed')).toBe(true);
+    });
+
+    it('returns all actions when status filter is empty array', async () => {
+      await repository.save(
+        createTestAction({ id: 'action-1', userId: 'user-123', status: 'pending' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-2', userId: 'user-123', status: 'completed' })
+      );
+
+      const result = await repository.listByUserId('user-123', { status: [] });
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('returns all actions when status filter is undefined', async () => {
+      await repository.save(
+        createTestAction({ id: 'action-1', userId: 'user-123', status: 'pending' })
+      );
+      await repository.save(
+        createTestAction({ id: 'action-2', userId: 'user-123', status: 'completed' })
+      );
+
+      const result = await repository.listByUserId('user-123', { status: undefined });
+
+      expect(result).toHaveLength(2);
+    });
   });
 
   describe('listByStatus', () => {
