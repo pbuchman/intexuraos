@@ -369,6 +369,25 @@ export function InboxPage(): React.JSX.Element {
     void fetchData();
   }, [fetchData]);
 
+  // Deep linking: open action modal from URL query parameter
+  useEffect(() => {
+    const hash = window.location.hash;
+    const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+    if (queryString === '') {
+      return;
+    }
+
+    const params = new URLSearchParams(queryString);
+    const actionId = params.get('action');
+
+    if (actionId !== null && actions.length > 0) {
+      const action = actions.find((a) => a.id === actionId);
+      if (action !== undefined) {
+        setSelectedAction(action);
+      }
+    }
+  }, [actions]);
+
   const handleRefresh = (): void => {
     void fetchData(true);
   };

@@ -2,6 +2,28 @@
 # Defines reusable actions and their UI behavior for different action types.
 
 actions:
+  approve:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Approve
+      variant: primary
+      icon: CheckCircle
+      confirmationMessage: "This will create a research draft. Continue?"
+
+  retry:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: "Retry creating research draft?"
+
   reject:
     endpoint:
       path: /router/actions/{actionId}
@@ -36,19 +58,33 @@ actions:
 types:
   research:
     actions:
-      # Reject - only for pending actions
+      # Approve - only for awaiting_approval
+      - action: approve
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      # Retry - only for failed
+      - action: retry
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      # Reject - only for awaiting_approval
       - action: reject
         when:
           field: status
           op: eq
-          value: pending
+          value: awaiting_approval
 
-      # Archive - for pending, completed, failed, rejected (NOT archived)
+      # Archive - for completed, failed, rejected (NOT archived or awaiting_approval)
       - action: archive
         when:
           field: status
           op: in
-          value: [pending, completed, failed, rejected]
+          value: [completed, failed, rejected]
 
       # Delete - available for all statuses
       - action: delete
