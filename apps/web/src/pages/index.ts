@@ -11,3 +11,5 @@ export { LlmOrchestratorPage } from './LlmOrchestratorPage.js';
 export { ResearchListPage } from './ResearchListPage.js';
 export { ResearchDetailPage } from './ResearchDetailPage.js';
 export { InboxPage } from './InboxPage.js';
+export { DataSourcesListPage } from './DataSourcesListPage.js';
+export { DataSourceFormPage } from './DataSourceFormPage.js';

@@ -79,8 +79,8 @@ describe('System Endpoints', () => {
     };
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('data-insights-service');
-    expect(spec.paths['/internal/analytics/events']).toBeDefined();
-    expect(spec.paths['/insights/summary']).toBeDefined();
-    expect(spec.paths['/insights/usage']).toBeDefined();
+    expect(spec.paths['/data-sources']).toBeDefined();
+    expect(spec.paths['/data-sources/{id}']).toBeDefined();
+    expect(spec.paths['/data-sources/generate-title']).toBeDefined();
   });
 });

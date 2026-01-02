@@ -173,6 +173,7 @@ export interface AppConfig {
   mobileNotificationsServiceUrl: string;
   llmOrchestratorUrl: string;
   commandsRouterServiceUrl: string;
+  dataInsightsServiceUrl: string;
 }
 
 /**
@@ -325,4 +326,39 @@ export interface CommandsResponse {
 export interface ActionsResponse {
   actions: Action[];
   nextCursor?: string;
+}
+
+/**
+ * Custom data source from data-insights-service
+ */
+export interface DataSource {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a data source
+ */
+export interface CreateDataSourceRequest {
+  title: string;
+  content: string;
+}
+
+/**
+ * Request to update a data source
+ */
+export interface UpdateDataSourceRequest {
+  title?: string;
+  content?: string;
+}
+
+/**
+ * Response from generate title endpoint
+ */
+export interface GenerateTitleResponse {
+  title: string;
 }

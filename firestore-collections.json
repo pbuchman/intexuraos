@@ -50,13 +50,9 @@
       "owner": "actions-agent",
       "description": "Action items and their execution lifecycle"
     },
-    "analytics_events": {
+    "custom_data_sources": {
       "owner": "data-insights-service",
-      "description": "Raw analytics events ingested from other services"
-    },
-    "aggregated_insights": {
-      "owner": "data-insights-service",
-      "description": "Computed/aggregated metrics and usage insights per user"
+      "description": "User-created custom data sources for analysis"
     }
   }
 }

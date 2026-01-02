@@ -6,6 +6,8 @@ import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/componen
 import { config } from '@/config';
 import {
   ApiKeysSettingsPage,
+  DataSourceFormPage,
+  DataSourcesListPage,
   HomePage,
   InboxPage,
   LlmOrchestratorPage,
@@ -149,6 +151,31 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ResearchListPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Data Insights routes */}
+      <Route
+        path="/data-insights"
+        element={
+          <ProtectedRoute>
+            <DataSourcesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/new"
+        element={
+          <ProtectedRoute>
+            <DataSourceFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/:id"
+        element={
+          <ProtectedRoute>
+            <DataSourceFormPage />
           </ProtectedRoute>
         }
       />

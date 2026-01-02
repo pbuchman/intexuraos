@@ -6,22 +6,23 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import type {
-  AnalyticsEvent,
-  AnalyticsEventRepository,
-  AggregatedInsights,
-  AggregatedInsightsRepository,
-  CreateAnalyticsEventRequest,
-} from '../domain/insights/index.js';
+  DataSource,
+  DataSourceRepository,
+  CreateDataSourceRequest,
+  UpdateDataSourceRequest,
+} from '../domain/dataSource/index.js';
 
 /**
- * Fake AnalyticsEvent repository for testing.
+ * Fake DataSource repository for testing.
  */
-export class FakeAnalyticsEventRepository implements AnalyticsEventRepository {
-  private events = new Map<string, AnalyticsEvent>();
+export class FakeDataSourceRepository implements DataSourceRepository {
+  private dataSources = new Map<string, DataSource>();
   private idCounter = 1;
   private shouldFailCreate = false;
   private shouldFailGet = false;
-  private shouldFailCount = false;
+  private shouldFailList = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
 
   setFailNextCreate(fail: boolean): void {
     this.shouldFailCreate = fail;
@@ -31,129 +32,117 @@ export class FakeAnalyticsEventRepository implements AnalyticsEventRepository {
     this.shouldFailGet = fail;
   }
 
-  setFailNextCount(fail: boolean): void {
-    this.shouldFailCount = fail;
+  setFailNextList(fail: boolean): void {
+    this.shouldFailList = fail;
   }
 
-  create(request: CreateAnalyticsEventRequest): Promise<Result<AnalyticsEvent, string>> {
+  setFailNextUpdate(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  create(userId: string, request: CreateDataSourceRequest): Promise<Result<DataSource, string>> {
     if (this.shouldFailCreate) {
       this.shouldFailCreate = false;
       return Promise.resolve(err('Simulated create failure'));
     }
 
-    const id = `event-${String(this.idCounter++)}`;
+    const id = `ds-${String(this.idCounter++)}`;
     const now = new Date();
-    const event: AnalyticsEvent = {
+    const dataSource: DataSource = {
       id,
-      userId: request.userId,
-      sourceService: request.sourceService,
-      eventType: request.eventType,
-      payload: request.payload,
-      timestamp: request.timestamp ?? now,
+      userId,
+      title: request.title,
+      content: request.content,
       createdAt: now,
+      updatedAt: now,
     };
 
-    this.events.set(id, event);
-    return Promise.resolve(ok(event));
+    this.dataSources.set(id, dataSource);
+    return Promise.resolve(ok(dataSource));
   }
 
-  getByUserIdAndTimeRange(
-    userId: string,
-    startDate: Date,
-    endDate: Date,
-    limit = 100
-  ): Promise<Result<AnalyticsEvent[], string>> {
+  getById(id: string, userId: string): Promise<Result<DataSource | null, string>> {
     if (this.shouldFailGet) {
       this.shouldFailGet = false;
       return Promise.resolve(err('Simulated get failure'));
     }
 
-    const events = Array.from(this.events.values())
-      .filter((e) => e.userId === userId && e.timestamp >= startDate && e.timestamp <= endDate)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-      .slice(0, limit);
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(ok(null));
+    }
 
-    return Promise.resolve(ok(events));
+    return Promise.resolve(ok(dataSource));
   }
 
-  countByUserIdAndService(
+  listByUserId(userId: string): Promise<Result<DataSource[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return Promise.resolve(err('Simulated list failure'));
+    }
+
+    const dataSources = Array.from(this.dataSources.values())
+      .filter((ds) => ds.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return Promise.resolve(ok(dataSources));
+  }
+
+  update(
+    id: string,
     userId: string,
-    serviceNames: string[]
-  ): Promise<Result<Record<string, number>, string>> {
-    if (this.shouldFailCount) {
-      this.shouldFailCount = false;
-      return Promise.resolve(err('Simulated count failure'));
+    request: UpdateDataSourceRequest
+  ): Promise<Result<DataSource, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err('Simulated update failure'));
     }
 
-    const counts: Record<string, number> = {};
-    for (const serviceName of serviceNames) {
-      counts[serviceName] = Array.from(this.events.values()).filter(
-        (e) => e.userId === userId && e.sourceService === serviceName
-      ).length;
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(err('Data source not found'));
     }
 
-    return Promise.resolve(ok(counts));
+    const updated: DataSource = {
+      ...dataSource,
+      title: request.title ?? dataSource.title,
+      content: request.content ?? dataSource.content,
+      updatedAt: new Date(),
+    };
+
+    this.dataSources.set(id, updated);
+    return Promise.resolve(ok(updated));
   }
 
-  clear(): void {
-    this.events.clear();
-    this.idCounter = 1;
-  }
-
-  getAll(): AnalyticsEvent[] {
-    return Array.from(this.events.values());
-  }
-
-  addEvent(event: AnalyticsEvent): void {
-    this.events.set(event.id, event);
-  }
-}
-
-/**
- * Fake AggregatedInsights repository for testing.
- */
-export class FakeAggregatedInsightsRepository implements AggregatedInsightsRepository {
-  private insights = new Map<string, AggregatedInsights>();
-  private shouldFailGet = false;
-  private shouldFailUpsert = false;
-
-  setFailNextGet(fail: boolean): void {
-    this.shouldFailGet = fail;
-  }
-
-  setFailNextUpsert(fail: boolean): void {
-    this.shouldFailUpsert = fail;
-  }
-
-  getByUserId(userId: string): Promise<Result<AggregatedInsights | null, string>> {
-    if (this.shouldFailGet) {
-      this.shouldFailGet = false;
-      return Promise.resolve(err('Simulated get failure'));
+  delete(id: string, userId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err('Simulated delete failure'));
     }
 
-    const insights = this.insights.get(userId);
-    return Promise.resolve(ok(insights ?? null));
-  }
-
-  upsert(insights: AggregatedInsights): Promise<Result<void, string>> {
-    if (this.shouldFailUpsert) {
-      this.shouldFailUpsert = false;
-      return Promise.resolve(err('Simulated upsert failure'));
+    const dataSource = this.dataSources.get(id);
+    if (dataSource === undefined || dataSource.userId !== userId) {
+      return Promise.resolve(err('Data source not found'));
     }
 
-    this.insights.set(insights.userId, insights);
+    this.dataSources.delete(id);
     return Promise.resolve(ok(undefined));
   }
 
   clear(): void {
-    this.insights.clear();
+    this.dataSources.clear();
+    this.idCounter = 1;
   }
 
-  getAll(): AggregatedInsights[] {
-    return Array.from(this.insights.values());
+  getAll(): DataSource[] {
+    return Array.from(this.dataSources.values());
   }
 
-  setInsights(insights: AggregatedInsights): void {
-    this.insights.set(insights.userId, insights);
+  addDataSource(dataSource: DataSource): void {
+    this.dataSources.set(dataSource.id, dataSource);
   }
 }
