@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
 
+const mockCreateClaudeClient = vi.fn().mockReturnValue({
+  research: mockResearch,
+  generate: mockGenerate,
+});
+
 vi.mock('@intexuraos/infra-claude', () => ({
-  createClaudeClient: vi.fn().mockReturnValue({
-    research: mockResearch,
-    generate: mockGenerate,
-  }),
+  createClaudeClient: mockCreateClaudeClient,
 }));
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
@@ -22,6 +24,27 @@ describe('ClaudeAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapter = new ClaudeAdapter('test-key');
+  });
+
+  describe('constructor', () => {
+    it('passes researchModel to client when provided', () => {
+      mockCreateClaudeClient.mockClear();
+      new ClaudeAdapter('test-key', 'claude-3-haiku-20240307');
+
+      expect(mockCreateClaudeClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        researchModel: 'claude-3-haiku-20240307',
+      });
+    });
+
+    it('does not pass researchModel when not provided', () => {
+      mockCreateClaudeClient.mockClear();
+      new ClaudeAdapter('test-key');
+
+      expect(mockCreateClaudeClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+      });
+    });
   });
 
   describe('research', () => {

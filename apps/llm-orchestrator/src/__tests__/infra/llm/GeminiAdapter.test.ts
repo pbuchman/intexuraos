@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
 
+const mockCreateGeminiClient = vi.fn().mockReturnValue({
+  research: mockResearch,
+  generate: mockGenerate,
+});
+
 vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockReturnValue({
-    research: mockResearch,
-    generate: mockGenerate,
-  }),
+  createGeminiClient: mockCreateGeminiClient,
 }));
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
@@ -22,6 +24,27 @@ describe('GeminiAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapter = new GeminiAdapter('test-key');
+  });
+
+  describe('constructor', () => {
+    it('passes researchModel to client when provided', () => {
+      mockCreateGeminiClient.mockClear();
+      new GeminiAdapter('test-key', 'gemini-1.5-flash');
+
+      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        researchModel: 'gemini-1.5-flash',
+      });
+    });
+
+    it('does not pass researchModel when not provided', () => {
+      mockCreateGeminiClient.mockClear();
+      new GeminiAdapter('test-key');
+
+      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+      });
+    });
   });
 
   describe('research', () => {

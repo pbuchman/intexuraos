@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
 
+const mockCreateGptClient = vi.fn().mockReturnValue({
+  research: mockResearch,
+  generate: mockGenerate,
+});
+
 vi.mock('@intexuraos/infra-gpt', () => ({
-  createGptClient: vi.fn().mockReturnValue({
-    research: mockResearch,
-    generate: mockGenerate,
-  }),
+  createGptClient: mockCreateGptClient,
 }));
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
@@ -22,6 +24,27 @@ describe('GptAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapter = new GptAdapter('test-key');
+  });
+
+  describe('constructor', () => {
+    it('passes researchModel to client when provided', () => {
+      mockCreateGptClient.mockClear();
+      new GptAdapter('test-key', 'gpt-4o-mini');
+
+      expect(mockCreateGptClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        researchModel: 'gpt-4o-mini',
+      });
+    });
+
+    it('does not pass researchModel when not provided', () => {
+      mockCreateGptClient.mockClear();
+      new GptAdapter('test-key');
+
+      expect(mockCreateGptClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+      });
+    });
   });
 
   describe('research', () => {

@@ -110,7 +110,7 @@ describe('WhatsAppNotificationSender', () => {
       });
     });
 
-    it('includes provider name in message', async () => {
+    it('includes provider name in message for openai', async () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
@@ -119,6 +119,19 @@ describe('WhatsAppNotificationSender', () => {
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('OpenAI'),
+        })
+      );
+    });
+
+    it('includes provider name in message for anthropic', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = new WhatsAppNotificationSender(mockConfig);
+      await sender.sendLlmFailure('user-123', 'research-456', 'anthropic', 'Key invalid');
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Anthropic Claude'),
         })
       );
     });
