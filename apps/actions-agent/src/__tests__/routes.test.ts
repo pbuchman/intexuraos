@@ -471,6 +471,246 @@ describe('Research Agent Routes', () => {
     });
   });
 
+  describe('GET /router/actions (list user actions)', () => {
+    beforeEach(() => {
+      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/router/actions',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns list of actions for authenticated user', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/router/actions',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: unknown[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(1);
+    });
+  });
+
+  describe('PATCH /router/actions/:actionId (update action status)', () => {
+    beforeEach(() => {
+      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        payload: { status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/nonexistent',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when user does not own action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'other-user',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('updates action status successfully', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { id: string; status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.status).toBe('rejected');
+    });
+  });
+
+  describe('DELETE /router/actions/:actionId (delete action)', () => {
+    beforeEach(() => {
+      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/action-1',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/nonexistent',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when user does not own action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'other-user',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('deletes action successfully', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const action = await fakeActionRepository.getById('action-1');
+      expect(action).toBeNull();
+    });
+  });
+
   describe('System endpoints', () => {
     it('GET /health returns 200', async () => {
       const response = await app.inject({
