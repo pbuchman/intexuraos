@@ -5,14 +5,12 @@ import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
   FakeResearchServiceClient,
-  FakeUserPhoneLookup,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
 
 describe('executeResearchAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
   let fakeResearchClient: FakeResearchServiceClient;
-  let fakeUserPhoneLookup: FakeUserPhoneLookup;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -32,16 +30,13 @@ describe('executeResearchAction usecase', () => {
   beforeEach(() => {
     fakeActionRepo = new FakeActionRepository();
     fakeResearchClient = new FakeResearchServiceClient();
-    fakeUserPhoneLookup = new FakeUserPhoneLookup();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
-    fakeUserPhoneLookup.setDefaultPhoneNumber('+1234567890');
   });
 
   it('returns error when action not found', async () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -64,7 +59,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -85,7 +79,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -106,7 +99,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -132,7 +124,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -157,7 +148,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -170,7 +160,7 @@ describe('executeResearchAction usecase', () => {
     }
   });
 
-  it('sends WhatsApp notification on success', async () => {
+  it('publishes WhatsApp notification on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
     fakeResearchClient.setNextResearchId('notified-research-123');
@@ -178,7 +168,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });
@@ -187,32 +176,11 @@ describe('executeResearchAction usecase', () => {
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.phoneNumber).toBe('+1234567890');
+    expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('research draft is ready');
     expect(messages[0]?.message).toContain(
       'https://app.test.com/#/research/notified-research-123/edit'
     );
-  });
-
-  it('succeeds without sending notification when user has no phone number', async () => {
-    const action = createAction({ status: 'awaiting_approval' });
-    await fakeActionRepo.save(action);
-    fakeUserPhoneLookup.setDefaultPhoneNumber(null);
-
-    const usecase = createExecuteResearchActionUseCase({
-      actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.test.com',
-    });
-
-    const result = await usecase('action-123');
-
-    expect(isOk(result)).toBe(true);
-
-    const messages = fakeWhatsappPublisher.getSentMessages();
-    expect(messages).toHaveLength(0);
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -226,7 +194,6 @@ describe('executeResearchAction usecase', () => {
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
       researchServiceClient: fakeResearchClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
     });

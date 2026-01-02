@@ -2,15 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import {
-  FakeActionServiceClient,
-  FakeUserPhoneLookup,
-  FakeWhatsAppSendPublisher,
-} from './fakes.js';
+import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
 
 describe('handleResearchAction usecase', () => {
   let fakeActionClient: FakeActionServiceClient;
-  let fakeUserPhoneLookup: FakeUserPhoneLookup;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
@@ -30,15 +25,12 @@ describe('handleResearchAction usecase', () => {
 
   beforeEach(() => {
     fakeActionClient = new FakeActionServiceClient();
-    fakeUserPhoneLookup = new FakeUserPhoneLookup();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
-    fakeUserPhoneLookup.setDefaultPhoneNumber('+1234567890');
   });
 
-  it('sets action to awaiting_approval and sends WhatsApp notification', async () => {
+  it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
     });
@@ -56,37 +48,14 @@ describe('handleResearchAction usecase', () => {
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.phoneNumber).toBe('+1234567890');
+    expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('ready for approval');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
-  });
-
-  it('succeeds when user has no phone number (skips notification)', async () => {
-    fakeUserPhoneLookup.setDefaultPhoneNumber(null);
-
-    const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
-      userPhoneLookup: fakeUserPhoneLookup,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.intexuraos.com',
-    });
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isOk(result)).toBe(true);
-
-    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
-    expect(actionStatus).toBe('awaiting_approval');
-
-    const messages = fakeWhatsappPublisher.getSentMessages();
-    expect(messages).toHaveLength(0);
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
     });
@@ -105,7 +74,6 @@ describe('handleResearchAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
-      userPhoneLookup: fakeUserPhoneLookup,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
     });

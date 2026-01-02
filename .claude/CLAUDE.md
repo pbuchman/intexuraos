@@ -18,7 +18,13 @@ tf fmt -check -recursive      # If terraform changed (from /terraform)
 tf validate                   # If terraform changed
 ```
 
-**IMPORTANT:** Use `tf` command instead of `terraform`. This is an alias configured in the user's shell environment. Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
+**IMPORTANT:** Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
+
+```bash
+alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
+```
+
+Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
 
 **Do not claim complete until verification passes.**
 
@@ -182,3 +188,13 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 ## Complex Tasks — Continuity Workflow
 
 For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).
+
+---
+
+## Plan Documentation
+
+Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with tables for: Modified, Created, Removed, Unchanged.
+
+| Service          | Method | Path                         | Change               |
+| ---------------- | ------ | ---------------------------- | -------------------- |
+| whatsapp-service | POST   | `/internal/.../send-message` | Remove `phoneNumber` |

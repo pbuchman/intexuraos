@@ -5,12 +5,14 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
   LlmError,
+  LlmPricing,
   LlmProvider,
   LlmResearchProvider,
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
   NotificationError,
+  PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
@@ -148,7 +150,6 @@ export class FakeResearchRepository implements ResearchRepository {
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
-  private phones = new Map<string, string>();
   private researchSettings = new Map<string, ResearchSettings>();
   private failNextGetApiKeys = false;
 
@@ -159,11 +160,6 @@ export class FakeUserServiceClient implements UserServiceClient {
     }
     const keys = this.apiKeys.get(userId) ?? {};
     return ok(keys);
-  }
-
-  async getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>> {
-    const phone = this.phones.get(userId) ?? null;
-    return ok(phone);
   }
 
   async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
@@ -180,10 +176,6 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.apiKeys.set(userId, keys);
   }
 
-  setPhone(userId: string, phone: string): void {
-    this.phones.set(userId, phone);
-  }
-
   setResearchSettings(userId: string, settings: ResearchSettings): void {
     this.researchSettings.set(userId, settings);
   }
@@ -194,7 +186,6 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   clear(): void {
     this.apiKeys.clear();
-    this.phones.clear();
     this.researchSettings.clear();
   }
 }
@@ -398,5 +389,34 @@ export class FakeLlmCallPublisher {
 
   clear(): void {
     this.publishedEvents = [];
+  }
+}
+
+/**
+ * Fake implementation of PricingRepository for testing.
+ */
+export class FakePricingRepository implements PricingRepository {
+  private pricing = new Map<string, LlmPricing>();
+
+  async findByProviderAndModel(provider: LlmProvider, model: string): Promise<LlmPricing | null> {
+    const key = `${provider}_${model}`;
+    return this.pricing.get(key) ?? null;
+  }
+
+  setPricing(
+    provider: LlmProvider,
+    model: string,
+    pricing: Omit<LlmPricing, 'provider' | 'model'>
+  ): void {
+    const key = `${provider}_${model}`;
+    this.pricing.set(key, {
+      provider,
+      model,
+      ...pricing,
+    });
+  }
+
+  clear(): void {
+    this.pricing.clear();
   }
 }

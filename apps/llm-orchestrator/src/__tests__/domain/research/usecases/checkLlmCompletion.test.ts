@@ -43,7 +43,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     synthesisLlm: 'google',
     llmResults: [
       { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
-      { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+      { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -85,7 +85,7 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-        { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -100,7 +100,7 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-        { provider: 'openai', model: 'o3-deep-research', status: 'processing' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'processing' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -122,7 +122,7 @@ describe('checkLlmCompletion', () => {
         },
         {
           provider: 'openai',
-          model: 'o3-deep-research',
+          model: 'o4-mini-deep-research',
           status: 'completed',
           result: 'OpenAI Result',
         },
@@ -140,7 +140,12 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'API Error' },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Rate limit' },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'failed',
+          error: 'Rate limit',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -164,7 +169,12 @@ describe('checkLlmCompletion', () => {
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Rate limit' },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'failed',
+          error: 'Rate limit',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -198,7 +208,7 @@ describe('checkLlmCompletion', () => {
         },
         {
           provider: 'openai',
-          model: 'o3-deep-research',
+          model: 'o4-mini-deep-research',
           status: 'failed',
           error: 'Rate limit again',
         },
@@ -229,7 +239,7 @@ describe('checkLlmCompletion', () => {
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o3-deep-research', status: 'failed', error: 'Error 1' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
         { provider: 'anthropic', model: 'claude-3-opus', status: 'failed', error: 'Error 2' },
       ],
     });

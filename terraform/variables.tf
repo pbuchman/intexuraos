@@ -44,7 +44,7 @@ variable "enable_load_balancer" {
 }
 
 variable "web_app_domain" {
-  description = "Domain name for the web app (e.g., intexuraos.pbuchman.com)"
+  description = "Domain name for the web app (e.g., intexuraos.cloud)"
   type        = string
   default     = ""
 }

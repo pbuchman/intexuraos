@@ -67,16 +67,18 @@ describe('Pub/Sub Routes', () => {
   let mediaStorage: FakeMediaStorage;
   let transcriptionService: FakeSpeechTranscriptionPort;
   let messageRepository: FakeWhatsAppMessageRepository;
+  let userMappingRepository: FakeWhatsAppUserMappingRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
     mediaStorage = new FakeMediaStorage();
     transcriptionService = new FakeSpeechTranscriptionPort();
     messageRepository = new FakeWhatsAppMessageRepository();
+    userMappingRepository = new FakeWhatsAppUserMappingRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
-      userMappingRepository: new FakeWhatsAppUserMappingRepository(),
+      userMappingRepository,
       messageRepository,
       mediaStorage,
       eventPublisher: new FakeEventPublisher(),
@@ -105,7 +107,6 @@ describe('Pub/Sub Routes', () => {
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
         correlationId: 'corr-123',
         timestamp: new Date().toISOString(),
@@ -126,7 +127,6 @@ describe('Pub/Sub Routes', () => {
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
         correlationId: 'corr-123',
         timestamp: new Date().toISOString(),
@@ -146,10 +146,11 @@ describe('Pub/Sub Routes', () => {
 
     describe('Pub/Sub OIDC authentication', () => {
       it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
+        await userMappingRepository.saveMapping('user-123', ['+48123456789']);
+
         const body = createPubSubBody({
           type: 'whatsapp.message.send',
           userId: 'user-123',
-          phoneNumber: '+48123456789',
           message: 'Hello from Pub/Sub',
           correlationId: 'corr-pubsub',
           timestamp: new Date().toISOString(),
@@ -161,7 +162,6 @@ describe('Pub/Sub Routes', () => {
           headers: {
             'content-type': 'application/json',
             from: 'noreply@google.com',
-            // NOTE: NO x-internal-auth header - should still work via OIDC
           },
           payload: body,
         });
@@ -170,16 +170,14 @@ describe('Pub/Sub Routes', () => {
         const responseBody = JSON.parse(response.body) as { success: boolean };
         expect(responseBody.success).toBe(true);
 
-        // Verify message was sent
         expect(messageSender.getSentMessages()).toHaveLength(1);
-        expect(messageSender.getSentMessages()[0]?.phoneNumber).toBe('+48123456789');
+        expect(messageSender.getSentMessages()[0]?.phoneNumber).toBe('48123456789');
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
         const body = createPubSubBody({
           type: 'whatsapp.message.send',
           userId: 'user-123',
-          phoneNumber: '+48123456789',
           message: 'Hello',
           correlationId: 'corr-123',
           timestamp: new Date().toISOString(),
@@ -190,8 +188,6 @@ describe('Pub/Sub Routes', () => {
           url: '/internal/whatsapp/pubsub/send-message',
           headers: {
             'content-type': 'application/json',
-            // NO from: noreply@google.com
-            // NO x-internal-auth
           },
           payload: body,
         });
@@ -246,7 +242,6 @@ describe('Pub/Sub Routes', () => {
       const body = createPubSubBody({
         type: 'unknown.event.type',
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
         correlationId: 'corr-123',
         timestamp: new Date().toISOString(),
@@ -265,10 +260,11 @@ describe('Pub/Sub Routes', () => {
     });
 
     it('sends message and returns 200 on success', async () => {
+      await userMappingRepository.saveMapping('user-123', ['+48123456789']);
+
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello from test',
         correlationId: 'corr-123',
         timestamp: new Date().toISOString(),
@@ -288,18 +284,41 @@ describe('Pub/Sub Routes', () => {
       const sentMessages = messageSender.getSentMessages();
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toEqual({
-        phoneNumber: '+48123456789',
+        phoneNumber: '48123456789',
         message: 'Hello from test',
       });
     });
 
+    it('returns 200 with success when user is not connected (no WhatsApp mapping)', async () => {
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-not-connected',
+        message: 'Hello',
+        correlationId: 'corr-123',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
     it('returns 500 when message sending fails', async () => {
+      await userMappingRepository.saveMapping('user-123', ['+48123456789']);
       messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error' });
 
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
         userId: 'user-123',
-        phoneNumber: '+48123456789',
         message: 'Hello',
         correlationId: 'corr-123',
         timestamp: new Date().toISOString(),
@@ -318,10 +337,11 @@ describe('Pub/Sub Routes', () => {
     });
 
     it('handles message without optional fields', async () => {
+      await userMappingRepository.saveMapping('user-456', ['+15551234567']);
+
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
         userId: 'user-456',
-        phoneNumber: '+15551234567',
         message: 'Minimal message',
         correlationId: 'corr-456',
         timestamp: new Date().toISOString(),
@@ -338,7 +358,7 @@ describe('Pub/Sub Routes', () => {
 
       const sentMessages = messageSender.getSentMessages();
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]?.phoneNumber).toBe('+15551234567');
+      expect(sentMessages[0]?.phoneNumber).toBe('15551234567');
     });
   });
 

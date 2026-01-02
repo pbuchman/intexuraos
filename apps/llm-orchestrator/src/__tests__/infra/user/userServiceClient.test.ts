@@ -84,56 +84,59 @@ describe('createUserServiceClient', () => {
     });
   });
 
-  describe('getWhatsAppPhone', () => {
-    it('returns phone number when found', async () => {
+  describe('getResearchSettings', () => {
+    it('returns research settings when successful', async () => {
       nock(baseUrl)
-        .get('/internal/users/user-1/whatsapp-phone')
-        .reply(200, { phone: '+1234567890' });
+        .get('/internal/users/user-1/research-settings')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, {
+          searchMode: 'quick',
+        });
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getWhatsAppPhone('user-1');
+      const result = await client.getResearchSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('+1234567890');
+        expect(result.value.searchMode).toBe('quick');
       }
     });
 
-    it('returns null when phone not in response', async () => {
-      nock(baseUrl).get('/internal/users/user-1/whatsapp-phone').reply(200, {});
+    it('returns default searchMode when not found in response', async () => {
+      nock(baseUrl).get('/internal/users/user-1/research-settings').reply(200, {});
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getWhatsAppPhone('user-1');
+      const result = await client.getResearchSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBeNull();
+        expect(result.value.searchMode).toBe('deep');
       }
     });
 
-    it('returns null on non-200 response (best effort)', async () => {
-      nock(baseUrl).get('/internal/users/user-1/whatsapp-phone').reply(404);
+    it('returns default on non-200 response', async () => {
+      nock(baseUrl).get('/internal/users/user-1/research-settings').reply(404);
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getWhatsAppPhone('user-1');
+      const result = await client.getResearchSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBeNull();
+        expect(result.value.searchMode).toBe('deep');
       }
     });
 
-    it('returns null on network error (best effort)', async () => {
+    it('returns default on network error', async () => {
       nock(baseUrl)
-        .get('/internal/users/user-1/whatsapp-phone')
+        .get('/internal/users/user-1/research-settings')
         .replyWithError('Connection refused');
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getWhatsAppPhone('user-1');
+      const result = await client.getResearchSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBeNull();
+        expect(result.value.searchMode).toBe('deep');
       }
     });
   });

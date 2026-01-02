@@ -81,9 +81,18 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         lastSavedPromptRef.current = draft.prompt;
 
         // Load input contexts if exists
-        if (draft.inputContexts !== undefined && draft.inputContexts.length > 0) {
-          setInputContexts(draft.inputContexts.map((ctx) => ctx.content));
-        }
+        const loadedContexts =
+          draft.inputContexts !== undefined && draft.inputContexts.length > 0
+            ? draft.inputContexts.map((ctx) => ctx.content)
+            : [];
+        setInputContexts(loadedContexts);
+
+        // Track initial saved state for change detection
+        lastSavedStateRef.current = {
+          selectedLlms: draft.selectedLlms,
+          synthesisLlm: draft.synthesisLlm,
+          inputContexts: loadedContexts,
+        };
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load draft');
       } finally {
@@ -130,6 +139,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       await updateDraft(token, draftId, request);
 
       lastSavedPromptRef.current = prompt;
+      lastSavedStateRef.current = {
+        selectedLlms,
+        synthesisLlm,
+        inputContexts: validContexts,
+      };
       setHasUnsavedChanges(false);
     } catch {
       // Silently fail autosave - don't disrupt user
@@ -145,12 +159,27 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     getAccessToken,
   ]);
 
-  // Track changes
+  // Track changes - any form field change should trigger autosave
+  const lastSavedStateRef = useRef<{
+    selectedLlms: LlmProvider[];
+    synthesisLlm: LlmProvider | null;
+    inputContexts: string[];
+  }>({ selectedLlms: [], synthesisLlm: null, inputContexts: [] });
+
   useEffect(() => {
-    if (isEditMode && prompt !== lastSavedPromptRef.current) {
+    if (!isEditMode) return;
+
+    const promptChanged = prompt !== lastSavedPromptRef.current;
+    const llmsChanged =
+      JSON.stringify(selectedLlms) !== JSON.stringify(lastSavedStateRef.current.selectedLlms);
+    const synthesisChanged = synthesisLlm !== lastSavedStateRef.current.synthesisLlm;
+    const contextsChanged =
+      JSON.stringify(inputContexts) !== JSON.stringify(lastSavedStateRef.current.inputContexts);
+
+    if (promptChanged || llmsChanged || synthesisChanged || contextsChanged) {
       setHasUnsavedChanges(true);
     }
-  }, [prompt, isEditMode]);
+  }, [prompt, selectedLlms, synthesisLlm, inputContexts, isEditMode]);
 
   // 1-minute autosave interval
   useEffect(() => {
@@ -221,9 +250,24 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       const token = await getAccessToken();
       const contextObjects = validContexts.map((content) => ({ content }));
 
-      // If editing a draft, approve it to start research
+      // If editing a draft, save current state then approve to start research
       if (isEditMode) {
-        const { approveResearch } = await import('@/services/llmOrchestratorApi');
+        const { updateDraft: updateDraftFn, approveResearch } =
+          await import('@/services/llmOrchestratorApi');
+
+        // Save current form state before approving
+        const draftRequest: SaveDraftRequest = {
+          prompt,
+          synthesisLlm,
+        };
+        if (selectedLlms.length > 0) {
+          draftRequest.selectedLlms = selectedLlms;
+        }
+        if (contextObjects.length > 0) {
+          draftRequest.inputContexts = contextObjects;
+        }
+        await updateDraftFn(token, draftId, draftRequest);
+
         const research = await approveResearch(token, draftId);
         void navigate(`/research/${research.id}`);
       } else {

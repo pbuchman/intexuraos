@@ -3,14 +3,12 @@ import { ok, err } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
-import type { UserPhoneLookup } from '../ports/userPhoneLookup.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LlmProvider } from '../models/actionEvent.js';
 
 export interface ExecuteResearchActionDeps {
   actionRepository: ActionRepository;
   researchServiceClient: ResearchServiceClient;
-  userPhoneLookup: UserPhoneLookup;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
 }
@@ -29,13 +27,7 @@ export function createExecuteResearchActionUseCase(
   deps: ExecuteResearchActionDeps
 ): ExecuteResearchActionUseCase {
   return async (actionId: string): Promise<Result<ExecuteResearchActionResult>> => {
-    const {
-      actionRepository,
-      researchServiceClient,
-      userPhoneLookup,
-      whatsappPublisher,
-      webAppUrl,
-    } = deps;
+    const { actionRepository, researchServiceClient, whatsappPublisher, webAppUrl } = deps;
 
     const action = await actionRepository.getById(actionId);
     if (action === null) {
@@ -102,21 +94,17 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(completedAction);
 
-    const phoneNumber = await userPhoneLookup.getPhoneNumber(action.userId);
-    if (phoneNumber !== null) {
-      const fullUrl = `${webAppUrl}${resourceUrl}`;
-      const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
+    const fullUrl = `${webAppUrl}${resourceUrl}`;
+    const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
 
-      const publishResult = await whatsappPublisher.publishSendMessage({
-        userId: action.userId,
-        phoneNumber,
-        message,
-        correlationId: `research-complete-${researchId}`,
-      });
+    const publishResult = await whatsappPublisher.publishSendMessage({
+      userId: action.userId,
+      message,
+      correlationId: `research-complete-${researchId}`,
+    });
 
-      if (!publishResult.ok) {
-        /* Best-effort notification - don't fail the action if notification fails */
-      }
+    if (!publishResult.ok) {
+      /* Best-effort notification - don't fail the action if notification fails */
     }
 
     return ok({

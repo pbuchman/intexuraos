@@ -55,6 +55,7 @@ describe('retryPendingCommands usecase', () => {
     expect(result.skipped).toBe(0);
     expect(result.failed).toBe(0);
     expect(result.total).toBe(0);
+    expect(result.skipReasons).toEqual({});
   });
 
   it('skips command when fetching API keys fails', async () => {
@@ -76,6 +77,7 @@ describe('retryPendingCommands usecase', () => {
     expect(result.skipped).toBe(1);
     expect(result.processed).toBe(0);
     expect(result.failed).toBe(0);
+    expect(result.skipReasons).toEqual({ api_keys_fetch_failed: 1 });
   });
 
   it('skips command when user has no Google API key', async () => {
@@ -96,6 +98,7 @@ describe('retryPendingCommands usecase', () => {
 
     expect(result.skipped).toBe(1);
     expect(result.processed).toBe(0);
+    expect(result.skipReasons).toEqual({ no_google_api_key: 1 });
   });
 
   it('processes command successfully when classification is not unclassified', async () => {
@@ -269,5 +272,6 @@ describe('retryPendingCommands usecase', () => {
     expect(result.total).toBe(3);
     expect(result.processed).toBe(2);
     expect(result.skipped).toBe(1);
+    expect(result.skipReasons).toEqual({ no_google_api_key: 1 });
   });
 });

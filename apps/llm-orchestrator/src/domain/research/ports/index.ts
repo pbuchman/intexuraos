@@ -9,3 +9,5 @@ export type {
 } from './llmProvider.js';
 
 export type { NotificationError, NotificationSender } from './notification.js';
+
+export type { LlmPricing, PricingRepository } from './pricingRepository.js';

@@ -1,6 +1,12 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { Action, ActionsResponse, Command, CommandsResponse } from '@/types';
+import type {
+  Action,
+  ActionsResponse,
+  Command,
+  CommandSourceType,
+  CommandsResponse,
+} from '@/types';
 
 export async function getCommands(
   accessToken: string,
@@ -101,4 +107,20 @@ export async function batchGetActions(accessToken: string, actionIds: string[]):
     }
   );
   return response.actions;
+}
+
+export async function createCommand(
+  accessToken: string,
+  params: { text: string; source: CommandSourceType }
+): Promise<Command> {
+  const response = await apiRequest<{ command: Command }>(
+    config.commandsRouterServiceUrl,
+    '/router/commands',
+    accessToken,
+    {
+      method: 'POST',
+      body: params,
+    }
+  );
+  return response.command;
 }

@@ -62,7 +62,7 @@ const intexuraPlugin: FastifyPluginCallback = (
         ...diagnostics,
       };
       const response: ApiOk<unknown> = ok(data, fullDiagnostics);
-      return this.status(200).send(response);
+      return this.send(response);
     }
   );
 

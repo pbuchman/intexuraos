@@ -211,6 +211,85 @@ describe('createAuditContext', () => {
 
       vi.useRealTimers();
     });
+
+    it('includes inputTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-4',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', inputTokens: 100 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 100,
+        })
+      );
+    });
+
+    it('includes outputTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-4',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', outputTokens: 50 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outputTokens: 50,
+        })
+      );
+    });
+
+    it('includes costUsd when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-4',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', costUsd: 0.0025 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          costUsd: 0.0025,
+        })
+      );
+    });
+
+    it('includes all token/cost fields when provided together', async () => {
+      const ctx = createAuditContext({
+        provider: 'anthropic',
+        model: 'claude-3',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({
+        response: 'Response',
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.015,
+      });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 1000,
+          outputTokens: 500,
+          costUsd: 0.015,
+        })
+      );
+    });
   });
 
   describe('error', () => {

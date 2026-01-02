@@ -53,7 +53,17 @@ export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+    const titlePrompt = `Generate a short, concise title for this research prompt.
+
+CRITICAL REQUIREMENTS:
+- Title must be 5-8 words maximum
+- Title must be in the SAME LANGUAGE as the prompt (Polish prompt → Polish title, English prompt → English title)
+- Return ONLY the title - no explanations, no options, no word counts
+
+Research prompt:
+${prompt}
+
+Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {

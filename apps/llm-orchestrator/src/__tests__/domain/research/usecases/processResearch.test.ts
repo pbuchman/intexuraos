@@ -11,6 +11,12 @@ import {
 } from '../../../../domain/research/usecases/processResearch.js';
 import type { Research } from '../../../../domain/research/models/index.js';
 
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
+
 function createMockDeps(): ProcessResearchDeps & {
   mockRepo: {
     findById: ReturnType<typeof vi.fn>;
@@ -46,6 +52,7 @@ function createMockDeps(): ProcessResearchDeps & {
   return {
     researchRepo: mockRepo,
     llmCallPublisher: mockPublisher,
+    logger: mockLogger,
     titleGenerator: mockTitleGenerator,
     reportLlmSuccess: mockReportSuccess,
     mockRepo,
@@ -66,7 +73,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     synthesisLlm: 'google',
     llmResults: [
       { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
-      { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
+      { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -104,13 +111,16 @@ describe('processResearch', () => {
     expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalled();
   });
 
-  it('updates status to processing', async () => {
+  it('updates status to processing and resets startedAt', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     await processResearch('research-1', deps);
 
-    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { status: 'processing' });
+    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+      status: 'processing',
+      startedAt: '2024-01-01T00:00:00.000Z',
+    });
   });
 
   it('generates title when titleGenerator is provided', async () => {
@@ -138,6 +148,7 @@ describe('processResearch', () => {
     const depsWithSynthesizer: ProcessResearchDeps = {
       researchRepo: deps.researchRepo,
       llmCallPublisher: deps.llmCallPublisher,
+      logger: mockLogger,
       synthesizer: mockSynthesizer,
       reportLlmSuccess: mockReportSuccess,
     };
@@ -213,11 +224,15 @@ describe('processResearch', () => {
     const minimalDeps: ProcessResearchDeps = {
       researchRepo: deps.researchRepo,
       llmCallPublisher: deps.llmCallPublisher,
+      logger: mockLogger,
     };
 
     await processResearch('research-1', minimalDeps);
 
-    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { status: 'processing' });
+    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+      status: 'processing',
+      startedAt: '2024-01-01T00:00:00.000Z',
+    });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
   });
 

@@ -147,7 +147,7 @@ const SEARCH_MODES: SearchModeOption[] = [
     id: 'deep',
     name: 'Deep Search',
     description: 'More thorough research using specialized models',
-    models: 'Claude Opus 4.5, Gemini 2.5 Pro, o3-deep-research',
+    models: 'Claude Opus 4.5, Gemini 2.5 Pro, o4-mini-deep-research',
   },
   {
     id: 'quick',

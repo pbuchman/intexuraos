@@ -83,8 +83,15 @@ export function useResearch(id: string): {
       return;
     }
 
-    // 💰 CostGuard: Don't listen for completed/failed - saves continuous reads
-    if (research.status !== 'pending' && research.status !== 'processing') {
+    // 💰 CostGuard: Only listen for in-progress statuses, not terminal ones
+    const inProgressStatuses = [
+      'pending',
+      'processing',
+      'retrying',
+      'synthesizing',
+      'awaiting_confirmation',
+    ];
+    if (!inProgressStatuses.includes(research.status)) {
       // Cleanup any existing listener when status changes to terminal
       if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
@@ -147,6 +154,9 @@ export function useResearch(id: string): {
 
 /**
  * Hook for managing a list of researches with pagination.
+ *
+ * 💰 CostGuard: Refreshes on visibility change to catch status updates
+ * without expensive Firestore listeners.
  */
 export function useResearches(): {
   researches: Research[];
@@ -165,6 +175,7 @@ export function useResearches(): {
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
+  const isInitialLoadRef = useRef(true);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -185,6 +196,22 @@ export function useResearches(): {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // 💰 CostGuard: Refresh when page becomes visible to catch status updates
+  // Cheaper than Firestore listeners for the whole collection
+  useEffect(() => {
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
+        void refresh();
+      }
+      isInitialLoadRef.current = false;
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return (): void => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refresh]);
 
   const loadMore = useCallback(async (): Promise<void> => {

@@ -289,7 +289,7 @@ export type CommandStatus =
 /**
  * Command source type
  */
-export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice';
+export type CommandSourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
 
 /**
  * Command classification details

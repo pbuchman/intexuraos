@@ -35,6 +35,9 @@ export interface LlmResult {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
 }
 
 /**

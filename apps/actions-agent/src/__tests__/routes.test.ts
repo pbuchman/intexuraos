@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import nock from 'nock';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -12,7 +11,6 @@ import {
   createFakeServices,
   createFakeExecuteResearchActionUseCase,
 } from './fakes.js';
-import { createUserPhoneLookup } from '../infra/userService/userPhoneLookup.js';
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -1098,73 +1096,205 @@ describe('Research Agent Routes', () => {
       expect(body.openapi).toBe('3.1.1');
     });
   });
-});
 
-describe('UserPhoneLookup', () => {
-  afterEach(() => {
-    nock.cleanAll();
-  });
+  describe('POST /internal/actions/process (unified PubSub endpoint)', () => {
+    const createValidPayload = (overrides: Record<string, unknown> = {}): object => {
+      const event = {
+        type: 'action.created',
+        actionId: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        actionType: 'research',
+        title: 'Test Research',
+        payload: {
+          prompt: 'What is AI?',
+          confidence: 0.95,
+        },
+        timestamp: '2025-01-01T12:00:00.000Z',
+        ...overrides,
+      };
 
-  it('returns phone number when user exists', async () => {
-    const userServiceUrl = 'http://user-service.test';
-    const userPhoneLookup = createUserPhoneLookup({
-      baseUrl: userServiceUrl,
-      internalAuthToken: 'test-token',
+      return {
+        message: {
+          data: Buffer.from(JSON.stringify(event)).toString('base64'),
+          messageId: 'msg-123',
+          publishTime: '2025-01-01T12:00:00.000Z',
+        },
+        subscription: 'projects/test/subscriptions/test-sub',
+      };
+    };
+
+    it('returns 401 without auth', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        payload: createValidPayload(),
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
-    nock(userServiceUrl)
-      .get('/internal/users/user-123/whatsapp-phone')
-      .matchHeader('x-internal-auth', 'test-token')
-      .reply(200, { phoneNumber: '+1234567890' });
+    it('accepts Pub/Sub auth (from: noreply@google.com)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          from: 'noreply@google.com',
+        },
+        payload: createValidPayload(),
+      });
 
-    const result = await userPhoneLookup.getPhoneNumber('user-123');
-
-    expect(result).toBe('+1234567890');
-  });
-
-  it('returns null when user not found (404)', async () => {
-    const userServiceUrl = 'http://user-service.test';
-    const userPhoneLookup = createUserPhoneLookup({
-      baseUrl: userServiceUrl,
-      internalAuthToken: 'test-token',
+      expect(response.statusCode).toBe(200);
     });
 
-    nock(userServiceUrl).get('/internal/users/user-404/whatsapp-phone').reply(404);
+    it('accepts internal auth header', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload(),
+      });
 
-    const result = await userPhoneLookup.getPhoneNumber('user-404');
-
-    expect(result).toBeNull();
-  });
-
-  it('returns null when request fails', async () => {
-    const userServiceUrl = 'http://user-service.test';
-    const userPhoneLookup = createUserPhoneLookup({
-      baseUrl: userServiceUrl,
-      internalAuthToken: 'test-token',
+      expect(response.statusCode).toBe(200);
     });
 
-    nock(userServiceUrl)
-      .get('/internal/users/user-error/whatsapp-phone')
-      .reply(500, 'Server Error');
+    it('processes research action type with handler', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload({ actionType: 'research' }),
+      });
 
-    const result = await userPhoneLookup.getPhoneNumber('user-error');
-
-    expect(result).toBeNull();
-  });
-
-  it('returns null when network error occurs', async () => {
-    const userServiceUrl = 'http://user-service.test';
-    const userPhoneLookup = createUserPhoneLookup({
-      baseUrl: userServiceUrl,
-      internalAuthToken: 'test-token',
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      expect(body.success).toBe(true);
+      expect(body.actionId).toBe('action-123');
     });
 
-    nock(userServiceUrl)
-      .get('/internal/users/user-network/whatsapp-phone')
-      .replyWithError('Network failure');
+    it('skips action type without handler and returns 200', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload({ actionType: 'todo' }),
+      });
 
-    const result = await userPhoneLookup.getPhoneNumber('user-network');
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        skipped: boolean;
+        reason: string;
+      };
+      expect(body.success).toBe(true);
+      expect(body.skipped).toBe(true);
+      expect(body.reason).toBe('no_handler');
+    });
 
-    expect(result).toBeNull();
+    it('returns 400 for invalid message format', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: 'not-valid-base64!!!',
+            messageId: 'msg-123',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for wrong event type', async () => {
+      const event = {
+        type: 'wrong.event',
+        actionId: 'action-123',
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-123',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('POST /internal/actions/retry-pending', () => {
+    it('returns 401 without auth', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/retry-pending',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('accepts OIDC auth (Bearer token)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/retry-pending',
+        headers: {
+          authorization: 'Bearer some-oidc-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('accepts internal auth header', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/retry-pending',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns retry metrics', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/retry-pending',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        processed: number;
+        skipped: number;
+        failed: number;
+        total: number;
+      };
+      expect(body.success).toBe(true);
+      expect(typeof body.processed).toBe('number');
+      expect(typeof body.skipped).toBe('number');
+      expect(typeof body.failed).toBe('number');
+      expect(typeof body.total).toBe('number');
+    });
   });
 });

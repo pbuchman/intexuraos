@@ -89,6 +89,17 @@ export class AuditContext {
       log.researchId = this.params.researchId;
     }
 
+    // Add token and cost information if provided
+    if (result.inputTokens !== undefined) {
+      log.inputTokens = result.inputTokens;
+    }
+    if (result.outputTokens !== undefined) {
+      log.outputTokens = result.outputTokens;
+    }
+    if (result.costUsd !== undefined) {
+      log.costUsd = result.costUsd;
+    }
+
     await saveAuditLog(log);
   }
 
@@ -134,20 +145,13 @@ export class AuditContext {
 
 /**
  * Save an audit log entry to Firestore.
+ * Note: The log object is built with conditional property assignment,
+ * so undefined values are never present - we pass it directly to Firestore.
  */
 async function saveAuditLog(log: LlmAuditLog): Promise<Result<void>> {
   try {
     const firestore = getFirestore();
-
-    // Remove undefined fields before saving
-    const cleanLog: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(log)) {
-      if (value !== undefined) {
-        cleanLog[key] = value;
-      }
-    }
-
-    await firestore.collection(COLLECTION_NAME).doc(log.id).set(cleanLog);
+    await firestore.collection(COLLECTION_NAME).doc(log.id).set(log);
     return ok(undefined);
   } catch (error) {
     const message = getErrorMessage(error);

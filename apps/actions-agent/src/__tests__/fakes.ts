@@ -4,7 +4,6 @@ import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository } from '../domain/ports/actionRepository.js';
-import type { UserPhoneLookup } from '../domain/ports/userPhoneLookup.js';
 import type { Action } from '../domain/models/action.js';
 import type {
   ActionFilterOptionField,
@@ -191,6 +190,16 @@ export class FakeActionRepository implements ActionRepository {
     }
     return Array.from(this.actions.values()).filter((a) => a.userId === userId);
   }
+
+  async listByStatus(status: Action['status'], limit = 100): Promise<Action[]> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    return Array.from(this.actions.values())
+      .filter((a) => a.status === status)
+      .slice(0, limit);
+  }
 }
 
 export class FakeActionEventPublisher implements ActionEventPublisher {
@@ -217,30 +226,9 @@ export class FakeActionEventPublisher implements ActionEventPublisher {
   }
 }
 
-export class FakeUserPhoneLookup implements UserPhoneLookup {
-  private phoneNumbers = new Map<string, string | null>();
-  private defaultPhoneNumber: string | null = '+1234567890';
-
-  setPhoneNumber(userId: string, phoneNumber: string | null): void {
-    this.phoneNumbers.set(userId, phoneNumber);
-  }
-
-  setDefaultPhoneNumber(phoneNumber: string | null): void {
-    this.defaultPhoneNumber = phoneNumber;
-  }
-
-  async getPhoneNumber(userId: string): Promise<string | null> {
-    if (this.phoneNumbers.has(userId)) {
-      return this.phoneNumbers.get(userId) ?? null;
-    }
-    return this.defaultPhoneNumber;
-  }
-}
-
 export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   private sentMessages: {
     userId: string;
-    phoneNumber: string;
     message: string;
     correlationId: string;
   }[] = [];
@@ -258,15 +246,19 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
 
   async publishSendMessage(params: {
     userId: string;
-    phoneNumber: string;
     message: string;
-    correlationId: string;
+    replyToMessageId?: string;
+    correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
     }
-    this.sentMessages.push(params);
+    this.sentMessages.push({
+      userId: params.userId,
+      message: params.message,
+      correlationId: params.correlationId ?? '',
+    });
     return ok(undefined);
   }
 }
@@ -413,6 +405,10 @@ export class FakeActionFiltersRepository implements ActionFiltersRepository {
 }
 
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
+import type {
+  RetryResult,
+  RetryPendingActionsUseCase,
+} from '../domain/usecases/retryPendingActions.js';
 
 export type FakeExecuteResearchActionUseCase = (
   actionId: string
@@ -435,6 +431,24 @@ export function createFakeExecuteResearchActionUseCase(config?: {
   };
 }
 
+export function createFakeRetryPendingActionsUseCase(config?: {
+  returnResult?: RetryResult;
+}): RetryPendingActionsUseCase {
+  return {
+    async execute(): Promise<RetryResult> {
+      return (
+        config?.returnResult ?? {
+          processed: 0,
+          skipped: 0,
+          failed: 0,
+          total: 0,
+          skipReasons: {},
+        }
+      );
+    },
+  };
+}
+
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
   researchServiceClient: FakeResearchServiceClient;
@@ -442,17 +456,15 @@ export function createFakeServices(deps: {
   actionRepository?: FakeActionRepository;
   actionFiltersRepository?: FakeActionFiltersRepository;
   actionEventPublisher?: FakeActionEventPublisher;
-  userPhoneLookup?: FakeUserPhoneLookup;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
+  retryPendingActionsUseCase?: RetryPendingActionsUseCase;
 }): Services {
-  const userPhoneLookup = deps.userPhoneLookup ?? new FakeUserPhoneLookup();
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
 
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
       actionServiceClient: deps.actionServiceClient,
-      userPhoneLookup,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
     });
@@ -464,11 +476,12 @@ export function createFakeServices(deps: {
     actionRepository: deps.actionRepository ?? new FakeActionRepository(),
     actionFiltersRepository: deps.actionFiltersRepository ?? new FakeActionFiltersRepository(),
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
-    userPhoneLookup,
     whatsappPublisher,
     handleResearchActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
+    retryPendingActionsUseCase:
+      deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     research: handleResearchActionUseCase,
   };
 }

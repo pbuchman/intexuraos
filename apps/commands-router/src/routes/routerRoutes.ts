@@ -7,7 +7,7 @@ const commandSchema = {
   properties: {
     id: { type: 'string' },
     userId: { type: 'string' },
-    sourceType: { type: 'string', enum: ['whatsapp_text', 'whatsapp_voice'] },
+    sourceType: { type: 'string', enum: ['whatsapp_text', 'whatsapp_voice', 'pwa-shared'] },
     externalId: { type: 'string' },
     text: { type: 'string' },
     timestamp: { type: 'string', format: 'date-time' },
@@ -97,6 +97,86 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const commands = await commandRepository.listByUserId(user.userId);
 
       return await reply.ok({ commands });
+    }
+  );
+
+  fastify.post(
+    '/router/commands',
+    {
+      schema: {
+        operationId: 'createCommand',
+        summary: 'Create command',
+        description: 'Create a new command from a shared text or link.',
+        tags: ['router'],
+        body: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', minLength: 1 },
+            source: { type: 'string', enum: ['pwa-shared'] },
+          },
+          required: ['text', 'source'],
+        },
+        response: {
+          201: {
+            description: 'Command created',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  command: commandSchema,
+                },
+                required: ['command'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { text, source } = request.body as { text: string; source: 'pwa-shared' };
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substring(2, 9);
+      const externalId = `${String(timestamp)}-${randomSuffix}`;
+
+      const { processCommandUseCase } = getServices();
+      const result = await processCommandUseCase.execute({
+        userId: user.userId,
+        sourceType: source,
+        externalId,
+        text,
+        timestamp: new Date().toISOString(),
+      });
+
+      return await reply.code(201).ok({ command: result.command });
     }
   );
 
