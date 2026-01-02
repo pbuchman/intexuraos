@@ -14,8 +14,8 @@ import {
   createFakeServices,
 } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
 describe('Commands Router Routes', () => {
@@ -23,7 +23,7 @@ describe('Commands Router Routes', () => {
   let jwksServer: FastifyInstance;
   let jwksUrl: string;
   let privateKey: jose.KeyLike;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeCommandRepo: FakeCommandRepository;
   let fakeActionsAgentClient: FakeActionsAgentClient;
@@ -34,7 +34,7 @@ describe('Commands Router Routes', () => {
   async function createAccessToken(sub: string): Promise<string> {
     return await new jose.SignJWT({
       sub,
-      aud: AUTH_AUDIENCE,
+      aud: INTEXURAOS_AUTH_AUDIENCE,
     })
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
@@ -72,9 +72,9 @@ describe('Commands Router Routes', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();

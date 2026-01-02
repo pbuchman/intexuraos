@@ -261,6 +261,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const apiKeysResult = await userServiceClient.getApiKeys(research.userId);
         const apiKeys: DecryptedApiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
+        const researchSettingsResult = await userServiceClient.getResearchSettings(research.userId);
+        const searchMode = researchSettingsResult.ok
+          ? researchSettingsResult.value.searchMode
+          : 'deep';
+
+        request.log.info(
+          { researchId: event.researchId, searchMode },
+          'Using search mode for research'
+        );
+
         const synthesisProvider = research.synthesisLlm;
         const synthesisKey = apiKeys[synthesisProvider];
         if (synthesisKey === undefined) {
@@ -275,7 +285,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: false, error: 'API key missing' };
         }
 
-        const llmProviders = services.createLlmProviders(apiKeys);
+        const llmProviders = services.createLlmProviders(apiKeys, searchMode);
         const synthesizer = services.createSynthesizer(synthesisProvider, synthesisKey);
 
         const deps: Parameters<typeof processResearch>[1] = {

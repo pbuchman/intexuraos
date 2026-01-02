@@ -11,16 +11,16 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeEncryptor, FakeUserSettingsRepository } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let jwksUrl: string;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
@@ -54,11 +54,11 @@ describe('Internal Routes', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();

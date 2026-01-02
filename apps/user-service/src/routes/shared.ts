@@ -14,9 +14,9 @@ export interface Auth0Config {
  * Returns null if required vars are missing.
  */
 export function loadAuth0Config(): Auth0Config | null {
-  const domain = process.env['AUTH0_DOMAIN'];
-  const clientId = process.env['AUTH0_CLIENT_ID'];
-  const audience = process.env['AUTH_AUDIENCE'];
+  const domain = process.env['INTEXURAOS_AUTH0_DOMAIN'];
+  const clientId = process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+  const audience = process.env['INTEXURAOS_AUTH_AUDIENCE'];
 
   if (
     domain === undefined ||

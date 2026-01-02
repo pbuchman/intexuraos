@@ -23,7 +23,6 @@ export type {
   PaginationOptions,
   PaginatedNotifications,
   FilterOptions,
-  DistinctFilterField,
 } from './ports/index.js';
 
 // Usecases
@@ -46,4 +45,3 @@ export {
   type DeleteNotificationInput,
   type DeleteNotificationError,
 } from './usecases/index.js';
-export { getDistinctFilterValues, type GetDistinctFilterValuesInput } from './usecases/index.js';

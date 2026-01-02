@@ -8,7 +8,6 @@ import { err, ok } from '@intexuraos/common-core';
 import type {
   CreateNotificationInput,
   CreateSignatureConnectionInput,
-  DistinctFilterField,
   Notification,
   NotificationRepository,
   PaginatedNotifications,
@@ -17,6 +16,14 @@ import type {
   SignatureConnection,
   SignatureConnectionRepository,
 } from '../domain/notifications/index.js';
+import type {
+  CreateSavedFilterInput,
+  FilterOptionField,
+  FiltersRepositoryError,
+  NotificationFiltersData,
+  NotificationFiltersRepository,
+  SavedNotificationFilter,
+} from '../domain/filters/index.js';
 
 /**
  * Fake SignatureConnection repository for testing.
@@ -306,28 +313,164 @@ export class FakeNotificationRepository implements NotificationRepository {
   addNotification(notification: Notification): void {
     this.notifications.set(notification.id, notification);
   }
+}
 
-  getDistinctValues(
-    userId: string,
-    field: DistinctFilterField
-  ): Promise<Result<string[], RepositoryError>> {
-    if (this.shouldFailFind) {
-      this.shouldFailFind = false;
-      return Promise.resolve(
-        err({ code: 'INTERNAL_ERROR', message: 'Simulated getDistinctValues failure' })
-      );
+/**
+ * Fake NotificationFilters repository for testing.
+ */
+export class FakeNotificationFiltersRepository implements NotificationFiltersRepository {
+  private filtersData = new Map<string, NotificationFiltersData>();
+  private shouldFail = false;
+
+  setFail(fail: boolean): void {
+    this.shouldFail = fail;
+  }
+
+  getByUserId(
+    userId: string
+  ): Promise<Result<NotificationFiltersData | null, FiltersRepositoryError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated failure' }));
     }
 
-    const values = new Set<string>();
-    for (const notif of Array.from(this.notifications.values())) {
-      if (notif.userId === userId) {
-        const value = notif[field];
-        if (typeof value === 'string' && value.length > 0) {
-          values.add(value);
-        }
+    const data = this.filtersData.get(userId);
+    return Promise.resolve(ok(data ?? null));
+  }
+
+  addOption(
+    userId: string,
+    field: FilterOptionField,
+    value: string
+  ): Promise<Result<void, FiltersRepositoryError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated failure' }));
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { app: [], device: [], source: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    if (!data.options[field].includes(value)) {
+      data.options[field].push(value);
+      data.updatedAt = now;
+    }
+
+    this.filtersData.set(userId, data);
+    return Promise.resolve(ok(undefined));
+  }
+
+  addOptions(
+    userId: string,
+    options: Partial<Record<FilterOptionField, string>>
+  ): Promise<Result<void, FiltersRepositoryError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated failure' }));
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { app: [], device: [], source: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    for (const [field, value] of Object.entries(options)) {
+      const f = field as FilterOptionField;
+      if (value !== undefined && !data.options[f].includes(value)) {
+        data.options[f].push(value);
       }
     }
 
-    return Promise.resolve(ok(Array.from(values).sort()));
+    data.updatedAt = now;
+    this.filtersData.set(userId, data);
+    return Promise.resolve(ok(undefined));
+  }
+
+  addSavedFilter(
+    userId: string,
+    filter: CreateSavedFilterInput
+  ): Promise<Result<SavedNotificationFilter, FiltersRepositoryError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated failure' }));
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { app: [], device: [], source: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    const savedFilter: SavedNotificationFilter = {
+      id: crypto.randomUUID(),
+      name: filter.name,
+      createdAt: now,
+    };
+
+    if (filter.app !== undefined) savedFilter.app = filter.app;
+    if (filter.device !== undefined) savedFilter.device = filter.device;
+    if (filter.source !== undefined) savedFilter.source = filter.source;
+    if (filter.title !== undefined) savedFilter.title = filter.title;
+
+    data.savedFilters.push(savedFilter);
+    data.updatedAt = now;
+    this.filtersData.set(userId, data);
+
+    return Promise.resolve(ok(savedFilter));
+  }
+
+  deleteSavedFilter(
+    userId: string,
+    filterId: string
+  ): Promise<Result<void, FiltersRepositoryError>> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated failure' }));
+    }
+
+    const data = this.filtersData.get(userId);
+    if (data === undefined) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Filter data not found' }));
+    }
+
+    const index = data.savedFilters.findIndex((f) => f.id === filterId);
+    if (index === -1) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Saved filter not found' }));
+    }
+
+    data.savedFilters.splice(index, 1);
+    data.updatedAt = new Date().toISOString();
+    this.filtersData.set(userId, data);
+
+    return Promise.resolve(ok(undefined));
+  }
+
+  clear(): void {
+    this.filtersData.clear();
   }
 }

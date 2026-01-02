@@ -37,11 +37,24 @@ export interface UserServiceError {
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
 
 /**
+ * Search mode for research operations.
+ */
+export type SearchMode = 'deep' | 'quick';
+
+/**
+ * Research settings from user-service.
+ */
+export interface ResearchSettings {
+  searchMode: SearchMode;
+}
+
+/**
  * Client interface for user-service internal API.
  */
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>>;
+  getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
 }
 
@@ -111,6 +124,28 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       } catch {
         // Network error returns null (best effort)
         return ok(null);
+      }
+    },
+
+    async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
+      try {
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${userId}/research-settings`,
+          {
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          return ok({ searchMode: 'deep' });
+        }
+
+        const data = (await response.json()) as { searchMode?: 'deep' | 'quick' };
+        return ok({ searchMode: data.searchMode ?? 'deep' });
+      } catch {
+        return ok({ searchMode: 'deep' });
       }
     },
 

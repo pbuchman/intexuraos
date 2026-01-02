@@ -27,7 +27,7 @@ function createTestSettings(overrides: Partial<UserSettings> = {}): UserSettings
   const now = new Date().toISOString();
   return {
     userId: 'user-123',
-    notifications: { filters: [] },
+    researchSettings: { searchMode: 'deep' },
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -60,7 +60,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('returns settings for existing user', async () => {
       const settings = createTestSettings({
-        notifications: { filters: [{ name: 'test-filter' }] },
+        researchSettings: { searchMode: 'quick' },
       });
       await repo.saveSettings(settings);
 
@@ -69,8 +69,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.userId).toBe('user-123');
-        expect(result.value.notifications.filters).toHaveLength(1);
-        expect(result.value.notifications.filters[0]?.name).toBe('test-filter');
+        expect(result.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -132,7 +131,7 @@ describe('FirestoreUserSettingsRepository', () => {
   describe('saveSettings', () => {
     it('saves new settings', async () => {
       const settings = createTestSettings({
-        notifications: { filters: [{ name: 'filter1', app: 'test-app' }] },
+        researchSettings: { searchMode: 'quick' },
       });
 
       const result = await repo.saveSettings(settings);
@@ -146,7 +145,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.notifications.filters[0]?.app).toBe('test-app');
+        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -196,14 +195,14 @@ describe('FirestoreUserSettingsRepository', () => {
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
         expect(stored.value.llmApiKeys?.google).toBeDefined();
-        expect(stored.value.notifications.filters).toEqual([]);
+        expect(stored.value.researchSettings?.searchMode).toBe('deep');
       }
     });
 
     it('updates existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          notifications: { filters: [{ name: 'existing-filter' }] },
+          researchSettings: { searchMode: 'quick' },
         })
       );
 
@@ -216,7 +215,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmApiKeys?.anthropic).toBeDefined();
-        expect(stored.value.notifications.filters[0]?.name).toBe('existing-filter');
+        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -304,7 +303,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          notifications: { filters: [{ name: 'filter' }] },
+          researchSettings: { searchMode: 'quick' },
         })
       );
 
@@ -321,7 +320,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.response).toBe('OpenAI response');
-        expect(stored.value.notifications.filters[0]?.name).toBe('filter');
+        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -359,7 +358,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates testedAt for existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          notifications: { filters: [{ name: 'filter' }] },
+          researchSettings: { searchMode: 'quick' },
         })
       );
 
@@ -371,7 +370,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
-        expect(stored.value.notifications.filters[0]?.name).toBe('filter');
+        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 

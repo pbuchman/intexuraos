@@ -4,6 +4,7 @@
  *
  * GET /internal/users/:uid/llm-keys - Get decrypted LLM API keys for a user
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
+ * GET /internal/users/:uid/research-settings - Get research settings for a user
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -163,6 +164,79 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       reply.status(204);
       return;
+    }
+  );
+
+  // GET /internal/users/:uid/research-settings
+  fastify.get(
+    '/internal/users/:uid/research-settings',
+    {
+      schema: {
+        operationId: 'getInternalResearchSettings',
+        summary: 'Get research settings (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Returns user research settings.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        response: {
+          200: {
+            description: 'Research settings',
+            type: 'object',
+            properties: {
+              searchMode: {
+                type: 'string',
+                enum: ['deep', 'quick'],
+                description: 'Search mode for research',
+              },
+            },
+            required: ['searchMode'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/research-settings',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for research-settings endpoint'
+        );
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const params = request.params as { uid: string };
+      const { userSettingsRepository } = getServices();
+
+      const result = await userSettingsRepository.getSettings(params.uid);
+
+      if (!result.ok || result.value === null) {
+        return { searchMode: 'deep' };
+      }
+
+      const settings = result.value;
+      return {
+        searchMode: settings.researchSettings?.searchMode ?? 'deep',
+      };
     }
   );
 

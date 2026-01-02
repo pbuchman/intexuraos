@@ -7,7 +7,12 @@ import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepos
 import { createUserServiceClient } from './infra/user/userServiceClient.js';
 import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
 
-const REQUIRED_ENV = ['GOOGLE_CLOUD_PROJECT', 'AUTH_JWKS_URL', 'AUTH_ISSUER', 'AUTH_AUDIENCE'];
+const REQUIRED_ENV = [
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_AUDIENCE',
+];
 
 validateRequiredEnv(REQUIRED_ENV);
 

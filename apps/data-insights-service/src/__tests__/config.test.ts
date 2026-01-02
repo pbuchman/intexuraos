@@ -17,7 +17,7 @@ describe('config', () => {
       delete process.env['PORT'];
       delete process.env['HOST'];
       delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-      delete process.env['USER_SERVICE_URL'];
+      delete process.env['INTEXURAOS_USER_SERVICE_URL'];
 
       const config = loadConfig();
 
@@ -31,7 +31,7 @@ describe('config', () => {
       process.env['PORT'] = '9000';
       process.env['HOST'] = '127.0.0.1';
       process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
-      process.env['USER_SERVICE_URL'] = 'http://user-service:8080';
+      process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service:8080';
 
       const config = loadConfig();
 

@@ -20,6 +20,7 @@ import {
   type LlmSynthesisProvider,
   type NotificationSender,
   type ResearchRepository,
+  type SearchMode,
   type TitleGenerator,
 } from './domain/research/index.js';
 
@@ -32,7 +33,10 @@ export interface ServiceContainer {
   researchEventPublisher: ResearchEventPublisher;
   userServiceClient: UserServiceClient;
   notificationSender: NotificationSender;
-  createLlmProviders: (apiKeys: InfraDecryptedApiKeys) => Record<LlmProvider, LlmResearchProvider>;
+  createLlmProviders: (
+    apiKeys: InfraDecryptedApiKeys,
+    searchMode?: SearchMode
+  ) => Record<LlmProvider, LlmResearchProvider>;
   createSynthesizer: (provider: LlmProvider, apiKey: string) => LlmSynthesisProvider;
   createTitleGenerator: (apiKey: string) => TitleGenerator;
 }
@@ -69,7 +73,7 @@ export function resetServices(): void {
  * Uses Pub/Sub to send messages via whatsapp-service.
  */
 function createNotificationSender(userServiceClient: UserServiceClient): NotificationSender {
-  const gcpProjectId = process.env['GOOGLE_CLOUD_PROJECT'];
+  const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'];
 
   if (
@@ -102,14 +106,14 @@ export function initializeServices(): void {
   const researchRepo = new FirestoreResearchRepository();
 
   const userServiceClient = createUserServiceClient({
-    baseUrl: process.env['USER_SERVICE_URL'] ?? 'http://localhost:8081',
+    baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
   });
 
   const notificationSender = createNotificationSender(userServiceClient);
 
   const researchEventPublisher = createResearchEventPublisher({
-    projectId: process.env['GOOGLE_CLOUD_PROJECT'] ?? '',
+    projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
   });
 

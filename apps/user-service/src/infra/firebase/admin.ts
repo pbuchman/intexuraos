@@ -23,9 +23,9 @@ export function getFirebaseAdmin(): App {
     return firebaseApp;
   }
 
-  const projectId = process.env['GOOGLE_CLOUD_PROJECT'];
+  const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
   if (projectId === undefined || projectId === '') {
-    throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable');
+    throw new Error('Missing INTEXURAOS_GCP_PROJECT_ID environment variable');
   }
 
   firebaseApp = initializeApp({ projectId });

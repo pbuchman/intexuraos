@@ -6,6 +6,13 @@ import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository } from '../domain/ports/actionRepository.js';
 import type { UserPhoneLookup } from '../domain/ports/userPhoneLookup.js';
 import type { Action } from '../domain/models/action.js';
+import type {
+  ActionFilterOptionField,
+  ActionFiltersData,
+  CreateSavedActionFilterInput,
+  SavedActionFilter,
+} from '../domain/models/actionFilters.js';
+import type { ActionFiltersRepository } from '../domain/ports/actionFiltersRepository.js';
 import type { ActionCreatedEvent, LlmProvider } from '../domain/models/actionEvent.js';
 import {
   createHandleResearchActionUseCase,
@@ -264,6 +271,147 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   }
 }
 
+export class FakeActionFiltersRepository implements ActionFiltersRepository {
+  private filtersData = new Map<string, ActionFiltersData>();
+  private shouldFail = false;
+
+  setFail(fail: boolean): void {
+    this.shouldFail = fail;
+  }
+
+  async getByUserId(userId: string): Promise<ActionFiltersData | null> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated failure');
+    }
+
+    return this.filtersData.get(userId) ?? null;
+  }
+
+  async addOption(userId: string, field: ActionFilterOptionField, value: string): Promise<void> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated failure');
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { status: [], type: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    if (!data.options[field].includes(value as never)) {
+      (data.options[field] as string[]).push(value);
+      data.updatedAt = now;
+    }
+
+    this.filtersData.set(userId, data);
+  }
+
+  async addOptions(
+    userId: string,
+    options: Partial<Record<ActionFilterOptionField, string>>
+  ): Promise<void> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated failure');
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { status: [], type: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    for (const [field, value] of Object.entries(options)) {
+      const f = field as ActionFilterOptionField;
+      if (value !== undefined && !data.options[f].includes(value as never)) {
+        (data.options[f] as string[]).push(value);
+      }
+    }
+
+    data.updatedAt = now;
+    this.filtersData.set(userId, data);
+  }
+
+  async addSavedFilter(
+    userId: string,
+    filter: CreateSavedActionFilterInput
+  ): Promise<SavedActionFilter> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated failure');
+    }
+
+    const now = new Date().toISOString();
+    let data = this.filtersData.get(userId);
+
+    if (data === undefined) {
+      data = {
+        userId,
+        options: { status: [], type: [] },
+        savedFilters: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
+    const savedFilter: SavedActionFilter = {
+      id: crypto.randomUUID(),
+      name: filter.name,
+      createdAt: now,
+    };
+
+    if (filter.status !== undefined) savedFilter.status = filter.status;
+    if (filter.type !== undefined) savedFilter.type = filter.type;
+
+    data.savedFilters.push(savedFilter);
+    data.updatedAt = now;
+    this.filtersData.set(userId, data);
+
+    return savedFilter;
+  }
+
+  async deleteSavedFilter(userId: string, filterId: string): Promise<void> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated failure');
+    }
+
+    const data = this.filtersData.get(userId);
+    if (data === undefined) {
+      throw new Error('Filter data not found for user');
+    }
+
+    const index = data.savedFilters.findIndex((f) => f.id === filterId);
+    if (index === -1) {
+      throw new Error('Saved filter not found');
+    }
+
+    data.savedFilters.splice(index, 1);
+    data.updatedAt = new Date().toISOString();
+    this.filtersData.set(userId, data);
+  }
+
+  clear(): void {
+    this.filtersData.clear();
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 
 export type FakeExecuteResearchActionUseCase = (
@@ -292,6 +440,7 @@ export function createFakeServices(deps: {
   researchServiceClient: FakeResearchServiceClient;
   notificationSender: FakeNotificationSender;
   actionRepository?: FakeActionRepository;
+  actionFiltersRepository?: FakeActionFiltersRepository;
   actionEventPublisher?: FakeActionEventPublisher;
   userPhoneLookup?: FakeUserPhoneLookup;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
@@ -313,6 +462,7 @@ export function createFakeServices(deps: {
     researchServiceClient: deps.researchServiceClient,
     notificationSender: deps.notificationSender,
     actionRepository: deps.actionRepository ?? new FakeActionRepository(),
+    actionFiltersRepository: deps.actionFiltersRepository ?? new FakeActionFiltersRepository(),
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     userPhoneLookup,
     whatsappPublisher,

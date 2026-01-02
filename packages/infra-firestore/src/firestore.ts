@@ -16,10 +16,10 @@ let firestoreInstance: Firestore | null = null;
  */
 export function getFirestore(): Firestore {
   if (firestoreInstance === null) {
-    const projectId = process.env['GOOGLE_CLOUD_PROJECT'];
+    const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
 
     if (projectId === undefined) {
-      throw new Error('Missing GOOGLE_CLOUD_PROJECT environment variable. Run: direnv allow');
+      throw new Error('Missing INTEXURAOS_GCP_PROJECT_ID environment variable. Run: direnv allow');
     }
 
     firestoreInstance = new Firestore({ projectId });

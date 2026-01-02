@@ -35,11 +35,21 @@ if [[ ! -f "firestore.rules" ]]; then
   exit 1
 fi
 
+# Use locally installed firebase-tools (pinned in package.json) instead of npx
+# to prevent supply chain attacks from dynamically fetched packages
+FIREBASE_BIN="./node_modules/.bin/firebase"
+
+if [[ ! -x "${FIREBASE_BIN}" ]]; then
+  log "ERROR: firebase-tools not found at ${FIREBASE_BIN}"
+  log "Ensure 'npm ci' has run and firebase-tools is in devDependencies"
+  exit 1
+fi
+
 # Deploy indexes and rules
 log "Deploying Firestore indexes..."
-npx firebase-tools deploy --only firestore:indexes --project="${PROJECT_ID}" --non-interactive
+"${FIREBASE_BIN}" deploy --only firestore:indexes --project="${PROJECT_ID}" --non-interactive
 
 log "Deploying Firestore rules..."
-npx firebase-tools deploy --only firestore:rules --project="${PROJECT_ID}" --non-interactive
+"${FIREBASE_BIN}" deploy --only firestore:rules --project="${PROJECT_ID}" --non-interactive
 
 log "Firestore deployment complete"

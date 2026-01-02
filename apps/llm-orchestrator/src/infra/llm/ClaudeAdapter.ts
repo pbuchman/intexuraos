@@ -14,8 +14,12 @@ import type {
 export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: ClaudeClient;
 
-  constructor(apiKey: string) {
-    this.client = createClaudeClient({ apiKey });
+  constructor(apiKey: string, researchModel?: string) {
+    const config: Parameters<typeof createClaudeClient>[0] = { apiKey };
+    if (researchModel !== undefined) {
+      config.researchModel = researchModel;
+    }
+    this.client = createClaudeClient(config);
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

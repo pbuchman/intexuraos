@@ -1,6 +1,6 @@
 /**
  * Firestore implementation of UserSettingsRepository.
- * Stores per-user settings with notification filters.
+ * Stores per-user settings including LLM API keys and research settings.
  */
 
 import {
@@ -14,6 +14,7 @@ import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import type {
   LlmProvider,
   LlmTestResult,
+  ResearchSettings,
   SettingsError,
   UserSettings,
   UserSettingsRepository,
@@ -26,9 +27,6 @@ const COLLECTION_NAME = 'user_settings';
  */
 interface UserSettingsDoc {
   userId: string;
-  notifications: {
-    filters: { name: string; app?: string; source?: string; title?: string }[];
-  };
   llmApiKeys?: {
     google?: EncryptedValue;
     openai?: EncryptedValue;
@@ -39,6 +37,7 @@ interface UserSettingsDoc {
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
   };
+  researchSettings?: ResearchSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,7 +59,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       const data = doc.data() as UserSettingsDoc;
       const settings: UserSettings = {
         userId: data.userId,
-        notifications: data.notifications,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
       };
@@ -69,6 +67,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
       if (data.llmTestResults !== undefined) {
         settings.llmTestResults = data.llmTestResults;
+      }
+      if (data.researchSettings !== undefined) {
+        settings.researchSettings = data.researchSettings;
       }
       return ok(settings);
     } catch (error) {
@@ -86,12 +87,14 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
       const doc: UserSettingsDoc = {
         userId: settings.userId,
-        notifications: settings.notifications,
         createdAt: settings.createdAt,
         updatedAt: settings.updatedAt,
       };
       if (settings.llmApiKeys !== undefined) {
         doc.llmApiKeys = settings.llmApiKeys;
+      }
+      if (settings.researchSettings !== undefined) {
+        doc.researchSettings = settings.researchSettings;
       }
 
       await docRef.set(doc);
@@ -119,8 +122,8 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         const now = new Date().toISOString();
         await docRef.set({
           userId,
-          notifications: { filters: [] },
           llmApiKeys: { [provider]: encryptedKey },
+          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });
@@ -177,8 +180,8 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         const now = new Date().toISOString();
         await docRef.set({
           userId,
-          notifications: { filters: [] },
           llmTestResults: { [provider]: testResult },
+          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });
@@ -211,8 +214,8 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (!doc.exists) {
         await docRef.set({
           userId,
-          notifications: { filters: [] },
           llmTestResults: { [provider]: { response: '', testedAt: now } },
+          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });

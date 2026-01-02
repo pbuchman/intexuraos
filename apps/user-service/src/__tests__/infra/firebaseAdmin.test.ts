@@ -11,12 +11,12 @@ vi.mock('firebase-admin/app', () => ({
 describe('Firebase Admin', () => {
   beforeEach(() => {
     vi.resetModules();
-    process.env['GOOGLE_CLOUD_PROJECT'] = 'test-project-id';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project-id';
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env['GOOGLE_CLOUD_PROJECT'];
+    delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
   });
 
   describe('getFirebaseAdmin', () => {
@@ -69,8 +69,8 @@ describe('Firebase Admin', () => {
       resetFirebaseAdmin();
     });
 
-    it('throws error if GOOGLE_CLOUD_PROJECT is not set', async () => {
-      delete process.env['GOOGLE_CLOUD_PROJECT'];
+    it('throws error if INTEXURAOS_GCP_PROJECT_ID is not set', async () => {
+      delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
 
       const { getApps } = await import('firebase-admin/app');
       vi.mocked(getApps).mockReturnValue([]);
@@ -80,11 +80,13 @@ describe('Firebase Admin', () => {
 
       resetFirebaseAdmin();
 
-      expect(() => getFirebaseAdmin()).toThrow('Missing GOOGLE_CLOUD_PROJECT environment variable');
+      expect(() => getFirebaseAdmin()).toThrow(
+        'Missing INTEXURAOS_GCP_PROJECT_ID environment variable'
+      );
     });
 
-    it('throws error if GOOGLE_CLOUD_PROJECT is empty string', async () => {
-      process.env['GOOGLE_CLOUD_PROJECT'] = '';
+    it('throws error if INTEXURAOS_GCP_PROJECT_ID is empty string', async () => {
+      process.env['INTEXURAOS_GCP_PROJECT_ID'] = '';
 
       const { getApps } = await import('firebase-admin/app');
       vi.mocked(getApps).mockReturnValue([]);
@@ -94,7 +96,9 @@ describe('Firebase Admin', () => {
 
       resetFirebaseAdmin();
 
-      expect(() => getFirebaseAdmin()).toThrow('Missing GOOGLE_CLOUD_PROJECT environment variable');
+      expect(() => getFirebaseAdmin()).toThrow(
+        'Missing INTEXURAOS_GCP_PROJECT_ID environment variable'
+      );
     });
   });
 

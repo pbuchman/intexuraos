@@ -10,6 +10,7 @@ import type { UserSettingsRepository } from '../ports/UserSettingsRepository.js'
 import {
   createDefaultSettings,
   type NotificationSettings,
+  type ResearchSettings,
   type UserSettings,
 } from '../models/UserSettings.js';
 
@@ -19,7 +20,8 @@ import {
 export interface UpdateUserSettingsInput {
   userId: string;
   requestingUserId: string;
-  notifications: NotificationSettings;
+  notifications?: NotificationSettings;
+  researchSettings?: ResearchSettings;
 }
 
 /**
@@ -53,7 +55,7 @@ export async function updateUserSettings(
   input: UpdateUserSettingsInput,
   deps: UpdateUserSettingsDeps
 ): Promise<Result<UserSettings, UpdateUserSettingsError>> {
-  const { userId, requestingUserId, notifications } = input;
+  const { userId, requestingUserId, notifications, researchSettings } = input;
   const { userSettingsRepository } = deps;
 
   // Authorization check: user can only update their own settings
@@ -62,31 +64,6 @@ export async function updateUserSettings(
       code: 'FORBIDDEN',
       message: 'You can only update your own settings',
     });
-  }
-
-  // Validate filters
-  const filters = notifications.filters;
-
-  // Check for duplicate filter names
-  const filterNames = new Set<string>();
-  for (const filter of filters) {
-    if (filterNames.has(filter.name)) {
-      return err({
-        code: 'INVALID_REQUEST',
-        message: `Duplicate filter name: ${filter.name}`,
-      });
-    }
-    filterNames.add(filter.name);
-  }
-
-  // Check that each filter has at least one criterion
-  for (const filter of filters) {
-    if (filter.app === undefined && filter.source === undefined && filter.title === undefined) {
-      return err({
-        code: 'INVALID_REQUEST',
-        message: `Filter "${filter.name}" must have at least one criterion (app, source, or title)`,
-      });
-    }
   }
 
   // Get existing settings or create defaults
@@ -102,12 +79,17 @@ export async function updateUserSettings(
   const fetchedSettings = (getResult as { ok: true; value: UserSettings | null }).value;
   const existingSettings = fetchedSettings ?? createDefaultSettings(userId);
 
-  // Update settings
+  // Update settings (only update fields that were provided)
   const updatedSettings: UserSettings = {
     ...existingSettings,
-    notifications,
     updatedAt: new Date().toISOString(),
   };
+  if (notifications !== undefined) {
+    updatedSettings.notifications = notifications;
+  }
+  if (researchSettings !== undefined) {
+    updatedSettings.researchSettings = researchSettings;
+  }
 
   // Save updated settings
   const saveResult = await userSettingsRepository.saveSettings(updatedSettings);

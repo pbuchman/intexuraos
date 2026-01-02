@@ -16,7 +16,12 @@ import type {
   ResearchRepository,
   TitleGenerator,
 } from '../domain/research/index.js';
-import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type {
+  DecryptedApiKeys,
+  ResearchSettings,
+  UserServiceClient,
+  UserServiceError,
+} from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
 
@@ -144,6 +149,7 @@ export class FakeResearchRepository implements ResearchRepository {
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
   private phones = new Map<string, string>();
+  private researchSettings = new Map<string, ResearchSettings>();
   private failNextGetApiKeys = false;
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
@@ -160,6 +166,11 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(phone);
   }
 
+  async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
+    const settings = this.researchSettings.get(userId) ?? { searchMode: 'deep' };
+    return ok(settings);
+  }
+
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
     // Best effort - do nothing in tests
   }
@@ -173,6 +184,10 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.phones.set(userId, phone);
   }
 
+  setResearchSettings(userId: string, settings: ResearchSettings): void {
+    this.researchSettings.set(userId, settings);
+  }
+
   setFailNextGetApiKeys(fail: boolean): void {
     this.failNextGetApiKeys = fail;
   }
@@ -180,6 +195,7 @@ export class FakeUserServiceClient implements UserServiceClient {
   clear(): void {
     this.apiKeys.clear();
     this.phones.clear();
+    this.researchSettings.clear();
   }
 }
 

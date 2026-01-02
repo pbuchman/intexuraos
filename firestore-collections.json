@@ -30,9 +30,13 @@
       "owner": "mobile-notifications-service",
       "description": "Device signature to user ID bindings for notification delivery"
     },
+    "mobile_notifications_filters": {
+      "owner": "mobile-notifications-service",
+      "description": "User filter options and saved filters for notifications"
+    },
     "user_settings": {
       "owner": "user-service",
-      "description": "User preferences, notification filters, and LLM API keys (encrypted)"
+      "description": "User preferences and LLM API keys (encrypted)"
     },
     "auth_tokens": {
       "owner": "user-service",
@@ -49,6 +53,10 @@
     "actions": {
       "owner": "actions-agent",
       "description": "Action items and their execution lifecycle"
+    },
+    "actions_filters": {
+      "owner": "actions-agent",
+      "description": "User filter options and saved filters for actions"
     },
     "custom_data_sources": {
       "owner": "data-insights-service",

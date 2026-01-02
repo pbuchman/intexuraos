@@ -9,6 +9,8 @@ import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
 
+export type SearchMode = 'deep' | 'quick';
+
 export type ResearchStatus = 'draft' | 'pending' | 'processing' | 'completed' | 'failed';
 
 export type LlmResultStatus = 'pending' | 'processing' | 'completed' | 'failed';

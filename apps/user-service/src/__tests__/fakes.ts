@@ -285,7 +285,6 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       const now = new Date().toISOString();
       existing = {
         userId,
-        notifications: { filters: [] },
         llmApiKeys: {},
         createdAt: now,
         updatedAt: now,
@@ -336,7 +335,6 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       const now = new Date().toISOString();
       existing = {
         userId,
-        notifications: { filters: [] },
         llmTestResults: {},
         createdAt: now,
         updatedAt: now,
@@ -359,7 +357,6 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     if (existing === undefined) {
       existing = {
         userId,
-        notifications: { filters: [] },
         llmTestResults: { [provider]: { response: '', testedAt: now } },
         createdAt: now,
         updatedAt: now,

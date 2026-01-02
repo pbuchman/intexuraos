@@ -41,7 +41,7 @@ export function loadConfig(): Config {
     port: process.env['PORT'],
     host: process.env['HOST'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-    userServiceUrl: process.env['USER_SERVICE_URL'],
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'],
   });
 }
 

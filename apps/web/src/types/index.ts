@@ -212,7 +212,7 @@ export interface MobileNotificationsConnectResponse {
 }
 
 /**
- * Notification filter configuration.
+ * Notification filter configuration (legacy - from user-service).
  * Requires a unique name and at least one filter criterion.
  */
 export interface NotificationFilter {
@@ -220,6 +220,36 @@ export interface NotificationFilter {
   app?: string;
   source?: string;
   title?: string;
+}
+
+/**
+ * Saved notification filter from mobile-notifications-service.
+ */
+export interface SavedNotificationFilter {
+  id: string;
+  name: string;
+  app?: string;
+  device?: string;
+  source?: string;
+  title?: string;
+  createdAt: string;
+}
+
+/**
+ * Notification filter options from mobile-notifications-service.
+ */
+export interface NotificationFilterOptions {
+  app: string[];
+  device: string[];
+  source: string[];
+}
+
+/**
+ * Notification filters data from mobile-notifications-service.
+ */
+export interface NotificationFiltersData {
+  options: NotificationFilterOptions;
+  savedFilters: SavedNotificationFilter[];
 }
 
 /**

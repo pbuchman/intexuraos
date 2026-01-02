@@ -10,16 +10,6 @@
 #   npm run dev
 
 # =============================================================================
-# AUTH (backend services require non-prefixed names)
-# =============================================================================
-# The fastifyAuthPlugin expects AUTH_* without INTEXURAOS_ prefix.
-# Map from the prefixed versions loaded from Secret Manager.
-
-export AUTH_JWKS_URL=$INTEXURAOS_AUTH_JWKS_URL
-export AUTH_ISSUER=$INTEXURAOS_AUTH_ISSUER
-export AUTH_AUDIENCE=$INTEXURAOS_AUTH_AUDIENCE
-
-# =============================================================================
 # EMULATORS
 # =============================================================================
 # Uncomment to use local emulators instead of GCP services.

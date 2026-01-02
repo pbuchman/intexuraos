@@ -122,26 +122,26 @@ The script will:
 
 ```bash
 # Set your Auth0 configuration
-export AUTH0_DOMAIN="your-tenant.auth0.com"
-export AUTH0_CLIENT_ID="your-native-app-client-id"
+export INTEXURAOS_AUTH0_DOMAIN="your-tenant.auth0.com"
+export INTEXURAOS_AUTH0_CLIENT_ID="your-native-app-client-id"
 export AUTH0_AUDIENCE="urn:intexuraos:api"
 
 # Add secret versions (Terraform created the secrets, we add values)
 
 # Auth0 domain - required for user-service DAF endpoints
-echo -n "${AUTH0_DOMAIN}" | \
+echo -n "${INTEXURAOS_AUTH0_DOMAIN}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=-
 
 # Auth0 client ID - required for user-service DAF endpoints
-echo -n "${AUTH0_CLIENT_ID}" | \
+echo -n "${INTEXURAOS_AUTH0_CLIENT_ID}" | \
   gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=-
 
 # Auth JWKS URL - required for JWT verification
-echo -n "https://${AUTH0_DOMAIN}/.well-known/jwks.json" | \
+echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/.well-known/jwks.json" | \
   gcloud secrets versions add INTEXURAOS_AUTH_JWKS_URL --data-file=-
 
 # Auth issuer - required for JWT verification
-echo -n "https://${AUTH0_DOMAIN}/" | \
+echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/" | \
   gcloud secrets versions add INTEXURAOS_AUTH_ISSUER --data-file=-
 
 # Auth audience - required for JWT verification

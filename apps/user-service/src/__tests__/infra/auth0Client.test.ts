@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import nock from 'nock';
 import { Auth0ClientImpl, loadAuth0Config } from '../../infra/auth0/client.js';
 
-const AUTH0_DOMAIN = 'test-tenant.auth0.com';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.auth0.com';
 const CLIENT_ID = 'test-client-id';
 const REFRESH_TOKEN = 'test-refresh-token';
 
@@ -22,7 +22,7 @@ describe('Auth0ClientImpl', () => {
   });
 
   beforeEach(() => {
-    client = new Auth0ClientImpl({ domain: AUTH0_DOMAIN, clientId: CLIENT_ID });
+    client = new Auth0ClientImpl({ domain: INTEXURAOS_AUTH0_DOMAIN, clientId: CLIENT_ID });
   });
 
   afterEach(() => {
@@ -31,7 +31,7 @@ describe('Auth0ClientImpl', () => {
 
   describe('refreshAccessToken', () => {
     it('returns tokens on successful refresh', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
         access_token: 'new-access-token',
         token_type: 'Bearer',
         expires_in: 86400,
@@ -54,7 +54,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INVALID_GRANT error when refresh token is invalid', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
         error: 'invalid_grant',
         error_description: 'Unknown or invalid refresh token.',
       });
@@ -69,7 +69,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INVALID_GRANT with default message when error_description is missing', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
         error: 'invalid_grant',
       });
 
@@ -83,7 +83,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INTERNAL_ERROR for other Auth0 errors', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
         error: 'invalid_request',
         error_description: 'Missing required parameter',
       });
@@ -98,7 +98,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INTERNAL_ERROR with error code as fallback when error_description is missing', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
         error: 'invalid_request',
       });
 
@@ -112,7 +112,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INTERNAL_ERROR for non-JSON error response', async () => {
-      nock(`https://${AUTH0_DOMAIN}`)
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
         .post('/oauth/token')
         .reply(500, 'Internal Server Error', { 'content-type': 'text/plain' });
 
@@ -125,7 +125,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INTERNAL_ERROR for error response with empty JSON body', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {});
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {});
 
       const result = await client.refreshAccessToken(REFRESH_TOKEN);
 
@@ -137,7 +137,9 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('returns INTERNAL_ERROR on network failure', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').replyWithError('Connection refused');
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+        .post('/oauth/token')
+        .replyWithError('Connection refused');
 
       const result = await client.refreshAccessToken(REFRESH_TOKEN);
 
@@ -149,7 +151,7 @@ describe('Auth0ClientImpl', () => {
     });
 
     it('handles response without optional fields', async () => {
-      nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+      nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
         access_token: 'access-only',
         token_type: 'Bearer',
         expires_in: 3600,
@@ -176,8 +178,8 @@ describe('loadAuth0Config', () => {
   });
 
   it('returns config when both env vars are set', () => {
-    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-    process.env['AUTH0_CLIENT_ID'] = 'client-123';
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'client-123';
 
     const config = loadAuth0Config();
 
@@ -187,8 +189,8 @@ describe('loadAuth0Config', () => {
   });
 
   it('returns null when domain is missing', () => {
-    delete process.env['AUTH0_DOMAIN'];
-    process.env['AUTH0_CLIENT_ID'] = 'client-123';
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'client-123';
 
     const config = loadAuth0Config();
 
@@ -196,8 +198,8 @@ describe('loadAuth0Config', () => {
   });
 
   it('returns null when client ID is missing', () => {
-    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-    delete process.env['AUTH0_CLIENT_ID'];
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
 
     const config = loadAuth0Config();
 
@@ -205,8 +207,8 @@ describe('loadAuth0Config', () => {
   });
 
   it('returns null when domain is empty string', () => {
-    process.env['AUTH0_DOMAIN'] = '';
-    process.env['AUTH0_CLIENT_ID'] = 'client-123';
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = '';
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'client-123';
 
     const config = loadAuth0Config();
 
@@ -214,8 +216,8 @@ describe('loadAuth0Config', () => {
   });
 
   it('returns null when client ID is empty string', () => {
-    process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-    process.env['AUTH0_CLIENT_ID'] = '';
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = '';
 
     const config = loadAuth0Config();
 

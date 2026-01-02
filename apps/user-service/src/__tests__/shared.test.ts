@@ -9,56 +9,56 @@ describe('shared utilities', () => {
   let savedClientId: string | undefined;
   let savedAudience: string | undefined;
   beforeEach(() => {
-    savedDomain = process.env['AUTH0_DOMAIN'];
-    savedClientId = process.env['AUTH0_CLIENT_ID'];
-    savedAudience = process.env['AUTH_AUDIENCE'];
+    savedDomain = process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    savedClientId = process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    savedAudience = process.env['INTEXURAOS_AUTH_AUDIENCE'];
   });
   afterEach(() => {
     if (savedDomain !== undefined) {
-      process.env['AUTH0_DOMAIN'] = savedDomain;
+      process.env['INTEXURAOS_AUTH0_DOMAIN'] = savedDomain;
     } else {
-      delete process.env['AUTH0_DOMAIN'];
+      delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
     }
     if (savedClientId !== undefined) {
-      process.env['AUTH0_CLIENT_ID'] = savedClientId;
+      process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = savedClientId;
     } else {
-      delete process.env['AUTH0_CLIENT_ID'];
+      delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
     }
     if (savedAudience !== undefined) {
-      process.env['AUTH_AUDIENCE'] = savedAudience;
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = savedAudience;
     } else {
-      delete process.env['AUTH_AUDIENCE'];
+      delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     }
   });
   describe('loadAuth0Config', () => {
-    it('returns null when AUTH0_DOMAIN is missing', () => {
-      delete process.env['AUTH0_DOMAIN'];
-      process.env['AUTH0_CLIENT_ID'] = 'test-client';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    it('returns null when INTEXURAOS_AUTH0_DOMAIN is missing', () => {
+      delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+      process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
       expect(loadAuth0Config()).toBeNull();
     });
-    it('returns null when AUTH0_CLIENT_ID is missing', () => {
-      process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-      delete process.env['AUTH0_CLIENT_ID'];
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    it('returns null when INTEXURAOS_AUTH0_CLIENT_ID is missing', () => {
+      process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+      delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
       expect(loadAuth0Config()).toBeNull();
     });
-    it('returns null when AUTH_AUDIENCE is missing', () => {
-      process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-      process.env['AUTH0_CLIENT_ID'] = 'test-client';
-      delete process.env['AUTH_AUDIENCE'];
+    it('returns null when INTEXURAOS_AUTH_AUDIENCE is missing', () => {
+      process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+      process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client';
+      delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
       expect(loadAuth0Config()).toBeNull();
     });
-    it('returns null when AUTH0_DOMAIN is empty', () => {
-      process.env['AUTH0_DOMAIN'] = '';
-      process.env['AUTH0_CLIENT_ID'] = 'test-client';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    it('returns null when INTEXURAOS_AUTH0_DOMAIN is empty', () => {
+      process.env['INTEXURAOS_AUTH0_DOMAIN'] = '';
+      process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
       expect(loadAuth0Config()).toBeNull();
     });
     it('returns config when all vars are set', () => {
-      process.env['AUTH0_DOMAIN'] = 'test.auth0.com';
-      process.env['AUTH0_CLIENT_ID'] = 'test-client';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test.auth0.com';
+      process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
       const config = loadAuth0Config();
       expect(config).not.toBeNull();
       expect(config?.domain).toBe('test.auth0.com');

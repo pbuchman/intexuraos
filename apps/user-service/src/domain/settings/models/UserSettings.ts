@@ -6,24 +6,6 @@
 import type { EncryptedValue } from '@intexuraos/common-core';
 
 /**
- * A notification filter configuration.
- * Requires a unique name and at least one filter criterion.
- */
-export interface NotificationFilter {
-  name: string; // Unique within user's filters
-  app?: string; // e.g., "com.whatsapp"
-  source?: string; // e.g., "tasker"
-  title?: string; // Partial match, case-insensitive
-}
-
-/**
- * Notification-related settings.
- */
-export interface NotificationSettings {
-  filters: NotificationFilter[];
-}
-
-/**
  * LLM provider identifiers.
  */
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
@@ -56,13 +38,45 @@ export interface LlmTestResults {
 }
 
 /**
+ * Search mode for research operations.
+ * - 'deep': Uses research-optimized models (slower, more thorough)
+ * - 'quick': Uses default models with web search (faster, cheaper)
+ */
+export type SearchMode = 'deep' | 'quick';
+
+/**
+ * Research-related settings.
+ */
+export interface ResearchSettings {
+  searchMode: SearchMode;
+}
+
+/**
+ * A notification filter rule.
+ */
+export interface NotificationFilter {
+  name: string;
+  app?: string;
+  source?: string;
+  title?: string;
+}
+
+/**
+ * Notification-related settings.
+ */
+export interface NotificationSettings {
+  filters: NotificationFilter[];
+}
+
+/**
  * User settings aggregate.
  */
 export interface UserSettings {
   userId: string;
-  notifications: NotificationSettings;
+  notifications?: NotificationSettings;
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
+  researchSettings?: ResearchSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,7 +88,7 @@ export function createDefaultSettings(userId: string): UserSettings {
   const now = new Date().toISOString();
   return {
     userId,
-    notifications: { filters: [] },
+    researchSettings: { searchMode: 'deep' },
     createdAt: now,
     updatedAt: now,
   };

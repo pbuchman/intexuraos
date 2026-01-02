@@ -21,8 +21,8 @@ import {
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const TEST_USER_ID = 'auth0|test-user-123';
 const OTHER_USER_ID = 'auth0|other-user-456';
 
@@ -52,9 +52,9 @@ describe('Research Routes - Unauthenticated', () => {
   let fakeRepo: FakeResearchRepository;
 
   beforeEach(async () => {
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
     fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
@@ -169,7 +169,7 @@ describe('Research Routes - Authenticated', () => {
   let jwksServer: FastifyInstance;
   let privateKey: jose.KeyLike;
   let jwksUrl: string;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeRepo: FakeResearchRepository;
   let fakeUserServiceClient: FakeUserServiceClient;
@@ -181,7 +181,7 @@ describe('Research Routes - Authenticated', () => {
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
-      .setAudience(AUTH_AUDIENCE)
+      .setAudience(INTEXURAOS_AUTH_AUDIENCE)
       .setExpirationTime('1h');
 
     return await builder.sign(privateKey);
@@ -216,9 +216,9 @@ describe('Research Routes - Authenticated', () => {
   });
 
   beforeEach(async () => {
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
     clearJwksCache();
 
@@ -897,9 +897,9 @@ describe('System Endpoints', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
 
     const fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
@@ -952,9 +952,9 @@ describe('Internal Routes', () => {
   const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
 
   beforeEach(async () => {
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
 
     fakeRepo = new FakeResearchRepository();

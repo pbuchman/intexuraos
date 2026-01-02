@@ -497,9 +497,9 @@ describe('Research Agent Routes', () => {
 
   describe('GET /router/actions (list user actions)', () => {
     beforeEach(() => {
-      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     });
 
     it('returns 401 when no auth token', async () => {
@@ -548,9 +548,9 @@ describe('Research Agent Routes', () => {
 
   describe('PATCH /router/actions/:actionId (update action status)', () => {
     beforeEach(() => {
-      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     });
 
     it('returns 401 when no auth token', async () => {
@@ -646,9 +646,9 @@ describe('Research Agent Routes', () => {
 
   describe('DELETE /router/actions/:actionId (delete action)', () => {
     beforeEach(() => {
-      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     });
 
     it('returns 401 when no auth token', async () => {
@@ -737,9 +737,9 @@ describe('Research Agent Routes', () => {
 
   describe('POST /router/actions/batch (batch fetch actions)', () => {
     beforeEach(() => {
-      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     });
 
     it('returns 401 when no auth token', async () => {
@@ -910,9 +910,9 @@ describe('Research Agent Routes', () => {
 
   describe('POST /router/actions/:actionId/execute (execute action)', () => {
     beforeEach(() => {
-      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
-      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
-      process.env['AUTH_AUDIENCE'] = 'test-audience';
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     });
 
     it('returns 401 when no auth token', async () => {

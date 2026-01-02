@@ -6,7 +6,6 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   CreateNotificationInput,
-  DistinctFilterField,
   Notification,
   NotificationRepository,
   PaginatedNotifications,
@@ -219,40 +218,6 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       return err({
         code: 'INTERNAL_ERROR',
         message: getErrorMessage(error, 'Failed to delete notification'),
-      });
-    }
-  }
-
-  async getDistinctValues(
-    userId: string,
-    field: DistinctFilterField
-  ): Promise<Result<string[], RepositoryError>> {
-    try {
-      const db = getFirestore();
-      // 💰 CostGuard: Limit scan to 1000 most recent docs and select only needed field
-      // This prevents full collection scans while capturing most distinct values
-      const snapshot = await db
-        .collection(COLLECTION_NAME)
-        .where('userId', '==', userId)
-        .orderBy('receivedAt', 'desc')
-        .limit(1000)
-        .select(field)
-        .get();
-
-      const values = new Set<string>();
-      for (const doc of snapshot.docs) {
-        const data = doc.data() as Pick<NotificationDoc, typeof field>;
-        const value = data[field];
-        if (typeof value === 'string' && value.length > 0) {
-          values.add(value);
-        }
-      }
-
-      return ok(Array.from(values).sort());
-    } catch (error) {
-      return err({
-        code: 'INTERNAL_ERROR',
-        message: getErrorMessage(error, 'Failed to get distinct values'),
       });
     }
   }

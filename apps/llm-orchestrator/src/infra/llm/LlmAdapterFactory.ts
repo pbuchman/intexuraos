@@ -2,10 +2,14 @@
  * Factory functions for creating LLM adapters from API keys.
  */
 
+import { CLAUDE_DEFAULTS } from '@intexuraos/infra-claude';
+import { GEMINI_DEFAULTS } from '@intexuraos/infra-gemini';
+import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
 import type {
   LlmProvider,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  SearchMode,
   TitleGenerator,
 } from '../../domain/research/index.js';
 import type { DecryptedApiKeys } from '../user/index.js';
@@ -14,18 +18,23 @@ import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
 
 export function createLlmProviders(
-  keys: DecryptedApiKeys
+  keys: DecryptedApiKeys,
+  searchMode: SearchMode = 'deep'
 ): Record<LlmProvider, LlmResearchProvider> {
   const providers: Partial<Record<LlmProvider, LlmResearchProvider>> = {};
 
+  const geminiModel = searchMode === 'quick' ? GEMINI_DEFAULTS.defaultModel : undefined;
+  const claudeModel = searchMode === 'quick' ? CLAUDE_DEFAULTS.defaultModel : undefined;
+  const gptModel = searchMode === 'quick' ? GPT_DEFAULTS.defaultModel : undefined;
+
   if (keys.google !== undefined) {
-    providers.google = new GeminiAdapter(keys.google);
+    providers.google = new GeminiAdapter(keys.google, geminiModel);
   }
   if (keys.anthropic !== undefined) {
-    providers.anthropic = new ClaudeAdapter(keys.anthropic);
+    providers.anthropic = new ClaudeAdapter(keys.anthropic, claudeModel);
   }
   if (keys.openai !== undefined) {
-    providers.openai = new GptAdapter(keys.openai);
+    providers.openai = new GptAdapter(keys.openai, gptModel);
   }
 
   return providers as Record<LlmProvider, LlmResearchProvider>;

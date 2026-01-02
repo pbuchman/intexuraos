@@ -4,12 +4,13 @@ import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import {
   ApiError,
+  createSavedNotificationFilter,
   deleteMobileNotification,
-  getFilterValues,
+  deleteSavedNotificationFilter,
   getMobileNotifications,
+  getNotificationFilters,
 } from '@/services';
-import { getUserSettings, updateUserSettings } from '@/services/authApi';
-import type { MobileNotification, NotificationFilter } from '@/types';
+import type { MobileNotification, SavedNotificationFilter } from '@/types';
 import { Bell, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
 
 /**
@@ -178,7 +179,7 @@ function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean 
 }
 
 export function MobileNotificationsListPage(): React.JSX.Element {
-  const { getAccessToken, user } = useAuth();
+  const { getAccessToken } = useAuth();
   const [searchParams] = useSearchParams();
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
@@ -198,28 +199,26 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [sourceOptions, setSourceOptions] = useState<string[]>([]);
 
   // Saved filters
-  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
 
   // Filter name for saving
   const [filterName, setFilterName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load dropdown options on mount
+  // Load filter options and saved filters on mount
   useEffect(() => {
-    const loadFilterOptions = async (): Promise<void> => {
+    const loadFiltersData = async (): Promise<void> => {
       try {
         const token = await getAccessToken();
-        const [apps, sources] = await Promise.all([
-          getFilterValues(token, 'app'),
-          getFilterValues(token, 'source'),
-        ]);
-        setAppOptions(apps);
-        setSourceOptions(sources);
+        const filtersData = await getNotificationFilters(token);
+        setAppOptions(filtersData.options.app);
+        setSourceOptions(filtersData.options.source);
+        setSavedFilters(filtersData.savedFilters);
       } catch {
         /* Best-effort load, ignore errors */
       }
     };
-    void loadFilterOptions();
+    void loadFiltersData();
   }, [getAccessToken]);
 
   const fetchNotifications = useCallback(
@@ -329,21 +328,6 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     void fetchNotifications(true);
   };
 
-  // Fetch saved filters on mount
-  useEffect(() => {
-    const fetchSavedFilters = async (): Promise<void> => {
-      if (user?.sub === undefined) return;
-      try {
-        const token = await getAccessToken();
-        const settings = await getUserSettings(token, user.sub);
-        setSavedFilters(settings.notifications.filters);
-      } catch {
-        /* Best-effort fetch, ignore errors */
-      }
-    };
-    void fetchSavedFilters();
-  }, [getAccessToken, user?.sub]);
-
   // Apply filter from URL search params
   useEffect(() => {
     const urlApp = searchParams.get('app');
@@ -361,7 +345,6 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   }, [searchParams]);
 
   const handleSaveFilter = async (): Promise<void> => {
-    if (user?.sub === undefined) return;
     if (filterName.trim() === '') {
       setError('Filter name is required');
       return;
@@ -377,24 +360,26 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     }
 
     setIsSaving(true);
-    const newFilter: NotificationFilter = { name: filterName.trim() };
+    const newFilterInput: {
+      name: string;
+      app?: string;
+      source?: string;
+      title?: string;
+    } = { name: filterName.trim() };
     if (filters.app !== '') {
-      newFilter.app = filters.app;
+      newFilterInput.app = filters.app;
     }
     if (filters.source !== '') {
-      newFilter.source = filters.source;
+      newFilterInput.source = filters.source;
     }
-    // Use titleInput to capture pending debounced input
     if (titleInput !== '') {
-      newFilter.title = titleInput;
+      newFilterInput.title = titleInput;
     }
-
-    const newFilters = [...savedFilters, newFilter];
 
     try {
       const token = await getAccessToken();
-      await updateUserSettings(token, user.sub, { filters: newFilters });
-      setSavedFilters(newFilters);
+      const createdFilter = await createSavedNotificationFilter(token, newFilterInput);
+      setSavedFilters((prev) => [...prev, createdFilter]);
       setFilterName('');
       setError(null);
     } catch (e) {
@@ -404,18 +389,19 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     }
   };
 
-  const handleDeleteFilter = async (name: string): Promise<void> => {
-    if (user?.sub === undefined) return;
+  const handleDeleteFilter = async (filterId: string): Promise<void> => {
+    const filterToDelete = savedFilters.find((f) => f.id === filterId);
+    if (filterToDelete === undefined) return;
 
-    const newFilters = savedFilters.filter((f) => f.name !== name);
-    setSavedFilters(newFilters);
+    // Optimistic update
+    setSavedFilters((prev) => prev.filter((f) => f.id !== filterId));
 
     try {
       const token = await getAccessToken();
-      await updateUserSettings(token, user.sub, { filters: newFilters });
+      await deleteSavedNotificationFilter(token, filterId);
     } catch (e) {
       // Revert on error
-      setSavedFilters(savedFilters);
+      setSavedFilters((prev) => [...prev, filterToDelete]);
       setError(e instanceof ApiError ? e.message : 'Failed to delete filter');
     }
   };
@@ -573,13 +559,13 @@ export function MobileNotificationsListPage(): React.JSX.Element {
             <div className="mt-2 flex flex-wrap gap-2">
               {savedFilters.map((filter) => (
                 <div
-                  key={filter.name}
+                  key={filter.id}
                   className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-slate-700 shadow-sm"
                 >
                   <span>{filter.name}</span>
                   <button
                     onClick={(): void => {
-                      void handleDeleteFilter(filter.name);
+                      void handleDeleteFilter(filter.id);
                     }}
                     className="text-slate-400 hover:text-red-600"
                     aria-label={`Delete filter ${filter.name}`}

@@ -8,9 +8,9 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { FakeAuth0Client, FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'https://api.test.com';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'https://api.test.com';
 
 describe('Token Refresh Routes', () => {
   let app: FastifyInstance;
@@ -19,9 +19,9 @@ describe('Token Refresh Routes', () => {
 
   beforeEach(() => {
     // Clear environment
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
 
     // Reset services before each test
@@ -39,9 +39,9 @@ describe('Token Refresh Routes', () => {
 
   describe('POST /auth/refresh', () => {
     describe('when config is missing', () => {
-      it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      it('returns 503 MISCONFIGURED when INTEXURAOS_AUTH0_DOMAIN is missing', async () => {
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         app = await buildServer();
 
         const response = await app.inject({
@@ -59,9 +59,9 @@ describe('Token Refresh Routes', () => {
         expect(body.error.code).toBe('MISCONFIGURED');
       });
 
-      it('returns 503 MISCONFIGURED when AUTH0_CLIENT_ID is missing', async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      it('returns 503 MISCONFIGURED when INTEXURAOS_AUTH0_CLIENT_ID is missing', async () => {
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         app = await buildServer();
 
         const response = await app.inject({
@@ -79,9 +79,9 @@ describe('Token Refresh Routes', () => {
         expect(body.error.code).toBe('MISCONFIGURED');
       });
 
-      it('returns 503 MISCONFIGURED when AUTH_AUDIENCE is missing', async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
+      it('returns 503 MISCONFIGURED when INTEXURAOS_AUTH_AUDIENCE is missing', async () => {
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
         app = await buildServer();
 
         const response = await app.inject({
@@ -100,9 +100,9 @@ describe('Token Refresh Routes', () => {
       });
 
       it('returns 503 MISCONFIGURED when auth0Client is null', async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
         // Set services with null auth0Client
         setServices({
@@ -134,9 +134,9 @@ describe('Token Refresh Routes', () => {
 
     describe('validation', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
@@ -185,9 +185,9 @@ describe('Token Refresh Routes', () => {
 
     describe('token retrieval errors', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
@@ -240,9 +240,9 @@ describe('Token Refresh Routes', () => {
 
     describe('Auth0 refresh errors', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
@@ -335,9 +335,9 @@ describe('Token Refresh Routes', () => {
 
     describe('successful refresh', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
         setServices({
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
