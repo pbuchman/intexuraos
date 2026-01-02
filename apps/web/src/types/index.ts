@@ -224,13 +224,14 @@ export interface NotificationFilter {
 
 /**
  * Saved notification filter from mobile-notifications-service.
+ * Filter dimensions are arrays for multi-select.
  */
 export interface SavedNotificationFilter {
   id: string;
   name: string;
-  app?: string;
-  device?: string;
-  source?: string;
+  app?: string[];
+  device?: string[];
+  source?: string[];
   title?: string;
   createdAt: string;
 }

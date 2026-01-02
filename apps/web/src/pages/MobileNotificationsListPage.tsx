@@ -232,12 +232,12 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         setError(null);
 
         const token = await getAccessToken();
-        const options: { source?: string; app?: string; title?: string } = {};
+        const options: { source?: string[]; app?: string[]; title?: string } = {};
         if (filters.source !== '') {
-          options.source = filters.source;
+          options.source = [filters.source];
         }
         if (filters.app !== '') {
-          options.app = filters.app;
+          options.app = [filters.app];
         }
         if (filters.title !== '') {
           options.title = filters.title;
@@ -262,14 +262,14 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     try {
       setIsLoadingMore(true);
       const token = await getAccessToken();
-      const options: { cursor: string; source?: string; app?: string; title?: string } = {
+      const options: { cursor: string; source?: string[]; app?: string[]; title?: string } = {
         cursor: nextCursor,
       };
       if (filters.source !== '') {
-        options.source = filters.source;
+        options.source = [filters.source];
       }
       if (filters.app !== '') {
-        options.app = filters.app;
+        options.app = [filters.app];
       }
       if (filters.title !== '') {
         options.title = filters.title;
@@ -362,15 +362,15 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     setIsSaving(true);
     const newFilterInput: {
       name: string;
-      app?: string;
-      source?: string;
+      app?: string[];
+      source?: string[];
       title?: string;
     } = { name: filterName.trim() };
     if (filters.app !== '') {
-      newFilterInput.app = filters.app;
+      newFilterInput.app = [filters.app];
     }
     if (filters.source !== '') {
-      newFilterInput.source = filters.source;
+      newFilterInput.source = [filters.source];
     }
     if (titleInput !== '') {
       newFilterInput.title = titleInput;
