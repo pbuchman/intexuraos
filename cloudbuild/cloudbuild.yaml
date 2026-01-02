@@ -488,6 +488,11 @@ steps:
         INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
         INTEXURAOS_LLM_ORCHESTRATOR_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_URL)
         INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
+        INTEXURAOS_ACTIONS_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_ACTIONS_AGENT_URL)
+        INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_DATA_INSIGHTS_SERVICE_URL)
+        INTEXURAOS_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
+        INTEXURAOS_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
+        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
         EOF
           echo "Secrets written to /workspace/apps/web/.env"
         else
