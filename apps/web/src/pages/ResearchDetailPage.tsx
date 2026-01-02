@@ -399,8 +399,7 @@ export function ResearchDetailPage(): React.JSX.Element {
       {/* Only show Individual LLM Results when at least one result has content */}
       {research.llmResults.some(
         (r) =>
-          (r.result !== undefined && r.result !== '') ||
-          (r.error !== undefined && r.error !== '')
+          (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
       ) ? (
         <div>
           <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
