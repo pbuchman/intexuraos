@@ -163,37 +163,37 @@ describe('FirestoreNotificationFiltersRepository', () => {
     it('creates saved filter with app', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'WhatsApp Only',
-        app: 'com.whatsapp',
+        app: ['com.whatsapp'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.name).toBe('WhatsApp Only');
-        expect(result.value.app).toBe('com.whatsapp');
+        expect(result.value.app).toEqual(['com.whatsapp']);
       }
     });
 
     it('creates saved filter with device', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Pixel Only',
-        device: 'Pixel 7',
+        device: ['Pixel 7'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.device).toBe('Pixel 7');
+        expect(result.value.device).toEqual(['Pixel 7']);
       }
     });
 
     it('creates saved filter with source', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Mail Only',
-        source: 'mail',
+        source: ['mail'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.source).toBe('mail');
+        expect(result.value.source).toEqual(['mail']);
       }
     });
 
@@ -212,17 +212,17 @@ describe('FirestoreNotificationFiltersRepository', () => {
     it('creates saved filter with all optional fields', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Complex Filter',
-        app: 'com.gmail',
-        device: 'Pixel 7',
-        source: 'mail',
+        app: ['com.gmail'],
+        device: ['Pixel 7'],
+        source: ['mail'],
         title: 'meeting',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.app).toBe('com.gmail');
-        expect(result.value.device).toBe('Pixel 7');
-        expect(result.value.source).toBe('mail');
+        expect(result.value.app).toEqual(['com.gmail']);
+        expect(result.value.device).toEqual(['Pixel 7']);
+        expect(result.value.source).toEqual(['mail']);
         expect(result.value.title).toBe('meeting');
       }
     });

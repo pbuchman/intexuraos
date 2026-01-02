@@ -106,7 +106,7 @@ describe('Filter Routes', () => {
     it('returns existing filters for user', async () => {
       await fakeFiltersRepo.addOption(TEST_USER_ID, 'app', 'com.whatsapp');
       await fakeFiltersRepo.addOption(TEST_USER_ID, 'device', 'Pixel 7');
-      await fakeFiltersRepo.addSavedFilter(TEST_USER_ID, { name: 'Work', app: 'com.gmail' });
+      await fakeFiltersRepo.addSavedFilter(TEST_USER_ID, { name: 'Work', app: ['com.gmail'] });
 
       const response = await app.inject({
         method: 'GET',
@@ -121,7 +121,7 @@ describe('Filter Routes', () => {
         success: boolean;
         data: {
           options: { app: string[]; device: string[] };
-          savedFilters: { name: string; app?: string }[];
+          savedFilters: { name: string; app?: string[] }[];
         };
       };
       expect(body.success).toBe(true);
@@ -187,9 +187,9 @@ describe('Filter Routes', () => {
         },
         payload: {
           name: 'Work Emails',
-          app: 'com.google.android.gm',
-          device: 'Pixel 7',
-          source: 'mail',
+          app: ['com.google.android.gm'],
+          device: ['Pixel 7'],
+          source: ['mail'],
           title: 'meeting',
         },
       });
@@ -197,13 +197,19 @@ describe('Filter Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { name: string; app?: string; device?: string; source?: string; title?: string };
+        data: {
+          name: string;
+          app?: string[];
+          device?: string[];
+          source?: string[];
+          title?: string;
+        };
       };
       expect(body.success).toBe(true);
       expect(body.data.name).toBe('Work Emails');
-      expect(body.data.app).toBe('com.google.android.gm');
-      expect(body.data.device).toBe('Pixel 7');
-      expect(body.data.source).toBe('mail');
+      expect(body.data.app).toEqual(['com.google.android.gm']);
+      expect(body.data.device).toEqual(['Pixel 7']);
+      expect(body.data.source).toEqual(['mail']);
       expect(body.data.title).toBe('meeting');
     });
 
@@ -214,7 +220,7 @@ describe('Filter Routes', () => {
         headers: {
           authorization: `Bearer ${MOCK_TOKEN}`,
         },
-        payload: { app: 'com.whatsapp' },
+        payload: { app: ['com.whatsapp'] },
       });
 
       expect(response.statusCode).toBe(400);

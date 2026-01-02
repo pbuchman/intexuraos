@@ -27,9 +27,9 @@ interface FiltersDoc {
   savedFilters: {
     id: string;
     name: string;
-    app?: string;
-    device?: string;
-    source?: string;
+    app?: string[];
+    device?: string[];
+    source?: string[];
     title?: string;
     createdAt: string;
   }[];

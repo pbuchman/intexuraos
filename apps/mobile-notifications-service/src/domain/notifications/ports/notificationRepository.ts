@@ -16,10 +16,11 @@ export interface RepositoryError {
 /**
  * Filter options for listing notifications.
  * Multiple filters can be combined (AND logic).
+ * Array values use IN operator (OR within field, AND between fields).
  */
 export interface FilterOptions {
-  source?: string;
-  app?: string;
+  source?: string[];
+  app?: string[];
   title?: string;
 }
 

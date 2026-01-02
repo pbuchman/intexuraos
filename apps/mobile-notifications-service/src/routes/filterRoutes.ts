@@ -11,9 +11,9 @@ import type { CreateSavedFilterInput } from '../domain/filters/index.js';
 
 interface CreateSavedFilterBody {
   name: string;
-  app?: string;
-  device?: string;
-  source?: string;
+  app?: string[];
+  device?: string[];
+  source?: string[];
   title?: string;
 }
 
@@ -27,9 +27,9 @@ const savedFilterSchema = {
   properties: {
     id: { type: 'string' },
     name: { type: 'string' },
-    app: { type: 'string' },
-    device: { type: 'string' },
-    source: { type: 'string' },
+    app: { type: 'array', items: { type: 'string' } },
+    device: { type: 'array', items: { type: 'string' } },
+    source: { type: 'array', items: { type: 'string' } },
     title: { type: 'string' },
     createdAt: { type: 'string' },
   },
@@ -140,9 +140,9 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           required: ['name'],
           properties: {
             name: { type: 'string', minLength: 1, maxLength: 100 },
-            app: { type: 'string' },
-            device: { type: 'string' },
-            source: { type: 'string' },
+            app: { type: 'array', items: { type: 'string' } },
+            device: { type: 'array', items: { type: 'string' } },
+            source: { type: 'array', items: { type: 'string' } },
             title: { type: 'string' },
           },
         },
