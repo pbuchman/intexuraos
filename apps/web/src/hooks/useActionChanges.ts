@@ -93,7 +93,7 @@ export function useActionChanges(): UseActionChangesResult {
 
       // 💰 CostGuard: Listener only reads minimal metadata (userId, status, updatedAt)
       // Full action data fetched separately via batch API
-      const unsubscribe = onSnapshot(
+      unsubscribeRef.current = onSnapshot(
         q,
         (snapshot) => {
           const changed: string[] = [];
@@ -116,8 +116,6 @@ export function useActionChanges(): UseActionChangesResult {
           setIsListening(false);
         }
       );
-
-      unsubscribeRef.current = unsubscribe;
       setIsListening(true);
       setError(null);
     } catch (err) {
