@@ -1,11 +1,13 @@
 export {
   type ExternalReport,
   type LlmProvider,
-  type SearchMode,
-  type ResearchStatus,
-  type LlmResultStatus,
   type LlmResult,
+  type LlmResultStatus,
+  type PartialFailure,
+  type PartialFailureDecision,
   type Research,
-  createResearch,
+  type ResearchStatus,
+  type SearchMode,
   createDraftResearch,
+  createResearch,
 } from './Research.js';

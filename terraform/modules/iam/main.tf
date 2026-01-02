@@ -189,6 +189,20 @@ resource "google_project_iam_member" "user_service_firestore" {
   member  = "serviceAccount:${google_service_account.user_service.email}"
 }
 
+# User service: Firebase Auth Admin (for creating custom tokens)
+resource "google_project_iam_member" "user_service_firebase_auth" {
+  project = var.project_id
+  role    = "roles/firebaseauth.admin"
+  member  = "serviceAccount:${google_service_account.user_service.email}"
+}
+
+# User service: Allow signing custom tokens (service account signs on itself)
+resource "google_service_account_iam_member" "user_service_token_creator" {
+  service_account_id = google_service_account.user_service.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.user_service.email}"
+}
+
 # LLM Orchestrator: Firestore access
 resource "google_project_iam_member" "llm_orchestrator_firestore" {
   project = var.project_id

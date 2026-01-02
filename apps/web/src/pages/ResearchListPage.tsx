@@ -30,6 +30,9 @@ const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
   draft: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Draft' },
   pending: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Pending' },
   processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
+  awaiting_confirmation: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Action Required' },
+  retrying: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Retrying' },
+  synthesizing: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Synthesizing' },
   completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
   failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed' },
 };

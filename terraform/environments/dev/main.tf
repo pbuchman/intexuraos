@@ -854,6 +854,7 @@ module "llm_orchestrator" {
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC = "intexuraos-research-process-${var.environment}"
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_LLM_CALL_TOPIC         = "intexuraos-llm-call-${var.environment}"
   }
 
   depends_on = [
@@ -1074,6 +1075,25 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 }
 
 # -----------------------------------------------------------------------------
+# Firebase Authentication (Identity Platform)
+# -----------------------------------------------------------------------------
+
+resource "google_identity_platform_config" "default" {
+  provider = google-beta
+  project  = var.project_id
+
+  sign_in {
+    allow_duplicate_emails = false
+
+    anonymous {
+      enabled = false
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# -----------------------------------------------------------------------------
 # Firebase Web App
 # -----------------------------------------------------------------------------
 
@@ -1081,6 +1101,8 @@ resource "google_firebase_web_app" "web" {
   provider     = google-beta
   project      = var.project_id
   display_name = "IntexuraOS Web (${var.environment})"
+
+  depends_on = [google_identity_platform_config.default]
 }
 
 data "google_firebase_web_app_config" "web" {

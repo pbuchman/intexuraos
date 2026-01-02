@@ -235,6 +235,12 @@ export class FakeResearchEventPublisher implements ResearchEventPublisher {
  */
 export class FakeNotificationSender implements NotificationSender {
   private sentNotifications: { userId: string; researchId: string; title: string }[] = [];
+  private sentFailures: {
+    userId: string;
+    researchId: string;
+    provider: LlmProvider;
+    error: string;
+  }[] = [];
 
   async sendResearchComplete(
     userId: string,
@@ -245,12 +251,32 @@ export class FakeNotificationSender implements NotificationSender {
     return ok(undefined);
   }
 
+  async sendLlmFailure(
+    userId: string,
+    researchId: string,
+    provider: LlmProvider,
+    error: string
+  ): Promise<Result<void, NotificationError>> {
+    this.sentFailures.push({ userId, researchId, provider, error });
+    return ok(undefined);
+  }
+
   getSentNotifications(): { userId: string; researchId: string; title: string }[] {
     return [...this.sentNotifications];
   }
 
+  getSentFailures(): {
+    userId: string;
+    researchId: string;
+    provider: LlmProvider;
+    error: string;
+  }[] {
+    return [...this.sentFailures];
+  }
+
   clear(): void {
     this.sentNotifications = [];
+    this.sentFailures = [];
   }
 }
 
@@ -298,6 +324,26 @@ export function createFakeSynthesizer(
 }
 
 /**
+ * Create a fake LlmSynthesisProvider that always fails for testing error paths.
+ */
+export function createFailingSynthesizer(
+  errorMessage = 'Test synthesis failure'
+): LlmSynthesisProvider {
+  return {
+    async synthesize(
+      _originalPrompt: string,
+      _reports: { model: string; content: string }[],
+      _externalReports?: { content: string; model?: string }[]
+    ): Promise<Result<string, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+  };
+}
+
+/**
  * Create a fake TitleGenerator for testing.
  */
 export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenerator {
@@ -306,4 +352,51 @@ export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenera
       return ok(title);
     },
   };
+}
+
+/**
+ * Fake implementation of LlmCallPublisher for testing.
+ */
+export class FakeLlmCallPublisher {
+  private publishedEvents: {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }[] = [];
+  private failNextPublish = false;
+
+  async publishLlmCall(event: {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
+    if (this.failNextPublish) {
+      this.failNextPublish = false;
+      return err({ code: 'PUBLISH_FAILED', message: 'Test publish failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+
+  getPublishedEvents(): {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }[] {
+    return [...this.publishedEvents];
+  }
+
+  setFailNextPublish(fail: boolean): void {
+    this.failNextPublish = fail;
+  }
+
+  clear(): void {
+    this.publishedEvents = [];
+  }
 }

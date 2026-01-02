@@ -54,3 +54,20 @@ export function createSynthesizer(provider: LlmProvider, apiKey: string): LlmSyn
 export function createTitleGenerator(googleApiKey: string): TitleGenerator {
   return new GeminiAdapter(googleApiKey);
 }
+
+export function createResearchProvider(
+  provider: LlmProvider,
+  apiKey: string,
+  searchMode: SearchMode = 'deep'
+): LlmResearchProvider {
+  const useDefaultModel = searchMode === 'quick';
+
+  switch (provider) {
+    case 'google':
+      return new GeminiAdapter(apiKey, useDefaultModel ? GEMINI_DEFAULTS.defaultModel : undefined);
+    case 'anthropic':
+      return new ClaudeAdapter(apiKey, useDefaultModel ? CLAUDE_DEFAULTS.defaultModel : undefined);
+    case 'openai':
+      return new GptAdapter(apiKey, useDefaultModel ? GPT_DEFAULTS.defaultModel : undefined);
+  }
+}
