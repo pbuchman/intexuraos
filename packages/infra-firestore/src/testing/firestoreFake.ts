@@ -32,6 +32,108 @@ function isFieldValueDelete(value: unknown): boolean {
 }
 
 /**
+ * Check if a value is a FieldValue.arrayUnion() sentinel and extract its elements.
+ * Returns the elements array if it's an arrayUnion, or null otherwise.
+ */
+function extractArrayUnionElements(value: unknown): unknown[] | null {
+  if (value === null || typeof value !== 'object') return null;
+  const obj = value as Record<string, unknown>;
+  // Firebase Admin SDK stores elements in 'elements' property
+  if ('elements' in obj && Array.isArray(obj['elements'])) {
+    return obj['elements'] as unknown[];
+  }
+  return null;
+}
+
+/**
+ * Deep merge source into target, handling nested objects.
+ */
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+  for (const key of Object.keys(source)) {
+    const sourceVal = source[key];
+    const targetVal = target[key];
+    if (
+      sourceVal !== null &&
+      typeof sourceVal === 'object' &&
+      !Array.isArray(sourceVal) &&
+      extractArrayUnionElements(sourceVal) === null &&
+      !isFieldValueDelete(sourceVal) &&
+      targetVal !== null &&
+      typeof targetVal === 'object' &&
+      !Array.isArray(targetVal)
+    ) {
+      deepMerge(targetVal as Record<string, unknown>, sourceVal as Record<string, unknown>);
+    } else {
+      target[key] = sourceVal;
+    }
+  }
+}
+
+/**
+ * Process FieldValue sentinels (arrayUnion, delete) in data, mutating in place.
+ */
+function processFieldValues(
+  data: Record<string, unknown>,
+  existing: Record<string, unknown> | undefined
+): void {
+  for (const key of Object.keys(data)) {
+    const value = data[key];
+
+    // Handle arrayUnion
+    const arrayElements = extractArrayUnionElements(value);
+    if (arrayElements !== null) {
+      const existingArray = getNestedField(existing, key);
+      const currentArray: unknown[] = Array.isArray(existingArray)
+        ? (existingArray as unknown[]).slice()
+        : [];
+      for (const elem of arrayElements) {
+        if (!currentArray.some((e) => JSON.stringify(e) === JSON.stringify(elem))) {
+          currentArray.push(elem);
+        }
+      }
+      if (key.includes('.')) {
+        setNestedField(data, key, currentArray);
+        Reflect.deleteProperty(data, key);
+      } else {
+        data[key] = currentArray;
+      }
+      continue;
+    }
+
+    // Handle delete
+    if (isFieldValueDelete(value)) {
+      Reflect.deleteProperty(data, key);
+      continue;
+    }
+
+    // Recursively process nested objects
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      const nestedExisting = existing?.[key];
+      processFieldValues(
+        value as Record<string, unknown>,
+        typeof nestedExisting === 'object' && nestedExisting !== null
+          ? (nestedExisting as Record<string, unknown>)
+          : undefined
+      );
+    }
+  }
+}
+
+/**
+ * Get a nested field using dot notation.
+ */
+function getNestedField(obj: Record<string, unknown> | undefined, path: string): unknown {
+  if (obj === undefined) return undefined;
+  const parts = path.split('.');
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/**
  * Set a nested field using dot notation (e.g., "llmApiKeys.google").
  */
 function setNestedField(obj: Record<string, unknown>, path: string, value: unknown): void {
@@ -185,6 +287,8 @@ class FakeQuery {
             return (fieldValue as number) >= (filter.value as number);
           case 'array-contains':
             return Array.isArray(fieldValue) && fieldValue.includes(filter.value);
+          case 'in':
+            return Array.isArray(filter.value) && (filter.value as unknown[]).includes(fieldValue);
           default:
             return true;
         }
@@ -270,13 +374,28 @@ class FakeDocumentReference {
     );
   }
 
-  set(data: DocumentData): Promise<WriteResult> {
+  set(data: DocumentData, options?: { merge?: boolean }): Promise<WriteResult> {
     let collection = this.store.get(this.collectionName);
     if (collection === undefined) {
       collection = new Map();
       this.store.set(this.collectionName, collection);
     }
-    collection.set(this.docId, { ...data });
+
+    const existing = collection.get(this.docId);
+    const newData = { ...data } as Record<string, unknown>;
+
+    if (options?.merge === true && existing !== undefined) {
+      // Deep merge with existing, then process FieldValues
+      const merged = { ...existing } as Record<string, unknown>;
+      processFieldValues(newData, existing as Record<string, unknown>);
+      deepMerge(merged, newData);
+      collection.set(this.docId, merged);
+    } else {
+      // Full replace - still process FieldValues for arrayUnion on new docs
+      processFieldValues(newData, undefined);
+      collection.set(this.docId, newData);
+    }
+
     return Promise.resolve({ writeTime: { toDate: (): Date => new Date() } } as WriteResult);
   }
 
@@ -286,19 +405,45 @@ class FakeDocumentReference {
     if (existing === undefined) {
       throw new Error(`Document ${this.collectionName}/${this.docId} does not exist`);
     }
-    const updated = { ...existing };
+    const updated = { ...existing } as Record<string, unknown>;
     for (const key of Object.keys(data)) {
       const value: unknown = data[key as keyof typeof data];
+
+      // Handle FieldValue.arrayUnion() - check BEFORE delete since both have isEqual
+      const arrayElements = extractArrayUnionElements(value);
+      if (arrayElements !== null) {
+        const existingArray = key.includes('.') ? getNestedField(updated, key) : updated[key];
+        const currentArray: unknown[] = Array.isArray(existingArray)
+          ? (existingArray as unknown[]).slice()
+          : [];
+        for (const elem of arrayElements) {
+          if (!currentArray.some((e) => JSON.stringify(e) === JSON.stringify(elem))) {
+            currentArray.push(elem);
+          }
+        }
+        if (key.includes('.')) {
+          setNestedField(updated, key, currentArray);
+        } else {
+          updated[key] = currentArray;
+        }
+        continue;
+      }
+
+      // Handle FieldValue.delete()
       if (isFieldValueDelete(value)) {
         if (key.includes('.')) {
           deleteNestedField(updated, key);
         } else {
           Reflect.deleteProperty(updated, key);
         }
-      } else if (key.includes('.')) {
+        continue;
+      }
+
+      // Regular value
+      if (key.includes('.')) {
         setNestedField(updated, key, value);
       } else {
-        (updated as Record<string, unknown>)[key] = value;
+        updated[key] = value;
       }
     }
     collection?.set(this.docId, updated);
@@ -430,9 +575,9 @@ class FakeBatch {
     return this;
   }
 
-  set(docRef: FakeDocumentReference, data: DocumentData): this {
+  set(docRef: FakeDocumentReference, data: DocumentData, options?: { merge?: boolean }): this {
     this.operations.push((): void => {
-      void docRef.set(data);
+      void docRef.set(data, options);
     });
     return this;
   }

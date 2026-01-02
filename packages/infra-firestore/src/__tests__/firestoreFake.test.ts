@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { FieldValue } from '@google-cloud/firestore';
 import { createFakeFirestore, type FakeFirestore } from '../testing/firestoreFake.js';
 
 describe('FakeFirestore', () => {
@@ -71,6 +72,71 @@ describe('FakeFirestore', () => {
         expect(result.writeTime).toBeDefined();
         expect(result.writeTime.toDate()).toBeInstanceOf(Date);
       });
+
+      it('merges data when merge: true', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John', age: 30 });
+        await docRef.set({ role: 'admin' }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()).toEqual({ name: 'John', age: 30, role: 'admin' });
+      });
+
+      it('deeply merges nested objects with merge: true', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John', settings: { theme: 'dark', lang: 'en' } });
+        await docRef.set({ settings: { theme: 'light' } }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()).toEqual({
+          name: 'John',
+          settings: { theme: 'light', lang: 'en' },
+        });
+      });
+
+      it('handles arrayUnion in set with merge: true', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John', tags: ['a'] });
+        await docRef.set({ tags: FieldValue.arrayUnion('b') }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['a', 'b']);
+      });
+
+      it('arrayUnion creates array if field does not exist', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John' });
+        await docRef.set({ tags: FieldValue.arrayUnion('first') }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['first']);
+      });
+
+      it('arrayUnion does not duplicate existing values', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ tags: ['a', 'b'] });
+        await docRef.set({ tags: FieldValue.arrayUnion('a', 'c') }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['a', 'b', 'c']);
+      });
+
+      it('handles nested arrayUnion with merge: true', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ options: { app: ['gmail'] } });
+        await docRef.set({ options: { app: FieldValue.arrayUnion('slack') } }, { merge: true });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['options']).toEqual({ app: ['gmail', 'slack'] });
+      });
+
+      it('handles arrayUnion on new document without merge', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ tags: FieldValue.arrayUnion('first', 'second') });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['first', 'second']);
+      });
     });
 
     describe('get', () => {
@@ -125,6 +191,33 @@ describe('FakeFirestore', () => {
         expect(() => docRef.update({ name: 'Test' })).toThrow(
           'Document users/non-existent does not exist'
         );
+      });
+
+      it('handles arrayUnion in update', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John', tags: ['a'] });
+        await docRef.update({ tags: FieldValue.arrayUnion('b') });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['a', 'b']);
+      });
+
+      it('arrayUnion in update creates array if field missing', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ name: 'John' });
+        await docRef.update({ tags: FieldValue.arrayUnion('first') });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['tags']).toEqual(['first']);
+      });
+
+      it('arrayUnion in update with dot notation', async () => {
+        const docRef = db.collection('users').doc('user-1');
+        await docRef.set({ options: { app: ['gmail'] } });
+        await docRef.update({ 'options.app': FieldValue.arrayUnion('slack') });
+
+        const snapshot = await docRef.get();
+        expect(snapshot.data()?.['options']).toEqual({ app: ['gmail', 'slack'] });
       });
     });
 
@@ -216,6 +309,25 @@ describe('FakeFirestore', () => {
           .where('name', 'unknown-op' as Parameters<typeof db.collection>[0], 'value')
           .get();
         expect(snapshot.size).toBe(4);
+      });
+
+      it('filters with in operator', async () => {
+        const snapshot = await db.collection('users').where('role', 'in', ['admin', 'guest']).get();
+        expect(snapshot.size).toBe(2);
+        expect(snapshot.docs.map((d) => d.id).sort()).toEqual(['user-2', 'user-4']);
+      });
+
+      it('filters with in operator for numeric values', async () => {
+        const snapshot = await db.collection('users').where('age', 'in', [25, 35]).get();
+        expect(snapshot.size).toBe(3);
+      });
+
+      it('in operator returns empty for no matches', async () => {
+        const snapshot = await db
+          .collection('users')
+          .where('role', 'in', ['guest', 'moderator'])
+          .get();
+        expect(snapshot.size).toBe(0);
       });
 
       it('chains multiple where clauses', async () => {
