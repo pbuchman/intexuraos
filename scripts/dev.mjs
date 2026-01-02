@@ -173,6 +173,7 @@ const COMMON_SERVICE_ENV = {
 const SERVICE_ENV_MAPPINGS = {
   'commands-router': {
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    ACTIONS_AGENT_URL: process.env.INTEXURAOS_ACTIONS_AGENT_URL ?? 'http://localhost:8118',
   },
   'llm-orchestrator': {
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
@@ -193,6 +194,11 @@ const SERVICE_ENV_MAPPINGS = {
     COMMANDS_ROUTER_URL: 'http://localhost:8117',
     LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC ?? 'actions-research',
+    INTEXURAOS_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   },
 };
 
