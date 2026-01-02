@@ -95,7 +95,6 @@ export async function authenticateFirebase(auth0Token: string): Promise<void> {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${auth0Token}`,
-      'Content-Type': 'application/json',
     },
   });
 
