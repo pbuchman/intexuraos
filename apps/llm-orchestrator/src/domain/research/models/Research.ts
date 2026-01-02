@@ -58,6 +58,18 @@ export interface ExternalReport {
   addedAt: string;
 }
 
+/**
+ * Public sharing information for a completed research.
+ * Generated automatically when synthesis completes.
+ */
+export interface ShareInfo {
+  shareToken: string;
+  slug: string;
+  shareUrl: string;
+  sharedAt: string;
+  gcsPath: string;
+}
+
 export interface Research {
   id: string;
   userId: string;
@@ -75,6 +87,8 @@ export interface Research {
   completedAt?: string;
   totalDurationMs?: number;
   sourceActionId?: string;
+  skipSynthesis?: boolean;
+  shareInfo?: ShareInfo;
 }
 
 function getDefaultModel(provider: LlmProvider): string {
@@ -95,6 +109,7 @@ export function createResearch(params: {
   selectedLlms: LlmProvider[];
   synthesisLlm: LlmProvider;
   externalReports?: { content: string; model?: string }[];
+  skipSynthesis?: boolean;
 }): Research {
   const now = new Date().toISOString();
   const research: Research = {
@@ -125,6 +140,10 @@ export function createResearch(params: {
       }
       return externalReport;
     });
+  }
+
+  if (params.skipSynthesis === true) {
+    research.skipSynthesis = true;
   }
 
   return research;

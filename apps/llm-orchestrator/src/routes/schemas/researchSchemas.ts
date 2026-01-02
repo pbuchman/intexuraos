@@ -39,6 +39,10 @@ export const createResearchBodySchema = {
       maxItems: 5,
       nullable: true,
     },
+    skipSynthesis: {
+      type: 'boolean',
+      description: 'Skip synthesis step (for single-provider research without input context)',
+    },
   },
 } as const;
 

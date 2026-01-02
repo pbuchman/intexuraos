@@ -124,6 +124,15 @@ export async function confirmPartialFailure(
   );
 }
 
+/**
+ * Remove public share access for a research.
+ */
+export async function unshareResearch(accessToken: string, id: string): Promise<void> {
+  await apiRequest<null>(config.llmOrchestratorUrl, `/research/${id}/share`, accessToken, {
+    method: 'DELETE',
+  });
+}
+
 export type {
   ConfirmPartialFailureResponse,
   LlmProvider,

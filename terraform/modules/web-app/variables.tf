@@ -55,3 +55,9 @@ variable "ssl_private_key_secret_id" {
   default     = ""
 }
 
+variable "shared_content_bucket_name" {
+  description = "Name of the shared content bucket for /share/* path routing"
+  type        = string
+  default     = ""
+}
+

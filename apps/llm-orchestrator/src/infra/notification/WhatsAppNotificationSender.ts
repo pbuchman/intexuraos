@@ -16,25 +16,20 @@ import type {
   NotificationSender,
 } from '../../domain/research/index.js';
 
-export interface WhatsAppNotificationSenderConfig extends WhatsAppSendPublisherConfig {
-  webAppUrl: string;
-}
-
 export class WhatsAppNotificationSender implements NotificationSender {
   private readonly publisher: WhatsAppSendPublisher;
-  private readonly webAppUrl: string;
 
-  constructor(config: WhatsAppNotificationSenderConfig) {
+  constructor(config: WhatsAppSendPublisherConfig) {
     this.publisher = createWhatsAppSendPublisher(config);
-    this.webAppUrl = config.webAppUrl;
   }
 
   async sendResearchComplete(
     userId: string,
     researchId: string,
-    title: string
+    title: string,
+    shareUrl: string
   ): Promise<Result<void, NotificationError>> {
-    const message = this.formatResearchCompleteMessage(title, researchId);
+    const message = this.formatResearchCompleteMessage(title, shareUrl);
     await this.publisher.publishSendMessage({
       userId,
       message,
@@ -60,10 +55,9 @@ export class WhatsAppNotificationSender implements NotificationSender {
     return ok(undefined);
   }
 
-  private formatResearchCompleteMessage(title: string, researchId: string): string {
+  private formatResearchCompleteMessage(title: string, shareUrl: string): string {
     const displayTitle = title !== '' ? title : 'Untitled Research';
-    const researchUrl = `${this.webAppUrl}/#/research/${researchId}`;
-    return `Research Complete!\n\n"${displayTitle}"\n${researchUrl}`;
+    return `Research Complete!\n\n"${displayTitle}"\n${shareUrl}`;
   }
 
   private formatFailureMessage(provider: LlmProvider, error: string): string {

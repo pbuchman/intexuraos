@@ -9,7 +9,12 @@ describe('NoopNotificationSender', () => {
   it('returns success for sendResearchComplete', async () => {
     const sender = new NoopNotificationSender();
 
-    const result = await sender.sendResearchComplete('user-123', 'research-456', 'Test Title');
+    const result = await sender.sendResearchComplete(
+      'user-123',
+      'research-456',
+      'Test Title',
+      'https://share.example.com/research.html'
+    );
 
     expect(result.ok).toBe(true);
   });
@@ -17,7 +22,7 @@ describe('NoopNotificationSender', () => {
   it('succeeds regardless of input for sendResearchComplete', async () => {
     const sender = new NoopNotificationSender();
 
-    const result = await sender.sendResearchComplete('', '', '');
+    const result = await sender.sendResearchComplete('', '', '', '');
 
     expect(result.ok).toBe(true);
   });

@@ -88,6 +88,26 @@ resource "google_compute_backend_bucket" "web_app" {
   ]
 }
 
+# Backend bucket for shared content (publicly shared research HTML files)
+resource "google_compute_backend_bucket" "shared_content" {
+  count       = var.enable_load_balancer && var.shared_content_bucket_name != "" ? 1 : 0
+  name        = "intexuraos-shared-content-${var.environment}-backend"
+  project     = var.project_id
+  bucket_name = var.shared_content_bucket_name
+  enable_cdn  = true
+
+  cdn_policy {
+    cache_mode  = "CACHE_ALL_STATIC"
+    default_ttl = 3600
+    max_ttl     = 86400
+  }
+
+  custom_response_headers = [
+    "X-Frame-Options: DENY",
+    "X-Content-Type-Options: nosniff",
+  ]
+}
+
 # URL map for SPA hosting
 # NOTE: This is a simple pass-through URL map. All requests go to the backend bucket.
 # The bucket serves files as-is. For SPA deep links to work:
@@ -124,6 +144,23 @@ resource "google_compute_url_map" "web_app" {
       }
 
       service = google_compute_backend_bucket.web_app[0].id
+    }
+
+    # Shared content path rule (publicly shared research HTML files)
+    # Maps /share/research/xxx.html -> bucket/research/xxx.html
+    dynamic "path_rule" {
+      for_each = var.shared_content_bucket_name != "" ? [1] : []
+      content {
+        paths = ["/share/*"]
+
+        route_action {
+          url_rewrite {
+            path_prefix_rewrite = "/"
+          }
+        }
+
+        service = google_compute_backend_bucket.shared_content[0].id
+      }
     }
   }
 }

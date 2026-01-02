@@ -29,5 +29,7 @@ export interface ResearchRepository {
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>>;
 
+  clearShareInfo(id: string): Promise<Result<Research, RepositoryError>>;
+
   delete(id: string): Promise<Result<void, RepositoryError>>;
 }

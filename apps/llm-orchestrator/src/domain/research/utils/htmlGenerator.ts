@@ -1,0 +1,247 @@
+/**
+ * Generate branded HTML from research markdown content.
+ */
+import { marked } from 'marked';
+
+export interface HtmlGeneratorInput {
+  title: string;
+  synthesizedResult: string;
+  shareUrl: string;
+  sharedAt: string;
+  staticAssetsUrl: string;
+}
+
+const PROSE_STYLES = `
+  :root {
+    --color-primary: #2563eb;
+    --color-text: #1e293b;
+    --color-text-muted: #64748b;
+    --color-bg: #f8fafc;
+    --color-border: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.75;
+    margin: 0;
+    padding: 0;
+  }
+
+  .container {
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  header img {
+    height: 32px;
+    width: auto;
+  }
+
+  header span {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 1.125rem;
+  }
+
+  .meta {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 2rem;
+  }
+
+  .prose h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    line-height: 1.25;
+  }
+
+  .prose h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 2rem 0 1rem 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .prose h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.75rem 0;
+  }
+
+  .prose p {
+    margin: 1rem 0;
+  }
+
+  .prose ul, .prose ol {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .prose li {
+    margin: 0.5rem 0;
+  }
+
+  .prose a {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+
+  .prose a:hover {
+    text-decoration: none;
+  }
+
+  .prose blockquote {
+    border-left: 4px solid var(--color-primary);
+    margin: 1.5rem 0;
+    padding: 0.5rem 0 0.5rem 1rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .prose code {
+    background: #e2e8f0;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .prose pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+  }
+
+  .prose pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  .prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+  }
+
+  .prose th, .prose td {
+    border: 1px solid var(--color-border);
+    padding: 0.75rem;
+    text-align: left;
+  }
+
+  .prose th {
+    background: #e2e8f0;
+    font-weight: 600;
+  }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    text-align: center;
+  }
+
+  footer a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 640px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .prose h1 {
+      font-size: 1.5rem;
+    }
+
+    .prose h2 {
+      font-size: 1.25rem;
+    }
+  }
+`;
+
+export function generateShareableHtml(input: HtmlGeneratorInput): string {
+  const { title, synthesizedResult, shareUrl, sharedAt, staticAssetsUrl } = input;
+
+  const displayTitle = title !== '' ? title : 'Research Report';
+  const formattedDate = new Date(sharedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const renderedMarkdown = marked.parse(synthesizedResult, { async: false });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>${escapeHtml(displayTitle)} | IntexuraOS Research</title>
+
+  <meta property="og:title" content="${escapeHtml(displayTitle)}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="${escapeHtml(shareUrl)}">
+
+  <link rel="icon" type="image/svg+xml" href="${staticAssetsUrl}/branding/exports/favicon/favicon.svg">
+
+  <style>${PROSE_STYLES}</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img src="${staticAssetsUrl}/branding/exports/primary/logo-primary-dark.svg" alt="IntexuraOS">
+      <span>IntexuraOS</span>
+    </header>
+
+    <main class="prose">
+      <h1>${escapeHtml(displayTitle)}</h1>
+      <p class="meta">Generated on ${formattedDate}</p>
+
+      ${renderedMarkdown}
+    </main>
+
+    <footer>
+      <p>Powered by <a href="https://intexuraos.cloud">IntexuraOS</a></p>
+    </footer>
+  </div>
+</body>
+</html>`;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}

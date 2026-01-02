@@ -8,6 +8,7 @@ export {
   type Research,
   type ResearchStatus,
   type SearchMode,
+  type ShareInfo,
   createDraftResearch,
   createResearch,
 } from './Research.js';

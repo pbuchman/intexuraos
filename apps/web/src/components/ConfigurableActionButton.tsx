@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import {
   Archive,
+  CheckCircle,
   Trash2,
   XCircle,
   Sparkles,
@@ -28,6 +29,7 @@ interface ConfigurableActionButtonProps {
 // Icon mapping for dynamic icon rendering
 const ICON_MAP: Record<string, LucideIcon> = {
   Archive,
+  CheckCircle,
   Trash2,
   XCircle,
   Sparkles,
@@ -52,13 +54,15 @@ function getIcon(iconName: string): LucideIcon {
  * @param variant - Button variant
  * @returns Tailwind CSS classes
  */
-function getButtonClasses(variant: 'primary' | 'secondary' | 'danger'): string {
+function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success'): string {
   const baseClasses =
     'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50';
 
   switch (variant) {
     case 'primary':
       return `${baseClasses} bg-blue-600 text-white hover:bg-blue-700`;
+    case 'success':
+      return `${baseClasses} bg-green-600 text-white hover:bg-green-700`;
     case 'secondary':
       return `${baseClasses} text-slate-500 hover:bg-slate-100 hover:text-slate-700`;
     case 'danger':
