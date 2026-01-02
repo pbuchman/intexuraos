@@ -10,16 +10,16 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('Settings Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let privateKey: jose.KeyLike;
   let jwksUrl: string;
-  const issuer = `https://${AUTH0_DOMAIN}/`;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
@@ -29,24 +29,21 @@ describe('Settings Routes', () => {
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
-      .setAudience(AUTH_AUDIENCE)
+      .setAudience(INTEXURAOS_AUTH_AUDIENCE)
       .setExpirationTime('1h');
 
     return await builder.sign(privateKey);
   }
 
   beforeAll(async () => {
-    // Generate RSA key pair for testing
     const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
     privateKey = privKey;
 
-    // Export public key as JWK
     const publicKeyJwk = await jose.exportJWK(publicKey);
     publicKeyJwk.kid = 'test-key-1';
     publicKeyJwk.alg = 'RS256';
     publicKeyJwk.use = 'sig';
 
-    // Start local JWKS server
     jwksServer = Fastify({ logger: false });
 
     jwksServer.get('/.well-known/jwks.json', async (_req, reply) => {
@@ -67,11 +64,11 @@ describe('Settings Routes', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-    process.env['AUTH_JWKS_URL'] = jwksUrl;
-    process.env['AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
     clearJwksCache();
 
@@ -174,26 +171,21 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { app: string }[] };
+          researchSettings?: { searchMode: string };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe('auth0|new-user');
-      expect(body.data.notifications.filters).toEqual([]);
+      expect(body.data.researchSettings?.searchMode).toBe('deep');
     });
 
     it('returns existing settings', { timeout: 20000 }, async () => {
       const userId = 'auth0|existing-user';
       fakeSettingsRepo.setSettings({
         userId,
-        notifications: {
-          filters: [
-            { name: 'WhatsApp', app: 'com.whatsapp' },
-            { name: 'Slack', app: 'com.slack' },
-          ],
-        },
+        researchSettings: { searchMode: 'quick' },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-15T00:00:00.000Z',
       });
@@ -217,17 +209,14 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { name: string; app?: string }[] };
+          researchSettings: { searchMode: string };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
-      expect(body.data.notifications.filters).toEqual([
-        { name: 'WhatsApp', app: 'com.whatsapp' },
-        { name: 'Slack', app: 'com.slack' },
-      ]);
+      expect(body.data.researchSettings.searchMode).toBe('quick');
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(body.data.updatedAt).toBe('2025-01-15T00:00:00.000Z');
     });
@@ -267,7 +256,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: '/users/user-123/settings',
         payload: {
-          notifications: { filters: [] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -290,7 +279,7 @@ describe('Settings Routes', () => {
           authorization: 'Bearer invalid-token',
         },
         payload: {
-          notifications: { filters: [] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -317,7 +306,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ name: 'WhatsApp', app: 'com.whatsapp' }] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -331,7 +320,7 @@ describe('Settings Routes', () => {
       expect(body.error.message).toBe('You can only update your own settings');
     });
 
-    it('creates new settings for new user', { timeout: 20000 }, async () => {
+    it('creates new settings for new user with researchSettings', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const userId = 'auth0|new-patch-user';
@@ -346,7 +335,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ name: 'WhatsApp', app: 'com.whatsapp' }] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -355,28 +344,25 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { name: string; app?: string }[] };
+          researchSettings: { searchMode: string };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
-      expect(body.data.notifications.filters).toEqual([{ name: 'WhatsApp', app: 'com.whatsapp' }]);
+      expect(body.data.researchSettings.searchMode).toBe('quick');
 
-      // Verify it was saved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored).toBeDefined();
-      expect(stored?.notifications.filters).toEqual([{ name: 'WhatsApp', app: 'com.whatsapp' }]);
+      expect(stored?.researchSettings?.searchMode).toBe('quick');
     });
 
-    it('updates existing settings', { timeout: 20000 }, async () => {
+    it('updates existing settings with deep searchMode', { timeout: 20000 }, async () => {
       const userId = 'auth0|existing-patch-user';
       fakeSettingsRepo.setSettings({
         userId,
-        notifications: {
-          filters: [{ name: 'OldApp', app: 'com.old-app' }],
-        },
+        researchSettings: { searchMode: 'quick' },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -394,12 +380,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: {
-            filters: [
-              { name: 'NewApp', app: 'com.new-app' },
-              { name: 'AnotherApp', app: 'com.another-app' },
-            ],
-          },
+          researchSettings: { searchMode: 'deep' },
         },
       });
 
@@ -408,41 +389,71 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          notifications: { filters: { name: string; app: string }[] };
+          researchSettings: { searchMode: string };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toEqual([
-        { name: 'NewApp', app: 'com.new-app' },
-        { name: 'AnotherApp', app: 'com.another-app' },
-      ]);
-      // Should preserve original createdAt
+      expect(body.data.researchSettings.searchMode).toBe('deep');
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
-      // updatedAt should be different
       expect(body.data.updatedAt).not.toBe('2025-01-01T00:00:00.000Z');
     });
 
-    it('returns 400 when body is invalid', { timeout: 20000 }, async () => {
+    it('returns 400 when searchMode is invalid', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const token = await createToken({
-        sub: 'auth0|user-bad-body',
+        sub: 'auth0|user-invalid-mode',
       });
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/users/auth0|user-bad-body/settings',
+        url: '/users/auth0|user-invalid-mode/settings',
         headers: {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          invalid: 'body',
+          researchSettings: { searchMode: 'invalid-mode' },
         },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('allows empty body (no changes)', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-empty-body';
+      fakeSettingsRepo.setSettings({
+        userId,
+        researchSettings: { searchMode: 'deep' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({
+        sub: userId,
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          researchSettings: { searchMode: string };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.researchSettings.searchMode).toBe('deep');
     });
 
     it('returns 500 when get fails during update', { timeout: 20000 }, async () => {
@@ -461,7 +472,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ name: 'TestFilter', app: 'com.test' }] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -490,7 +501,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          notifications: { filters: [{ name: 'TestFilter', app: 'com.test' }] },
+          researchSettings: { searchMode: 'quick' },
         },
       });
 
@@ -503,268 +514,50 @@ describe('Settings Routes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 400 when filter names are duplicated', { timeout: 20000 }, async () => {
-      app = await buildServer();
-
-      const token = await createToken({
-        sub: 'auth0|user-dup-names',
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/users/auth0|user-dup-names/settings',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [
-              { name: 'MyFilter', app: 'com.app1' },
-              { name: 'MyFilter', app: 'com.app2' },
-            ],
+    it(
+      'preserves existing llmApiKeys when updating researchSettings',
+      { timeout: 20000 },
+      async () => {
+        const userId = 'auth0|user-preserve-keys';
+        fakeSettingsRepo.setSettings({
+          userId,
+          researchSettings: { searchMode: 'deep' },
+          llmApiKeys: {
+            google: { ciphertext: 'encrypted-key', iv: 'test-iv', tag: 'test-tag' },
           },
-        },
-      });
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
 
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string; message: string };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('Duplicate filter name');
-    });
+        app = await buildServer();
 
-    it('returns 400 when filter has no criteria', { timeout: 20000 }, async () => {
-      app = await buildServer();
+        const token = await createToken({
+          sub: userId,
+        });
 
-      const token = await createToken({
-        sub: 'auth0|user-no-criteria',
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: '/users/auth0|user-no-criteria/settings',
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [{ name: 'EmptyFilter' }],
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/users/${encodeURIComponent(userId)}/settings`,
+          headers: {
+            authorization: `Bearer ${token}`,
           },
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        error: { code: string; message: string };
-      };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('must have at least one criterion');
-    });
-
-    it('accepts filter with source criterion only', { timeout: 20000 }, async () => {
-      app = await buildServer();
-
-      const userId = 'auth0|user-source-only';
-      const token = await createToken({
-        sub: userId,
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/users/${encodeURIComponent(userId)}/settings`,
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [{ name: 'SourceFilter', source: 'tasker' }],
+          payload: {
+            researchSettings: { searchMode: 'quick' },
           },
-        },
-      });
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: {
-          notifications: { filters: { name: string; source: string }[] };
-        };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toEqual([{ name: 'SourceFilter', source: 'tasker' }]);
-    });
+        expect(response.statusCode).toBe(200);
 
-    it('accepts filter with title criterion only', { timeout: 20000 }, async () => {
-      app = await buildServer();
-
-      const userId = 'auth0|user-title-only';
-      const token = await createToken({
-        sub: userId,
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/users/${encodeURIComponent(userId)}/settings`,
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [{ name: 'TitleFilter', title: 'important' }],
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: {
-          notifications: { filters: { name: string; title: string }[] };
-        };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toEqual([
-        { name: 'TitleFilter', title: 'important' },
-      ]);
-    });
-
-    it('accepts filter with multiple criteria', { timeout: 20000 }, async () => {
-      app = await buildServer();
-
-      const userId = 'auth0|user-multi-criteria';
-      const token = await createToken({
-        sub: userId,
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/users/${encodeURIComponent(userId)}/settings`,
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [
-              { name: 'MultiFilter', app: 'com.whatsapp', source: 'tasker', title: 'urgent' },
-            ],
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: {
-          notifications: {
-            filters: { name: string; app: string; source: string; title: string }[];
-          };
-        };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toEqual([
-        { name: 'MultiFilter', app: 'com.whatsapp', source: 'tasker', title: 'urgent' },
-      ]);
-    });
-
-    it('allows clearing all filters (empty array)', { timeout: 20000 }, async () => {
-      const userId = 'auth0|user-clear-filters';
-      fakeSettingsRepo.setSettings({
-        userId,
-        notifications: {
-          filters: [
-            { name: 'Filter1', app: 'com.app1' },
-            { name: 'Filter2', app: 'com.app2' },
-          ],
-        },
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-      });
-
-      app = await buildServer();
-
-      const token = await createToken({
-        sub: userId,
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/users/${encodeURIComponent(userId)}/settings`,
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: { filters: [] },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: {
-          userId: string;
-          notifications: { filters: unknown[] };
-        };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toEqual([]);
-    });
-
-    it('allows adding multiple filters at once', { timeout: 20000 }, async () => {
-      app = await buildServer();
-
-      const userId = 'auth0|user-multi-add';
-      const token = await createToken({
-        sub: userId,
-      });
-
-      const response = await app.inject({
-        method: 'PATCH',
-        url: `/users/${encodeURIComponent(userId)}/settings`,
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-        payload: {
-          notifications: {
-            filters: [
-              {
-                name: 'android auto',
-                app: 'com.google.android.projection.gearhead',
-                source: 'tasker',
-                title: 'looking',
-              },
-              { name: 'whatsapp', app: 'com.whatsapp', title: 'looking' },
-            ],
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as {
-        success: boolean;
-        data: {
-          notifications: {
-            filters: { name: string; app?: string; source?: string; title?: string }[];
-          };
-        };
-      };
-      expect(body.success).toBe(true);
-      expect(body.data.notifications.filters).toHaveLength(2);
-      expect(body.data.notifications.filters[0]?.name).toBe('android auto');
-      expect(body.data.notifications.filters[1]?.name).toBe('whatsapp');
-    });
+        const stored = fakeSettingsRepo.getStoredSettings(userId);
+        expect(stored?.llmApiKeys?.google).toBeDefined();
+        expect(stored?.researchSettings?.searchMode).toBe('quick');
+      }
+    );
 
     it(
       'handles string payload (Fastify auto-parses JSON strings)',
       { timeout: 20000 },
       async () => {
-        // Note: Fastify's inject() with string payload automatically parses it as JSON
-        // So this test verifies normal behavior - in real HTTP, double-stringified JSON
-        // would be rejected at the body validation level because the body schema
-        // expects an object with { notifications: { filters: [] } }
         app = await buildServer();
 
         const userId = 'auth0|user-string-payload';
@@ -772,7 +565,6 @@ describe('Settings Routes', () => {
           sub: userId,
         });
 
-        // When using inject with a string payload, Fastify parses it as JSON
         const response = await app.inject({
           method: 'PATCH',
           url: `/users/${encodeURIComponent(userId)}/settings`,
@@ -780,17 +572,16 @@ describe('Settings Routes', () => {
             authorization: `Bearer ${token}`,
             'content-type': 'application/json',
           },
-          payload: JSON.stringify({ notifications: { filters: [] } }),
+          payload: JSON.stringify({ researchSettings: { searchMode: 'quick' } }),
         });
 
-        // Fastify inject() auto-parses the string, so this actually works
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body) as {
           success: boolean;
-          data: { notifications: { filters: unknown[] } };
+          data: { researchSettings: { searchMode: string } };
         };
         expect(body.success).toBe(true);
-        expect(body.data.notifications.filters).toEqual([]);
+        expect(body.data.researchSettings.searchMode).toBe('quick');
       }
     );
   });

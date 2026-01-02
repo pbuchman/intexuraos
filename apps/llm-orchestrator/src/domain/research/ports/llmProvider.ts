@@ -13,6 +13,10 @@ export interface LlmError {
 export interface LlmResearchResult {
   content: string;
   sources?: string[];
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 }
 
 export interface LlmResearchProvider {

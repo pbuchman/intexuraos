@@ -10,7 +10,7 @@
  * Depends on @intexuraos/common-core for Result types.
  */
 
-// Types
+// Types from types.ts
 export type {
   LlmProvider,
   LlmAuditStatus,
@@ -20,5 +20,5 @@ export type {
   CompleteAuditLogErrorParams,
 } from './types.js';
 
-// Audit functions
+// Functions and classes from audit.ts
 export { isAuditEnabled, createAuditContext, AuditContext } from './audit.js';

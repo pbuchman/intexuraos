@@ -9,7 +9,26 @@ import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
 
-export type ResearchStatus = 'draft' | 'pending' | 'processing' | 'completed' | 'failed';
+export type SearchMode = 'deep' | 'quick';
+
+export type ResearchStatus =
+  | 'draft'
+  | 'pending'
+  | 'processing'
+  | 'awaiting_confirmation'
+  | 'retrying'
+  | 'synthesizing'
+  | 'completed'
+  | 'failed';
+
+export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
+
+export interface PartialFailure {
+  failedProviders: LlmProvider[];
+  userDecision?: PartialFailureDecision;
+  detectedAt: string;
+  retryCount: number;
+}
 
 export type LlmResultStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -23,6 +42,9 @@ export interface LlmResult {
   startedAt?: string;
   completedAt?: string;
   durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
 }
 
 /**
@@ -48,6 +70,7 @@ export interface Research {
   externalReports?: ExternalReport[];
   synthesizedResult?: string;
   synthesisError?: string;
+  partialFailure?: PartialFailure;
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;

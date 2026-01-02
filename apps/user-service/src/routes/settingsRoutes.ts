@@ -44,17 +44,18 @@ function mapUpdateErrorCode(
 }
 
 /**
- * Schema for notification filter.
+ * Schema for research settings.
  */
-const notificationFilterSchema = {
+const researchSettingsSchema = {
   type: 'object',
   properties: {
-    name: { type: 'string', minLength: 1, description: 'Unique filter name' },
-    app: { type: 'string', minLength: 1, description: 'App package name (e.g., com.whatsapp)' },
-    source: { type: 'string', minLength: 1, description: 'Notification source (e.g., tasker)' },
-    title: { type: 'string', minLength: 1, description: 'Title filter (case-insensitive partial)' },
+    searchMode: {
+      type: 'string',
+      enum: ['deep', 'quick'],
+      description: 'Search mode: deep (research models) or quick (default models with web search)',
+    },
   },
-  required: ['name'],
+  required: ['searchMode'],
 } as const;
 
 /**
@@ -64,20 +65,11 @@ const userSettingsDataSchema = {
   type: 'object',
   properties: {
     userId: { type: 'string' },
-    notifications: {
-      type: 'object',
-      properties: {
-        filters: {
-          type: 'array',
-          items: notificationFilterSchema,
-        },
-      },
-      required: ['filters'],
-    },
+    researchSettings: researchSettingsSchema,
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
   },
-  required: ['userId', 'notifications', 'createdAt', 'updatedAt'],
+  required: ['userId', 'createdAt', 'updatedAt'],
 } as const;
 
 export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -184,18 +176,8 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         body: {
           type: 'object',
           properties: {
-            notifications: {
-              type: 'object',
-              properties: {
-                filters: {
-                  type: 'array',
-                  items: notificationFilterSchema,
-                },
-              },
-              required: ['filters'],
-            },
+            researchSettings: researchSettingsSchema,
           },
-          required: ['notifications'],
         },
         response: {
           200: {
@@ -259,20 +241,25 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const params = request.params as { uid: string };
       const body = request.body as {
-        notifications: {
-          filters: { name: string; app?: string; source?: string; title?: string }[];
+        researchSettings?: {
+          searchMode: 'deep' | 'quick';
         };
       };
       const { userSettingsRepository } = getServices();
 
-      const result = await updateUserSettings(
-        {
-          userId: params.uid,
-          requestingUserId: user.userId,
-          notifications: body.notifications,
-        },
-        { userSettingsRepository }
-      );
+      const input: {
+        userId: string;
+        requestingUserId: string;
+        researchSettings?: { searchMode: 'deep' | 'quick' };
+      } = {
+        userId: params.uid,
+        requestingUserId: user.userId,
+      };
+      if (body.researchSettings !== undefined) {
+        input.researchSettings = body.researchSettings;
+      }
+
+      const result = await updateUserSettings(input, { userSettingsRepository });
 
       if (!result.ok) {
         return await reply.fail(mapUpdateErrorCode(result.error.code), result.error.message);

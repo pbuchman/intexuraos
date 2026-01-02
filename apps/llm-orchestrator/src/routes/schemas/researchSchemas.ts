@@ -199,3 +199,37 @@ export const saveDraftResponseSchema = {
     },
   },
 } as const;
+
+export const confirmPartialFailureBodySchema = {
+  type: 'object',
+  required: ['action'],
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['proceed', 'retry', 'cancel'],
+      description:
+        'User decision for partial failure: proceed with successful results, retry failed providers, or cancel',
+    },
+  },
+} as const;
+
+export const confirmPartialFailureResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        action: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

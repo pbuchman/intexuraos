@@ -70,7 +70,7 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
    - Add module in `terraform/environments/dev/main.tf`
    - Configure:
      - Service account with minimal required permissions
-     - Environment variables (including `GOOGLE_CLOUD_PROJECT` if using Firestore)
+     - Environment variables (including `INTEXURAOS_GCP_PROJECT_ID` if using Firestore)
      - Secret Manager bindings
      - Cloud Run service settings (min/max instances, memory, CPU)
      - IAM permissions (Firestore, Pub/Sub, etc.)

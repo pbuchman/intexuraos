@@ -3,6 +3,7 @@ export { ClaudeAdapter } from './ClaudeAdapter.js';
 export { GptAdapter } from './GptAdapter.js';
 export {
   createLlmProviders,
+  createResearchProvider,
   createSynthesizer,
   createTitleGenerator,
 } from './LlmAdapterFactory.js';

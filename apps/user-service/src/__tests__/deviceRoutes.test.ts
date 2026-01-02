@@ -8,9 +8,9 @@ import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('Device Authorization Flow', () => {
   let app: FastifyInstance;
@@ -26,9 +26,9 @@ describe('Device Authorization Flow', () => {
   });
 
   beforeEach(() => {
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     nock.cleanAll();
     resetServices();
 
@@ -43,9 +43,9 @@ describe('Device Authorization Flow', () => {
 
   describe('POST /auth/device/start', () => {
     describe('when config is missing', () => {
-      it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      it('returns 503 MISCONFIGURED when INTEXURAOS_AUTH0_DOMAIN is missing', async () => {
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
         app = await buildServer();
 
@@ -62,28 +62,30 @@ describe('Device Authorization Flow', () => {
         };
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('MISCONFIGURED');
-        expect(body.error.message).toContain('AUTH0_DOMAIN');
+        expect(body.error.message).toContain('INTEXURAOS_AUTH0_DOMAIN');
       });
     });
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
       });
 
       it('returns expected fields on success', async () => {
         const mockResponse = {
           device_code: 'DEVICE-CODE-123',
           user_code: 'ABCD-EFGH',
-          verification_uri: `https://${AUTH0_DOMAIN}/activate`,
-          verification_uri_complete: `https://${AUTH0_DOMAIN}/activate?user_code=ABCD-EFGH`,
+          verification_uri: `https://${INTEXURAOS_AUTH0_DOMAIN}/activate`,
+          verification_uri_complete: `https://${INTEXURAOS_AUTH0_DOMAIN}/activate?user_code=ABCD-EFGH`,
           expires_in: 900,
           interval: 5,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/device/code').reply(200, mockResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/device/code')
+          .reply(200, mockResponse);
 
         app = await buildServer();
 
@@ -102,7 +104,7 @@ describe('Device Authorization Flow', () => {
         expect(body.success).toBe(true);
         expect(body.data.device_code).toBe('DEVICE-CODE-123');
         expect(body.data.user_code).toBe('ABCD-EFGH');
-        expect(body.data.verification_uri).toBe(`https://${AUTH0_DOMAIN}/activate`);
+        expect(body.data.verification_uri).toBe(`https://${INTEXURAOS_AUTH0_DOMAIN}/activate`);
         expect(body.data.verification_uri_complete).toContain('ABCD-EFGH');
         expect(body.data.expires_in).toBe(900);
         expect(body.data.interval).toBe(5);
@@ -114,15 +116,15 @@ describe('Device Authorization Flow', () => {
         const mockResponse = {
           device_code: 'DEVICE-CODE-123',
           user_code: 'ABCD-EFGH',
-          verification_uri: `https://${AUTH0_DOMAIN}/activate`,
-          verification_uri_complete: `https://${AUTH0_DOMAIN}/activate?user_code=ABCD-EFGH`,
+          verification_uri: `https://${INTEXURAOS_AUTH0_DOMAIN}/activate`,
+          verification_uri_complete: `https://${INTEXURAOS_AUTH0_DOMAIN}/activate?user_code=ABCD-EFGH`,
           expires_in: 900,
           interval: 5,
         };
 
         let receivedBody = '';
 
-        nock(`https://${AUTH0_DOMAIN}`)
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
           .post('/oauth/device/code')
           .reply(200, function (_uri, requestBody) {
             receivedBody = Buffer.isBuffer(requestBody)
@@ -164,7 +166,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles Auth0 error response', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
           error: 'invalid_client',
           error_description: 'Client is not authorized for device flow',
         });
@@ -190,7 +192,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles Auth0 error response without error_description', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/device/code').reply(400, {
           error: 'invalid_scope',
         });
 
@@ -215,7 +217,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles non-Auth0 error response for device/start', async () => {
-        nock(`https://${AUTH0_DOMAIN}`)
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
           .post('/oauth/device/code')
           .reply(500, 'Internal Server Error');
 
@@ -238,7 +240,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles network error for device/start', async () => {
-        nock(`https://${AUTH0_DOMAIN}`)
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
           .post('/oauth/device/code')
           .replyWithError('Connection refused');
 
@@ -285,9 +287,9 @@ describe('Device Authorization Flow', () => {
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
         // Inject fake repository to avoid Firestore connection during token storage
         setServices({
@@ -321,7 +323,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('returns 409 CONFLICT when authorization pending', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
           error: 'authorization_pending',
           error_description: 'User has not authorized yet',
         });
@@ -345,7 +347,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('returns 409 CONFLICT when slow_down', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
           error: 'slow_down',
           error_description: 'You are polling too quickly',
         });
@@ -376,7 +378,9 @@ describe('Device Authorization Flow', () => {
           scope: 'openid profile email',
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -399,7 +403,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles expired token error', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
           error: 'expired_token',
           error_description: 'Device code has expired',
         });
@@ -423,7 +427,7 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles Auth0 error without error_description for device/poll', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
           error: 'access_denied',
         });
 
@@ -446,7 +450,9 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles non-Auth0 error response', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(500, 'Internal Server Error');
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(500, 'Internal Server Error');
 
         app = await buildServer();
 
@@ -466,7 +472,9 @@ describe('Device Authorization Flow', () => {
       });
 
       it('handles network error', async () => {
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').replyWithError('Connection refused');
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .replyWithError('Connection refused');
 
         app = await buildServer();
 
@@ -500,7 +508,9 @@ describe('Device Authorization Flow', () => {
           scope: 'openid profile email offline_access',
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -533,7 +543,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -566,7 +578,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -599,7 +613,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -632,7 +648,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -659,7 +677,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -687,7 +707,9 @@ describe('Device Authorization Flow', () => {
           // No refresh_token
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -714,7 +736,9 @@ describe('Device Authorization Flow', () => {
           expires_in: 3600,
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         app = await buildServer();
 
@@ -747,7 +771,9 @@ describe('Device Authorization Flow', () => {
           scope: 'openid profile email offline_access',
         };
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, mockTokenResponse);
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
+          .post('/oauth/token')
+          .reply(200, mockTokenResponse);
 
         // Configure the fake repository to fail the next saveTokens call
         fakeTokenRepo.setFailNextSaveTokens(true);

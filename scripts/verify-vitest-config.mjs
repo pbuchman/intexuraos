@@ -19,7 +19,7 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const configPath = join(repoRoot, 'vitest.config.ts');
 
 const REQUIRED_THRESHOLDS = { lines: 95, branches: 95, functions: 95, statements: 95 };
-const MAX_EXCLUSIONS = 15; // Current baseline from vitest.config.ts
+const MAX_EXCLUSIONS = 18; // Current baseline from vitest.config.ts coverage.exclude
 
 function parseConfig() {
   const content = readFileSync(configPath, 'utf8');
@@ -39,8 +39,8 @@ function parseConfig() {
     }
   }
 
-  // Count exclusions (non-comment lines in exclude array)
-  const excludeMatch = content.match(/exclude:\s*\[([\s\S]*?)]/);
+  // Count exclusions in coverage.exclude (not test.exclude)
+  const excludeMatch = content.match(/coverage:\s*\{[\s\S]*?exclude:\s*\[([\s\S]*?)]/);
   if (!excludeMatch) {
     throw new Error('Cannot parse coverage exclusions');
   }

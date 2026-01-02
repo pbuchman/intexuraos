@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Layout } from '@/components';
 import { useResearches } from '@/hooks';
 import type { Research, ResearchStatus } from '@/services/llmOrchestratorApi.types';
@@ -30,6 +30,9 @@ const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
   draft: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Draft' },
   pending: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Pending' },
   processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
+  awaiting_confirmation: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Action Required' },
+  retrying: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Retrying' },
+  synthesizing: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Synthesizing' },
   completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
   failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed' },
 };
@@ -110,9 +113,11 @@ interface ResearchCardProps {
 }
 
 function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Element {
+  const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[research.status];
   const isDraft = research.status === 'draft';
+  const isCompleted = research.status === 'completed';
   const deleteLabel = isDraft ? 'Discard' : 'Delete';
 
   const formatDate = (dateString: string): string => {
@@ -125,15 +130,29 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
     });
   };
 
+  const handleCardClick = (): void => {
+    void navigate(`/research/${research.id}`);
+  };
+
+  const getDateLabel = (): string => {
+    if (isDraft) {
+      return `Draft saved: ${formatDate(research.startedAt)}`;
+    }
+    return `Research started: ${formatDate(research.startedAt)}`;
+  };
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-sm">
+    <div
+      onClick={handleCardClick}
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+    >
       <div className="flex items-start justify-between">
-        <Link to={`/research/${research.id}`} className="flex-1">
+        <div className="flex-1">
           <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
             {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
           </h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
-        </Link>
+        </div>
         <span
           className={`ml-4 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
         >
@@ -143,8 +162,8 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
         <div className="flex gap-4">
-          <span>Started: {formatDate(research.startedAt)}</span>
-          {research.completedAt !== undefined ? (
+          <span>{getDateLabel()}</span>
+          {isCompleted && research.completedAt !== undefined ? (
             <span>Completed: {formatDate(research.completedAt)}</span>
           ) : null}
         </div>
@@ -159,7 +178,12 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
 
       <div className="mt-3 flex justify-end">
         {showDeleteConfirm ? (
-          <div className="flex gap-2">
+          <div
+            className="flex gap-2"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
             <Button variant="danger" onClick={onDelete}>
               Confirm {deleteLabel}
             </Button>
@@ -174,7 +198,8 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
           </div>
         ) : (
           <button
-            onClick={(): void => {
+            onClick={(e): void => {
+              e.stopPropagation();
               setShowDeleteConfirm(true);
             }}
             className="text-sm text-slate-400 hover:text-red-600"

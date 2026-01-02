@@ -6,9 +6,9 @@ import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('OAuth2 Routes', () => {
   let app: FastifyInstance;
@@ -23,9 +23,9 @@ describe('OAuth2 Routes', () => {
   });
 
   beforeEach(() => {
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     nock.cleanAll();
   });
 
@@ -58,9 +58,9 @@ describe('OAuth2 Routes', () => {
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
       });
 
       it('returns 400 when code missing for authorization_code grant', async () => {
@@ -125,7 +125,7 @@ describe('OAuth2 Routes', () => {
       it('exchanges authorization code for tokens successfully', async () => {
         app = await buildServer();
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
           access_token: 'test-access-token',
           token_type: 'Bearer',
           expires_in: 86400,
@@ -161,7 +161,7 @@ describe('OAuth2 Routes', () => {
       it('accepts form-urlencoded content type (OAuth2 standard)', async () => {
         app = await buildServer();
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
           access_token: 'test-access-token',
           token_type: 'Bearer',
           expires_in: 86400,
@@ -185,7 +185,7 @@ describe('OAuth2 Routes', () => {
       it('refreshes token successfully', async () => {
         app = await buildServer();
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(200, {
           access_token: 'new-access-token',
           token_type: 'Bearer',
           expires_in: 86400,
@@ -213,7 +213,7 @@ describe('OAuth2 Routes', () => {
       it('returns Auth0 error on invalid credentials', async () => {
         app = await buildServer();
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(401, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(401, {
           error: 'invalid_client',
           error_description: 'Client authentication failed',
         });
@@ -238,7 +238,7 @@ describe('OAuth2 Routes', () => {
       it('returns error on Auth0 failure', async () => {
         app = await buildServer();
 
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
           error: 'invalid_grant',
           error_description: 'Invalid authorization code',
         });
@@ -264,7 +264,7 @@ describe('OAuth2 Routes', () => {
         app = await buildServer();
 
         // Use nock's reqheaders to match the body content
-        nock(`https://${AUTH0_DOMAIN}`)
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
           .post('/oauth/token', /code_verifier=test-code-verifier-value/)
           .reply(200, {
             access_token: 'pkce-access-token',
@@ -294,7 +294,7 @@ describe('OAuth2 Routes', () => {
         app = await buildServer();
 
         // Auth0 returns an error response that doesn't match the expected Auth0Error format
-        nock(`https://${AUTH0_DOMAIN}`).post('/oauth/token').reply(500, {
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(500, {
           message: 'Internal server error',
           statusCode: 500,
         });
@@ -321,7 +321,7 @@ describe('OAuth2 Routes', () => {
         app = await buildServer();
 
         // Simulate a network error
-        nock(`https://${AUTH0_DOMAIN}`)
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`)
           .post('/oauth/token')
           .replyWithError('Network connection refused');
 
@@ -385,9 +385,9 @@ describe('OAuth2 Routes', () => {
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
       });
 
       it('returns 400 when redirect_uri missing', async () => {
@@ -414,11 +414,11 @@ describe('OAuth2 Routes', () => {
 
         expect(response.statusCode).toBe(302);
         const location = String(response.headers.location);
-        expect(location).toContain(`https://${AUTH0_DOMAIN}/authorize`);
+        expect(location).toContain(`https://${INTEXURAOS_AUTH0_DOMAIN}/authorize`);
         expect(location).toContain('redirect_uri=https%3A%2F%2Fchat.openai.com%2Fcallback');
         expect(location).toContain('scope=openid');
         expect(location).toContain('state=abc123');
-        expect(location).toContain(`audience=${encodeURIComponent(AUTH_AUDIENCE)}`);
+        expect(location).toContain(`audience=${encodeURIComponent(INTEXURAOS_AUTH_AUDIENCE)}`);
       });
 
       it('uses default scope when not provided', async () => {

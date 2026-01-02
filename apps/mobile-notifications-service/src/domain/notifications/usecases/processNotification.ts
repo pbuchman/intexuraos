@@ -10,6 +10,7 @@ import type {
   RepositoryError,
   SignatureConnectionRepository,
 } from '../ports/index.js';
+import type { NotificationFiltersRepository } from '../../filters/index.js';
 import { hashSignature } from './createConnection.js';
 
 /**
@@ -60,7 +61,8 @@ export async function processNotification(
   input: ProcessNotificationInput,
   signatureRepo: SignatureConnectionRepository,
   notificationRepo: NotificationRepository,
-  logger?: ProcessNotificationLogger
+  logger?: ProcessNotificationLogger,
+  filtersRepo?: NotificationFiltersRepository
 ): Promise<Result<ProcessNotificationOutput, RepositoryError>> {
   const log = logger ?? {
     info: (_obj: Record<string, unknown>, _msg: string): void => {
@@ -161,5 +163,20 @@ export async function processNotification(
     { id: saveResult.value.id, userId, app: input.payload.app },
     'Notification saved successfully'
   );
+
+  // Populate filter options (best-effort, don't fail if this fails)
+  if (filtersRepo !== undefined) {
+    try {
+      await filtersRepo.addOptions(userId, {
+        app: input.payload.app,
+        device: input.payload.device,
+        source: input.payload.source,
+      });
+      log.info({ userId }, 'Filter options updated');
+    } catch {
+      log.warn({ userId }, 'Failed to update filter options (non-critical)');
+    }
+  }
+
   return ok({ status: 'accepted', id: saveResult.value.id });
 }

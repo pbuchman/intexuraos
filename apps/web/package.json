@@ -18,6 +18,7 @@
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
     "@types/js-yaml": "^4.0.9",
+    "firebase": "^11.9.0",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
     "libphonenumber-js": "^1.12.33",

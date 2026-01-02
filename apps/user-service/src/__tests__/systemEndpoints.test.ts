@@ -19,9 +19,9 @@ describe('System Endpoints', () => {
   });
 
   beforeEach(() => {
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     nock.cleanAll();
   });
 
@@ -30,11 +30,11 @@ describe('System Endpoints', () => {
   });
 
   it('GET /health returns health status', async () => {
-    process.env['AUTH0_DOMAIN'] = 'test-tenant.eu.auth0.com';
-    process.env['AUTH0_CLIENT_ID'] = 'test-client-id';
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = 'test-tenant.eu.auth0.com';
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = 'test-client-id';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
     process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw==';
 
     app = await buildServer();

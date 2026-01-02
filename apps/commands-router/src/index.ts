@@ -3,11 +3,12 @@ import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
-  'GOOGLE_CLOUD_PROJECT',
-  'AUTH_JWKS_URL',
-  'AUTH_ISSUER',
-  'AUTH_AUDIENCE',
-  'USER_SERVICE_URL',
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_ACTIONS_AGENT_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
 ];
 
@@ -15,9 +16,10 @@ validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   initServices({
-    userServiceUrl: process.env['USER_SERVICE_URL'] as string,
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
+    actionsAgentUrl: process.env['INTEXURAOS_ACTIONS_AGENT_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
-    gcpProjectId: process.env['GOOGLE_CLOUD_PROJECT'] as string,
+    gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
   });
 
   const app = await buildServer();

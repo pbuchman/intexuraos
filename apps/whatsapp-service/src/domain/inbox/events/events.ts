@@ -120,6 +120,7 @@ export interface TranscriptionCompletedEvent {
 /**
  * Event received to send an outbound WhatsApp message.
  * Published by other services (e.g., llm-orchestrator) to request message sending.
+ * The phone number is looked up internally using userId.
  */
 export interface SendMessageEvent {
   /**
@@ -128,14 +129,9 @@ export interface SendMessageEvent {
   type: 'whatsapp.message.send';
 
   /**
-   * IntexuraOS user ID (for audit/logging).
+   * IntexuraOS user ID. Used to look up the phone number internally.
    */
   userId: string;
-
-  /**
-   * Recipient phone number (E.164 format, e.g., +48123456789).
-   */
-  phoneNumber: string;
 
   /**
    * Message text to send.

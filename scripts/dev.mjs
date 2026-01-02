@@ -38,6 +38,7 @@ const SERVICES = [
   { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
   { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
+  { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -151,31 +152,33 @@ function validateEnvVars() {
 }
 
 const API_DOCS_HUB_ENV = {
-  USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
-  PROMPTVAULT_SERVICE_OPENAPI_URL: 'http://localhost:8111/openapi.json',
-  NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
-  WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
-  MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
-  LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
-  COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
-  RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
+  INTEXURAOS_USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
+  INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL: 'http://localhost:8111/openapi.json',
+  INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
+  INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
+  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
+  INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
 };
 
 const COMMON_SERVICE_ENV = {
-  AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
-  AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
-  AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE ?? '',
-  AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
-  AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
+  INTEXURAOS_AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
+  INTEXURAOS_AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
+  INTEXURAOS_AUTH_AUDIENCE: process.env.INTEXURAOS_AUTH_AUDIENCE ?? '',
+  INTEXURAOS_AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
+  INTEXURAOS_AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
   INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
 };
 
 const SERVICE_ENV_MAPPINGS = {
   'commands-router': {
-    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_ACTIONS_AGENT_URL:
+      process.env.INTEXURAOS_ACTIONS_AGENT_URL ?? 'http://localhost:8118',
   },
   'llm-orchestrator': {
-    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -190,9 +193,18 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
   'actions-agent': {
-    COMMANDS_ROUTER_URL: 'http://localhost:8117',
-    LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
-    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_COMMANDS_ROUTER_URL: 'http://localhost:8117',
+    INTEXURAOS_LLM_ORCHESTRATOR_URL:
+      process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
+    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC ?? 'actions-research',
+    INTEXURAOS_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
+  },
+  'data-insights-service': {
+    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
 };
 

@@ -24,11 +24,6 @@ export interface FilterOptions {
 }
 
 /**
- * Fields that support distinct value retrieval.
- */
-export type DistinctFilterField = 'app' | 'source';
-
-/**
  * Pagination options for listing notifications.
  */
 export interface PaginationOptions {
@@ -80,13 +75,4 @@ export interface NotificationRepository {
    * Delete a notification by ID.
    */
   delete(id: string): Promise<Result<void, RepositoryError>>;
-
-  /**
-   * Get distinct values for a filterable field.
-   * Used to populate filter dropdowns.
-   */
-  getDistinctValues(
-    userId: string,
-    field: DistinctFilterField
-  ): Promise<Result<string[], RepositoryError>>;
 }

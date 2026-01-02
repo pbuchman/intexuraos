@@ -11,3 +11,10 @@ export {
   type ListResearchesResult,
 } from './listResearches.js';
 export { deleteResearch } from './deleteResearch.js';
+export {
+  checkLlmCompletion,
+  type CheckLlmCompletionDeps,
+  type CompletionAction,
+} from './checkLlmCompletion.js';
+export { runSynthesis, type RunSynthesisDeps } from './runSynthesis.js';
+export { retryFailedLlms, type RetryFailedLlmsDeps, type RetryResult } from './retryFailedLlms.js';

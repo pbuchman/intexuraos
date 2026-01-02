@@ -1,2 +1,2 @@
-export { WhatsAppNotificationSender, type UserPhoneLookup } from './WhatsAppNotificationSender.js';
+export { WhatsAppNotificationSender } from './WhatsAppNotificationSender.js';
 export { NoopNotificationSender } from './NoopNotificationSender.js';

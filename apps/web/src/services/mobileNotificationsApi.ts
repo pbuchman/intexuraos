@@ -1,6 +1,11 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { MobileNotificationsConnectResponse, MobileNotificationsResponse } from '@/types';
+import type {
+  MobileNotificationsConnectResponse,
+  MobileNotificationsResponse,
+  NotificationFiltersData,
+  SavedNotificationFilter,
+} from '@/types';
 
 /**
  * Generate a new signature for mobile notifications.
@@ -64,20 +69,57 @@ export async function getMobileNotifications(
 }
 
 /**
- * Valid filter fields for getFilterValues.
+ * Get notification filters data (options and saved filters).
  */
-export type FilterField = 'app' | 'source';
-
-/**
- * Get distinct values for a filter field.
- */
-export async function getFilterValues(accessToken: string, field: FilterField): Promise<string[]> {
-  const result = await apiRequest<{ values: string[] }>(
+export async function getNotificationFilters(
+  accessToken: string
+): Promise<NotificationFiltersData> {
+  return await apiRequest<NotificationFiltersData>(
     config.mobileNotificationsServiceUrl,
-    `/mobile-notifications/filter-values?field=${field}`,
+    '/notifications/filters',
     accessToken
   );
-  return result.values;
+}
+
+/**
+ * Input for creating a saved notification filter.
+ */
+export interface CreateSavedNotificationFilterInput {
+  name: string;
+  app?: string;
+  device?: string;
+  source?: string;
+  title?: string;
+}
+
+/**
+ * Create a saved notification filter.
+ */
+export async function createSavedNotificationFilter(
+  accessToken: string,
+  filter: CreateSavedNotificationFilterInput
+): Promise<SavedNotificationFilter> {
+  return await apiRequest<SavedNotificationFilter>(
+    config.mobileNotificationsServiceUrl,
+    '/notifications/filters/saved',
+    accessToken,
+    { method: 'POST', body: filter }
+  );
+}
+
+/**
+ * Delete a saved notification filter.
+ */
+export async function deleteSavedNotificationFilter(
+  accessToken: string,
+  filterId: string
+): Promise<void> {
+  await apiRequest<unknown>(
+    config.mobileNotificationsServiceUrl,
+    `/notifications/filters/saved/${encodeURIComponent(filterId)}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
 }
 
 /**

@@ -110,6 +110,13 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
             },
           },
         },
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
       },
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },

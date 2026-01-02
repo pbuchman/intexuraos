@@ -123,7 +123,8 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         { signature, payload: request.body },
         services.signatureConnectionRepository,
         services.notificationRepository,
-        request.log
+        request.log,
+        services.notificationFiltersRepository
       );
 
       if (!result.ok) {

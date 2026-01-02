@@ -7,7 +7,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { FakeNotificationRepository, FakeSignatureConnectionRepository } from './fakes.js';
+import {
+  FakeNotificationFiltersRepository,
+  FakeNotificationRepository,
+  FakeSignatureConnectionRepository,
+} from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
@@ -59,9 +63,10 @@ export async function setupJwksServer(): Promise<void> {
   await jwksServer.listen({ port: 0, host: '127.0.0.1' });
   const address = jwksServer.server.address();
   if (address !== null && typeof address === 'object') {
-    process.env['AUTH_JWKS_URL'] = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
-    process.env['AUTH_ISSUER'] = issuer;
-    process.env['AUTH_AUDIENCE'] = audience;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] =
+      `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = audience;
   }
 }
 
@@ -70,15 +75,16 @@ export async function setupJwksServer(): Promise<void> {
  */
 export async function teardownJwksServer(): Promise<void> {
   await jwksServer.close();
-  delete process.env['AUTH_JWKS_URL'];
-  delete process.env['AUTH_ISSUER'];
-  delete process.env['AUTH_AUDIENCE'];
+  delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
+  delete process.env['INTEXURAOS_AUTH_ISSUER'];
+  delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
 }
 
 export interface TestContext {
   app: FastifyInstance;
   signatureRepo: FakeSignatureConnectionRepository;
   notificationRepo: FakeNotificationRepository;
+  filtersRepo: FakeNotificationFiltersRepository;
 }
 
 /**
@@ -89,6 +95,7 @@ export function setupTestContext(): TestContext {
     app: null as unknown as FastifyInstance,
     signatureRepo: null as unknown as FakeSignatureConnectionRepository,
     notificationRepo: null as unknown as FakeNotificationRepository,
+    filtersRepo: null as unknown as FakeNotificationFiltersRepository,
   };
 
   beforeAll(async () => {
@@ -102,10 +109,12 @@ export function setupTestContext(): TestContext {
   beforeEach(async () => {
     context.signatureRepo = new FakeSignatureConnectionRepository();
     context.notificationRepo = new FakeNotificationRepository();
+    context.filtersRepo = new FakeNotificationFiltersRepository();
 
     setServices({
       signatureConnectionRepository: context.signatureRepo,
       notificationRepository: context.notificationRepo,
+      notificationFiltersRepository: context.filtersRepo,
     });
 
     clearJwksCache();

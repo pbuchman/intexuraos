@@ -112,6 +112,13 @@ resource "google_project_iam_member" "cloud_build_builds_editor" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs Firebase Admin to deploy Firestore indexes and rules
+resource "google_project_iam_member" "cloud_build_firebase_admin" {
+  project = var.project_id
+  role    = "roles/firebase.admin"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Automatic Trigger (fires on push to development branch)
 # -----------------------------------------------------------------------------

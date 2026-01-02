@@ -93,6 +93,7 @@ export interface WhatsAppUserMappingRepository {
   ): Promise<Result<WhatsAppUserMappingPublic, InboxError>>;
   getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>>;
   findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>>;
+  findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>>;
   disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>>;
   isConnected(userId: string): Promise<Result<boolean, InboxError>>;
 }

@@ -72,9 +72,10 @@ export async function setupJwksServer(): Promise<void> {
   await jwksServer.listen({ port: 0, host: '127.0.0.1' });
   const address = jwksServer.server.address();
   if (address !== null && typeof address === 'object') {
-    process.env['AUTH_JWKS_URL'] = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
-    process.env['AUTH_ISSUER'] = issuer;
-    process.env['AUTH_AUDIENCE'] = audience;
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] =
+      `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = audience;
   }
 }
 
@@ -84,9 +85,9 @@ export async function setupJwksServer(): Promise<void> {
  */
 export async function teardownJwksServer(): Promise<void> {
   await jwksServer.close();
-  delete process.env['AUTH_JWKS_URL'];
-  delete process.env['AUTH_ISSUER'];
-  delete process.env['AUTH_AUDIENCE'];
+  delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
+  delete process.env['INTEXURAOS_AUTH_ISSUER'];
+  delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
 }
 
 export const testConfig: Config = {

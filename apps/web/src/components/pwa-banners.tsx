@@ -14,7 +14,7 @@ export function IOSInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-slate-900 p-4 text-white shadow-lg">
+    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-slate-900 p-4 text-white shadow-lg lg:hidden">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <button
           onClick={dismissIOSInstallPrompt}
@@ -53,7 +53,7 @@ export function AndroidInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-blue-600 p-4 text-white shadow-lg">
+    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-blue-600 p-4 text-white shadow-lg lg:hidden">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div>
           <p className="text-sm font-semibold">Install IntexuraOS</p>

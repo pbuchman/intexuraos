@@ -22,9 +22,9 @@ describe('promptvault-service OpenAPI contract', () => {
 
   beforeAll(async () => {
     // Set required env vars
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'https://api.test.com';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.test.com';
     process.env['VITEST'] = 'true';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-auth-token';
     process.env['INTEXURAOS_NOTION_SERVICE_URL'] = 'http://localhost:3000';
@@ -39,9 +39,9 @@ describe('promptvault-service OpenAPI contract', () => {
 
   afterAll(async () => {
     await app.close();
-    delete process.env['AUTH_JWKS_URL'];
-    delete process.env['AUTH_ISSUER'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
+    delete process.env['INTEXURAOS_AUTH_ISSUER'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     delete process.env['VITEST'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_NOTION_SERVICE_URL'];

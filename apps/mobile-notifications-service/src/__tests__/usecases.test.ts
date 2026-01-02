@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   createConnection,
   deleteNotification,
-  getDistinctFilterValues,
   hashSignature,
   listNotifications,
   processNotification,
@@ -740,78 +739,5 @@ describe('hashSignature', () => {
     const hash2 = hashSignature('signature-2');
 
     expect(hash1).not.toBe(hash2);
-  });
-});
-
-describe('getDistinctFilterValues', () => {
-  let notificationRepo: FakeNotificationRepository;
-
-  beforeEach(() => {
-    notificationRepo = new FakeNotificationRepository();
-  });
-
-  it('returns distinct values for app field', async () => {
-    notificationRepo.addNotification({
-      id: 'notif-1',
-      userId: 'user-123',
-      source: 'tasker',
-      device: 'phone',
-      app: 'com.whatsapp',
-      title: 'Title 1',
-      text: 'Text 1',
-      timestamp: Date.now(),
-      postTime: '2024-01-01T00:00:00Z',
-      receivedAt: new Date().toISOString(),
-      notificationId: 'ext-1',
-    });
-    notificationRepo.addNotification({
-      id: 'notif-2',
-      userId: 'user-123',
-      source: 'tasker',
-      device: 'phone',
-      app: 'com.slack',
-      title: 'Title 2',
-      text: 'Text 2',
-      timestamp: Date.now() + 1,
-      postTime: '2024-01-01T00:00:00Z',
-      receivedAt: new Date().toISOString(),
-      notificationId: 'ext-2',
-    });
-
-    const result = await getDistinctFilterValues(
-      { userId: 'user-123', field: 'app' },
-      notificationRepo
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toEqual(['com.slack', 'com.whatsapp']);
-    }
-  });
-
-  it('returns empty array when no notifications', async () => {
-    const result = await getDistinctFilterValues(
-      { userId: 'user-123', field: 'app' },
-      notificationRepo
-    );
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toEqual([]);
-    }
-  });
-
-  it('returns error on repository failure', async () => {
-    notificationRepo.setFailNextFind(true);
-
-    const result = await getDistinctFilterValues(
-      { userId: 'user-123', field: 'source' },
-      notificationRepo
-    );
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('INTERNAL_ERROR');
-    }
   });
 });

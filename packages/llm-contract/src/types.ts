@@ -1,3 +1,9 @@
+/**
+ * LLM Contract Types.
+ *
+ * Common types and interfaces for LLM client implementations.
+ */
+
 import type { Result } from '@intexuraos/common-core';
 
 export interface LLMConfig {
@@ -7,9 +13,15 @@ export interface LLMConfig {
   researchModel: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface ResearchResult {
   content: string;
   sources: string[];
+  usage?: TokenUsage;
 }
 
 export interface SynthesisInput {

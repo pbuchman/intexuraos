@@ -19,9 +19,9 @@ describe('System Endpoints', () => {
   });
 
   beforeEach(() => {
-    process.env['AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
-    process.env['AUTH_ISSUER'] = 'https://test.auth0.com/';
-    process.env['AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';

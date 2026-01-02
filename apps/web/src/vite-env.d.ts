@@ -2,12 +2,12 @@
 /// <reference types="vite-plugin-pwa/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_AUTH0_DOMAIN: string;
-  readonly VITE_AUTH0_CLIENT_ID: string;
-  readonly VITE_AUTH_AUDIENCE: string;
-  readonly VITE_USER_SERVICE_URL: string;
-  readonly VITE_PROMPTVAULT_SERVICE_URL: string;
-  readonly VITE_WHATSAPP_SERVICE_URL: string;
+  readonly INTEXURAOS_AUTH0_DOMAIN: string;
+  readonly INTEXURAOS_AUTH0_SPA_CLIENT_ID: string;
+  readonly INTEXURAOS_AUTH_AUDIENCE: string;
+  readonly INTEXURAOS_USER_SERVICE_URL: string;
+  readonly INTEXURAOS_PROMPTVAULT_SERVICE_URL: string;
+  readonly INTEXURAOS_WHATSAPP_SERVICE_URL: string;
 }
 
 interface ImportMeta {

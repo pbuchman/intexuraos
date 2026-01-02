@@ -1,8 +1,10 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  ConfirmPartialFailureResponse,
   CreateResearchRequest,
   ListResearchesResponse,
+  PartialFailureDecision,
   Research,
   SaveDraftRequest,
 } from './llmOrchestratorApi.types.js';
@@ -103,11 +105,33 @@ export async function deleteResearch(accessToken: string, id: string): Promise<v
   );
 }
 
+/**
+ * Confirm partial failure action (proceed, retry, or cancel).
+ */
+export async function confirmPartialFailure(
+  accessToken: string,
+  id: string,
+  action: PartialFailureDecision
+): Promise<ConfirmPartialFailureResponse> {
+  return await apiRequest<ConfirmPartialFailureResponse>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/confirm`,
+    accessToken,
+    {
+      method: 'POST',
+      body: { action },
+    }
+  );
+}
+
 export type {
+  ConfirmPartialFailureResponse,
   LlmProvider,
-  ResearchStatus,
   LlmResult,
+  PartialFailure,
+  PartialFailureDecision,
   Research,
+  ResearchStatus,
   CreateResearchRequest,
   SaveDraftRequest,
   ListResearchesResponse,

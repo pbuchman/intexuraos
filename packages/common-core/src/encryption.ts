@@ -38,7 +38,8 @@ export function createEncryptor(keyBase64: string): Encryptor {
           tag: tag.toString('base64'),
         });
       } catch (error) {
-        return err(error instanceof Error ? error : new Error('Encryption failed'));
+        // Node's crypto module always throws Error instances
+        return err(error as Error);
       }
     },
 
@@ -56,7 +57,8 @@ export function createEncryptor(keyBase64: string): Encryptor {
 
         return ok(plaintext);
       } catch (error) {
-        return err(error instanceof Error ? error : new Error('Decryption failed'));
+        // Node's crypto module always throws Error instances
+        return err(error as Error);
       }
     },
   };

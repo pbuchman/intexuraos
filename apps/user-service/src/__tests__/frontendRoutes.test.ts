@@ -8,19 +8,19 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('Frontend Auth Routes', () => {
   let app: FastifyInstance;
 
   beforeEach(() => {
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
-    delete process.env['AUTH_JWKS_URL'];
-    delete process.env['AUTH_ISSUER'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
+    delete process.env['INTEXURAOS_AUTH_ISSUER'];
     clearJwksCache();
   });
 
@@ -30,9 +30,9 @@ describe('Frontend Auth Routes', () => {
 
   describe('GET /auth/login', () => {
     describe('when config is missing', () => {
-      it('returns 503 MISCONFIGURED when AUTH0_DOMAIN is missing', async () => {
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+      it('returns 503 MISCONFIGURED when INTEXURAOS_AUTH0_DOMAIN is missing', async () => {
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
         app = await buildServer();
 
@@ -48,15 +48,15 @@ describe('Frontend Auth Routes', () => {
         };
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('MISCONFIGURED');
-        expect(body.error.message).toContain('AUTH0_DOMAIN');
+        expect(body.error.message).toContain('INTEXURAOS_AUTH0_DOMAIN');
       });
     });
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
       });
 
       it('returns 400 when redirect_uri missing', async () => {
@@ -87,12 +87,12 @@ describe('Frontend Auth Routes', () => {
 
         expect(response.statusCode).toBe(302);
         const location = String(response.headers.location);
-        expect(location).toContain(`https://${AUTH0_DOMAIN}/authorize`);
+        expect(location).toContain(`https://${INTEXURAOS_AUTH0_DOMAIN}/authorize`);
         expect(location).toContain('redirect_uri=https%3A%2F%2Fapp.example.com%2Fcallback');
         expect(location).toContain('response_type=code');
-        expect(location).toContain(`client_id=${AUTH0_CLIENT_ID}`);
+        expect(location).toContain(`client_id=${INTEXURAOS_AUTH0_CLIENT_ID}`);
         expect(location).toContain('scope=openid+profile+email+offline_access');
-        expect(location).toContain(`audience=${encodeURIComponent(AUTH_AUDIENCE)}`);
+        expect(location).toContain(`audience=${encodeURIComponent(INTEXURAOS_AUTH_AUDIENCE)}`);
         expect(location).toContain('state=csrf-token-123');
       });
 
@@ -106,7 +106,7 @@ describe('Frontend Auth Routes', () => {
 
         expect(response.statusCode).toBe(302);
         const location = String(response.headers.location);
-        expect(location).toContain(`https://${AUTH0_DOMAIN}/authorize`);
+        expect(location).toContain(`https://${INTEXURAOS_AUTH0_DOMAIN}/authorize`);
         expect(location).not.toContain('state=');
       });
     });
@@ -134,9 +134,9 @@ describe('Frontend Auth Routes', () => {
 
     describe('when config is valid', () => {
       beforeEach(() => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
       });
 
       it('returns 400 when return_to missing', async () => {
@@ -167,8 +167,8 @@ describe('Frontend Auth Routes', () => {
 
         expect(response.statusCode).toBe(302);
         const location = String(response.headers.location);
-        expect(location).toContain(`https://${AUTH0_DOMAIN}/v2/logout`);
-        expect(location).toContain(`client_id=${AUTH0_CLIENT_ID}`);
+        expect(location).toContain(`https://${INTEXURAOS_AUTH0_DOMAIN}/v2/logout`);
+        expect(location).toContain(`client_id=${INTEXURAOS_AUTH0_CLIENT_ID}`);
         expect(location).toContain('returnTo=https%3A%2F%2Fapp.example.com');
       });
     });
@@ -177,14 +177,14 @@ describe('Frontend Auth Routes', () => {
       let jwksServer: FastifyInstance;
       let privateKey: jose.KeyLike;
       let jwksUrl: string;
-      const issuer = `https://${AUTH0_DOMAIN}/`;
+      const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
       async function createToken(claims: Record<string, unknown>): Promise<string> {
         const builder = new jose.SignJWT(claims)
           .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
           .setIssuedAt()
           .setIssuer(issuer)
-          .setAudience(AUTH_AUDIENCE)
+          .setAudience(INTEXURAOS_AUTH_AUDIENCE)
           .setExpirationTime('1h');
 
         return await builder.sign(privateKey);
@@ -219,11 +219,11 @@ describe('Frontend Auth Routes', () => {
       });
 
       it('still redirects when token deletion throws', { timeout: 20000 }, async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-        process.env['AUTH_JWKS_URL'] = jwksUrl;
-        process.env['AUTH_ISSUER'] = issuer;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+        process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         const { setServices, resetServices } = await import('../services.js');
         const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');
@@ -255,7 +255,7 @@ describe('Frontend Auth Routes', () => {
         // Should still redirect despite token deletion error (best-effort cleanup)
         expect(response.statusCode).toBe(302);
         const location = String(response.headers.location);
-        expect(location).toContain(`https://${AUTH0_DOMAIN}/v2/logout`);
+        expect(location).toContain(`https://${INTEXURAOS_AUTH0_DOMAIN}/v2/logout`);
 
         resetServices();
       });
@@ -266,14 +266,14 @@ describe('Frontend Auth Routes', () => {
     let jwksServer: FastifyInstance;
     let privateKey: jose.KeyLike;
     let jwksUrl: string;
-    const issuer = `https://${AUTH0_DOMAIN}/`;
+    const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
 
     async function createToken(claims: Record<string, unknown>): Promise<string> {
       const builder = new jose.SignJWT(claims)
         .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
         .setIssuedAt()
         .setIssuer(issuer)
-        .setAudience(AUTH_AUDIENCE)
+        .setAudience(INTEXURAOS_AUTH_AUDIENCE)
         .setExpirationTime('1h');
 
       return await builder.sign(privateKey);
@@ -312,11 +312,11 @@ describe('Frontend Auth Routes', () => {
 
     describe('when not authenticated', () => {
       it('returns 401 when no auth token', async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-        process.env['AUTH_JWKS_URL'] = jwksUrl;
-        process.env['AUTH_ISSUER'] = issuer;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+        process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         app = await buildServer();
 
@@ -335,11 +335,11 @@ describe('Frontend Auth Routes', () => {
       });
 
       it('returns 401 when token is invalid', async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-        process.env['AUTH_JWKS_URL'] = jwksUrl;
-        process.env['AUTH_ISSUER'] = issuer;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+        process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         app = await buildServer();
 
@@ -363,11 +363,11 @@ describe('Frontend Auth Routes', () => {
 
     describe('when authenticated', () => {
       beforeEach(async () => {
-        process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-        process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-        process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
-        process.env['AUTH_JWKS_URL'] = jwksUrl;
-        process.env['AUTH_ISSUER'] = issuer;
+        process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+        process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+        process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+        process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+        process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         const { setServices } = await import('../services.js');
         const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');

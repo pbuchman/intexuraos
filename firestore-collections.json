@@ -30,9 +30,13 @@
       "owner": "mobile-notifications-service",
       "description": "Device signature to user ID bindings for notification delivery"
     },
+    "mobile_notifications_filters": {
+      "owner": "mobile-notifications-service",
+      "description": "User filter options and saved filters for notifications"
+    },
     "user_settings": {
       "owner": "user-service",
-      "description": "User preferences, notification filters, and LLM API keys (encrypted)"
+      "description": "User preferences and LLM API keys (encrypted)"
     },
     "auth_tokens": {
       "owner": "user-service",
@@ -42,13 +46,29 @@
       "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"
     },
+    "app_settings": {
+      "owner": "llm-orchestrator",
+      "description": "Application-wide settings including LLM pricing configuration"
+    },
+    "llm_api_logs": {
+      "owner": "llm-orchestrator",
+      "description": "LLM API call audit logs with token usage and cost tracking"
+    },
     "commands": {
       "owner": "commands-router",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
     },
     "actions": {
-      "owner": "commands-router",
-      "description": "Pending actions derived from classified commands"
+      "owner": "actions-agent",
+      "description": "Action items and their execution lifecycle"
+    },
+    "actions_filters": {
+      "owner": "actions-agent",
+      "description": "User filter options and saved filters for actions"
+    },
+    "custom_data_sources": {
+      "owner": "data-insights-service",
+      "description": "User-created custom data sources for analysis"
     }
   }
 }

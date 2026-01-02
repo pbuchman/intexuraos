@@ -25,7 +25,11 @@ const SERVICE_NAME = 'notion-service';
 const SERVICE_VERSION = '0.0.1';
 
 // Required secrets for this service
-const REQUIRED_SECRETS = ['AUTH_JWKS_URL', 'AUTH_ISSUER', 'AUTH_AUDIENCE'];
+const REQUIRED_SECRETS = [
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_AUDIENCE',
+];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   // Exactly two servers: Cloud Run deployment and local development

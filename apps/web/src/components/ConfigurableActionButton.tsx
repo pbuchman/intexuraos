@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import {
+  Archive,
   Trash2,
   XCircle,
   Sparkles,
@@ -26,6 +27,7 @@ interface ConfigurableActionButtonProps {
 
 // Icon mapping for dynamic icon rendering
 const ICON_MAP: Record<string, LucideIcon> = {
+  Archive,
   Trash2,
   XCircle,
   Sparkles,
@@ -81,7 +83,7 @@ export function ConfigurableActionButton({
 
     try {
       // Get base URL from environment
-      const baseUrl = import.meta.env['INTEXURAOS_ROUTER_SERVICE_URL'] as string;
+      const baseUrl = import.meta.env['INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'] as string;
 
       // Execute action
       await executeAction(button.endpoint, button.action, request, baseUrl);

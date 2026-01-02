@@ -12,7 +12,8 @@ export interface PublishError {
 
 /**
  * Event to send a WhatsApp message.
- * This is the payload format expected by whatsapp-service's SendMessageWorker.
+ * This is the payload format expected by whatsapp-service's Pub/Sub handler.
+ * Phone number lookup is done internally by whatsapp-service using userId.
  */
 export interface SendMessageEvent {
   /**
@@ -21,14 +22,9 @@ export interface SendMessageEvent {
   type: 'whatsapp.message.send';
 
   /**
-   * IntexuraOS user ID (for audit/logging).
+   * IntexuraOS user ID. whatsapp-service looks up the phone number internally.
    */
   userId: string;
-
-  /**
-   * Recipient phone number (E.164 format, e.g., +48123456789).
-   */
-  phoneNumber: string;
 
   /**
    * Message text to send.

@@ -201,10 +201,10 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 │                                                                 │
 │  Fetches specs at runtime from:                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │ AUTH_SERVICE_OPENAPI_URL → Auth Service /openapi.json       ││
-│  │ PROMPTVAULT_SERVICE_OPENAPI_URL → PromptVault /openapi.json ││
-│  │ NOTION_SERVICE_OPENAPI_URL → Notion Service /openapi.json   ││
-│  │ WHATSAPP_SERVICE_OPENAPI_URL → WhatsApp Service /openapi.json│
+│  │ INTEXURAOS_USER_SERVICE_OPENAPI_URL → User Service /openapi.json       ││
+│  │ INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL → PromptVault /openapi.json ││
+│  │ INTEXURAOS_NOTION_SERVICE_OPENAPI_URL → Notion Service /openapi.json   ││
+│  │ INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL → WhatsApp Service /openapi.json│
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -219,12 +219,12 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 
 #### Environment Variables
 
-| Variable                          | Description                             |
-| --------------------------------- | --------------------------------------- |
-| `AUTH_SERVICE_OPENAPI_URL`        | URL to user-service OpenAPI JSON        |
-| `PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
-| `NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
-| `WHATSAPP_SERVICE_OPENAPI_URL`    | URL to whatsapp-service OpenAPI JSON    |
+| Variable                                     | Description                             |
+| -------------------------------------------- | --------------------------------------- |
+| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`        | URL to user-service OpenAPI JSON        |
+| `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
+| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
+| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`    | URL to whatsapp-service OpenAPI JSON    |
 
 These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
 
@@ -368,9 +368,9 @@ Authorization: Bearer <jwt>
 
 #### Validation Rules
 
-- **Signature**: Verified against JWKS (fetched from `AUTH_JWKS_URL`)
-- **Issuer** (`iss`): Must match `AUTH_ISSUER`
-- **Audience** (`aud`): Must match `AUTH_AUDIENCE`
+- **Signature**: Verified against JWKS (fetched from `INTEXURAOS_AUTH_JWKS_URL`)
+- **Issuer** (`iss`): Must match `INTEXURAOS_AUTH_ISSUER`
+- **Audience** (`aud`): Must match `INTEXURAOS_AUTH_AUDIENCE`
 - **Expiration** (`exp`): Token must not be expired
 - **Subject** (`sub`): Must be present and non-empty
 
@@ -386,11 +386,11 @@ This provides a stable identifier across sessions.
 
 #### Required Environment Variables
 
-| Variable        | Description                   | Example                                               |
-| --------------- | ----------------------------- | ----------------------------------------------------- |
-| `AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
-| `AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
-| `AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                  |
+| Variable                   | Description                   | Example                                               |
+| -------------------------- | ----------------------------- | ----------------------------------------------------- |
+| `INTEXURAOS_AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
+| `INTEXURAOS_AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
+| `INTEXURAOS_AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                  |
 
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
@@ -401,11 +401,11 @@ The user-service provides Device Authorization Flow helpers for CLI/device authe
 
 ### Configuration
 
-| Variable          | Description              | Example                       |
-| ----------------- | ------------------------ | ----------------------------- |
-| `AUTH0_DOMAIN`    | Auth0 tenant domain      | `intexuraos-dev.eu.auth0.com` |
-| `AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`                   |
-| `AUTH_AUDIENCE`   | API identifier (default) | `urn:intexuraos:api`          |
+| Variable                     | Description              | Example                       |
+| ---------------------------- | ------------------------ | ----------------------------- |
+| `INTEXURAOS_AUTH0_DOMAIN`    | Auth0 tenant domain      | `intexuraos-dev.eu.auth0.com` |
+| `INTEXURAOS_AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`                   |
+| `INTEXURAOS_AUTH_AUDIENCE`   | API identifier (default) | `urn:intexuraos:api`          |
 
 If any required variable is missing, endpoints return `503 MISCONFIGURED`.
 
@@ -422,10 +422,10 @@ Start Device Authorization Flow. Returns device code and user code.
 }
 ```
 
-| Field      | Type     | Required | Default                  |
-| ---------- | -------- | -------- | ------------------------ |
-| `audience` | `string` | No       | From `AUTH_AUDIENCE` env |
-| `scope`    | `string` | No       | `openid profile email`   |
+| Field      | Type     | Required | Default                             |
+| ---------- | -------- | -------- | ----------------------------------- |
+| `audience` | `string` | No       | From `INTEXURAOS_AUTH_AUDIENCE` env |
+| `scope`    | `string` | No       | `openid profile email`              |
 
 **Success Response (200):**
 

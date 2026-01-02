@@ -15,22 +15,22 @@ export interface LlmAuditLog {
   model: string;
   method: string;
 
-  // Request (full storage)
   prompt: string;
   promptLength: number;
 
-  // Response (full storage)
   status: LlmAuditStatus;
   response?: string;
   responseLength?: number;
   error?: string;
 
-  // Timing
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+
   startedAt: string;
   completedAt: string;
   durationMs: number;
 
-  // Context (optional)
   userId?: string;
   researchId?: string;
 
@@ -55,6 +55,9 @@ export interface CreateAuditLogParams {
  */
 export interface CompleteAuditLogSuccessParams {
   response: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
 }
 
 /**

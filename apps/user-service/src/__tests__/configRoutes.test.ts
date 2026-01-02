@@ -6,9 +6,9 @@ import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
 
-const AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
-const AUTH0_CLIENT_ID = 'test-client-id';
-const AUTH_AUDIENCE = 'urn:intexuraos:api';
+const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
+const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 
 describe('GET /auth/config', () => {
   let app: FastifyInstance;
@@ -23,9 +23,9 @@ describe('GET /auth/config', () => {
   });
 
   beforeEach(() => {
-    delete process.env['AUTH0_DOMAIN'];
-    delete process.env['AUTH0_CLIENT_ID'];
-    delete process.env['AUTH_AUDIENCE'];
+    delete process.env['INTEXURAOS_AUTH0_DOMAIN'];
+    delete process.env['INTEXURAOS_AUTH0_CLIENT_ID'];
+    delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     nock.cleanAll();
   });
 
@@ -51,9 +51,9 @@ describe('GET /auth/config', () => {
   });
 
   it('returns auth configuration when configured', async () => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
     app = await buildServer();
 
@@ -73,16 +73,16 @@ describe('GET /auth/config', () => {
       };
     };
     expect(body.success).toBe(true);
-    expect(body.data.domain).toBe(AUTH0_DOMAIN);
-    expect(body.data.issuer).toBe(`https://${AUTH0_DOMAIN}/`);
-    expect(body.data.audience).toBe(AUTH_AUDIENCE);
-    expect(body.data.jwksUrl).toBe(`https://${AUTH0_DOMAIN}/.well-known/jwks.json`);
+    expect(body.data.domain).toBe(INTEXURAOS_AUTH0_DOMAIN);
+    expect(body.data.issuer).toBe(`https://${INTEXURAOS_AUTH0_DOMAIN}/`);
+    expect(body.data.audience).toBe(INTEXURAOS_AUTH_AUDIENCE);
+    expect(body.data.jwksUrl).toBe(`https://${INTEXURAOS_AUTH0_DOMAIN}/.well-known/jwks.json`);
   });
 
   it('does not expose client_id in config response', async () => {
-    process.env['AUTH0_DOMAIN'] = AUTH0_DOMAIN;
-    process.env['AUTH0_CLIENT_ID'] = AUTH0_CLIENT_ID;
-    process.env['AUTH_AUDIENCE'] = AUTH_AUDIENCE;
+    process.env['INTEXURAOS_AUTH0_DOMAIN'] = INTEXURAOS_AUTH0_DOMAIN;
+    process.env['INTEXURAOS_AUTH0_CLIENT_ID'] = INTEXURAOS_AUTH0_CLIENT_ID;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
 
     app = await buildServer();
 
@@ -93,6 +93,6 @@ describe('GET /auth/config', () => {
 
     expect(response.statusCode).toBe(200);
     const bodyStr = response.body;
-    expect(bodyStr).not.toContain(AUTH0_CLIENT_ID);
+    expect(bodyStr).not.toContain(INTEXURAOS_AUTH0_CLIENT_ID);
   });
 });

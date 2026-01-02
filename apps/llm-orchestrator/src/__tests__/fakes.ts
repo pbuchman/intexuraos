@@ -5,18 +5,25 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
   LlmError,
+  LlmPricing,
   LlmProvider,
   LlmResearchProvider,
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
   NotificationError,
+  PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
   TitleGenerator,
 } from '../domain/research/index.js';
-import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type {
+  DecryptedApiKeys,
+  ResearchSettings,
+  UserServiceClient,
+  UserServiceError,
+} from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
 
@@ -143,7 +150,7 @@ export class FakeResearchRepository implements ResearchRepository {
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
-  private phones = new Map<string, string>();
+  private researchSettings = new Map<string, ResearchSettings>();
   private failNextGetApiKeys = false;
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
@@ -155,9 +162,9 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(keys);
   }
 
-  async getWhatsAppPhone(userId: string): Promise<Result<string | null, UserServiceError>> {
-    const phone = this.phones.get(userId) ?? null;
-    return ok(phone);
+  async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
+    const settings = this.researchSettings.get(userId) ?? { searchMode: 'deep' };
+    return ok(settings);
   }
 
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
@@ -169,8 +176,8 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.apiKeys.set(userId, keys);
   }
 
-  setPhone(userId: string, phone: string): void {
-    this.phones.set(userId, phone);
+  setResearchSettings(userId: string, settings: ResearchSettings): void {
+    this.researchSettings.set(userId, settings);
   }
 
   setFailNextGetApiKeys(fail: boolean): void {
@@ -179,7 +186,7 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   clear(): void {
     this.apiKeys.clear();
-    this.phones.clear();
+    this.researchSettings.clear();
   }
 }
 
@@ -219,6 +226,12 @@ export class FakeResearchEventPublisher implements ResearchEventPublisher {
  */
 export class FakeNotificationSender implements NotificationSender {
   private sentNotifications: { userId: string; researchId: string; title: string }[] = [];
+  private sentFailures: {
+    userId: string;
+    researchId: string;
+    provider: LlmProvider;
+    error: string;
+  }[] = [];
 
   async sendResearchComplete(
     userId: string,
@@ -229,12 +242,32 @@ export class FakeNotificationSender implements NotificationSender {
     return ok(undefined);
   }
 
+  async sendLlmFailure(
+    userId: string,
+    researchId: string,
+    provider: LlmProvider,
+    error: string
+  ): Promise<Result<void, NotificationError>> {
+    this.sentFailures.push({ userId, researchId, provider, error });
+    return ok(undefined);
+  }
+
   getSentNotifications(): { userId: string; researchId: string; title: string }[] {
     return [...this.sentNotifications];
   }
 
+  getSentFailures(): {
+    userId: string;
+    researchId: string;
+    provider: LlmProvider;
+    error: string;
+  }[] {
+    return [...this.sentFailures];
+  }
+
   clear(): void {
     this.sentNotifications = [];
+    this.sentFailures = [];
   }
 }
 
@@ -282,6 +315,26 @@ export function createFakeSynthesizer(
 }
 
 /**
+ * Create a fake LlmSynthesisProvider that always fails for testing error paths.
+ */
+export function createFailingSynthesizer(
+  errorMessage = 'Test synthesis failure'
+): LlmSynthesisProvider {
+  return {
+    async synthesize(
+      _originalPrompt: string,
+      _reports: { model: string; content: string }[],
+      _externalReports?: { content: string; model?: string }[]
+    ): Promise<Result<string, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+  };
+}
+
+/**
  * Create a fake TitleGenerator for testing.
  */
 export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenerator {
@@ -290,4 +343,80 @@ export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenera
       return ok(title);
     },
   };
+}
+
+/**
+ * Fake implementation of LlmCallPublisher for testing.
+ */
+export class FakeLlmCallPublisher {
+  private publishedEvents: {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }[] = [];
+  private failNextPublish = false;
+
+  async publishLlmCall(event: {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
+    if (this.failNextPublish) {
+      this.failNextPublish = false;
+      return err({ code: 'PUBLISH_FAILED', message: 'Test publish failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+
+  getPublishedEvents(): {
+    type: 'llm.call';
+    researchId: string;
+    userId: string;
+    provider: LlmProvider;
+    prompt: string;
+  }[] {
+    return [...this.publishedEvents];
+  }
+
+  setFailNextPublish(fail: boolean): void {
+    this.failNextPublish = fail;
+  }
+
+  clear(): void {
+    this.publishedEvents = [];
+  }
+}
+
+/**
+ * Fake implementation of PricingRepository for testing.
+ */
+export class FakePricingRepository implements PricingRepository {
+  private pricing = new Map<string, LlmPricing>();
+
+  async findByProviderAndModel(provider: LlmProvider, model: string): Promise<LlmPricing | null> {
+    const key = `${provider}_${model}`;
+    return this.pricing.get(key) ?? null;
+  }
+
+  setPricing(
+    provider: LlmProvider,
+    model: string,
+    pricing: Omit<LlmPricing, 'provider' | 'model'>
+  ): void {
+    const key = `${provider}_${model}`;
+    this.pricing.set(key, {
+      provider,
+      model,
+      ...pricing,
+    });
+  }
+
+  clear(): void {
+    this.pricing.clear();
+  }
 }

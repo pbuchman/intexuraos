@@ -6,6 +6,7 @@
  * GET    /research            - List user's researches
  * GET    /research/:id        - Get single research
  * POST   /research/:id/approve - Approve draft research
+ * POST   /research/:id/confirm - Confirm partial failure decision
  * DELETE /research/:id        - Delete research
  */
 
@@ -18,12 +19,17 @@ import {
   getResearch,
   listResearches,
   type LlmProvider,
+  type PartialFailureDecision,
   type Research,
+  retryFailedLlms,
+  runSynthesis,
   submitResearch,
 } from '../domain/research/index.js';
 import { getServices } from '../services.js';
 import {
   approveResearchResponseSchema,
+  confirmPartialFailureBodySchema,
+  confirmPartialFailureResponseSchema,
   createResearchBodySchema,
   createResearchResponseSchema,
   deleteResearchResponseSchema,
@@ -59,6 +65,10 @@ interface ResearchIdParams {
   id: string;
 }
 
+interface ConfirmPartialFailureBody {
+  action: PartialFailureDecision;
+}
+
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /research
   fastify.post(
@@ -88,7 +98,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: user.userId,
         prompt: body.prompt,
         selectedLlms: body.selectedLlms,
-        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+        synthesisLlm: body.synthesisLlm ?? body.selectedLlms[0] ?? 'google',
       };
       if (body.externalReports !== undefined) {
         submitParams.externalReports = body.externalReports;
@@ -151,13 +161,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Create draft research
+      const resolvedSelectedLlms = body.selectedLlms ?? ['google', 'openai', 'anthropic'];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms ?? ['google', 'openai', 'anthropic'],
-        synthesisLlm: body.synthesisLlm ?? 'anthropic',
+        selectedLlms: resolvedSelectedLlms,
+        synthesisLlm: body.synthesisLlm ?? resolvedSelectedLlms[0] ?? 'google',
       };
       if (body.externalReports !== undefined) {
         const now = new Date().toISOString();
@@ -430,6 +441,143 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       return await reply.ok(updateResult.value);
+    }
+  );
+
+  // POST /research/:id/confirm
+  fastify.post(
+    '/research/:id/confirm',
+    {
+      schema: {
+        operationId: 'confirmPartialFailure',
+        summary: 'Confirm partial failure decision',
+        description:
+          'Submit user decision for handling partial LLM failures: proceed with successful results, retry failed providers, or cancel.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: confirmPartialFailureBodySchema,
+        response: {
+          200: confirmPartialFailureResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const body = request.body as ConfirmPartialFailureBody;
+      const {
+        researchRepo,
+        userServiceClient,
+        notificationSender,
+        llmCallPublisher,
+        createSynthesizer,
+      } = getServices();
+
+      const existing = await getResearch(id, { researchRepo });
+
+      if (!existing.ok) {
+        return await reply.fail('INTERNAL_ERROR', existing.error.message);
+      }
+
+      if (existing.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      if (existing.value.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Access denied');
+      }
+
+      if (existing.value.status !== 'awaiting_confirmation') {
+        return await reply.fail('CONFLICT', 'Research is not awaiting confirmation');
+      }
+
+      const research = existing.value;
+
+      if (research.partialFailure === undefined) {
+        return await reply.fail('CONFLICT', 'No partial failure info found');
+      }
+
+      const partialFailure = research.partialFailure;
+
+      switch (body.action) {
+        case 'proceed': {
+          const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+          if (!apiKeysResult.ok) {
+            return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+          }
+
+          const synthesisProvider = research.synthesisLlm;
+          const synthesisKey = apiKeysResult.value[synthesisProvider];
+          if (synthesisKey === undefined) {
+            return await reply.fail(
+              'MISCONFIGURED',
+              `API key required for synthesis with ${synthesisProvider}`
+            );
+          }
+
+          await researchRepo.update(id, {
+            partialFailure: {
+              ...partialFailure,
+              userDecision: 'proceed',
+            },
+          });
+
+          const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+          const synthesisResult = await runSynthesis(id, {
+            researchRepo,
+            synthesizer,
+            notificationSender,
+            reportLlmSuccess: (): void => {
+              void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
+            },
+          });
+
+          if (synthesisResult.ok) {
+            return await reply.ok({
+              action: 'proceed',
+              message: 'Synthesis completed successfully',
+            });
+          }
+          return await reply.fail('INTERNAL_ERROR', synthesisResult.error ?? 'Synthesis failed');
+        }
+
+        case 'retry': {
+          await researchRepo.update(id, {
+            partialFailure: {
+              ...partialFailure,
+              userDecision: 'retry',
+            },
+          });
+
+          const retryResult = await retryFailedLlms(id, { researchRepo, llmCallPublisher });
+
+          if (retryResult.ok) {
+            return await reply.ok({
+              action: 'retry',
+              message: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+            });
+          }
+          return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
+        }
+
+        case 'cancel': {
+          await researchRepo.update(id, {
+            status: 'failed',
+            synthesisError: 'Cancelled by user',
+            completedAt: new Date().toISOString(),
+            partialFailure: {
+              ...partialFailure,
+              userDecision: 'cancel',
+            },
+          });
+
+          return await reply.ok({ action: 'cancel', message: 'Research cancelled' });
+        }
+      }
     }
   );
 

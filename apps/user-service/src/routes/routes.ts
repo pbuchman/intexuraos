@@ -6,6 +6,7 @@
  * POST  /auth/device/start     → ./deviceRoutes.ts
  * POST  /auth/device/poll      → ./deviceRoutes.ts
  * POST  /auth/refresh          → ./tokenRoutes.ts
+ * POST  /auth/firebase-token   → ./firebaseRoutes.ts
  * GET   /auth/config           → ./configRoutes.ts
  * POST  /auth/oauth/token      → ./oauthRoutes.ts
  * GET   /auth/oauth/authorize  → ./oauthRoutes.ts

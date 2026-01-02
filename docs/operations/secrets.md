@@ -29,14 +29,14 @@ Create `.env.local` in repository root (gitignored):
 
 ```bash
 # GCP Project
-GOOGLE_CLOUD_PROJECT=your-project-id
+INTEXURAOS_GCP_PROJECT_ID=your-project-id
 
 # Auth0 Configuration
-AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
-AUTH_ISSUER=https://your-tenant.auth0.com/
-AUTH_AUDIENCE=urn:intexuraos:api
-AUTH0_DOMAIN=your-tenant.auth0.com
-AUTH0_CLIENT_ID=your-client-id
+INTEXURAOS_AUTH_JWKS_URL=https://your-tenant.auth0.com/.well-known/jwks.json
+INTEXURAOS_AUTH_ISSUER=https://your-tenant.auth0.com/
+INTEXURAOS_AUTH_AUDIENCE=urn:intexuraos:api
+INTEXURAOS_AUTH0_DOMAIN=your-tenant.auth0.com
+INTEXURAOS_AUTH0_CLIENT_ID=your-client-id
 AUTH0_CLIENT_SECRET=your-client-secret
 
 # Token Encryption (generate with: openssl rand -base64 32)
