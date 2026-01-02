@@ -71,6 +71,15 @@ export default defineConfig(({ mode }) => {
               purpose: 'maskable',
             },
           ],
+          share_target: {
+            action: '/',
+            method: 'GET',
+            params: {
+              title: 'title',
+              text: 'text',
+              url: 'url',
+            },
+          },
         },
         workbox: {
           // Skip waiting to activate new service worker immediately
