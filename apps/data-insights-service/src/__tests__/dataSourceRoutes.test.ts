@@ -126,6 +126,17 @@ describe('dataSourceRoutes', () => {
   });
 
   describe('GET /data-sources', () => {
+    it('requires authentication', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/data-sources',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('lists data sources for user', async () => {
       const app = await buildServer();
 
@@ -183,6 +194,17 @@ describe('dataSourceRoutes', () => {
   });
 
   describe('GET /data-sources/:id', () => {
+    it('requires authentication', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/data-sources/some-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('gets a data source by id', async () => {
       const app = await buildServer();
 
@@ -232,9 +254,34 @@ describe('dataSourceRoutes', () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    it('handles repository errors', async () => {
+      const app = await buildServer();
+      fakeRepo.setFailNextGet(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/data-sources/some-id',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 
   describe('PUT /data-sources/:id', () => {
+    it('requires authentication', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/data-sources/some-id',
+        payload: { title: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('updates a data source', async () => {
       const app = await buildServer();
 
@@ -298,9 +345,43 @@ describe('dataSourceRoutes', () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    it('handles repository errors', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeRepo.create('user-123', {
+        title: 'Test',
+        content: 'Content',
+      });
+      const dataSource = createResult.ok ? createResult.value : null;
+
+      fakeRepo.setFailNextUpdate(true);
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/data-sources/${dataSource?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          title: 'Updated',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 
   describe('DELETE /data-sources/:id', () => {
+    it('requires authentication', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/data-sources/some-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('deletes a data source', async () => {
       const app = await buildServer();
 
@@ -330,6 +411,26 @@ describe('dataSourceRoutes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('handles repository errors', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeRepo.create('user-123', {
+        title: 'Test',
+        content: 'Content',
+      });
+      const dataSource = createResult.ok ? createResult.value : null;
+
+      fakeRepo.setFailNextDelete(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/data-sources/${dataSource?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 
@@ -424,6 +525,34 @@ describe('dataSourceRoutes', () => {
       });
 
       expect(response.statusCode).toBe(502);
+    });
+
+    it('handles Gemini generation errors', async () => {
+      const app = await buildServer();
+
+      nock('http://localhost:8110')
+        .get('/internal/users/user-123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { google: 'fake-api-key' });
+
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      const mockCreate = createGeminiClient as ReturnType<typeof vi.fn>;
+      mockCreate.mockImplementationOnce(() => ({
+        generate: vi.fn().mockResolvedValue({ ok: false, error: { message: 'API rate limit exceeded' } }),
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/data-sources/generate-title',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          content: 'Some content',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

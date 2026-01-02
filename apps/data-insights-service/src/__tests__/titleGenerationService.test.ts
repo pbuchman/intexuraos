@@ -84,5 +84,24 @@ describe('titleGenerationService', () => {
         expect(result.value).not.toMatch(/^\s|\s$/);
       }
     });
+
+    it('returns GENERATION_ERROR when Gemini fails', async () => {
+      const mockClient = createMockUserServiceClient();
+
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+      const mockCreate = createGeminiClient as ReturnType<typeof vi.fn>;
+      mockCreate.mockImplementationOnce(() => ({
+        generate: vi.fn().mockResolvedValue(err({ message: 'Gemini API error' })),
+      }));
+
+      const service = createTitleGenerationService(mockClient);
+      const result = await service.generateTitle('user-123', 'Some content');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('GENERATION_ERROR');
+        expect(result.error.message).toBe('Gemini API error');
+      }
+    });
   });
 });
