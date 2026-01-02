@@ -45,7 +45,6 @@ const commandSchema = {
   ],
 } as const;
 
-
 export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
     '/router/commands',

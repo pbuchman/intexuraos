@@ -7,6 +7,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 ## Scope
 
 ### In Scope
+
 - Add `awaiting_approval` action status
 - Move all action endpoints from commands-router to actions-agent
 - Transfer Firestore ownership of `actions` collection to actions-agent
@@ -17,6 +18,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 - Update action configuration for approve/retry buttons
 
 ### Out of Scope
+
 - Approval workflow for todo, note, calendar, link actions (research only for now)
 - Email notifications
 - SMS notifications
@@ -25,6 +27,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 ## Constraints
 
 ### Architectural
+
 1. **commands-router has ZERO direct Firestore access to actions collection**
    - Must call actions-agent endpoints to create/read/update actions
 2. **actions-agent owns entire action lifecycle**
@@ -38,6 +41,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
    - No direct HTTP calls to whatsapp-service
 
 ### Technical
+
 - All action reads/writes go through actions-agent
 - Execute endpoint must be synchronous (wait for completion)
 - Idempotent execute (can retry failed actions)
@@ -47,6 +51,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 ## Success Criteria
 
 ### Functionality
+
 - [ ] User receives WhatsApp notification when action awaits approval
 - [ ] WhatsApp link opens inbox with action modal
 - [ ] User can approve action via web UI
@@ -56,6 +61,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 - [ ] Frontend shows correct buttons based on action status
 
 ### Technical
+
 - [ ] `npm run ci` passes
 - [ ] `npm run verify:firestore` passes
 - [ ] No TypeScript errors
@@ -65,6 +71,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 - [ ] Integration tests pass
 
 ### Architecture
+
 - [ ] commands-router has no Firestore action references
 - [ ] actions-agent owns actions collection
 - [ ] All action endpoints moved to actions-agent
@@ -72,6 +79,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 - [ ] Firestore ownership updated
 
 ### Migration
+
 - [ ] Existing pending actions manually deleted (pre-deployment)
 - [ ] Old auto-execution code removed
 - [ ] No breaking changes to existing completed actions
@@ -79,18 +87,21 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 ## Dependencies
 
 ### Packages
+
 - `@intexuraos/infra-pubsub` - WhatsApp message publishing
 - `@intexuraos/infra-firestore` - Firestore access
 - `@intexuraos/common-http` - JWT validation, internal auth
 - `@intexuraos/common-core` - Result types
 
 ### Services
+
 - user-service - User phone number lookup
 - whatsapp-service - WhatsApp message delivery
 - llm-orchestrator - Research draft creation
 - commands-router - Action classification
 
 ### Environment Variables
+
 - `INTEXURAOS_WEB_APP_URL` - Base URL for deep links
 - `INTEXURAOS_GCP_PROJECT_ID` - Pub/Sub project
 - `INTEXURAOS_WHATSAPP_SEND_TOPIC` - Pub/Sub topic
@@ -106,6 +117,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 3. **Phase 3 fails**: Revert web app deployment
 
 **Emergency rollback:**
+
 - Keep old auto-execution code in comments for 1 week post-deployment
 - Manual Firestore restore from backup if needed
 - Monitor Cloud Logging for errors after each phase

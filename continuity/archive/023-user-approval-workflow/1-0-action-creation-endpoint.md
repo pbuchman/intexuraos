@@ -3,12 +3,15 @@
 ## Status: ✅ COMPLETED
 
 ## Objective
+
 Create POST /internal/actions endpoint in actions-agent for commands-router to create actions.
 
 ## Dependencies
+
 - 0-0-setup (completed)
 
 ## Tasks
+
 - [x] Add POST /internal/actions route handler to internalRoutes.ts
 - [x] Implement request body validation (userId, commandId, type, title, confidence)
 - [x] Call actionRepository.save() to persist action
@@ -19,14 +22,17 @@ Create POST /internal/actions endpoint in actions-agent for commands-router to c
 - [x] Write integration tests
 
 ## Files to Modify
+
 1. `apps/actions-agent/src/routes/internalRoutes.ts` - Add endpoint handler
 
 ## Files to Create
+
 None (modifying existing files only)
 
 ## Implementation Details
 
 ### Request Schema
+
 ```typescript
 {
   userId: string,
@@ -39,6 +45,7 @@ None (modifying existing files only)
 ```
 
 ### Response Schema
+
 ```typescript
 {
   success: true,
@@ -58,11 +65,13 @@ None (modifying existing files only)
 ```
 
 ### Pub/Sub Event
+
 - Topic: From environment variable (configured per action type)
 - Payload: ActionCreatedEvent
 - Must publish AFTER Firestore save succeeds
 
 ## Verification
+
 - [x] Endpoint validates internal auth header
 - [x] Returns 400 for invalid request body
 - [x] Creates action in Firestore
@@ -73,13 +82,16 @@ None (modifying existing files only)
 - [x] Added required environment variable (INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC)
 
 ## Blocked By
+
 None
 
 ## Blocks
+
 - 2-0-actions-agent-client (needs this endpoint to exist)
 - 2-1-classification-flow-update (needs this endpoint)
 
 ## Notes
+
 - Use `createAction()` helper from domain/models/action.ts
 - Pub/Sub publisher must be injected via services
 - Remember to log all errors and successes

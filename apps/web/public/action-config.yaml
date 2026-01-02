@@ -11,7 +11,7 @@ actions:
       label: Approve
       variant: primary
       icon: CheckCircle
-      confirmationMessage: "This will create a research draft. Continue?"
+      confirmationMessage: 'This will create a research draft. Continue?'
 
   retry:
     endpoint:
@@ -22,7 +22,7 @@ actions:
       label: Retry
       variant: primary
       icon: Play
-      confirmationMessage: "Retry creating research draft?"
+      confirmationMessage: 'Retry creating research draft?'
 
   reject:
     endpoint:
