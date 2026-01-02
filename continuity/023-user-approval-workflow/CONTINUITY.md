@@ -24,9 +24,13 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 1-0: Implemented POST /internal/actions endpoint with validation, save, publish
 - ✅ Tier 1-0: Wrote comprehensive tests (auth, validation, happy path, error handling)
 - ✅ Tier 1-0: Updated firestore-collections.json ownership (actions → actions-agent)
+- ✅ Tier 1-1: Created publicRoutes.ts with GET, PATCH, DELETE endpoints
+- ✅ Tier 1-1: Added action schema with awaiting_approval status
+- ✅ Tier 1-1: Registered public routes in server (routes/index.ts)
+- ✅ Tier 1-1: Wrote 11 comprehensive tests (auth, ownership, CRUD operations)
 
 ### Now
-- ⏳ Ready to start Tier 1-1: Move public action endpoints to actions-agent
+- ⏳ Ready to start Tier 1-2: Add WhatsApp Pub/Sub integration to actions-agent
 
 ### Next (Prioritized)
 1. Tier 1-1: Move public action endpoints to actions-agent (GET, PATCH, DELETE)
@@ -92,12 +96,17 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 
 ### 2026-01-02 (Session 2)
 - ✅ Completed Tier 1-0: Action Creation Endpoint
-- Added @intexuraos/infra-pubsub dependency
-- Created action event publisher infrastructure
-- Implemented POST /internal/actions with full validation
-- Wrote 6 comprehensive unit tests (auth, validation, happy/error paths)
-- Updated firestore-collections.json ownership transfer
-- Added INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC env var validation
+  - Added @intexuraos/infra-pubsub dependency
+  - Created action event publisher infrastructure
+  - Implemented POST /internal/actions with full validation
+  - Wrote 6 comprehensive unit tests (auth, validation, happy/error paths)
+  - Updated firestore-collections.json ownership transfer
+  - Added INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC env var validation
+- ✅ Completed Tier 1-1: Public Action Endpoints Migration
+  - Created publicRoutes.ts with GET, PATCH, DELETE for /router/actions
+  - Added action schema including awaiting_approval status
+  - Registered public routes in routes/index.ts
+  - Wrote 11 comprehensive tests covering all endpoints and edge cases
 
 ### 2026-01-02 02:30 UTC
 - Created continuity structure (023-user-approval-workflow)
