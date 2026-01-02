@@ -30,6 +30,7 @@ const phases = [
       'verify:terraform-secrets',
       'verify:pubsub',
       'verify:workspace-deps',
+      'verify:migrations',
     ],
   },
   {

@@ -41,6 +41,9 @@
     "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
     "verify:pubsub": "node scripts/verify-pubsub.mjs",
     "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
+    "verify:migrations": "node scripts/verify-migrations.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "migrate:status": "node scripts/migrate.mjs --status",
     "install-hooks": "node scripts/install-hooks.mjs",
     "ci": "node scripts/ci.mjs"
   },
