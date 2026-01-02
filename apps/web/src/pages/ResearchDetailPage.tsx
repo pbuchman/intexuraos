@@ -22,6 +22,7 @@ import {
   deleteResearch,
 } from '@/services/llmOrchestratorApi';
 import type {
+  LlmProvider,
   LlmResult,
   PartialFailure,
   PartialFailureDecision,
@@ -451,6 +452,9 @@ export function ResearchDetailPage(): React.JSX.Element {
       {showLlmStatus ? (
         <ProcessingStatus
           llmResults={research.llmResults}
+          selectedLlms={research.selectedLlms}
+          synthesisLlm={research.synthesisLlm}
+          researchStatus={research.status}
           title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
         />
       ) : null}
@@ -546,11 +550,19 @@ export function ResearchDetailPage(): React.JSX.Element {
 
 interface ProcessingStatusProps {
   llmResults: LlmResult[];
+  selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
+  researchStatus: ResearchStatus;
   title?: string;
 }
 
+const ALL_PROVIDERS: LlmProvider[] = ['google', 'openai', 'anthropic'];
+
 function ProcessingStatus({
   llmResults,
+  selectedLlms,
+  synthesisLlm,
+  researchStatus,
   title = 'Processing Status',
 }: ProcessingStatusProps): React.JSX.Element {
   const getStatusText = (result: LlmResult): string => {
@@ -569,21 +581,74 @@ function ProcessingStatus({
     return '';
   };
 
+  const getSynthesisStatus = (): { status: string; text: string } => {
+    if (researchStatus === 'synthesizing') {
+      return { status: 'processing', text: 'Synthesizing...' };
+    }
+    if (researchStatus === 'completed') {
+      return { status: 'completed', text: 'Complete' };
+    }
+    if (researchStatus === 'failed') {
+      const allLlmsFailed = llmResults.every((r) => r.status === 'failed');
+      if (allLlmsFailed) {
+        return { status: 'skipped', text: 'Skipped (all LLMs failed)' };
+      }
+      return { status: 'failed', text: 'Failed' };
+    }
+    return { status: 'pending', text: 'Pending' };
+  };
+
+  const synthesisStatus = getSynthesisStatus();
+
   return (
     <Card title={title} className="mb-6">
       <div className="space-y-3">
-        {llmResults.map((result) => (
-          <div key={result.provider} className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <StatusDot status={result.status} />
-              <span className="capitalize">{result.provider}</span>
-              <span className="text-sm text-slate-500">{getStatusText(result)}</span>
+        {ALL_PROVIDERS.map((provider) => {
+          const isSelected = selectedLlms.includes(provider);
+          const result = llmResults.find((r) => r.provider === provider);
+
+          if (!isSelected) {
+            return (
+              <div key={provider} className="flex items-center gap-3">
+                <StatusDot status="skipped" />
+                <span className="capitalize text-slate-400">{provider}</span>
+                <span className="text-sm text-slate-400">Skipped</span>
+              </div>
+            );
+          }
+
+          if (result === undefined) {
+            return (
+              <div key={provider} className="flex items-center gap-3">
+                <StatusDot status="pending" />
+                <span className="capitalize">{provider}</span>
+                <span className="text-sm text-slate-500">Waiting...</span>
+              </div>
+            );
+          }
+
+          return (
+            <div key={provider} className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <StatusDot status={result.status} />
+                <span className="capitalize">{provider}</span>
+                <span className="text-sm text-slate-500">{getStatusText(result)}</span>
+              </div>
+              {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
+                <p className="ml-6 text-sm text-red-600">{result.error}</p>
+              ) : null}
             </div>
-            {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
-              <p className="ml-6 text-sm text-red-600">{result.error}</p>
-            ) : null}
+          );
+        })}
+
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <div className="flex items-center gap-3">
+            <StatusDot status={synthesisStatus.status} />
+            <span className="font-medium">Synthesis</span>
+            <span className="text-sm text-slate-500">({synthesisLlm})</span>
+            <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
           </div>
-        ))}
+        </div>
       </div>
     </Card>
   );
@@ -595,6 +660,7 @@ function StatusDot({ status }: { status: string }): React.JSX.Element {
     processing: 'bg-blue-500 animate-pulse',
     completed: 'bg-green-500',
     failed: 'bg-red-500',
+    skipped: 'bg-slate-200',
   };
 
   return <div className={`h-3 w-3 rounded-full ${colors[status] ?? 'bg-slate-300'}`} />;
