@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
@@ -10,8 +10,37 @@ import {
   FakeActionRepository,
   FakeActionEventPublisher,
   createFakeServices,
+  createFakeExecuteResearchActionUseCase,
 } from './fakes.js';
 import { createUserPhoneLookup } from '../infra/userService/userPhoneLookup.js';
+
+vi.mock('@intexuraos/common-http', async () => {
+  const actual = await vi.importActual('@intexuraos/common-http');
+  return {
+    ...actual,
+    requireAuth: vi.fn().mockImplementation(async (request, reply) => {
+      const authHeader = request.headers.authorization as string | undefined;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        try {
+          const payloadBase64 = token.split('.')[1];
+          if (payloadBase64 !== undefined) {
+            const payload = JSON.parse(Buffer.from(payloadBase64, 'base64').toString()) as {
+              sub?: string;
+            };
+            if (payload.sub !== undefined) {
+              return { userId: payload.sub };
+            }
+          }
+        } catch {
+          /* Invalid token format */
+        }
+      }
+      await reply.fail('UNAUTHORIZED', 'Missing or invalid Authorization header');
+      return null;
+    }),
+  };
+});
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
@@ -134,9 +163,9 @@ describe('Research Agent Routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body) as { success: boolean; researchId: string };
+        const body = JSON.parse(response.body) as { success: boolean; actionId: string };
         expect(body.success).toBe(true);
-        expect(body.researchId).toBe('research-123');
+        expect(body.actionId).toBe('action-123');
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
@@ -251,8 +280,6 @@ describe('Research Agent Routes', () => {
     });
 
     it('processes valid research action and returns 200', async () => {
-      fakeResearchClient.setNextResearchId('research-999');
-
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/research',
@@ -263,16 +290,11 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; researchId: string };
+      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
       expect(body.success).toBe(true);
-      expect(body.researchId).toBe('research-999');
+      expect(body.actionId).toBe('action-123');
 
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('processing');
-
-      const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
-      expect(actionUpdate?.status).toBe('completed');
-
-      expect(fakeNotificationSender.getNotifications()).toHaveLength(1);
+      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
     });
 
     it('returns 500 when processing fails', async () => {
@@ -289,7 +311,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to mark action as processing');
+      expect(body.error).toContain('Failed to update action status');
     });
   });
 
@@ -710,6 +732,175 @@ describe('Research Agent Routes', () => {
 
       const action = await fakeActionRepository.getById('action-1');
       expect(action).toBeNull();
+    });
+  });
+
+  describe('POST /router/actions/:actionId/execute (execute action)', () => {
+    beforeEach(() => {
+      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/action-1/execute',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/nonexistent/execute',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when user does not own action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'other-user',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Action',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/action-1/execute',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 400 when action type is not research', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'todo',
+        confidence: 0.95,
+        title: 'Test Todo',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/action-1/execute',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('Action type todo not supported');
+    });
+
+    it('executes research action successfully', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/action-1/execute',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actionId: string; status: string; resource_url: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actionId).toBe('action-1');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resource_url).toBeDefined();
+    });
+
+    it('returns 500 when execution fails', async () => {
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          executeResearchActionUseCase: createFakeExecuteResearchActionUseCase({
+            failWithError: new Error('Research service unavailable'),
+          }),
+        })
+      );
+
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/action-1/execute',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('Research service unavailable');
     });
   });
 

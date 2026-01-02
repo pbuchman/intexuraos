@@ -211,6 +211,40 @@ describe('Health Utilities', () => {
         process.env['NODE_ENV'] = originalNodeEnv;
       }
     });
+
+    it('returns down when Firestore check times out in production mode', async () => {
+      vi.useFakeTimers();
+
+      const originalVitest = process.env['VITEST'];
+      const originalNodeEnv = process.env['NODE_ENV'];
+      delete process.env['VITEST'];
+      process.env['NODE_ENV'] = 'production';
+
+      const { getFirestore } = await import('@intexuraos/infra-firestore');
+      const mockDb = {
+        listCollections: vi.fn().mockImplementation(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function -- Intentionally never resolves to trigger timeout
+          () => new Promise(() => {})
+        ),
+      };
+      vi.mocked(getFirestore).mockReturnValue(mockDb as unknown as ReturnType<typeof getFirestore>);
+
+      try {
+        const resultPromise = checkFirestore();
+
+        await vi.advanceTimersByTimeAsync(3100);
+
+        const result = await resultPromise;
+
+        expect(result.name).toBe('firestore');
+        expect(result.status).toBe('down');
+        expect(result.details).toEqual({ error: 'Firestore health check timed out' });
+      } finally {
+        process.env['VITEST'] = originalVitest;
+        process.env['NODE_ENV'] = originalNodeEnv;
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('checkNotionSdk', () => {

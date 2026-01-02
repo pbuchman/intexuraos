@@ -898,6 +898,46 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
+    it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-anthropic';
+      const anthropicKey = 'sk-ant-api1234567890abcdefgh';
+      fakeSettingsRepo.setSettings({
+        userId,
+        notifications: { filters: [] },
+        llmApiKeys: {
+          anthropic: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      fakeLlmValidator.setTestResponse('Hello! I am Claude.');
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/anthropic/test`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { response: string; testedAt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.response).toBe('Hello! I am Claude.');
+    });
+
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {
       fakeSettingsRepo.setFailNextGet(true);
 

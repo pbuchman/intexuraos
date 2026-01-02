@@ -45,6 +45,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             payload: {
               type: 'object',
+              additionalProperties: true,
               description: 'Optional action-specific payload',
             },
           },
@@ -66,7 +67,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   title: { type: 'string' },
                   status: { type: 'string' },
                   confidence: { type: 'number' },
-                  payload: { type: 'object' },
+                  payload: { type: 'object', additionalProperties: true },
                   createdAt: { type: 'string' },
                   updatedAt: { type: 'string' },
                 },

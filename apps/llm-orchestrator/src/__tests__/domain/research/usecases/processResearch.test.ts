@@ -223,6 +223,24 @@ describe('processResearch', () => {
     );
   });
 
+  it('updates LLM result without sources when sources is undefined', async () => {
+    const research = createTestResearch({ selectedLlms: ['google'] });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.generateTitle.mockResolvedValue(
+      err({ code: 'API_ERROR', message: 'Failed' })
+    );
+    deps.mockProviders.google.research.mockResolvedValue(ok({ content: 'Result content' }));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(ok('Synthesized'));
+
+    await processResearch('research-1', deps);
+
+    const updateCall = deps.mockRepo.updateLlmResult.mock.calls.find(
+      (call: unknown[]) => (call[2] as { status: string }).status === 'completed'
+    );
+    expect(updateCall).toBeDefined();
+    expect((updateCall?.[2] as { sources?: string[] }).sources).toBeUndefined();
+  });
+
   it('updates LLM result to failed on error', async () => {
     const research = createTestResearch({ selectedLlms: ['google'] });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -421,5 +439,36 @@ describe('processResearch', () => {
     await processResearch('research-1', deps);
 
     expect(deps.mockReportSuccess).toHaveBeenCalledWith('anthropic');
+  });
+
+  it('works correctly without reportLlmSuccess callback', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.generateTitle.mockResolvedValue(ok('Title'));
+    deps.mockProviders.google.research.mockResolvedValue(ok({ content: 'Result', sources: [] }));
+    deps.mockProviders.openai.research.mockResolvedValue(ok({ content: 'Result', sources: [] }));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(ok('Synthesis'));
+
+    const { reportLlmSuccess: _unused, ...depsWithoutReport } = deps;
+
+    await processResearch('research-1', depsWithoutReport);
+
+    expect(deps.mockRepo.update).toHaveBeenCalledWith(
+      'research-1',
+      expect.objectContaining({ status: 'completed' })
+    );
+  });
+
+  it('reports synthesisLlm provider when using synthesizer for title generation', async () => {
+    const research = createTestResearch({ synthesisLlm: 'openai' });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.generateTitle.mockResolvedValue(ok('Generated Title'));
+    deps.mockProviders.google.research.mockResolvedValue(ok({ content: 'Result', sources: [] }));
+    deps.mockProviders.openai.research.mockResolvedValue(ok({ content: 'Result', sources: [] }));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(ok('Synthesis'));
+
+    await processResearch('research-1', deps);
+
+    expect(deps.mockReportSuccess).toHaveBeenCalledWith('openai');
   });
 });

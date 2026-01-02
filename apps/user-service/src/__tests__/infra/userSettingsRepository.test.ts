@@ -340,4 +340,51 @@ describe('FirestoreUserSettingsRepository', () => {
       }
     });
   });
+
+  describe('updateLlmLastUsed', () => {
+    it('creates new settings document if user does not exist', async () => {
+      const result = await repo.updateLlmLastUsed('new-user', 'google');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.userId).toBe('new-user');
+        expect(stored.value.llmTestResults?.google?.testedAt).toBeDefined();
+        expect(stored.value.llmTestResults?.google?.response).toBe('');
+      }
+    });
+
+    it('updates testedAt for existing settings document', async () => {
+      await repo.saveSettings(
+        createTestSettings({
+          notifications: { filters: [{ name: 'filter' }] },
+        })
+      );
+
+      const result = await repo.updateLlmLastUsed('user-123', 'openai');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
+        expect(stored.value.notifications.filters[0]?.name).toBe('filter');
+      }
+    });
+
+    it('returns error when Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.updateLlmLastUsed('user-123', 'google');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+  });
 });

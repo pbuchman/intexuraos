@@ -264,6 +264,29 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   }
 }
 
+import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
+
+export type FakeExecuteResearchActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteResearchActionResult, Error>>;
+
+export function createFakeExecuteResearchActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteResearchActionResult;
+}): FakeExecuteResearchActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteResearchActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/research/test-123/edit',
+      }
+    );
+  };
+}
+
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
   researchServiceClient: FakeResearchServiceClient;
@@ -272,6 +295,7 @@ export function createFakeServices(deps: {
   actionEventPublisher?: FakeActionEventPublisher;
   userPhoneLookup?: FakeUserPhoneLookup;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
+  executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
 }): Services {
   const userPhoneLookup = deps.userPhoneLookup ?? new FakeUserPhoneLookup();
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
@@ -293,9 +317,8 @@ export function createFakeServices(deps: {
     userPhoneLookup,
     whatsappPublisher,
     handleResearchActionUseCase,
-    executeResearchActionUseCase: (): never => {
-      throw new Error('executeResearchActionUseCase not implemented in fake services');
-    },
+    executeResearchActionUseCase:
+      deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     research: handleResearchActionUseCase,
   };
 }

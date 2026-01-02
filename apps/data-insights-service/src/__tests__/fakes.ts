@@ -166,10 +166,7 @@ export class FakeTitleGenerationService implements TitleGenerationService {
     this.errorToReturn = error;
   }
 
-  generateTitle(
-    _userId: string,
-    _content: string
-  ): Promise<Result<string, TitleGenerationError>> {
+  generateTitle(_userId: string, _content: string): Promise<Result<string, TitleGenerationError>> {
     if (this.errorToReturn !== null) {
       const error = this.errorToReturn;
       this.errorToReturn = null;

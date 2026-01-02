@@ -51,8 +51,8 @@ describe('handleResearchAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
-    expect(actionUpdate?.status).toBe('awaiting_approval');
+    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
+    expect(actionStatus).toBe('awaiting_approval');
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
@@ -76,8 +76,8 @@ describe('handleResearchAction usecase', () => {
 
     expect(isOk(result)).toBe(true);
 
-    const actionUpdate = fakeActionClient.getActionUpdates().get('action-123');
-    expect(actionUpdate?.status).toBe('awaiting_approval');
+    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
+    expect(actionStatus).toBe('awaiting_approval');
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(0);
@@ -102,7 +102,7 @@ describe('handleResearchAction usecase', () => {
     }
   });
 
-  it('fails when WhatsApp publish fails', async () => {
+  it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     const usecase = createHandleResearchActionUseCase({
       actionServiceClient: fakeActionClient,
       userPhoneLookup: fakeUserPhoneLookup,
@@ -118,9 +118,12 @@ describe('handleResearchAction usecase', () => {
     const event = createEvent();
     const result = await usecase.execute(event);
 
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) {
-      expect(result.error.message).toContain('Failed to send WhatsApp notification');
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
     }
+
+    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
+    expect(actionStatus).toBe('awaiting_approval');
   });
 });

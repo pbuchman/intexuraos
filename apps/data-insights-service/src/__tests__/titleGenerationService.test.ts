@@ -4,15 +4,15 @@ import { createTitleGenerationService } from '../infra/gemini/titleGenerationSer
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
 
 describe('titleGenerationService', () => {
-  function createMockUserServiceClient(
-    apiKey: string | null = 'test-api-key'
-  ): UserServiceClient {
+  function createMockUserServiceClient(apiKey: string | null = 'test-api-key'): UserServiceClient {
     return {
-      getGeminiApiKey: vi.fn().mockResolvedValue(
-        apiKey !== null
-          ? ok(apiKey)
-          : err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })
-      ),
+      getGeminiApiKey: vi
+        .fn()
+        .mockResolvedValue(
+          apiKey !== null
+            ? ok(apiKey)
+            : err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })
+        ),
     };
   }
 
@@ -49,9 +49,9 @@ describe('titleGenerationService', () => {
 
     it('returns USER_SERVICE_ERROR when user service fails', async () => {
       const mockClient: UserServiceClient = {
-        getGeminiApiKey: vi.fn().mockResolvedValue(
-          err({ code: 'API_ERROR' as const, message: 'Service unavailable' })
-        ),
+        getGeminiApiKey: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service unavailable' })),
       };
       const service = createTitleGenerationService(mockClient);
 

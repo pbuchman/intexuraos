@@ -63,9 +63,7 @@ describe('userServiceClient', () => {
         internalAuthToken: 'test-token',
       });
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .reply(200, {});
+      nock('http://localhost:8110').get('/internal/users/user-123/llm-keys').reply(200, {});
 
       const result = await client.getGeminiApiKey('user-123');
 
@@ -81,9 +79,7 @@ describe('userServiceClient', () => {
         internalAuthToken: 'test-token',
       });
 
-      nock('http://localhost:8110')
-        .get('/internal/users/user-123/llm-keys')
-        .reply(500);
+      nock('http://localhost:8110').get('/internal/users/user-123/llm-keys').reply(500);
 
       const result = await client.getGeminiApiKey('user-123');
 
