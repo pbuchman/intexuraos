@@ -39,9 +39,14 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 2-0: Created POST /router/actions/:actionId/execute endpoint in publicRoutes.ts
 - ✅ Tier 2-0: Updated handleResearchAction to only set awaiting_approval + send WhatsApp notification
 - ✅ Tier 2-0: Updated services.ts with new handleResearchAction dependencies
+- ✅ Tier 2-1: Created ActionsAgentClient interface and HTTP implementation
+- ✅ Tier 2-1: Updated commands-router services.ts to use client instead of repository
+- ✅ Tier 2-1: Updated processCommand use case to call POST /internal/actions
+- ✅ Tier 2-1: Updated retryPendingCommands use case to use client
+- ✅ Tier 2-1: Added ACTIONS_AGENT_URL env var to commands-router
 
 ### Now
-- ⏳ Ready to start Tier 2-1: Create actions-agent client in commands-router
+- ⏳ Ready to start Tier 2-2: Delete action routes from commands-router
 - ⚠️ Note: Firestore ownership check failing - commands-router still has old actionRepository.ts
   - Will be resolved after Tier 2-1 (create actions-agent client) and Tier 2-3 (delete old repository)
 - ⚠️ Note: Public route tests failing (11/34 tests) - need JWT mocking setup
@@ -125,7 +130,13 @@ Introduce user approval workflow for all actions - no automatic execution, expli
   - Simplified handleResearchAction to only set awaiting_approval + send approval notification
   - Updated services.ts with new dependencies for both use cases
   - Idempotency: execute can be called multiple times, returns existing resource_url if completed
-- ⚠️ Firestore ownership check failing - expected, will resolve after Tier 2 work
+- ✅ Completed Tier 2-1: Actions-Agent Client in commands-router
+  - Created ActionsAgentClient interface (infra/actionsAgent/client.ts)
+  - Implemented HTTP client calling POST /internal/actions
+  - Updated processCommand + retryPendingCommands to use client instead of direct Firestore
+  - Added ACTIONS_AGENT_URL env var to commands-router
+  - Removed ActionRepository dependency from both use cases
+- ⚠️ Firestore ownership check failing - expected, will resolve after Tier 2-3 (delete old repository)
 - ⚠️ Public route tests failing (11/34) - JWT mocking needs setup for new public routes
 
 ### 2026-01-02 (Session 2)

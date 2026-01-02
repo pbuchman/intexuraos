@@ -1,6 +1,5 @@
 import pino from 'pino';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
-import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
 import {
@@ -12,14 +11,14 @@ import {
   type RetryPendingCommandsUseCase,
 } from './domain/usecases/retryPendingCommands.js';
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
-import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createGeminiClassifier } from './infra/gemini/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
 
 export interface Services {
   commandRepository: CommandRepository;
-  actionRepository: ActionRepository;
+  actionsAgentClient: ActionsAgentClient;
   classifierFactory: ClassifierFactory;
   userServiceClient: UserServiceClient;
   eventPublisher: EventPublisherPort;
@@ -29,6 +28,7 @@ export interface Services {
 
 export interface ServiceConfig {
   userServiceUrl: string;
+  actionsAgentUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
 }
@@ -39,7 +39,10 @@ export function initServices(config: ServiceConfig): void {
   const logger = pino({ name: 'commands-router' });
 
   const commandRepository = createFirestoreCommandRepository();
-  const actionRepository = createFirestoreActionRepository();
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: config.actionsAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
   const classifierFactory: ClassifierFactory = (apiKey: string) =>
     createGeminiClassifier({ apiKey });
   const userServiceClient = createUserServiceClient({
@@ -50,13 +53,13 @@ export function initServices(config: ServiceConfig): void {
 
   container = {
     commandRepository,
-    actionRepository,
+    actionsAgentClient,
     classifierFactory,
     userServiceClient,
     eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
       commandRepository,
-      actionRepository,
+      actionsAgentClient,
       classifierFactory,
       userServiceClient,
       eventPublisher,
@@ -64,7 +67,7 @@ export function initServices(config: ServiceConfig): void {
     }),
     retryPendingCommandsUseCase: createRetryPendingCommandsUseCase({
       commandRepository,
-      actionRepository,
+      actionsAgentClient,
       classifierFactory,
       userServiceClient,
       eventPublisher,
