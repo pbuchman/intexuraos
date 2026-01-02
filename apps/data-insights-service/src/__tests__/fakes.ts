@@ -69,12 +69,7 @@ export class FakeAnalyticsEventRepository implements AnalyticsEventRepository {
     }
 
     const events = Array.from(this.events.values())
-      .filter(
-        (e) =>
-          e.userId === userId &&
-          e.timestamp >= startDate &&
-          e.timestamp <= endDate
-      )
+      .filter((e) => e.userId === userId && e.timestamp >= startDate && e.timestamp <= endDate)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, limit);
 

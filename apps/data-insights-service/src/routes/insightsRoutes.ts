@@ -5,6 +5,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { aggregatedInsightsSchema } from './schemas.js';
 import type { AggregatedInsights, ServiceUsage } from '../domain/insights/index.js';
@@ -13,7 +14,6 @@ export const insightsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
     '/insights/summary',
     {
-      preHandler: fastify.auth,
       schema: {
         operationId: 'getInsightsSummary',
         summary: 'Get insights summary',
@@ -33,7 +33,11 @@ export const insightsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId;
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+      const userId = user.userId;
       const { aggregatedInsightsRepository } = getServices();
 
       const result = await aggregatedInsightsRepository.getByUserId(userId);
@@ -56,7 +60,6 @@ export const insightsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
     '/insights/usage',
     {
-      preHandler: fastify.auth,
       schema: {
         operationId: 'getInsightsUsage',
         summary: 'Get usage statistics',
@@ -92,7 +95,11 @@ export const insightsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId;
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+      const userId = user.userId;
       const { aggregatedInsightsRepository } = getServices();
 
       const result = await aggregatedInsightsRepository.getByUserId(userId);

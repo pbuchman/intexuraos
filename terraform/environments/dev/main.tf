@@ -170,6 +170,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    data_insights_service = {
+      name      = "intexuraos-data-insights-service"
+      app_path  = "apps/data-insights-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -743,6 +750,7 @@ module "api_docs_hub" {
     LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
     COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
     ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
+    DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -756,6 +764,7 @@ module "api_docs_hub" {
     module.llm_orchestrator,
     module.commands_router,
     module.actions_agent,
+    module.data_insights_service,
   ]
 }
 
@@ -870,6 +879,40 @@ module "actions_agent" {
     module.commands_router,
     module.llm_orchestrator,
     module.user_service,
+  ]
+}
+
+# Data Insights Service - Analytics aggregation from other services
+module "data_insights_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.data_insights_service.name
+  service_account = module.iam.service_accounts["data_insights_service"]
+  port            = local.services.data_insights_service.port
+  min_scale       = local.services.data_insights_service.min_scale
+  max_scale       = local.services.data_insights_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-service:latest"
+
+  secrets = {
+    AUTH_JWKS_URL                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    AUTH_ISSUER                    = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    AUTH_AUDIENCE                  = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    GOOGLE_CLOUD_PROJECT = var.project_id
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
   ]
 }
 
@@ -1021,6 +1064,11 @@ output "commands_router_url" {
 output "actions_agent_url" {
   description = "Actions Agent Service URL"
   value       = module.actions_agent.service_url
+}
+
+output "data_insights_service_url" {
+  description = "Data Insights Service URL"
+  value       = module.data_insights_service.service_url
 }
 
 output "firestore_database" {

@@ -424,6 +424,49 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===== data-insights-service =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-data-insights-service'
+    waitFor: ['detect-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"data-insights-service"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building data-insights-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+            -f apps/data-insights-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
+        else
+          echo "data-insights-service not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-data-insights-service'
+    waitFor: ['build-push-data-insights-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"data-insights-service"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-data-insights-service.sh
+        else
+          echo "data-insights-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'

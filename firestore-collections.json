@@ -49,6 +49,14 @@
     "actions": {
       "owner": "actions-agent",
       "description": "Action items and their execution lifecycle"
+    },
+    "analytics_events": {
+      "owner": "data-insights-service",
+      "description": "Raw analytics events ingested from other services"
+    },
+    "aggregated_insights": {
+      "owner": "data-insights-service",
+      "description": "Computed/aggregated metrics and usage insights per user"
     }
   }
 }

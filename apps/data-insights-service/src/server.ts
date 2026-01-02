@@ -45,8 +45,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description:
-          'IntexuraOS Data Insights Service - Analytics aggregation from other services',
+        description: 'IntexuraOS Data Insights Service - Analytics aggregation from other services',
         version: SERVICE_VERSION,
       },
       servers,
