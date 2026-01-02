@@ -6,6 +6,8 @@ import {
   FakeActionServiceClient,
   FakeResearchServiceClient,
   FakeNotificationSender,
+  FakeActionRepository,
+  FakeActionEventPublisher,
   createFakeServices,
 } from './fakes.js';
 
@@ -17,6 +19,8 @@ describe('Research Agent Routes', () => {
   let fakeActionClient: FakeActionServiceClient;
   let fakeResearchClient: FakeResearchServiceClient;
   let fakeNotificationSender: FakeNotificationSender;
+  let fakeActionRepository: FakeActionRepository;
+  let fakeActionEventPublisher: FakeActionEventPublisher;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -24,12 +28,16 @@ describe('Research Agent Routes', () => {
     fakeActionClient = new FakeActionServiceClient();
     fakeResearchClient = new FakeResearchServiceClient();
     fakeNotificationSender = new FakeNotificationSender();
+    fakeActionRepository = new FakeActionRepository();
+    fakeActionEventPublisher = new FakeActionEventPublisher();
 
     setServices(
       createFakeServices({
         actionServiceClient: fakeActionClient,
         researchServiceClient: fakeResearchClient,
         notificationSender: fakeNotificationSender,
+        actionRepository: fakeActionRepository,
+        actionEventPublisher: fakeActionEventPublisher,
       })
     );
 
@@ -280,6 +288,186 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toContain('Failed to mark action as processing');
+    });
+  });
+
+  describe('POST /internal/actions (action creation endpoint)', () => {
+    it('returns 401 when no internal auth header', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 401 when internal auth token is wrong', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when request body is missing required fields', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('creates action with status pending and publishes event', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          id: string;
+          userId: string;
+          commandId: string;
+          type: string;
+          title: string;
+          status: string;
+          confidence: number;
+        };
+      };
+
+      expect(body.success).toBe(true);
+      expect(body.data.userId).toBe('user-123');
+      expect(body.data.commandId).toBe('cmd-456');
+      expect(body.data.type).toBe('research');
+      expect(body.data.title).toBe('Test Research');
+      expect(body.data.status).toBe('pending');
+      expect(body.data.confidence).toBe(0.95);
+
+      const savedActions = fakeActionRepository.getActions();
+      expect(savedActions.size).toBe(1);
+      const savedAction = savedActions.get(body.data.id);
+      expect(savedAction).toBeDefined();
+      expect(savedAction?.status).toBe('pending');
+
+      const publishedEvents = fakeActionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.type).toBe('action.created');
+      expect(publishedEvents[0]?.actionId).toBe(body.data.id);
+      expect(publishedEvents[0]?.userId).toBe('user-123');
+      expect(publishedEvents[0]?.actionType).toBe('research');
+    });
+
+    it('creates action with optional payload', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+          payload: { customField: 'customValue' },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { id: string; payload: Record<string, unknown> };
+      };
+
+      expect(body.data.payload).toEqual({ customField: 'customValue' });
+    });
+
+    it('returns 500 when action repository fails', async () => {
+      fakeActionRepository.setFailNext(true, new Error('Database unavailable'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Failed to create action');
+    });
+
+    it('continues successfully even when event publishing fails', async () => {
+      fakeActionEventPublisher.setFailNext(true, {
+        code: 'PUBLISH_FAILED',
+        message: 'Pub/Sub unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          userId: 'user-123',
+          commandId: 'cmd-456',
+          type: 'research',
+          title: 'Test Research',
+          confidence: 0.95,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+
+      const savedActions = fakeActionRepository.getActions();
+      expect(savedActions.size).toBe(1);
     });
   });
 

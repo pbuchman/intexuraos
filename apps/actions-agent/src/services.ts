@@ -1,6 +1,7 @@
 import type { ActionServiceClient } from './domain/ports/actionServiceClient.js';
 import type { ResearchServiceClient } from './domain/ports/researchServiceClient.js';
 import type { NotificationSender } from './domain/ports/notificationSender.js';
+import type { ActionRepository } from './domain/ports/actionRepository.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -8,11 +9,15 @@ import {
 import { createCommandsRouterClient } from './infra/action/commandsRouterClient.js';
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
+import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
+import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
   researchServiceClient: ResearchServiceClient;
   notificationSender: NotificationSender;
+  actionRepository: ActionRepository;
+  actionEventPublisher: ActionEventPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
@@ -23,6 +28,7 @@ export interface ServiceConfig {
   llmOrchestratorUrl: string;
   userServiceUrl: string;
   internalAuthToken: string;
+  gcpProjectId: string;
 }
 
 let container: Services | null = null;
@@ -43,6 +49,12 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
 
+  const actionRepository = createFirestoreActionRepository();
+
+  const actionEventPublisher = createActionEventPublisher({
+    projectId: config.gcpProjectId,
+  });
+
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
     actionServiceClient,
     researchServiceClient,
@@ -53,6 +65,8 @@ export function initServices(config: ServiceConfig): void {
     actionServiceClient,
     researchServiceClient,
     notificationSender,
+    actionRepository,
+    actionEventPublisher,
     handleResearchActionUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,

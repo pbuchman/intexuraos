@@ -288,6 +288,7 @@ export interface Command {
  */
 export type ActionStatus =
   | 'pending'
+  | 'awaiting_approval'
   | 'processing'
   | 'completed'
   | 'failed'

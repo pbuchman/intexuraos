@@ -3,12 +3,16 @@ import { ok, err } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
-import type { LlmProvider } from '../domain/models/actionEvent.js';
+import type { ActionRepository } from '../domain/ports/actionRepository.js';
+import type { Action } from '../domain/models/action.js';
+import type { ActionCreatedEvent, LlmProvider } from '../domain/models/actionEvent.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
 } from '../domain/usecases/handleResearchAction.js';
 import type { Services } from '../services.js';
+import type { PublishError } from '@intexuraos/infra-pubsub';
+import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 
 export class FakeActionServiceClient implements ActionServiceClient {
   private statusUpdates = new Map<string, string>();
@@ -126,10 +130,91 @@ export class FakeNotificationSender implements NotificationSender {
   }
 }
 
+export class FakeActionRepository implements ActionRepository {
+  private actions = new Map<string, Action>();
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getActions(): Map<string, Action> {
+    return this.actions;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async getById(id: string): Promise<Action | null> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    return this.actions.get(id) ?? null;
+  }
+
+  async save(action: Action): Promise<void> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    this.actions.set(action.id, action);
+  }
+
+  async update(action: Action): Promise<void> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    this.actions.set(action.id, action);
+  }
+
+  async delete(id: string): Promise<void> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    this.actions.delete(id);
+  }
+
+  async listByUserId(userId: string): Promise<Action[]> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    return Array.from(this.actions.values()).filter((a) => a.userId === userId);
+  }
+}
+
+export class FakeActionEventPublisher implements ActionEventPublisher {
+  private publishedEvents: ActionCreatedEvent[] = [];
+  private failNext = false;
+  private failError: PublishError | null = null;
+
+  getPublishedEvents(): ActionCreatedEvent[] {
+    return this.publishedEvents;
+  }
+
+  setFailNext(fail: boolean, error?: PublishError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
+    }
+    this.publishedEvents.push(event);
+    return ok(undefined);
+  }
+}
+
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
   researchServiceClient: FakeResearchServiceClient;
   notificationSender: FakeNotificationSender;
+  actionRepository?: FakeActionRepository;
+  actionEventPublisher?: FakeActionEventPublisher;
 }): Services {
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
@@ -142,6 +227,8 @@ export function createFakeServices(deps: {
     actionServiceClient: deps.actionServiceClient,
     researchServiceClient: deps.researchServiceClient,
     notificationSender: deps.notificationSender,
+    actionRepository: deps.actionRepository ?? new FakeActionRepository(),
+    actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     handleResearchActionUseCase,
     research: handleResearchActionUseCase,
   };

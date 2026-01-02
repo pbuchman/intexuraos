@@ -47,8 +47,8 @@
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
     },
     "actions": {
-      "owner": "commands-router",
-      "description": "Pending actions derived from classified commands"
+      "owner": "actions-agent",
+      "description": "Action items and their execution lifecycle"
     }
   }
 }

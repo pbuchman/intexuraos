@@ -3,6 +3,8 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { getHandlerForType } from '../domain/usecases/actionHandlerRegistry.js';
+import { createAction } from '../domain/models/action.js';
+import type { ActionType } from '../domain/models/action.js';
 
 interface PubSubMessage {
   message: {
@@ -14,6 +16,200 @@ interface PubSubMessage {
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.post(
+    '/internal/actions',
+    {
+      schema: {
+        operationId: 'createAction',
+        summary: 'Create new action',
+        description:
+          'Internal endpoint for creating actions. Called by commands-router after classification.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string', description: 'User ID who created the command' },
+            commandId: { type: 'string', description: 'Command ID that triggered this action' },
+            type: {
+              type: 'string',
+              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'],
+              description: 'Type of action',
+            },
+            title: { type: 'string', description: 'Action title' },
+            confidence: {
+              type: 'number',
+              minimum: 0,
+              maximum: 1,
+              description: 'Classification confidence score',
+            },
+            payload: {
+              type: 'object',
+              description: 'Optional action-specific payload',
+            },
+          },
+          required: ['userId', 'commandId', 'type', 'title', 'confidence'],
+        },
+        response: {
+          201: {
+            description: 'Action created successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  userId: { type: 'string' },
+                  commandId: { type: 'string' },
+                  type: { type: 'string' },
+                  title: { type: 'string' },
+                  status: { type: 'string' },
+                  confidence: { type: 'number' },
+                  payload: { type: 'object' },
+                  createdAt: { type: 'string' },
+                  updatedAt: { type: 'string' },
+                },
+              },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Internal error',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions',
+        bodyPreviewLength: 500,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for create action');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const body = request.body as {
+        userId: string;
+        commandId: string;
+        type: ActionType;
+        title: string;
+        confidence: number;
+        payload?: Record<string, unknown>;
+      };
+
+      const action = createAction({
+        userId: body.userId,
+        commandId: body.commandId,
+        type: body.type,
+        confidence: body.confidence,
+        title: body.title,
+      });
+
+      if (body.payload !== undefined) {
+        action.payload = body.payload;
+      }
+
+      request.log.info(
+        {
+          actionId: action.id,
+          userId: body.userId,
+          commandId: body.commandId,
+          actionType: body.type,
+        },
+        'Creating new action'
+      );
+
+      const services = getServices();
+
+      try {
+        await services.actionRepository.save(action);
+
+        request.log.info(
+          {
+            actionId: action.id,
+            userId: body.userId,
+            actionType: body.type,
+          },
+          'Action saved to Firestore'
+        );
+      } catch (error) {
+        request.log.error(
+          {
+            actionId: action.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          'Failed to save action to Firestore'
+        );
+        reply.status(500);
+        return { error: 'Failed to create action' };
+      }
+
+      const event: ActionCreatedEvent = {
+        type: 'action.created',
+        actionId: action.id,
+        userId: body.userId,
+        commandId: body.commandId,
+        actionType: body.type,
+        title: body.title,
+        payload: {
+          prompt: body.title,
+          confidence: body.confidence,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      request.log.info(
+        {
+          actionId: action.id,
+          actionType: body.type,
+        },
+        'Publishing action.created event'
+      );
+
+      const publishResult = await services.actionEventPublisher.publishActionCreated(event);
+
+      if (!publishResult.ok) {
+        request.log.error(
+          {
+            actionId: action.id,
+            error: publishResult.error.message,
+          },
+          'Failed to publish action.created event'
+        );
+      } else {
+        request.log.info({ actionId: action.id }, 'Action event published successfully');
+      }
+
+      reply.status(201);
+      return {
+        success: true,
+        data: action,
+      };
+    }
+  );
+
   fastify.post(
     '/internal/actions/:actionType',
     {
