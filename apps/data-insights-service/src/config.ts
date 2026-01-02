@@ -22,7 +22,12 @@ const configSchema = z.object({
   /**
    * Internal auth token for service-to-service communication.
    */
-  internalAuthToken: z.string().optional(),
+  internalAuthToken: z.string().optional().default(''),
+
+  /**
+   * URL for user-service to fetch user's LLM API keys.
+   */
+  userServiceUrl: z.string().url().optional().default('http://localhost:8110'),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -36,6 +41,7 @@ export function loadConfig(): Config {
     port: process.env['PORT'],
     host: process.env['HOST'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+    userServiceUrl: process.env['USER_SERVICE_URL'],
   });
 }
 

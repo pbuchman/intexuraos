@@ -38,6 +38,7 @@ const SERVICES = [
   { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
   { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
+  { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -199,6 +200,9 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
+  },
+  'data-insights-service': {
+    USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
 };
 

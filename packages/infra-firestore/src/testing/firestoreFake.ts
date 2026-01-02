@@ -333,6 +333,11 @@ class FakeCollectionReference extends FakeQuery {
     const id = docId ?? `auto-${String(++this.docCounterRef.value)}`;
     return new FakeDocumentReference(this.collectionNameInternal, id, this.storeInternal);
   }
+
+  add(data: DocumentData): Promise<FakeDocumentReference> {
+    const docRef = this.doc();
+    return docRef.set(data).then(() => docRef);
+  }
 }
 
 /**

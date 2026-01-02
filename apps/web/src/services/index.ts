@@ -13,3 +13,4 @@ export {
 } from './llmKeysApi.js';
 export * from './llmOrchestratorApi.js';
 export * from './commandsApi.js';
+export * from './dataSourceApi.js';

@@ -10,7 +10,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
-import { insightsRoutes } from './routes/index.js';
+import { dataInsightsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
 const SERVICE_NAME = 'data-insights-service';
@@ -45,7 +45,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description: 'IntexuraOS Data Insights Service - Analytics aggregation from other services',
+        description: 'IntexuraOS Data Insights Service - Custom data sources management',
         version: SERVICE_VERSION,
       },
       servers,
@@ -95,8 +95,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         },
       },
       tags: [
-        { name: 'insights', description: 'Insights and analytics endpoints' },
-        { name: 'internal', description: 'Internal service-to-service endpoints' },
+        { name: 'data-sources', description: 'Custom data sources management' },
         { name: 'system', description: 'System endpoints' },
       ],
     },
@@ -169,7 +168,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(fastifyAuthPlugin);
-  await app.register(insightsRoutes);
+  await app.register(dataInsightsRoutes);
 
   // Health endpoint
   app.get(
