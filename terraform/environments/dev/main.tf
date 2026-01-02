@@ -536,6 +536,31 @@ module "pubsub_llm_analytics" {
   ]
 }
 
+# Topic for individual LLM research calls (llm-orchestrator -> llm-orchestrator)
+module "pubsub_llm_call" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-llm-call-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-llm-call"
+  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
+  push_audience              = module.llm_orchestrator.service_url
+  ack_deadline_seconds       = 600
+
+  publisher_service_accounts = {
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.llm_orchestrator,
+  ]
+}
+
 # Topic for sending WhatsApp messages (actions-agent, llm-orchestrator -> whatsapp-service)
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
@@ -1049,8 +1074,51 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 }
 
 # -----------------------------------------------------------------------------
+# Firebase Web App
+# -----------------------------------------------------------------------------
+
+resource "google_firebase_web_app" "web" {
+  provider     = google-beta
+  project      = var.project_id
+  display_name = "IntexuraOS Web (${var.environment})"
+}
+
+data "google_firebase_web_app_config" "web" {
+  provider   = google-beta
+  project    = var.project_id
+  web_app_id = google_firebase_web_app.web.app_id
+}
+
+# Auto-populate Firebase secrets from Terraform
+resource "google_secret_manager_secret_version" "firebase_api_key" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_API_KEY"]
+  secret_data = data.google_firebase_web_app_config.web.api_key
+}
+
+resource "google_secret_manager_secret_version" "firebase_auth_domain" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_AUTH_DOMAIN"]
+  secret_data = data.google_firebase_web_app_config.web.auth_domain
+}
+
+resource "google_secret_manager_secret_version" "firebase_project_id" {
+  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_PROJECT_ID"]
+  secret_data = var.project_id
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
+
+output "firebase_api_key" {
+  description = "Firebase API key for web app"
+  value       = data.google_firebase_web_app_config.web.api_key
+  sensitive   = true
+}
+
+output "firebase_auth_domain" {
+  description = "Firebase Auth domain for web app"
+  value       = data.google_firebase_web_app_config.web.auth_domain
+}
 
 output "artifact_registry_url" {
   description = "Artifact Registry URL"
