@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vitest/globals", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@intexuraos/*": ["packages/*/src", "apps/*/src"]
+    }
+  },
+  "include": ["apps/*/src/__tests__/**/*.ts", "packages/*/src/__tests__/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

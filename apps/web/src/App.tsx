@@ -50,7 +50,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/system-health" replace />;
+    return <Navigate to="/inbox" replace />;
   }
 
   return <>{children}</>;
@@ -68,7 +68,7 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/system-health" replace />;
+    return <Navigate to="/inbox" replace />;
   }
 
   return <HomePage />;
@@ -184,7 +184,7 @@ function AppRoutes(): React.JSX.Element {
       <Route path="/mobile-notifications" element={<Navigate to="/settings/mobile" replace />} />
       <Route path="/mobile-notifications/list" element={<Navigate to="/notifications" replace />} />
       {/* 404 fallback */}
-      <Route path="*" element={<Navigate to="/system-health" replace />} />
+      <Route path="*" element={<Navigate to="/inbox" replace />} />
     </Routes>
   );
 }

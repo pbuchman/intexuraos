@@ -13,6 +13,7 @@ import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   CommandIngestEvent,
   EventPublisherPort,
+  ExtractLinkPreviewsEvent,
   IgnoredReason,
   InboxError,
   LinkPreview,
@@ -26,6 +27,7 @@ import type {
   SpeechTranscriptionPort,
   ThumbnailGeneratorPort,
   ThumbnailResult,
+  TranscribeAudioEvent,
   TranscriptionJobInput,
   TranscriptionJobPollResult,
   TranscriptionJobSubmitResult,
@@ -33,6 +35,7 @@ import type {
   TranscriptionState,
   TranscriptionTextResult,
   UploadResult,
+  WebhookProcessEvent,
   WebhookProcessingStatus,
   WhatsAppCloudApiPort,
   WhatsAppMessage,
@@ -309,6 +312,20 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.nextCursorToReturn = cursor;
   }
 
+  /**
+   * Pre-populate a message with a specific ID for testing.
+   */
+  setMessage(message: WhatsAppMessage): void {
+    this.messages.set(message.id, message);
+  }
+
+  /**
+   * Get a message synchronously for test assertions.
+   */
+  getMessageSync(messageId: string): WhatsAppMessage | undefined {
+    return this.messages.get(messageId);
+  }
+
   saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
     if (this.shouldFailSave) {
       return Promise.resolve(
@@ -511,6 +528,9 @@ export class FakeMediaStorage implements MediaStoragePort {
 export class FakeEventPublisher implements EventPublisherPort {
   private mediaCleanupEvents: MediaCleanupEvent[] = [];
   private commandIngestEvents: CommandIngestEvent[] = [];
+  private webhookProcessEvents: WebhookProcessEvent[] = [];
+  private transcribeAudioEvents: TranscribeAudioEvent[] = [];
+  private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
     this.mediaCleanupEvents.push(event);
@@ -522,6 +542,21 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, InboxError>> {
+    this.webhookProcessEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, InboxError>> {
+    this.transcribeAudioEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, InboxError>> {
+    this.extractLinkPreviewsEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
   getMediaCleanupEvents(): MediaCleanupEvent[] {
     return [...this.mediaCleanupEvents];
   }
@@ -530,9 +565,24 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.commandIngestEvents];
   }
 
+  getWebhookProcessEvents(): WebhookProcessEvent[] {
+    return [...this.webhookProcessEvents];
+  }
+
+  getTranscribeAudioEvents(): TranscribeAudioEvent[] {
+    return [...this.transcribeAudioEvents];
+  }
+
+  getExtractLinkPreviewsEvents(): ExtractLinkPreviewsEvent[] {
+    return [...this.extractLinkPreviewsEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
     this.commandIngestEvents = [];
+    this.webhookProcessEvents = [];
+    this.transcribeAudioEvents = [];
+    this.extractLinkPreviewsEvents = [];
   }
 }
 
@@ -597,6 +647,19 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     code: 'SERVICE_UNAVAILABLE',
     message: 'Service temporarily unavailable',
   };
+  private autoComplete = false;
+  private autoCompleteTranscript = 'Auto-completed transcript for testing';
+
+  /**
+   * Configure the fake to auto-complete jobs on creation.
+   * Useful for testing success paths without waiting for polling.
+   */
+  setAutoComplete(enabled: boolean, transcript?: string): void {
+    this.autoComplete = enabled;
+    if (transcript !== undefined) {
+      this.autoCompleteTranscript = transcript;
+    }
+  }
 
   /**
    * Configure the fake to fail subsequent calls.
@@ -688,7 +751,11 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
 
     this.jobCounter++;
     const jobId = `fake-job-${String(this.jobCounter)}`;
-    this.jobs.set(jobId, { status: 'running' });
+    if (this.autoComplete) {
+      this.jobs.set(jobId, { status: 'done', transcript: this.autoCompleteTranscript });
+    } else {
+      this.jobs.set(jobId, { status: 'running' });
+    }
 
     return Promise.resolve(
       ok({
@@ -790,6 +857,8 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
       code: 'SERVICE_UNAVAILABLE',
       message: 'Service temporarily unavailable',
     };
+    this.autoComplete = false;
+    this.autoCompleteTranscript = 'Auto-completed transcript for testing';
   }
 }
 

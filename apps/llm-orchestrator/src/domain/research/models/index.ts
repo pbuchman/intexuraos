@@ -1,4 +1,5 @@
 export {
+  type ExternalReport,
   type LlmProvider,
   type ResearchStatus,
   type LlmResultStatus,

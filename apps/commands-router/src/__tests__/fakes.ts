@@ -18,8 +18,8 @@ import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendi
 import type { Services } from '../services.js';
 
 export class FakeCommandRepository implements CommandRepository {
-  private commands: Map<string, Command> = new Map();
-  private userCommands: Map<string, Command[]> = new Map();
+  private commands = new Map<string, Command>();
+  private userCommands = new Map<string, Command[]>();
 
   addCommand(command: Command): void {
     this.commands.set(command.id, command);
@@ -50,6 +50,16 @@ export class FakeCommandRepository implements CommandRepository {
     this.userCommands.set(userId, userList);
   }
 
+  async delete(id: string): Promise<void> {
+    const command = this.commands.get(id);
+    if (command !== undefined) {
+      this.commands.delete(id);
+      const userList = this.userCommands.get(command.userId) ?? [];
+      const filtered = userList.filter((c) => c.id !== id);
+      this.userCommands.set(command.userId, filtered);
+    }
+  }
+
   async listByUserId(userId: string): Promise<Command[]> {
     return this.userCommands.get(userId) ?? [];
   }
@@ -67,8 +77,8 @@ export class FakeCommandRepository implements CommandRepository {
 }
 
 export class FakeActionRepository implements ActionRepository {
-  private actions: Map<string, Action> = new Map();
-  private userActions: Map<string, Action[]> = new Map();
+  private actions = new Map<string, Action>();
+  private userActions = new Map<string, Action[]>();
 
   addAction(action: Action): void {
     this.actions.set(action.id, action);
@@ -99,6 +109,16 @@ export class FakeActionRepository implements ActionRepository {
     this.userActions.set(userId, userList);
   }
 
+  async delete(id: string): Promise<void> {
+    const action = this.actions.get(id);
+    if (action !== undefined) {
+      this.actions.delete(id);
+      const userList = this.userActions.get(action.userId) ?? [];
+      const filtered = userList.filter((a) => a.id !== id);
+      this.userActions.set(action.userId, filtered);
+    }
+  }
+
   async listByUserId(userId: string): Promise<Action[]> {
     return this.userActions.get(userId) ?? [];
   }
@@ -109,6 +129,7 @@ export class FakeClassifier implements Classifier {
     type: 'todo',
     confidence: 0.9,
     title: 'Test Task',
+    reasoning: 'Contains task-related keywords indicating a todo item',
   };
   private failNext = false;
 
@@ -130,7 +151,7 @@ export class FakeClassifier implements Classifier {
 }
 
 export class FakeUserServiceClient implements UserServiceClient {
-  private apiKeys: Map<string, UserApiKeys> = new Map();
+  private apiKeys = new Map<string, UserApiKeys>();
   private failNext = false;
 
   setApiKeys(userId: string, keys: UserApiKeys): void {

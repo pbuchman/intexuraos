@@ -159,7 +159,6 @@ describe('ExtractLinkPreviewsUseCase', () => {
     it('handles non-Error thrown values with fallback message', async () => {
       const throwingFetcher = {
         fetchPreview(): Promise<never> {
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return Promise.reject('string error, not Error instance');
         },
       };

@@ -49,7 +49,28 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const titlePrompt = `Generate a short, descriptive title (max 10 words) for this research prompt:\n\n${prompt}`;
+    const titlePrompt = `Generate a short, concise title for this research prompt.
+
+CRITICAL REQUIREMENTS:
+- Title must be 5-8 words maximum
+- Title must be in the SAME LANGUAGE as the prompt (Polish prompt → Polish title, English prompt → English title)
+- Return ONLY the title - no explanations, no options, no word counts
+- Do NOT start with "Here are options" or similar phrases
+
+GOOD EXAMPLES:
+- "Gran Canaria w Drugiej Połowie Stycznia" (for Polish prompt about Gran Canaria)
+- "Machine Learning in Healthcare Applications" (for English prompt)
+- "Paris Budget Travel Guide" (for English prompt)
+
+BAD EXAMPLES (DO NOT DO THIS):
+- "Here are a few options: 1. Gran Canaria January Trip: Worth it? (9 words)"
+- "Title: Planning Your Gran Canaria Vacation in January"
+- "Gran Canaria January Tourist Guide: What to See, Do, Stay. (10 words)"
+
+Research prompt:
+${prompt}
+
+Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {

@@ -329,6 +329,7 @@ export function setupTestContext(): TestContext {
 
     clearJwksCache();
     process.env['VITEST'] = 'true';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'] = testConfig.verifyToken;
     process.env['INTEXURAOS_WHATSAPP_APP_SECRET'] = testConfig.appSecret;
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
@@ -342,6 +343,7 @@ export function setupTestContext(): TestContext {
     await context.app.close();
     resetServices();
     delete process.env['VITEST'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_VERIFY_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_APP_SECRET'];
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];

@@ -113,6 +113,14 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     (serviceConfig as { commandsIngestTopic?: string }).commandsIngestTopic =
       config.commandsIngestTopic;
   }
+  if (config.webhookProcessTopic !== undefined) {
+    (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
+      config.webhookProcessTopic;
+  }
+  if (config.transcriptionTopic !== undefined) {
+    (serviceConfig as { transcriptionTopic?: string }).transcriptionTopic =
+      config.transcriptionTopic;
+  }
   initServices(serviceConfig);
 
   const app = Fastify({

@@ -204,7 +204,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             status: {
               type: 'string',
-              enum: ['pending', 'processing', 'completed', 'failed'],
+              enum: ['pending', 'processing', 'completed', 'failed', 'rejected', 'archived'],
               description: 'New action status',
             },
             payload: {

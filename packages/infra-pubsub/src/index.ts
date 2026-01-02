@@ -7,6 +7,13 @@
 export type { PublishError, SendMessageEvent, WhatsAppSendPublisherConfig } from './types.js';
 
 export {
+  BasePubSubPublisher,
+  getLogLevel,
+  type BasePubSubPublisherConfig,
+  type PublishContext,
+} from './basePublisher.js';
+
+export {
   type WhatsAppSendPublisher,
   createWhatsAppSendPublisher,
 } from './whatsappSendPublisher.js';

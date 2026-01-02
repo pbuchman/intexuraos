@@ -28,12 +28,14 @@ const phases = [
       'verify:endpoints',
       'verify:hash-routing',
       'verify:terraform-secrets',
+      'verify:pubsub',
+      'verify:workspace-deps',
     ],
   },
   {
     name: 'Type & Lint Checks',
     parallel: true,
-    commands: ['typecheck', 'lint'],
+    commands: ['typecheck', 'typecheck:tests', 'lint'],
   },
   {
     name: 'Tests',

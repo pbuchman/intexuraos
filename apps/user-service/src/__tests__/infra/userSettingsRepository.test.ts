@@ -5,8 +5,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
+import type { EncryptedValue } from '@intexuraos/common-core';
 import { FirestoreUserSettingsRepository } from '../../infra/firestore/index.js';
-import type { EncryptedValue, LlmTestResult, UserSettings } from '../../domain/settings/index.js';
+import type { LlmTestResult, UserSettings } from '../../domain/settings/index.js';
 
 /**
  * Helper to create encrypted value fixture.
@@ -92,7 +93,6 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('returns settings with llmTestResults when present', async () => {
       const testResult: LlmTestResult = {
-        success: true,
         testedAt: new Date().toISOString(),
         response: 'Hello!',
       };
@@ -112,7 +112,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.llmTestResults).toBeDefined();
-        expect(result.value.llmTestResults?.google?.success).toBe(true);
+        expect(result.value.llmTestResults?.google?.response).toBe('Hello!');
       }
     });
 
@@ -253,7 +253,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('deletes associated test result when deleting key', async () => {
       await repo.updateLlmApiKey('user-123', 'google', createEncryptedValue('key'));
       await repo.updateLlmTestResult('user-123', 'google', {
-        success: true,
+        response: 'Test passed',
         testedAt: new Date().toISOString(),
       });
 
@@ -285,7 +285,6 @@ describe('FirestoreUserSettingsRepository', () => {
   describe('updateLlmTestResult', () => {
     it('creates new settings document if user does not exist', async () => {
       const testResult: LlmTestResult = {
-        success: true,
         testedAt: new Date().toISOString(),
         response: 'Test response',
       };
@@ -298,7 +297,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmTestResults?.google?.success).toBe(true);
+        expect(stored.value.llmTestResults?.google?.response).toBe('Test response');
       }
     });
 
@@ -310,9 +309,8 @@ describe('FirestoreUserSettingsRepository', () => {
       );
 
       const testResult: LlmTestResult = {
-        success: false,
         testedAt: new Date().toISOString(),
-        errorMessage: 'Invalid key',
+        response: 'OpenAI response',
       };
 
       const result = await repo.updateLlmTestResult('user-123', 'openai', testResult);
@@ -322,8 +320,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmTestResults?.openai?.success).toBe(false);
-        expect(stored.value.llmTestResults?.openai?.errorMessage).toBe('Invalid key');
+        expect(stored.value.llmTestResults?.openai?.response).toBe('OpenAI response');
         expect(stored.value.notifications.filters[0]?.name).toBe('filter');
       }
     });
@@ -332,7 +329,7 @@ describe('FirestoreUserSettingsRepository', () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
       const result = await repo.updateLlmTestResult('user-123', 'google', {
-        success: true,
+        response: 'Test response',
         testedAt: new Date().toISOString(),
       });
 

@@ -42,7 +42,10 @@ describe('GcpPubSubPublisher', () => {
 
   beforeEach(() => {
     mockPublishMessage.mockReset();
-    publisher = new GcpPubSubPublisher('test-project', 'media-cleanup-topic');
+    publisher = new GcpPubSubPublisher({
+      projectId: 'test-project',
+      mediaCleanupTopic: 'media-cleanup-topic',
+    });
   });
 
   describe('publishMediaCleanup', () => {
@@ -98,11 +101,11 @@ describe('GcpPubSubPublisher', () => {
     });
 
     it('publishes event when topic is configured', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher(
-        'test-project',
-        'media-cleanup-topic',
-        'commands-ingest-topic'
-      );
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
+      });
       mockPublishMessage.mockResolvedValue('message-id-456');
 
       const result = await publisherWithTopic.publishCommandIngest({
@@ -121,11 +124,11 @@ describe('GcpPubSubPublisher', () => {
     });
 
     it('returns error when publish fails', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher(
-        'test-project',
-        'media-cleanup-topic',
-        'commands-ingest-topic'
-      );
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        commandsIngestTopic: 'commands-ingest-topic',
+      });
       mockPublishMessage.mockRejectedValue(new Error('Topic unavailable'));
 
       const result = await publisherWithTopic.publishCommandIngest({
@@ -141,6 +144,192 @@ describe('GcpPubSubPublisher', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Topic unavailable');
+      }
+    });
+  });
+
+  describe('publishWebhookProcess', () => {
+    it('skips publish when topic is not configured', async () => {
+      const result = await publisher.publishWebhookProcess({
+        type: 'whatsapp.webhook.process',
+        eventId: 'event-123',
+        payload: '{}',
+        phoneNumberId: 'phone-456',
+        receivedAt: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
+    it('publishes event when topic is configured', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+      });
+      mockPublishMessage.mockResolvedValue('message-id-789');
+
+      const result = await publisherWithTopic.publishWebhookProcess({
+        type: 'whatsapp.webhook.process',
+        eventId: 'event-123',
+        payload: '{"test": true}',
+        phoneNumberId: 'phone-456',
+        receivedAt: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledWith({
+        data: expect.any(Buffer) as Buffer,
+      });
+    });
+
+    it('returns error when publish fails', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+      });
+      mockPublishMessage.mockRejectedValue(new Error('Connection failed'));
+
+      const result = await publisherWithTopic.publishWebhookProcess({
+        type: 'whatsapp.webhook.process',
+        eventId: 'event-fail',
+        payload: '{}',
+        phoneNumberId: 'phone-456',
+        receivedAt: new Date().toISOString(),
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Connection failed');
+      }
+    });
+  });
+
+  describe('publishTranscribeAudio', () => {
+    it('skips publish when topic is not configured', async () => {
+      const result = await publisher.publishTranscribeAudio({
+        type: 'whatsapp.audio.transcribe',
+        messageId: 'msg-123',
+        userId: 'user-456',
+        gcsPath: 'path/to/audio.ogg',
+        mimeType: 'audio/ogg',
+        userPhoneNumber: '+1234567890',
+        originalWaMessageId: 'wamid.abc',
+        phoneNumberId: 'phone-789',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
+    it('publishes event when topic is configured', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        transcriptionTopic: 'transcription-topic',
+      });
+      mockPublishMessage.mockResolvedValue('message-id-audio');
+
+      const result = await publisherWithTopic.publishTranscribeAudio({
+        type: 'whatsapp.audio.transcribe',
+        messageId: 'msg-123',
+        userId: 'user-456',
+        gcsPath: 'path/to/audio.ogg',
+        mimeType: 'audio/ogg',
+        userPhoneNumber: '+1234567890',
+        originalWaMessageId: 'wamid.abc',
+        phoneNumberId: 'phone-789',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledWith({
+        data: expect.any(Buffer) as Buffer,
+      });
+    });
+
+    it('returns error when publish fails', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        transcriptionTopic: 'transcription-topic',
+      });
+      mockPublishMessage.mockRejectedValue(new Error('Publish timeout'));
+
+      const result = await publisherWithTopic.publishTranscribeAudio({
+        type: 'whatsapp.audio.transcribe',
+        messageId: 'msg-fail',
+        userId: 'user-456',
+        gcsPath: 'path/to/audio.ogg',
+        mimeType: 'audio/ogg',
+        userPhoneNumber: '+1234567890',
+        originalWaMessageId: 'wamid.xyz',
+        phoneNumberId: 'phone-789',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Publish timeout');
+      }
+    });
+  });
+
+  describe('publishExtractLinkPreviews', () => {
+    it('skips publish when topic is not configured', async () => {
+      const result = await publisher.publishExtractLinkPreviews({
+        type: 'whatsapp.linkpreview.extract',
+        messageId: 'msg-123',
+        userId: 'user-456',
+        text: 'Check out https://example.com',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
+    it('publishes event when topic is configured', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+      });
+      mockPublishMessage.mockResolvedValue('message-id-link');
+
+      const result = await publisherWithTopic.publishExtractLinkPreviews({
+        type: 'whatsapp.linkpreview.extract',
+        messageId: 'msg-123',
+        userId: 'user-456',
+        text: 'Check out https://example.com',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledWith({
+        data: expect.any(Buffer) as Buffer,
+      });
+    });
+
+    it('returns error when publish fails', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+      });
+      mockPublishMessage.mockRejectedValue(new Error('Network error'));
+
+      const result = await publisherWithTopic.publishExtractLinkPreviews({
+        type: 'whatsapp.linkpreview.extract',
+        messageId: 'msg-fail',
+        userId: 'user-456',
+        text: 'https://example.com/fail',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Network error');
       }
     });
   });

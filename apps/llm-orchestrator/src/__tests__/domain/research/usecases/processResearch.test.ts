@@ -70,13 +70,14 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
   return {
     id: 'research-1',
     userId: 'user-1',
+    title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'pending',
     selectedLlms: ['google', 'openai'],
     synthesisLlm: 'google',
     llmResults: [
-      { provider: 'google', status: 'pending' },
-      { provider: 'openai', status: 'pending' },
+      { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+      { provider: 'openai', model: 'o3-deep-research', status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -293,8 +294,13 @@ describe('processResearch', () => {
   it('includes external reports in synthesis', async () => {
     const research = createTestResearch({
       externalReports: [
-        { content: 'External report 1', model: 'Custom Model' },
-        { content: 'External report 2' },
+        {
+          id: 'ext-1',
+          content: 'External report 1',
+          model: 'Custom Model',
+          addedAt: '2024-01-01T00:00:00Z',
+        },
+        { id: 'ext-2', content: 'External report 2', addedAt: '2024-01-01T00:00:00Z' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

@@ -4,7 +4,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
 import {
   deleteMessage,
   findById,
@@ -41,7 +40,7 @@ describe('messageRepository', () => {
 
   beforeEach(() => {
     fakeFirestore = createFakeFirestore();
-    setFirestore(fakeFirestore as unknown as Firestore);
+    setFirestore(fakeFirestore as unknown as Parameters<typeof setFirestore>[0]);
   });
 
   afterEach(() => {

@@ -28,6 +28,10 @@ describe('notion-service domain use-cases', () => {
     it('should successfully connect when token is valid', async () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
+        getPageWithPreview: () =>
+          Promise.resolve(
+            ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+          ),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -54,6 +58,10 @@ describe('notion-service domain use-cases', () => {
     it('should return INVALID_TOKEN error when token validation returns false', async () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(false)),
+        getPageWithPreview: () =>
+          Promise.resolve(
+            ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+          ),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -80,6 +88,10 @@ describe('notion-service domain use-cases', () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> =>
           Promise.resolve(err(notionError)),
+        getPageWithPreview: () =>
+          Promise.resolve(
+            ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+          ),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -104,6 +116,10 @@ describe('notion-service domain use-cases', () => {
     it('should return DOWNSTREAM_ERROR when save fails', async () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
+        getPageWithPreview: () =>
+          Promise.resolve(
+            ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+          ),
       };
       const saveError: NotionError = { code: 'INTERNAL_ERROR', message: 'Save failed' };
       const connectionRepository: ConnectionRepository = {
@@ -131,6 +147,10 @@ describe('notion-service domain use-cases', () => {
       const notionApi: NotionApi = {
         validateToken: (): Promise<Result<boolean, NotionError>> =>
           Promise.resolve(err(notionError)),
+        getPageWithPreview: () =>
+          Promise.resolve(
+            ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+          ),
       };
       const connectionRepository: ConnectionRepository = {
         saveConnection: (): Promise<Result<NotionConnectionPublic, NotionError>> =>
@@ -273,6 +293,10 @@ describe('notion-service domain use-cases', () => {
 
     const mockApi: NotionApi = {
       validateToken: (): Promise<Result<boolean, NotionError>> => Promise.resolve(ok(true)),
+      getPageWithPreview: () =>
+        Promise.resolve(
+          ok({ page: { id: 'p1', title: 'T', url: 'https://notion.so/p1' }, blocks: [] })
+        ),
     };
 
     it('createConnectNotionUseCase returns working usecase', async () => {

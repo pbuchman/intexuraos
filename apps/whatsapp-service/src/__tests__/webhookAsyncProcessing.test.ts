@@ -46,11 +46,37 @@ describe('Webhook async processing', () => {
   const ctx = setupTestContext();
 
   /**
-   * Helper to wait for async processing to complete.
-   * The processWebhookAsync function is fire-and-forget, so we need to wait.
+   * Helper to trigger webhook processing via Pub/Sub endpoint.
+   * The webhook handler publishes to Pub/Sub, so we simulate the push by calling the endpoint.
    */
-  async function waitForAsyncProcessing(ms = 100): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
+  async function triggerWebhookProcessing(): Promise<void> {
+    const events = ctx.eventPublisher.getWebhookProcessEvents();
+    if (events.length === 0) {
+      return;
+    }
+    const event = events[events.length - 1];
+    if (event === undefined) {
+      return;
+    }
+
+    const pubsubPayload = {
+      message: {
+        data: Buffer.from(JSON.stringify(event)).toString('base64'),
+        messageId: `test-msg-${Date.now()}`,
+        publishTime: new Date().toISOString(),
+      },
+      subscription: 'test-subscription',
+    };
+
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/pubsub/process-webhook',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-internal-token',
+      },
+      payload: JSON.stringify(pubsubPayload),
+    });
   }
 
   describe('processWebhookAsync', () => {
@@ -71,8 +97,8 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
-      await waitForAsyncProcessing();
+      // Trigger processing via Pub/Sub endpoint
+      await triggerWebhookProcessing();
 
       // Event should be persisted with USER_UNMAPPED status (no mapping for sender)
       const events = ctx.webhookEventRepository.getAll();
@@ -104,8 +130,8 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
-      await waitForAsyncProcessing();
+      // Trigger processing via Pub/Sub endpoint
+      await triggerWebhookProcessing();
 
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
@@ -165,8 +191,8 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
-      await waitForAsyncProcessing();
+      // Trigger processing via Pub/Sub endpoint
+      await triggerWebhookProcessing();
 
       // Event should be persisted with IGNORED status (no sender)
       const events = ctx.webhookEventRepository.getAll();
@@ -198,7 +224,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing();
+      await triggerWebhookProcessing();
 
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
@@ -232,7 +258,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing including confirmation message
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Verify event was processed
       const events = ctx.webhookEventRepository.getAll();
@@ -270,7 +296,7 @@ describe('Webhook async processing', () => {
       // Should still return 200 even if confirmation message fails
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should still be processed
       const events = ctx.webhookEventRepository.getAll();
@@ -348,7 +374,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
@@ -406,7 +432,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       const messages = ctx.messageRepository.getAll();
       expect(messages.length).toBe(1);
@@ -439,7 +465,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -481,7 +507,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -520,7 +546,7 @@ describe('Webhook async processing', () => {
         payload: payloadString,
       });
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Verify confirmation message was sent via whatsappCloudApi
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
@@ -563,7 +589,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
@@ -612,7 +638,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -654,7 +680,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -693,7 +719,7 @@ describe('Webhook async processing', () => {
         payload: payloadString,
       });
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Verify confirmation message was sent via whatsappCloudApi
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
@@ -728,7 +754,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -770,7 +796,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be persisted (save happens before the error)
       const events = ctx.webhookEventRepository.getAll();
@@ -803,7 +829,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
@@ -870,7 +896,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be IGNORED because audio message has no media info
       const events = ctx.webhookEventRepository.getAll();
@@ -935,7 +961,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be IGNORED because text message has no body
       const events = ctx.webhookEventRepository.getAll();
@@ -1000,7 +1026,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be IGNORED because image message has no media info
       const events = ctx.webhookEventRepository.getAll();
@@ -1068,7 +1094,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(200);
 
       // Wait for async processing
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be IGNORED because sticker is not a supported message type
       const events = ctx.webhookEventRepository.getAll();
@@ -1152,7 +1178,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Message should be saved with metadata containing only phoneNumberId
       const messages = ctx.messageRepository.getAll();
@@ -1222,7 +1248,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       const messages = ctx.messageRepository.getAll();
       expect(messages.length).toBe(1);
@@ -1290,7 +1316,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       const messages = ctx.messageRepository.getAll();
       expect(messages.length).toBe(1);
@@ -1422,7 +1448,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Event should be IGNORED with 'unknown' in message
       const events = ctx.webhookEventRepository.getAll();
@@ -1491,7 +1517,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      await waitForAsyncProcessing(200);
+      await triggerWebhookProcessing();
 
       // Confirmation message should be sent even without originalMessageId
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();

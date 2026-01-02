@@ -1,7 +1,7 @@
 /**
  * Tests for Zod validation error handling.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { describe, expect, it, vi } from 'vitest';
 import type { FastifyReply } from 'fastify';
 import { z, ZodError } from 'zod';

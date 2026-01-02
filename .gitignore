@@ -5,7 +5,18 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
-.idea/
+
+# IDE - exclude user-specific files but keep project configuration
+.idea/workspace.xml
+.idea/shelf/
+.idea/dataSources/
+.idea/dataSources.local.xml
+.idea/httpRequests/
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/sonarlint/
+.idea/copilot.data.migration.*.xml
 
 # Local environment files
 .env

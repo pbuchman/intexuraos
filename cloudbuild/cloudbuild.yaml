@@ -381,42 +381,42 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== research-agent =====
+  # ===== actions-agent =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-research-agent'
+    id: 'build-push-actions-agent'
     waitFor: ['detect-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"research-agent"' /workspace/affected.json 2>/dev/null; then
-          echo "=== Building research-agent ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/research-agent:latest || true
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"actions-agent"' /workspace/affected.json 2>/dev/null; then
+          echo "=== Building actions-agent ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
           docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
-            -f apps/research-agent/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:latest
+            -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
+            -f apps/actions-agent/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest
         else
-          echo "research-agent not affected, skipping."
+          echo "actions-agent not affected, skipping."
         fi
     env:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-research-agent'
-    waitFor: ['build-push-research-agent']
+    id: 'deploy-actions-agent'
+    waitFor: ['build-push-actions-agent']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"research-agent"' /workspace/affected.json 2>/dev/null; then
-          bash cloudbuild/scripts/deploy-research-agent.sh
+        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"actions-agent"' /workspace/affected.json 2>/dev/null; then
+          bash cloudbuild/scripts/deploy-actions-agent.sh
         else
-          echo "research-agent not affected, skipping deploy."
+          echo "actions-agent not affected, skipping deploy."
         fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'

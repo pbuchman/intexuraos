@@ -140,3 +140,62 @@ export const approveResearchResponseSchema = {
     },
   },
 } as const;
+
+export const saveDraftBodySchema = {
+  type: 'object',
+  required: ['prompt'],
+  properties: {
+    prompt: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 20000,
+    },
+    selectedLlms: {
+      type: 'array',
+      items: llmProviderSchema,
+      maxItems: 3,
+    },
+    synthesisLlm: llmProviderSchema,
+    externalReports: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: {
+            type: 'string',
+            maxLength: 60000,
+          },
+          model: {
+            type: 'string',
+            maxLength: 100,
+          },
+        },
+      },
+      maxItems: 5,
+      nullable: true,
+    },
+  },
+} as const;
+
+export const updateDraftBodySchema = saveDraftBodySchema;
+
+export const saveDraftResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+      },
+    },
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

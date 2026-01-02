@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { ActionsResponse, CommandsResponse } from '@/types';
+import type { Action, ActionsResponse, Command, CommandsResponse } from '@/types';
 
 export async function getCommands(
   accessToken: string,
@@ -34,4 +34,52 @@ export async function getActions(
   const path = queryString !== '' ? `/router/actions?${queryString}` : '/router/actions';
 
   return await apiRequest<ActionsResponse>(config.commandsRouterServiceUrl, path, accessToken);
+}
+
+export async function updateActionStatus(
+  accessToken: string,
+  actionId: string,
+  status: 'processing' | 'rejected'
+): Promise<Action> {
+  const response = await apiRequest<{ action: Action }>(
+    config.commandsRouterServiceUrl,
+    `/router/actions/${actionId}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { status },
+    }
+  );
+  return response.action;
+}
+
+export async function deleteAction(accessToken: string, actionId: string): Promise<void> {
+  await apiRequest<Record<string, never>>(
+    config.commandsRouterServiceUrl,
+    `/router/actions/${actionId}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
+}
+
+export async function deleteCommand(accessToken: string, commandId: string): Promise<void> {
+  await apiRequest<Record<string, never>>(
+    config.commandsRouterServiceUrl,
+    `/router/commands/${commandId}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
+}
+
+export async function archiveCommand(accessToken: string, commandId: string): Promise<Command> {
+  const response = await apiRequest<{ command: Command }>(
+    config.commandsRouterServiceUrl,
+    `/router/commands/${commandId}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { status: 'archived' },
+    }
+  );
+  return response.command;
 }

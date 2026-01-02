@@ -9,7 +9,7 @@ output "service_accounts" {
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
     llm_orchestrator             = google_service_account.llm_orchestrator.email
     commands_router              = google_service_account.commands_router.email
-    research_agent               = google_service_account.research_agent.email
+    actions_agent                = google_service_account.actions_agent.email
   }
 }
 
@@ -53,8 +53,8 @@ output "commands_router_sa" {
   value       = google_service_account.commands_router.email
 }
 
-output "research_agent_sa" {
-  description = "Research Agent service account email"
-  value       = google_service_account.research_agent.email
+output "actions_agent_sa" {
+  description = "Actions Agent service account email"
+  value       = google_service_account.actions_agent.email
 }
 

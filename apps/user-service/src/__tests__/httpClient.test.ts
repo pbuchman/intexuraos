@@ -117,7 +117,7 @@ describe('httpClient utilities', () => {
       });
 
       // Temporarily replace https.request with our mock
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       https.request = mockRequest as any;
 
       try {

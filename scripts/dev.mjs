@@ -37,7 +37,7 @@ const SERVICES = [
   { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
   { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
-  { name: 'research-agent', port: 8118, color: '\x1b[94m' },
+  { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -102,7 +102,7 @@ async function waitForEmulators() {
   const delayMs = 1000;
 
   const endpoints = [
-    { name: 'Firebase (Firestore + Pub/Sub)', url: 'http://localhost:8100' },
+    { name: 'Firestore', url: 'http://localhost:8101' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
     { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
@@ -189,7 +189,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
-  'research-agent': {
+  'actions-agent': {
     COMMANDS_ROUTER_URL: 'http://localhost:8117',
     LLM_ORCHESTRATOR_URL: process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
     USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
@@ -349,7 +349,7 @@ async function startAllServices() {
   logOrchestrator(`All ${String(SERVICES.length)} services + web app started!`);
   logOrchestrator('');
   console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
-  console.log(`  API Docs:         ${BOLD}http://localhost:8115${RESET}`);
+  console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
   console.log(`  Firebase UI:      http://localhost:8100`);
   console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
   logOrchestrator('');

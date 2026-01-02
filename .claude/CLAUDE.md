@@ -281,7 +281,7 @@ fastify.post('/internal/pubsub/my-topic', async (request, reply) => {
 
 **Why:** Cloud Run scales to zero. Pull subscriptions require persistent background processes. Messages accumulate and are never processed.
 
-**Reference Implementation:** See `apps/research-agent/src/routes/internalRoutes.ts`
+**Reference Implementation:** See `apps/actions-agent/src/routes/internalRoutes.ts`
 
 **Verification:** ESLint `no-restricted-syntax` rule fails build on pull subscription patterns.
 
@@ -716,7 +716,7 @@ export function createFakeServices(deps: {
 #### Reference Implementations
 
 - `apps/commands-router/src/domain/usecases/processCommand.ts` - Comprehensive command classification logging (13 log points)
-- `apps/research-agent/src/domain/usecases/handleResearchAction.ts` - Research action processing
+- `apps/actions-agent/src/domain/usecases/handleResearchAction.ts` - Research action processing
 
 #### Verification Checklist
 
@@ -1007,6 +1007,7 @@ validateRequiredEnv([
 | `infra-claude`    | Anthropic Claude API client             | `common-core/http` |
 | `infra-gemini`    | Google Gemini API client                | `common-core/http` |
 | `infra-gpt`       | OpenAI GPT API client                   | `common-core/http` |
+| `infra-pubsub`    | GCP Pub/Sub base publisher              | `common-core`      |
 
 ### Common Package Rules
 
@@ -1045,6 +1046,59 @@ validateRequiredEnv([
 - `@intexuraos/infra-claude`
 - `@intexuraos/infra-gemini`
 - `@intexuraos/infra-gpt`
+- `@intexuraos/infra-pubsub`
+
+---
+
+## Pub/Sub Publishers (`packages/infra-pubsub`)
+
+**All Pub/Sub publishers MUST extend `BasePubSubPublisher`.**
+
+### Creating a Publisher
+
+```ts-example
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+
+export class MyPublisher extends BasePubSubPublisher {
+  constructor(config: { projectId: string; topicName: string }) {
+    super({ projectId: config.projectId, loggerName: 'my-publisher' });
+    this.topicName = config.topicName;
+  }
+
+  async publishMyEvent(event: MyEvent): Promise<Result<void, PublishError>> {
+    return await this.publishToTopic(
+      this.topicName,
+      event,
+      { eventId: event.id },  // Context for logging
+      'my event'              // Human-readable description
+    );
+  }
+}
+```
+
+### Rules
+
+| Rule                                               | Verification            |
+| -------------------------------------------------- | ----------------------- |
+| Extend `BasePubSubPublisher`                       | `npm run verify:pubsub` |
+| Topic from env var                                 | Code review             |
+| Use `PublishError` from `@intexuraos/infra-pubsub` | ESLint                  |
+
+### Topic Configuration
+
+**❌ Wrong - hardcoded topic:**
+
+```ts-example
+const topicName = 'intexuraos-my-topic-dev';
+```
+
+**✅ Correct - from environment:**
+
+```ts-example
+const topicName = process.env['INTEXURAOS_PUBSUB_MY_TOPIC'];
+```
+
+**Full documentation:** [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
 
 ---
 
@@ -1083,6 +1137,32 @@ terraform/
 2. `tf validate`
 3. `tf plan` (review before apply)
 4. Document in commit message
+
+### Image Management Architecture
+
+**Cloud Run images are managed by Cloud Build, NOT Terraform.**
+
+The `terraform/modules/cloud-run-service/main.tf` includes:
+
+```hcl
+lifecycle {
+  ignore_changes = [template[0].containers[0].image]
+}
+```
+
+**Workflow:**
+
+1. Terraform creates/updates service config (env vars, secrets, scaling)
+2. Cloud Build pushes new images to Artifact Registry
+3. Cloud Run auto-deploys when `:latest` tag is updated
+4. Terraform ignores image changes on subsequent applies
+
+**If you see "Image not found" errors:**
+
+- For NEW services: Run `./scripts/push-missing-images.sh` before `terraform apply`
+- For EXISTING services: Run `terraform refresh` to sync state from GCP
+
+See `docs/setup/02-terraform-bootstrap.md` for detailed troubleshooting.
 
 ### Web Hosting Gotcha
 
@@ -1601,7 +1681,7 @@ After applying a pattern across services:
 
    ```bash
    grep -r "'/internal/.*/pubsub/" apps/*/src/routes --include="*.ts"
-   # Found: whatsapp-service, research-agent
+   # Found: whatsapp-service, actions-agent
    ```
 
 2. **Check current implementation**
@@ -1613,7 +1693,7 @@ After applying a pattern across services:
 
 3. **Apply fix systematically**
    - Fixed whatsapp-service (2 endpoints)
-   - Fixed research-agent (1 endpoint)
+   - Fixed actions-agent (1 endpoint)
    - Updated all tests with Pub/Sub auth coverage
 
 4. **Verify deployment**
@@ -1647,7 +1727,7 @@ When you complete an audit and apply a pattern:
 
    Applied consistent authentication pattern to all Pub/Sub push endpoints:
    - whatsapp-service (2 endpoints)
-   - research-agent (1 endpoint)
+   - actions-agent (1 endpoint)
    - commands-router (2 endpoints)
 
    All endpoints now check for `from: noreply@google.com` header to detect
@@ -1669,50 +1749,63 @@ When you complete an audit and apply a pattern:
 
 ### Test File TypeScript Configuration
 
-**Test files (`src/**tests**/**`) are EXCLUDED from TypeScript compilation (`tsc`).\*\*
+**Test files have a SEPARATE TypeScript configuration from production code.**
 
-This is intentional — tests are:
+Two tsconfig files:
 
-- Run by Vitest which uses **esbuild** for transpilation (not `tsc`)
-- Ignored by ESLint (in `eslint.config.js` ignores)
-- Not part of the production build
+- `tsconfig.json` — production code only (excludes `__tests__`)
+- `tsconfig.tests-check.json` — test files only (type-checking, no emit)
 
-**Why this matters:**
+**Key differences:**
 
-1. `npm run typecheck` does NOT compile test files
-2. `npm run build` does NOT compile test files
-3. Vitest handles test transpilation internally
+| Check                   | Production (`tsconfig.json`) | Tests (`tsconfig.tests-check.json`) |
+| ----------------------- | ---------------------------- | ----------------------------------- |
+| Command                 | `npm run typecheck`          | `npm run typecheck:tests`           |
+| Runs in CI              | ✅ Yes                       | ✅ Yes                              |
+| Affects `npm run build` | ✅ Yes                       | ❌ No                               |
+| Strictness              | Full strict mode             | Full strict mode                    |
 
-**IDE shows errors in test files (expected behavior):**
+**TypeScript errors in test files ARE REAL errors.** Fix them by:
 
+1. Running `npm run typecheck:tests` to see all errors
+2. Fixing each error (proper types, imports, mock signatures)
+3. Verifying fix with `npm run typecheck:tests` again
+
+**Common test file TypeScript issues:**
+
+```ts-example
+// ❌ Mock with wrong signature
+const mockFn = vi.fn();  // Returns unknown
+
+// ✅ Mock with explicit type
+const mockFn = vi.fn<[], string>().mockReturnValue('result');
+
+// ❌ Type assertion through incompatible type
+(createAudit as MockInstance).mockReturnValue(...);
+
+// ✅ Type assertion through unknown
+(createAudit as unknown as MockInstance).mockReturnValue(...);
+
+// ❌ Setting optional property to undefined (exactOptionalPropertyTypes)
+const obj = { optional: condition ? value : undefined };
+
+// ✅ Conditionally add optional property
+const obj: Partial<Type> = {};
+if (condition) { obj.optional = value; }
 ```
-TS2307: Cannot find module '@intexuraos/common-core' or its corresponding type declarations.
-```
 
-**This is a FALSE POSITIVE.** The error appears because:
+**DO NOT modify the main `tsconfig.json` to include test files.** This would:
 
-- Test files are in `exclude` in `tsconfig.json`
-- IDE's TypeScript Language Server cannot resolve workspace package imports
-- But Vitest resolves them correctly at runtime
+- Break `npm run build` (test deps like `nock` not in production)
+- Add test code to production bundles
+- Slow down production type-checking
 
-**DO NOT attempt to "fix" these IDE errors by:**
-
-- ❌ Removing `src/__tests__` from `exclude` in `tsconfig.json`
-- ❌ Adding test dependencies to production dependencies
-- ❌ Creating separate tsconfig for tests
-
-**If you remove `__tests__` from exclude, `npm run build` will FAIL with:**
-
-- Missing type declarations (e.g., `Cannot find module 'nock'`)
-- Implicit `any` errors in test code
-- Other strict mode violations in test files
-
-**Verification:** Tests work correctly despite IDE errors:
+**Verification:**
 
 ```bash
-npm run test                    # All tests pass
-npm run typecheck               # No errors (tests excluded)
-npm run build                   # No errors (tests excluded)
+npm run typecheck:tests         # Type-check test files (runs in CI)
+npm run typecheck               # Type-check production code
+npm run test                    # Run tests (uses esbuild, not tsc)
 ```
 
 ### Common Commands
@@ -1779,6 +1872,56 @@ Added proper redirect URL validation to prevent open redirect vulnerability.
 
 - No emojis, no markdown, no AI references
 - If branch matches `^[A-Z]+[0-9]+-(.*)`$, prefix commit with ticket ID
+
+---
+
+## Git Push Policy
+
+**ABSOLUTE RULE: NEVER push to remote without explicit user instruction.**
+
+**When user says "commit":**
+
+- Create git commit(s) locally
+- DO NOT push to remote
+- Inform user that changes are committed locally
+
+**When user says "commit and push":**
+
+- Create git commit(s) locally
+- Push to remote ONCE
+- Do not push again unless explicitly asked
+
+**When user says "push":**
+
+- Push current branch to remote
+- Only push once per instruction
+
+**Examples:**
+
+```
+User: "fix that file and commit"
+✅ Fix file, git commit
+❌ DO NOT git push
+
+User: "commit and push the changes"
+✅ Fix files, git commit, git push ONCE
+❌ DO NOT push multiple times
+
+User: "commit that, then fix X and commit again"
+✅ First commit, fix X, second commit
+❌ DO NOT push without being asked
+
+User: "now push it"
+✅ git push
+```
+
+**Key Points:**
+
+- Commits are local operations (safe, reversible)
+- Pushes are remote operations (permanent, visible to team)
+- ALWAYS ask before pushing unless explicitly instructed
+- If you make multiple commits, ask before pushing: "I've made 3 commits. Should I push them to development?"
+- Never assume that committing implies pushing
 
 ---
 

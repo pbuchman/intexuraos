@@ -26,8 +26,8 @@ describe('Logger utilities', () => {
 
   describe('logIncomingRequest', () => {
     let mockRequest: Partial<FastifyRequest>;
-    let loggedPayloads: Array<{ payload: unknown; message: string }>;
-    let debugLogs: Array<{ payload: unknown; message: string }>;
+    let loggedPayloads: { payload: unknown; message: string }[];
+    let debugLogs: { payload: unknown; message: string }[];
 
     beforeEach(() => {
       loggedPayloads = [];
@@ -75,7 +75,7 @@ describe('Logger utilities', () => {
 
       // Sensitive headers redacted
       const payload = logged?.payload as Record<string, unknown>;
-      const headers = payload.headers as Record<string, unknown>;
+      const headers = payload['headers'] as Record<string, unknown>;
       expect(headers['x-internal-auth']).toContain('...');
       expect(headers['x-internal-auth']).not.toBe('secret-token-12345');
       expect(headers['authorization']).toContain('...');
@@ -89,7 +89,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.params).toEqual({ actionId: 'act-456' });
+      expect(payload['params']).toEqual({ actionId: 'act-456' });
     });
 
     it('excludes params by default', () => {
@@ -99,7 +99,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.params).toBeUndefined();
+      expect(payload['params']).toBeUndefined();
     });
 
     it('truncates body preview to specified length', () => {
@@ -110,7 +110,7 @@ describe('Logger utilities', () => {
 
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
-      const preview = payload.bodyPreview as string;
+      const preview = payload['bodyPreview'] as string;
 
       expect(preview.length).toBe(100);
     });
@@ -131,8 +131,8 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.userId).toBe('user-123');
-      expect(payload.correlationId).toBe('corr-789');
+      expect(payload['userId']).toBe('user-123');
+      expect(payload['correlationId']).toBe('corr-789');
     });
 
     it('handles logging errors gracefully with circular reference', () => {
@@ -157,7 +157,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.headers).toEqual({});
+      expect(payload['headers']).toEqual({});
     });
 
     it('handles info logging error gracefully', () => {
@@ -193,10 +193,10 @@ describe('Logger utilities', () => {
       expect(logged?.message).toBe('Custom message');
 
       const payload = logged?.payload as Record<string, unknown>;
-      expect(payload.event).toBe('incoming_request');
-      expect(payload.params).toEqual({ actionId: 'act-456' });
-      expect(payload.extra).toBe('field');
-      expect((payload.bodyPreview as string).length).toBeLessThanOrEqual(50);
+      expect(payload['event']).toBe('incoming_request');
+      expect(payload['params']).toEqual({ actionId: 'act-456' });
+      expect(payload['extra']).toBe('field');
+      expect((payload['bodyPreview'] as string).length).toBeLessThanOrEqual(50);
     });
 
     it('redacts x-goog-iap-jwt-assertion header', () => {
@@ -208,7 +208,7 @@ describe('Logger utilities', () => {
 
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
-      const headers = payload.headers as Record<string, unknown>;
+      const headers = payload['headers'] as Record<string, unknown>;
 
       expect(headers['x-goog-iap-jwt-assertion']).toContain('...');
       expect(headers['x-goog-iap-jwt-assertion']).not.toBe('sensitive-jwt-token-value');
@@ -224,7 +224,7 @@ describe('Logger utilities', () => {
       const payload = logged?.payload as Record<string, unknown>;
 
       // undefined becomes "undefined" string when JSON.stringified
-      expect(payload.bodyPreview).toBe('undefined');
+      expect(payload['bodyPreview']).toBe('undefined');
     });
 
     it('handles null body gracefully', () => {
@@ -236,7 +236,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.bodyPreview).toBe('null');
+      expect(payload['bodyPreview']).toBe('null');
     });
 
     it('handles empty object body', () => {
@@ -248,7 +248,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.bodyPreview).toBe('{}');
+      expect(payload['bodyPreview']).toBe('{}');
     });
 
     it('respects bodyPreviewLength of 0', () => {
@@ -257,7 +257,7 @@ describe('Logger utilities', () => {
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
 
-      expect(payload.bodyPreview).toBe('');
+      expect(payload['bodyPreview']).toBe('');
     });
 
     it('handles very long headers without error', () => {
@@ -271,7 +271,7 @@ describe('Logger utilities', () => {
       expect(loggedPayloads).toHaveLength(1);
       const logged = loggedPayloads[0];
       const payload = logged?.payload as Record<string, unknown>;
-      const headers = payload.headers as Record<string, unknown>;
+      const headers = payload['headers'] as Record<string, unknown>;
 
       // Header should be included (not redacted since it's not sensitive)
       expect(headers['x-custom-header']).toBe(longValue);

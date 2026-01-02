@@ -269,7 +269,7 @@ describe('Notion utilities', () => {
       expect(Client).toHaveBeenCalledWith(
         expect.objectContaining({
           auth: 'test-token',
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           fetch: expect.any(Function),
         })
       );
@@ -488,7 +488,6 @@ describe('Notion utilities', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         'Notion API error response',
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           body: expect.stringContaining('[TRUNCATED]'),
         })
       );
@@ -702,7 +701,7 @@ describe('Notion utilities', () => {
       expect(Client).toHaveBeenCalledWith(
         expect.objectContaining({
           auth: 'token',
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           fetch: expect.any(Function),
         })
       );
@@ -908,7 +907,7 @@ describe('Notion utilities', () => {
       expect(Client).toHaveBeenCalledWith(
         expect.objectContaining({
           auth: 'token',
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
           fetch: expect.any(Function),
         })
       );

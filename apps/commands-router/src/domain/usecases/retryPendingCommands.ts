@@ -133,6 +133,7 @@ export function createRetryPendingCommandsUseCase(deps: {
           const commandClassification: CommandClassification = {
             type: classification.type,
             confidence: classification.confidence,
+            reasoning: classification.reasoning,
             classifiedAt: new Date().toISOString(),
           };
           command.classification = commandClassification;

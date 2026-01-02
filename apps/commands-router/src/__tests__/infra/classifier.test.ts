@@ -6,7 +6,7 @@ import { extractSelectedLlms } from '../../infra/gemini/classifier.js';
 const mockGenerate = vi.fn();
 
 vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: () => ({
+  createGeminiClient: (): { generate: typeof mockGenerate } => ({
     generate: mockGenerate,
   }),
 }));

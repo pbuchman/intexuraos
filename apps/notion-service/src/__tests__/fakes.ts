@@ -9,17 +9,10 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-
-export interface NotionConnectionPublic {
-  connected: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface NotionError {
-  code: string;
-  message: string;
-}
+import type {
+  NotionConnectionPublic,
+  NotionError,
+} from '../domain/integration/ports/ConnectionRepository.js';
 
 /**
  * Fake Notion connection repository for testing.
