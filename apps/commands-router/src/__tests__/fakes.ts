@@ -4,7 +4,6 @@ import pino from 'pino';
 import type { Command, CommandStatus } from '../domain/models/command.js';
 import type { Action } from '../domain/models/action.js';
 import type { CommandRepository } from '../domain/ports/commandRepository.js';
-import type { ActionRepository } from '../domain/ports/actionRepository.js';
 import type {
   Classifier,
   ClassificationResult,
@@ -13,6 +12,7 @@ import type {
 import type { EventPublisherPort, PublishError } from '../domain/ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
 import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
+import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
 import type { Services } from '../services.js';
@@ -76,51 +76,39 @@ export class FakeCommandRepository implements CommandRepository {
   }
 }
 
-export class FakeActionRepository implements ActionRepository {
-  private actions = new Map<string, Action>();
-  private userActions = new Map<string, Action[]>();
+export class FakeActionsAgentClient implements ActionsAgentClient {
+  private createdActions: Action[] = [];
+  private failNext = false;
 
-  addAction(action: Action): void {
-    this.actions.set(action.id, action);
-    const userList = this.userActions.get(action.userId) ?? [];
-    userList.push(action);
-    this.userActions.set(action.userId, userList);
-  }
-
-  async getById(id: string): Promise<Action | null> {
-    return this.actions.get(id) ?? null;
-  }
-
-  async save(action: Action): Promise<void> {
-    this.actions.set(action.id, action);
-    const userList = this.userActions.get(action.userId) ?? [];
-    userList.push(action);
-    this.userActions.set(action.userId, userList);
-  }
-
-  async update(action: Action): Promise<void> {
-    this.actions.set(action.id, action);
-    const userId = action.userId;
-    const userList = this.userActions.get(userId) ?? [];
-    const index = userList.findIndex((a) => a.id === action.id);
-    if (index >= 0) {
-      userList[index] = action;
+  async createAction(params: CreateActionParams): Promise<Result<Action>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(new Error('Actions-agent client error'));
     }
-    this.userActions.set(userId, userList);
+
+    const action: Action = {
+      id: `action-${Date.now()}`,
+      userId: params.userId,
+      commandId: params.commandId,
+      type: params.type,
+      title: params.title,
+      status: 'pending',
+      confidence: params.confidence,
+      payload: params.payload ?? {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.createdActions.push(action);
+    return ok(action);
   }
 
-  async delete(id: string): Promise<void> {
-    const action = this.actions.get(id);
-    if (action !== undefined) {
-      this.actions.delete(id);
-      const userList = this.userActions.get(action.userId) ?? [];
-      const filtered = userList.filter((a) => a.id !== id);
-      this.userActions.set(action.userId, filtered);
-    }
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
   }
 
-  async listByUserId(userId: string): Promise<Action[]> {
-    return this.userActions.get(userId) ?? [];
+  getCreatedActions(): Action[] {
+    return [...this.createdActions];
   }
 }
 
@@ -195,7 +183,7 @@ export class FakeEventPublisher implements EventPublisherPort {
 
 export function createFakeServices(deps: {
   commandRepository: FakeCommandRepository;
-  actionRepository: FakeActionRepository;
+  actionsAgentClient: FakeActionsAgentClient;
   classifier: FakeClassifier;
   userServiceClient: FakeUserServiceClient;
   eventPublisher: FakeEventPublisher;
@@ -205,13 +193,13 @@ export function createFakeServices(deps: {
 
   return {
     commandRepository: deps.commandRepository,
-    actionRepository: deps.actionRepository,
+    actionsAgentClient: deps.actionsAgentClient,
     classifierFactory,
     userServiceClient: deps.userServiceClient,
     eventPublisher: deps.eventPublisher,
     processCommandUseCase: createProcessCommandUseCase({
       commandRepository: deps.commandRepository,
-      actionRepository: deps.actionRepository,
+      actionsAgentClient: deps.actionsAgentClient,
       classifierFactory,
       userServiceClient: deps.userServiceClient,
       eventPublisher: deps.eventPublisher,
@@ -219,7 +207,7 @@ export function createFakeServices(deps: {
     }),
     retryPendingCommandsUseCase: createRetryPendingCommandsUseCase({
       commandRepository: deps.commandRepository,
-      actionRepository: deps.actionRepository,
+      actionsAgentClient: deps.actionsAgentClient,
       classifierFactory,
       userServiceClient: deps.userServiceClient,
       eventPublisher: deps.eventPublisher,

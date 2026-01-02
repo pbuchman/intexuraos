@@ -170,7 +170,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { actionRepository } = getServices();
       const action = await actionRepository.getById(actionId);
 
-      if (action === null || action.userId !== user.userId) {
+      if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
@@ -241,7 +241,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { actionRepository } = getServices();
       const action = await actionRepository.getById(actionId);
 
-      if (action === null || action.userId !== user.userId) {
+      if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
@@ -331,7 +331,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { actionRepository, executeResearchActionUseCase } = getServices();
       const action = await actionRepository.getById(actionId);
 
-      if (action === null || action.userId !== user.userId) {
+      if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 

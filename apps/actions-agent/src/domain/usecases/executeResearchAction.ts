@@ -23,12 +23,12 @@ export interface ExecuteResearchActionResult {
 
 export type ExecuteResearchActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteResearchActionResult, Error>>;
+) => Promise<Result<ExecuteResearchActionResult>>;
 
 export function createExecuteResearchActionUseCase(
   deps: ExecuteResearchActionDeps
 ): ExecuteResearchActionUseCase {
-  return async (actionId: string): Promise<Result<ExecuteResearchActionResult, Error>> => {
+  return async (actionId: string): Promise<Result<ExecuteResearchActionResult>> => {
     const {
       actionRepository,
       researchServiceClient,
@@ -43,7 +43,7 @@ export function createExecuteResearchActionUseCase(
     }
 
     if (action.status === 'completed') {
-      const resourceUrl = (action.payload['resource_url'] as string | undefined) ?? undefined;
+      const resourceUrl = action.payload['resource_url'] as string;
       return ok({
         status: 'completed',
         resource_url: resourceUrl,
@@ -61,7 +61,7 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    const selectedLlms: LlmProvider[] = ['claude'];
+    const selectedLlms: LlmProvider[] = ['anthropic'];
     const result = await researchServiceClient.createDraft({
       userId: action.userId,
       title: action.title,

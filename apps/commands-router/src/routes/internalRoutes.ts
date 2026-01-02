@@ -2,7 +2,6 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { CommandSourceType } from '../domain/models/command.js';
-import type { ActionStatus } from '../domain/models/action.js';
 
 interface PubSubMessage {
   message: {
@@ -181,128 +180,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         commandId: result.command.id,
         isNew: result.isNew,
       };
-    }
-  );
-
-  fastify.patch(
-    '/internal/actions/:actionId',
-    {
-      schema: {
-        operationId: 'updateActionStatus',
-        summary: 'Update action status',
-        description: 'Internal endpoint for updating action status from workers.',
-        tags: ['internal'],
-        params: {
-          type: 'object',
-          properties: {
-            actionId: { type: 'string', description: 'Action ID to update' },
-          },
-          required: ['actionId'],
-        },
-        body: {
-          type: 'object',
-          properties: {
-            status: {
-              type: 'string',
-              enum: ['pending', 'processing', 'completed', 'failed', 'rejected', 'archived'],
-              description: 'New action status',
-            },
-            payload: {
-              type: 'object',
-              additionalProperties: true,
-              description: 'Additional payload data to merge',
-            },
-          },
-          required: ['status'],
-        },
-        response: {
-          200: {
-            description: 'Action updated successfully',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-            },
-            required: ['success'],
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-          404: {
-            description: 'Action not found',
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      // Log incoming request BEFORE auth check
-      logIncomingRequest(request, {
-        message: 'Received request to /internal/actions/:actionId',
-        bodyPreviewLength: 200,
-        includeParams: true,
-      });
-
-      // Validate auth (Pub/Sub uses OIDC, direct calls use x-internal-auth)
-      // Detection: Pub/Sub requests have from: noreply@google.com header
-      const fromHeader = request.headers.from;
-      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
-
-      if (isPubSubPush) {
-        request.log.info(
-          { from: fromHeader },
-          'Authenticated Pub/Sub push request for actions endpoint'
-        );
-      } else {
-        const authResult = validateInternalAuth(request);
-        if (!authResult.valid) {
-          request.log.warn(
-            { reason: authResult.reason },
-            'Internal auth failed for actions endpoint'
-          );
-          reply.status(401);
-          return { error: 'Unauthorized' };
-        }
-      }
-
-      const { actionId } = request.params as { actionId: string };
-      const { status, payload } = request.body as {
-        status: ActionStatus;
-        payload?: Record<string, unknown>;
-      };
-
-      const { actionRepository } = getServices();
-
-      const action = await actionRepository.getById(actionId);
-      if (action === null) {
-        request.log.warn(
-          {
-            actionId,
-            timestamp: new Date().toISOString(),
-          },
-          'Action not found in Firestore'
-        );
-        reply.status(404);
-        return { error: 'Action not found' };
-      }
-
-      action.status = status;
-      action.updatedAt = new Date().toISOString();
-      if (payload !== undefined) {
-        action.payload = { ...action.payload, ...payload };
-      }
-
-      await actionRepository.update(action);
-
-      request.log.info({ actionId, status }, 'Action status updated');
-
-      return { success: true };
     }
   );
 
