@@ -865,6 +865,7 @@ module "llm_orchestrator" {
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_PUBSUB_LLM_CALL_TOPIC         = "intexuraos-llm-call-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   }
 
   depends_on = [
@@ -936,7 +937,6 @@ module "actions_agent" {
 
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID                = var.project_id
-    INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL   = module.commands_router.service_url
     INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
     INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
     INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
@@ -948,7 +948,6 @@ module "actions_agent" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
-    module.commands_router,
     module.llm_orchestrator,
     module.user_service,
   ]

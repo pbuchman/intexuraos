@@ -95,16 +95,20 @@ export function resetServices(): void {
 function createNotificationSender(): NotificationSender {
   const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'];
+  const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
 
   if (
     gcpProjectId !== undefined &&
     gcpProjectId !== '' &&
     whatsappSendTopic !== undefined &&
-    whatsappSendTopic !== ''
+    whatsappSendTopic !== '' &&
+    webAppUrl !== undefined &&
+    webAppUrl !== ''
   ) {
     return new WhatsAppNotificationSender({
       projectId: gcpProjectId,
       topicName: whatsappSendTopic,
+      webAppUrl,
     });
   }
 

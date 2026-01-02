@@ -20,6 +20,7 @@ describe('WhatsAppNotificationSender', () => {
   const mockConfig = {
     projectId: 'test-project',
     topicName: 'test-topic',
+    webAppUrl: 'https://app.example.com',
   };
 
   beforeEach(() => {
@@ -76,6 +77,19 @@ describe('WhatsAppNotificationSender', () => {
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('Research Complete!'),
+        })
+      );
+    });
+
+    it('includes direct link to research in message', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = new WhatsAppNotificationSender(mockConfig);
+      await sender.sendResearchComplete('user-123', 'research-456', 'Test');
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('https://app.example.com/#/research/research-456'),
         })
       );
     });

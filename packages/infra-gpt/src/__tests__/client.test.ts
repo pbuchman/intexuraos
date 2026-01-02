@@ -306,114 +306,34 @@ describe('createGptClient', () => {
     });
   });
 
-  describe('synthesize', () => {
-    it('returns synthesized content', async () => {
+  describe('evaluate', () => {
+    it('returns evaluation result', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'Synthesized research report.' } }],
+        choices: [{ message: { content: 'Evaluation response.' } }],
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Original prompt', [
-        { model: 'Claude', content: 'Claude findings' },
-        { model: 'Gemini', content: 'Gemini findings' },
-      ]);
+      const result = await client.evaluate('Rate this content');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Synthesized research report.');
+        expect(result.value).toBe('Evaluation response.');
       }
-    });
-
-    it('includes external reports in synthesis', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'Combined synthesis.' } }],
-      });
-
-      const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'Claude', content: 'Claude findings' }],
-        [{ content: 'External findings', model: 'Custom Model' }]
-      );
-
-      expect(result.ok).toBe(true);
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('External LLM Reports'),
-            }),
-          ]),
+          model: GPT_DEFAULTS.evaluateModel,
+          max_completion_tokens: 500,
         })
       );
     });
 
-    it('handles external reports without model name', async () => {
+    it('handles empty choices', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'Synthesis result.' } }],
+        choices: [],
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'Claude', content: 'Claude findings' }],
-        [{ content: 'Anonymous external report' }]
-      );
-
-      expect(result.ok).toBe(true);
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('unknown source'),
-            }),
-          ]),
-        })
-      );
-    });
-
-    it('includes conflict resolution guidelines with external reports', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'Result' } }],
-      });
-
-      const client = createGptClient({ apiKey: 'test-key' });
-      await client.synthesize(
-        'Prompt',
-        [{ model: 'Claude', content: 'Content' }],
-        [{ content: 'External' }]
-      );
-
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('Conflict Resolution Guidelines'),
-            }),
-          ]),
-        })
-      );
-    });
-
-    it('returns error on API failure', async () => {
-      mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(500, 'Server error'));
-
-      const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-
-    it('handles null content in response', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: null } }],
-      });
-
-      const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -421,74 +341,25 @@ describe('createGptClient', () => {
       }
     });
 
-    it('handles empty choices array', async () => {
+    it('handles null content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
-        choices: [],
+        choices: [{ message: { content: null } }],
       });
 
       const client = createGptClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toBe('');
       }
     });
-  });
 
-  describe('validateKey', () => {
-    it('returns true when key is valid', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: "Hi! I'm GPT." } }],
-      });
-
-      const client = createGptClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe(true);
-      }
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: GPT_DEFAULTS.validationModel,
-        })
-      );
-    });
-
-    it('returns true even with null content', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: null } }],
-      });
-
-      const client = createGptClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe(true);
-      }
-    });
-
-    it('returns true even with empty choices', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [],
-      });
-
-      const client = createGptClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe(true);
-      }
-    });
-
-    it('returns error when key is invalid', async () => {
+    it('returns error on failure', async () => {
       mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
 
-      const client = createGptClient({ apiKey: 'invalid-key' });
-      const result = await client.validateKey();
+      const client = createGptClient({ apiKey: 'test-key' });
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -535,20 +406,20 @@ describe('createGptClient', () => {
       );
     });
 
-    it('uses custom validationModel when provided', async () => {
+    it('uses custom evaluateModel when provided', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Response' } }],
       });
 
       const client = createGptClient({
         apiKey: 'test-key',
-        validationModel: 'gpt-custom-validation',
+        evaluateModel: 'gpt-custom-evaluate',
       });
-      await client.validateKey();
+      await client.evaluate('Test prompt');
 
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-custom-validation',
+          model: 'gpt-custom-evaluate',
         })
       );
     });

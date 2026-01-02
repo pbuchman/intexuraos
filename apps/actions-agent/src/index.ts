@@ -7,7 +7,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL',
   'INTEXURAOS_LLM_ORCHESTRATOR_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
@@ -20,7 +19,6 @@ validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   initServices({
-    commandsRouterUrl: process.env['INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'] as string,
     llmOrchestratorUrl: process.env['INTEXURAOS_LLM_ORCHESTRATOR_URL'] as string,
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,

@@ -5,13 +5,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResearch = vi.fn();
-const mockSynthesize = vi.fn();
 const mockGenerate = vi.fn();
 
 vi.mock('@intexuraos/infra-gpt', () => ({
   createGptClient: vi.fn().mockReturnValue({
     research: mockResearch,
-    synthesize: mockSynthesize,
     generate: mockGenerate,
   }),
 }));
@@ -72,8 +70,8 @@ describe('GptAdapter', () => {
   });
 
   describe('synthesize', () => {
-    it('delegates to GPT client', async () => {
-      mockSynthesize.mockResolvedValue({
+    it('builds synthesis prompt and calls generate', async () => {
+      mockGenerate.mockResolvedValue({
         ok: true,
         value: 'Synthesized result',
       });
@@ -86,10 +84,12 @@ describe('GptAdapter', () => {
       if (result.ok) {
         expect(result.value).toBe('Synthesized result');
       }
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Claude result'));
     });
 
-    it('passes input contexts when provided', async () => {
-      mockSynthesize.mockResolvedValue({ ok: true, value: 'Result' });
+    it('includes external reports in synthesis prompt', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
 
       await adapter.synthesize(
         'Prompt',
@@ -97,15 +97,11 @@ describe('GptAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockSynthesize).toHaveBeenCalledWith(
-        'Prompt',
-        [{ model: 'claude', content: 'Claude' }],
-        [{ content: 'External context' }]
-      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
     });
 
     it('maps errors correctly', async () => {
-      mockSynthesize.mockResolvedValue({
+      mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'TIMEOUT', message: 'Request timed out' },
       });

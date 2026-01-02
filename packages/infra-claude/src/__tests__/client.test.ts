@@ -247,133 +247,46 @@ describe('createClaudeClient', () => {
     });
   });
 
-  describe('synthesize', () => {
-    it('returns synthesized content', async () => {
+  describe('evaluate', () => {
+    it('returns evaluation result', async () => {
       mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Synthesized research report.' }],
+        content: [{ type: 'text', text: 'Evaluation response.' }],
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Original prompt', [
-        { model: 'GPT-4', content: 'GPT findings' },
-        { model: 'Gemini', content: 'Gemini findings' },
-      ]);
+      const result = await client.evaluate('Rate this content');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Synthesized research report.');
+        expect(result.value).toBe('Evaluation response.');
       }
-    });
-
-    it('includes external reports in synthesis', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Combined synthesis.' }],
-      });
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'GPT-4', content: 'GPT findings' }],
-        [{ content: 'External findings', model: 'Custom Model' }]
-      );
-
-      expect(result.ok).toBe(true);
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('External LLM Reports'),
-            }),
-          ]),
+          model: CLAUDE_DEFAULTS.evaluateModel,
+          max_tokens: 500,
         })
       );
     });
 
-    it('handles external reports without model name', async () => {
+    it('handles empty content array', async () => {
       mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Synthesis result.' }],
+        content: [],
       });
 
       const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.synthesize(
-        'Original prompt',
-        [{ model: 'GPT-4', content: 'GPT findings' }],
-        [{ content: 'Anonymous external report' }]
-      );
-
-      expect(result.ok).toBe(true);
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('unknown source'),
-            }),
-          ]),
-        })
-      );
-    });
-
-    it('includes conflict resolution guidelines with external reports', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Result' }],
-      });
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      await client.synthesize(
-        'Prompt',
-        [{ model: 'GPT', content: 'Content' }],
-        [{ content: 'External' }]
-      );
-
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              content: expect.stringContaining('Conflict Resolution Guidelines'),
-            }),
-          ]),
-        })
-      );
-    });
-
-    it('returns error on API failure', async () => {
-      mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Server error'));
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.synthesize('Prompt', [{ model: 'Test', content: 'Content' }]);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-  });
-
-  describe('validateKey', () => {
-    it('returns true when key is valid', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: "Hi! I'm Claude." }],
-      });
-
-      const client = createClaudeClient({ apiKey: 'valid-key' });
-      const result = await client.validateKey();
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe(true);
+        expect(result.value).toBe('');
       }
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: CLAUDE_DEFAULTS.validationModel,
-        })
-      );
     });
 
-    it('returns error when key is invalid', async () => {
+    it('returns error on failure', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
 
-      const client = createClaudeClient({ apiKey: 'invalid-key' });
-      const result = await client.validateKey();
+      const client = createClaudeClient({ apiKey: 'test-key' });
+      const result = await client.evaluate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -419,20 +332,20 @@ describe('createClaudeClient', () => {
       );
     });
 
-    it('uses custom validationModel when provided', async () => {
+    it('uses custom evaluateModel when provided', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Response' }],
       });
 
       const client = createClaudeClient({
         apiKey: 'test-key',
-        validationModel: 'claude-custom-validation',
+        evaluateModel: 'claude-custom-evaluate',
       });
-      await client.validateKey();
+      await client.evaluate('Test prompt');
 
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-custom-validation',
+          model: 'claude-custom-evaluate',
         })
       );
     });

@@ -6,13 +6,13 @@ export type {
 
 export interface GeminiConfig {
   apiKey: string;
-  defaultModel?: string;
-  validationModel?: string;
   researchModel?: string;
+  defaultModel?: string;
+  evaluateModel?: string;
 }
 
 export const GEMINI_DEFAULTS = {
-  defaultModel: 'gemini-2.5-flash',
-  validationModel: 'gemini-2.5-flash-lite',
   researchModel: 'gemini-2.5-pro',
+  defaultModel: 'gemini-2.5-flash',
+  evaluateModel: 'gemini-2.5-flash-lite',
 } as const;

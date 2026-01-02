@@ -3,7 +3,7 @@
  */
 
 import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
-import type { Result } from '@intexuraos/common-core';
+import { buildSynthesisPrompt, type Result } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -40,7 +40,8 @@ export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     reports: { model: string; content: string }[],
     inputContexts?: { content: string }[]
   ): Promise<Result<string, LlmError>> {
-    const result = await this.client.synthesize(originalPrompt, reports, inputContexts);
+    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+    const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
       return {

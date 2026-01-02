@@ -36,7 +36,7 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(ok(undefined)),
+          evaluate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -44,12 +44,12 @@ describe('LlmValidatorImpl', () => {
 
         expect(result.ok).toBe(true);
         expect(createGeminiClient).toHaveBeenCalledWith({ apiKey: 'test-api-key' });
-        expect(mockClient.validateKey).toHaveBeenCalled();
+        expect(mockClient.evaluate).toHaveBeenCalled();
       });
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -64,7 +64,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          validateKey: vi
+          evaluate: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR', message: 'Connection failed' })),
         };
@@ -83,7 +83,7 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(ok(undefined)),
+          evaluate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -95,7 +95,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -110,7 +110,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -127,7 +127,7 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(ok(undefined)),
+          evaluate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -139,7 +139,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -154,7 +154,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          validateKey: vi
+          evaluate: vi
             .fn()
             .mockResolvedValue(err({ code: 'SERVICE_ERROR', message: 'Unavailable' })),
         };
@@ -177,7 +177,7 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
+          evaluate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -187,12 +187,12 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from Gemini!');
         }
-        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.evaluate).toHaveBeenCalledWith(testPrompt);
       });
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -209,7 +209,7 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(ok({ content: 'Hello from GPT!' })),
+          evaluate: vi.fn().mockResolvedValue(ok('Hello from GPT!')),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -223,7 +223,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Rate limited' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Rate limited' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -240,7 +240,7 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(ok({ content: 'Hello from Claude!' })),
+          evaluate: vi.fn().mockResolvedValue(ok('Hello from Claude!')),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -254,7 +254,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          research: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service down' })),
+          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service down' })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 

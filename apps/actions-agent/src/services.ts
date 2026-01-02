@@ -16,7 +16,7 @@ import {
   type RetryPendingActionsUseCase,
 } from './domain/usecases/retryPendingActions.js';
 import pino from 'pino';
-import { createCommandsRouterClient } from './infra/action/commandsRouterClient.js';
+import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
@@ -40,7 +40,6 @@ export interface Services {
 }
 
 export interface ServiceConfig {
-  commandsRouterUrl: string;
   llmOrchestratorUrl: string;
   userServiceUrl: string;
   internalAuthToken: string;
@@ -52,10 +51,8 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export function initServices(config: ServiceConfig): void {
-  const actionServiceClient = createCommandsRouterClient({
-    baseUrl: config.commandsRouterUrl,
-    internalAuthToken: config.internalAuthToken,
-  });
+  const actionRepository = createFirestoreActionRepository();
+  const actionServiceClient = createLocalActionServiceClient(actionRepository);
 
   const researchServiceClient = createLlmOrchestratorClient({
     baseUrl: config.llmOrchestratorUrl,
@@ -67,7 +64,6 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
 
-  const actionRepository = createFirestoreActionRepository();
   const actionFiltersRepository = createFirestoreActionFiltersRepository();
 
   const actionEventPublisher = createActionEventPublisher({

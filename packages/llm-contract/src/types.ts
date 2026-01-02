@@ -8,9 +8,9 @@ import type { Result } from '@intexuraos/common-core';
 
 export interface LLMConfig {
   apiKey: string;
-  defaultModel: string;
-  validationModel: string;
   researchModel: string;
+  defaultModel: string;
+  evaluateModel: string;
 }
 
 export interface TokenUsage {
@@ -44,11 +44,6 @@ export interface LLMError {
 
 export interface LLMClient {
   research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
-  validateKey(): Promise<Result<boolean, LLMError>>;
   generate(prompt: string): Promise<Result<string, LLMError>>;
-  synthesize(
-    originalPrompt: string,
-    reports: SynthesisInput[],
-    externalReports?: { content: string; model?: string }[]
-  ): Promise<Result<string, LLMError>>;
+  evaluate(prompt: string): Promise<Result<string, LLMError>>;
 }
