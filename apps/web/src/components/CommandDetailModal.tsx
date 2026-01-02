@@ -125,9 +125,7 @@ export function CommandDetailModal({
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               Command Text
             </h3>
-            <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-              {command.text}
-            </div>
+            <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{command.text}</div>
           </div>
 
           {/* Classification confidence */}
@@ -179,9 +177,7 @@ export function CommandDetailModal({
                       ? 'text-amber-600'
                       : command.status === 'failed'
                         ? 'text-red-600'
-                        : command.status === 'archived'
-                          ? 'text-slate-600'
-                          : 'text-slate-600'
+                        : 'text-slate-600'
                 }
               >
                 {command.status.charAt(0).toUpperCase() + command.status.slice(1).replace('_', ' ')}

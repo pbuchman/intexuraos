@@ -8,14 +8,7 @@ import {
   ConfigurableActionButton,
 } from '@/components';
 import { useAuth } from '@/context';
-import {
-  ApiError,
-  archiveCommand,
-  deleteAction,
-  deleteCommand,
-  getActions,
-  getCommands,
-} from '@/services';
+import { ApiError, archiveCommand, deleteCommand, getActions, getCommands } from '@/services';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
@@ -271,7 +264,6 @@ export function InboxPage(): React.JSX.Element {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deletingActionId, setDeletingActionId] = useState<string | null>(null);
   const [deletingCommandId, setDeletingCommandId] = useState<string | null>(null);
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
@@ -342,20 +334,6 @@ export function InboxPage(): React.JSX.Element {
       setError(e instanceof ApiError ? e.message : 'Failed to load more actions');
     } finally {
       setIsLoadingMore(false);
-    }
-  };
-
-  const handleDeleteAction = async (actionId: string): Promise<void> => {
-    try {
-      setDeletingActionId(actionId);
-      setError(null);
-      const token = await getAccessToken();
-      await deleteAction(token, actionId);
-      setActions((prev) => prev.filter((a) => a.id !== actionId));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to delete action');
-    } finally {
-      setDeletingActionId(null);
     }
   };
 
