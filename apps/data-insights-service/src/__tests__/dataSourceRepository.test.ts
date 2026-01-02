@@ -52,6 +52,22 @@ describe('FirestoreDataSourceRepository', () => {
         expect(result.error).toContain('Failed to create data source');
       }
     });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Firestore connection failed') });
+
+      const result = await repository.create('user-123', {
+        title: 'Test',
+        content: 'Content',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Firestore connection failed');
+      }
+
+      fakeFirestore.configure({});
+    });
   });
 
   describe('getById', () => {
@@ -93,6 +109,19 @@ describe('FirestoreDataSourceRepository', () => {
         expect(result.value).toBeNull();
       }
     });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Connection timeout') });
+
+      const result = await repository.getById('some-id', 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to get data source');
+      }
+
+      fakeFirestore.configure({});
+    });
   });
 
   describe('listByUserId', () => {
@@ -117,6 +146,19 @@ describe('FirestoreDataSourceRepository', () => {
         expect(result.value).toHaveLength(2);
       }
     });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+
+      const result = await repository.listByUserId('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to list data sources');
+      }
+
+      fakeFirestore.configure({});
+    });
   });
 
   describe('update', () => {
@@ -139,7 +181,7 @@ describe('FirestoreDataSourceRepository', () => {
       }
     });
 
-    it('allows partial updates', async () => {
+    it('allows partial updates - title only', async () => {
       const createResult = await repository.create('user-123', {
         title: 'Original',
         content: 'Original content',
@@ -154,6 +196,24 @@ describe('FirestoreDataSourceRepository', () => {
       if (result.ok) {
         expect(result.value.title).toBe('New Title');
         expect(result.value.content).toBe('Original content');
+      }
+    });
+
+    it('allows partial updates - content only', async () => {
+      const createResult = await repository.create('user-123', {
+        title: 'Original',
+        content: 'Original content',
+      });
+
+      const id = createResult.ok ? createResult.value.id : '';
+      const result = await repository.update(id, 'user-123', {
+        content: 'New Content',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.title).toBe('Original');
+        expect(result.value.content).toBe('New Content');
       }
     });
 
@@ -183,6 +243,21 @@ describe('FirestoreDataSourceRepository', () => {
       if (!result.ok) {
         expect(result.error).toBe('Data source not found');
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repository.update('some-id', 'user-123', {
+        title: 'Updated',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to update data source');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 
@@ -227,6 +302,19 @@ describe('FirestoreDataSourceRepository', () => {
       if (!result.ok) {
         expect(result.error).toBe('Data source not found');
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
+
+      const result = await repository.delete('some-id', 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to delete data source');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 });
