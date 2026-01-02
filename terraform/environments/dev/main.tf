@@ -531,6 +531,31 @@ module "pubsub_llm_analytics" {
   ]
 }
 
+# Topic for sending WhatsApp messages (actions-agent, llm-orchestrator -> whatsapp-service)
+module "pubsub_whatsapp_send" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-whatsapp-send-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message"
+  push_service_account_email = module.iam.service_accounts["whatsapp_service"]
+  push_audience              = module.whatsapp_service.service_url
+
+  publisher_service_accounts = {
+    actions_agent    = module.iam.service_accounts["actions_agent"]
+    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.whatsapp_service,
+  ]
+}
+
 
 # -----------------------------------------------------------------------------
 # Cloud Run Services
@@ -798,6 +823,7 @@ module "llm_orchestrator" {
     GOOGLE_CLOUD_PROJECT                     = var.project_id
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC = "intexuraos-research-process-${var.environment}"
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
   }
 
   depends_on = [
@@ -868,10 +894,13 @@ module "actions_agent" {
   }
 
   env_vars = {
-    GOOGLE_CLOUD_PROJECT = var.project_id
-    COMMANDS_ROUTER_URL  = module.commands_router.service_url
-    LLM_ORCHESTRATOR_URL = module.llm_orchestrator.service_url
-    USER_SERVICE_URL     = module.user_service.service_url
+    GOOGLE_CLOUD_PROJECT                     = var.project_id
+    COMMANDS_ROUTER_URL                      = module.commands_router.service_url
+    LLM_ORCHESTRATOR_URL                     = module.llm_orchestrator.service_url
+    USER_SERVICE_URL                         = module.user_service.service_url
+    INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
+    INTEXURAOS_WHATSAPP_SEND_TOPIC           = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   }
 
   depends_on = [
