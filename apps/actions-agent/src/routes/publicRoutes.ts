@@ -251,6 +251,100 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // 💰 CostGuard: Batch endpoint prevents N+1 API calls
+  // Fetches up to 50 actions in single request instead of 50 individual requests
+  fastify.post(
+    '/router/actions/batch',
+    {
+      schema: {
+        operationId: 'batchGetActions',
+        summary: 'Batch fetch actions by IDs',
+        description:
+          'Fetch multiple actions by their IDs in a single request. ' +
+          'Maximum 50 action IDs per request.',
+        tags: ['router'],
+        body: {
+          type: 'object',
+          properties: {
+            actionIds: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 1,
+              maxItems: 50, // 💰 CostGuard: Limit to 50 to prevent abuse
+              description: 'Array of action IDs to fetch',
+            },
+          },
+          required: ['actionIds'],
+        },
+        response: {
+          200: {
+            description: 'Actions fetched successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  actions: {
+                    type: 'array',
+                    items: actionSchema,
+                  },
+                },
+                required: ['actions'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Bad request - invalid action IDs',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { actionIds } = request.body as { actionIds: string[] };
+      const { actionRepository } = getServices();
+
+      // 💰 CostGuard: Parallel fetches, but limited to 50 IDs max (enforced by schema)
+      const actionPromises = actionIds.map(async (id) => {
+        return await actionRepository.getById(id);
+      });
+
+      const results = await Promise.all(actionPromises);
+
+      // Filter to user's actions only (security)
+      const actions = results.filter(
+        (action): action is NonNullable<typeof action> =>
+          action !== null && action.userId === user.userId
+      );
+
+      return await reply.ok({ actions });
+    }
+  );
+
   fastify.post(
     '/router/actions/:actionId/execute',
     {

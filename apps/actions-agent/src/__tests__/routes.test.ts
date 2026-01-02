@@ -735,6 +735,179 @@ describe('Research Agent Routes', () => {
     });
   });
 
+  describe('POST /router/actions/batch (batch fetch actions)', () => {
+    beforeEach(() => {
+      process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        payload: { actionIds: ['action-1'] },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns empty array when no actions found', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { actionIds: ['nonexistent-1', 'nonexistent-2'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: unknown[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(0);
+    });
+
+    it('returns only actions owned by authenticated user', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'My Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      await fakeActionRepository.save({
+        id: 'action-2',
+        userId: 'other-user',
+        commandId: 'cmd-2',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Other Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      await fakeActionRepository.save({
+        id: 'action-3',
+        userId: 'user-123',
+        commandId: 'cmd-3',
+        type: 'todo',
+        confidence: 0.9,
+        title: 'Another My Action',
+        status: 'completed',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { actionIds: ['action-1', 'action-2', 'action-3'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: { id: string; userId: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(2);
+      expect(body.data.actions.every((a) => a.userId === 'user-123')).toBe(true);
+      const actionIds = body.data.actions.map((a) => a.id);
+      expect(actionIds).toContain('action-1');
+      expect(actionIds).toContain('action-3');
+      expect(actionIds).not.toContain('action-2');
+    });
+
+    it('fetches multiple actions in batch', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await fakeActionRepository.save({
+          id: `action-${String(i)}`,
+          userId: 'user-123',
+          commandId: `cmd-${String(i)}`,
+          type: 'research',
+          confidence: 0.95,
+          title: `Action ${String(i)}`,
+          status: 'pending',
+          payload: {},
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        });
+      }
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { actionIds: ['action-1', 'action-3', 'action-5'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: { id: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(3);
+    });
+
+    it('returns 400 when actionIds is empty', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { actionIds: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when actionIds is missing', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/router/actions/batch',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe('POST /router/actions/:actionId/execute (execute action)', () => {
     beforeEach(() => {
       process.env['AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';

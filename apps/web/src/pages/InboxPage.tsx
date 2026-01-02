@@ -8,10 +8,18 @@ import {
   ConfigurableActionButton,
 } from '@/components';
 import { useAuth } from '@/context';
-import { ApiError, archiveCommand, deleteCommand, getActions, getCommands } from '@/services';
+import {
+  ApiError,
+  archiveCommand,
+  batchGetActions,
+  deleteCommand,
+  getActions,
+  getCommands,
+} from '@/services';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
+import { useActionChanges } from '@/hooks/useActionChanges';
 import {
   Archive,
   Bell,
@@ -26,6 +34,7 @@ import {
   Loader2,
   MessageSquare,
   Mic,
+  Radio,
   RefreshCw,
   Search,
   Trash2,
@@ -250,6 +259,9 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
   );
 }
 
+// 💰 CostGuard: Debounce delay for batch fetching changed actions
+const DEBOUNCE_DELAY_MS = 500;
+
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>(() => {
@@ -269,9 +281,78 @@ export function InboxPage(): React.JSX.Element {
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
 
+  // 💰 CostGuard: Real-time action listener with Page Visibility API optimization
+  const {
+    changedActionIds,
+    error: listenerError,
+    isListening,
+    clearChangedIds,
+  } = useActionChanges();
+
+  // Ref for debounce timeout
+  const debounceTimeoutRef = useRef<number | null>(null);
+
   useEffect(() => {
     localStorage.setItem('inbox-active-tab', activeTab);
   }, [activeTab]);
+
+  // 💰 CostGuard: Debounced batch fetch for changed actions
+  // Waits 500ms for additional changes before making API call
+  const fetchChangedActions = useCallback(
+    async (ids: string[]): Promise<void> => {
+      if (ids.length === 0) return;
+
+      try {
+        const token = await getAccessToken();
+        const fetchedActions = await batchGetActions(token, ids);
+
+        // Merge into local state
+        setActions((prev) => {
+          const updated = [...prev];
+
+          for (const changedAction of fetchedActions) {
+            const index = updated.findIndex((a) => a.id === changedAction.id);
+            if (index >= 0) {
+              updated[index] = changedAction;
+            } else {
+              // New action - add to beginning
+              updated.unshift(changedAction);
+            }
+          }
+
+          return updated;
+        });
+
+        // Clear the processed IDs
+        clearChangedIds();
+      } catch {
+        /* Best-effort batch fetch - silent fail */
+      }
+    },
+    [getAccessToken, clearChangedIds]
+  );
+
+  // 💰 CostGuard: Debounce effect for batch fetching
+  useEffect(() => {
+    if (changedActionIds.length === 0) return;
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current !== null) {
+      window.clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new debounced timeout
+    debounceTimeoutRef.current = window.setTimeout(() => {
+      void fetchChangedActions(changedActionIds);
+    }, DEBOUNCE_DELAY_MS);
+
+    // Cleanup on unmount
+    return (): void => {
+      if (debounceTimeoutRef.current !== null) {
+        window.clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [changedActionIds, fetchChangedActions]);
 
   const fetchData = useCallback(
     async (showRefreshing?: boolean): Promise<void> => {
@@ -435,7 +516,15 @@ export function InboxPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
-          <p className="text-slate-600">Your commands and pending actions</p>
+          <div className="flex items-center gap-2">
+            <p className="text-slate-600">Your commands and pending actions</p>
+            {isListening && (
+              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
         </div>
         <Button
           variant="secondary"
@@ -447,6 +536,13 @@ export function InboxPage(): React.JSX.Element {
           Refresh
         </Button>
       </div>
+
+      {/* Real-time listener error warning */}
+      {listenerError !== null && listenerError !== '' ? (
+        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-700">
+          Real-time updates paused: {listenerError}
+        </div>
+      ) : null}
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">

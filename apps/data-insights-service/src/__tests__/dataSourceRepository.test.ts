@@ -40,7 +40,7 @@ describe('FirestoreDataSourceRepository', () => {
     });
 
     it('handles errors gracefully', async () => {
-      resetFirestore();
+      fakeFirestore.configure({ errorToThrow: new Error('Add operation failed') });
 
       const result = await repository.create('user-123', {
         title: 'Test',
@@ -51,6 +51,8 @@ describe('FirestoreDataSourceRepository', () => {
       if (!result.ok) {
         expect(result.error).toContain('Failed to create data source');
       }
+
+      fakeFirestore.configure({});
     });
 
     it('handles Firestore errors', async () => {

@@ -14,3 +14,12 @@ export {
 export * from './llmOrchestratorApi.js';
 export * from './commandsApi.js';
 export * from './dataSourceApi.js';
+export {
+  initializeFirebase,
+  getFirestoreClient,
+  getFirebaseAuth,
+  authenticateFirebase,
+  signOutFirebase,
+  isFirebaseAuthenticated,
+  resetFirebaseState,
+} from './firebase.js';

@@ -173,7 +173,11 @@ export interface AppConfig {
   mobileNotificationsServiceUrl: string;
   llmOrchestratorUrl: string;
   commandsRouterServiceUrl: string;
+  actionsAgentUrl: string;
   dataInsightsServiceUrl: string;
+  firebaseProjectId: string;
+  firebaseApiKey: string;
+  firebaseAuthDomain: string;
 }
 
 /**

@@ -812,6 +812,67 @@ const response = await fetch(`${WHATSAPP_SERVICE_URL}/internal/whatsapp/messages
 
 **Full documentation:** [docs/architecture/firestore-ownership.md](../docs/architecture/firestore-ownership.md)
 
+### Firestore Composite Indexes
+
+**RULE: ALL composite indexes MUST be declared in `firestore.indexes.json`.**
+
+When writing Firestore queries that:
+
+- Filter on one field AND order by another field
+- Filter on multiple fields
+- Use `where()` with `orderBy()` on different fields
+
+You MUST add the corresponding index to `firestore.indexes.json`.
+
+**Why:** Firestore requires composite indexes for queries on multiple fields. Without the index definition in code:
+
+- Queries fail in production with "requires an index" error
+- Indexes created manually in Console are not tracked in version control
+- New environments require manual index recreation
+
+**Index File Location:** `firestore.indexes.json` (repo root)
+
+**Adding a New Index:**
+
+1. Identify the query pattern:
+
+   ```typescript
+   // This query requires a composite index:
+   db.collection('actions').where('userId', '==', userId).orderBy('createdAt', 'desc');
+   ```
+
+2. Add to `firestore.indexes.json`:
+
+   ```json
+   {
+     "collectionGroup": "actions",
+     "queryScope": "COLLECTION",
+     "fields": [
+       { "fieldPath": "userId", "order": "ASCENDING" },
+       { "fieldPath": "createdAt", "order": "DESCENDING" }
+     ]
+   }
+   ```
+
+3. Deploy: Indexes deploy automatically via Cloud Build when the file changes
+
+**Current Indexes:**
+
+| Collection             | Fields                     | Purpose                     |
+| ---------------------- | -------------------------- | --------------------------- |
+| `actions`              | userId, createdAt          | List user's actions by date |
+| `actions`              | userId, updatedAt          | Real-time action updates    |
+| `commands`             | status, createdAt          | Query commands by status    |
+| `commands`             | userId, createdAt          | List user's commands        |
+| `mobile_notifications` | app, userId, receivedAt    | Filter by app               |
+| `mobile_notifications` | source, userId, receivedAt | Filter by source            |
+| `mobile_notifications` | userId, receivedAt         | List user's notifications   |
+| `researches`           | userId, startedAt          | List user's researches      |
+| `researches`           | userId, status, createdAt  | Filter by status            |
+| `whatsapp_messages`    | userId, receivedAt         | List user's messages        |
+
+**Deployment:** Cloud Build deploys indexes via `firebase deploy --only firestore:indexes` when `firestore.indexes.json` changes.
+
 ---
 
 ## Apps (`apps/**`)

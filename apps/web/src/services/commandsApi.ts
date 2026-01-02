@@ -83,3 +83,22 @@ export async function archiveCommand(accessToken: string, commandId: string): Pr
   );
   return response.command;
 }
+
+// 💰 CostGuard: Batch endpoint prevents N+1 API calls
+// Fetches up to 50 actions in single request instead of 50 individual requests
+export async function batchGetActions(accessToken: string, actionIds: string[]): Promise<Action[]> {
+  if (actionIds.length === 0) {
+    return [];
+  }
+
+  const response = await apiRequest<{ actions: Action[] }>(
+    config.actionsAgentUrl,
+    '/router/actions/batch',
+    accessToken,
+    {
+      method: 'POST',
+      body: { actionIds },
+    }
+  );
+  return response.actions;
+}

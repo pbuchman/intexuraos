@@ -12,6 +12,7 @@ import { frontendRoutes } from './frontendRoutes.js';
 import { settingsRoutes } from './settingsRoutes.js';
 import { llmKeysRoutes } from './llmKeysRoutes.js';
 import { internalRoutes } from './internalRoutes.js';
+import { firebaseRoutes } from './firebaseRoutes.js';
 
 export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.register(deviceRoutes);
@@ -22,5 +23,6 @@ export const authRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.register(settingsRoutes);
   fastify.register(llmKeysRoutes);
   fastify.register(internalRoutes);
+  fastify.register(firebaseRoutes);
   done();
 };

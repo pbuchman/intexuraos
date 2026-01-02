@@ -396,45 +396,58 @@ export function ResearchDetailPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      <div>
-        <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
-        <div className="space-y-4">
-          {/* Input Contexts */}
-          {research.inputContexts !== undefined && research.inputContexts.length > 0
-            ? research.inputContexts.map((ctx, idx) => (
-                <div
-                  key={`ctx-${ctx.id}`}
-                  className="rounded-lg border border-slate-200 bg-slate-50"
-                >
-                  <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-                    <FileText className="h-4 w-4 text-slate-500" />
-                    <span className="font-medium text-slate-700">
-                      Input Context {String(idx + 1)}
-                    </span>
-                    <span className="ml-auto text-xs text-slate-400">
-                      Added {new Date(ctx.addedAt).toLocaleDateString()}
-                    </span>
+      {/* Only show Individual LLM Results when at least one result has content */}
+      {research.llmResults.some(
+        (r) =>
+          (r.result !== undefined && r.result !== '') ||
+          (r.error !== undefined && r.error !== '')
+      ) ? (
+        <div>
+          <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
+          <div className="space-y-4">
+            {/* Input Contexts */}
+            {research.inputContexts !== undefined && research.inputContexts.length > 0
+              ? research.inputContexts.map((ctx, idx) => (
+                  <div
+                    key={`ctx-${ctx.id}`}
+                    className="rounded-lg border border-slate-200 bg-slate-50"
+                  >
+                    <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+                      <FileText className="h-4 w-4 text-slate-500" />
+                      <span className="font-medium text-slate-700">
+                        Input Context {String(idx + 1)}
+                      </span>
+                      <span className="ml-auto text-xs text-slate-400">
+                        Added {new Date(ctx.addedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      <MarkdownContent content={ctx.content} />
+                    </div>
                   </div>
-                  <div className="p-4">
-                    <MarkdownContent content={ctx.content} />
-                  </div>
-                </div>
-              ))
-            : null}
+                ))
+              : null}
 
-          {/* LLM Results */}
-          {research.llmResults.map((result) => (
-            <LlmResultCard
-              key={result.provider}
-              result={result}
-              onCopy={(text): void => {
-                void copyToClipboard(text, result.provider);
-              }}
-              copied={copiedSection === result.provider}
-            />
-          ))}
+            {/* LLM Results - only show cards with content */}
+            {research.llmResults
+              .filter(
+                (r) =>
+                  (r.result !== undefined && r.result !== '') ||
+                  (r.error !== undefined && r.error !== '')
+              )
+              .map((result) => (
+                <LlmResultCard
+                  key={result.provider}
+                  result={result}
+                  onCopy={(text): void => {
+                    void copyToClipboard(text, result.provider);
+                  }}
+                  copied={copiedSection === result.provider}
+                />
+              ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </Layout>
   );
 }
@@ -448,6 +461,19 @@ function ProcessingStatus({
   llmResults,
   title = 'Processing Status',
 }: ProcessingStatusProps): React.JSX.Element {
+  const getStatusText = (result: LlmResult): string => {
+    if (result.status === 'completed' && result.durationMs !== undefined) {
+      return `(${(result.durationMs / 1000).toFixed(1)}s)`;
+    }
+    if (result.status === 'processing') {
+      return 'Processing...';
+    }
+    if (result.status === 'pending') {
+      return 'Waiting...';
+    }
+    return '';
+  };
+
   return (
     <Card title={title} className="mb-6">
       <div className="space-y-3">
@@ -456,11 +482,7 @@ function ProcessingStatus({
             <div className="flex items-center gap-3">
               <StatusDot status={result.status} />
               <span className="capitalize">{result.provider}</span>
-              <span className="text-sm text-slate-500">
-                {result.status === 'completed' && result.durationMs !== undefined
-                  ? `(${(result.durationMs / 1000).toFixed(1)}s)`
-                  : ''}
-              </span>
+              <span className="text-sm text-slate-500">{getStatusText(result)}</span>
             </div>
             {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
               <p className="ml-6 text-sm text-red-600">{result.error}</p>
