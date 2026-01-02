@@ -38,6 +38,9 @@ export function Header(): React.JSX.Element {
         <h1 className="text-xl font-bold">
           <span className="text-cyan-500">Intexura</span>
           <span className="text-slate-900">OS</span>
+          <span className="ml-2 text-xs font-normal text-slate-400">
+            ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
+          </span>
         </h1>
       </div>
 
