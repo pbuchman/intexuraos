@@ -156,6 +156,12 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyAuthPlugin);
 
   app.setErrorHandler(async (error, request, reply) => {
+    const fastifyError = error as { code?: string; statusCode?: number };
+    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+      reply.status(400);
+      return await reply.fail('INVALID_REQUEST', 'Invalid JSON body');
+    }
+
     if (
       typeof error === 'object' &&
       error !== null &&
