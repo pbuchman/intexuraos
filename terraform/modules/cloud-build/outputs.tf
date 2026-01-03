@@ -8,13 +8,13 @@ output "repository_id" {
   value       = google_cloudbuildv2_repository.intexuraos.id
 }
 
-output "manual_trigger_id" {
-  description = "Manual trigger ID for main branch"
+output "deploy_trigger_id" {
+  description = "Deploy trigger ID"
   value       = google_cloudbuild_trigger.manual_main.trigger_id
 }
 
-output "manual_trigger_name" {
-  description = "Manual trigger name"
+output "deploy_trigger_name" {
+  description = "Deploy trigger name"
   value       = google_cloudbuild_trigger.manual_main.name
 }
 

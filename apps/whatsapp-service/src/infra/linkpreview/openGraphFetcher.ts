@@ -67,6 +67,7 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
     const url = new URL(baseUrl);
     return `${url.origin}/favicon.ico`;
   } catch {
+    /* v8 ignore next - baseUrl comes from valid fetch URL, defensive only */
     return undefined;
   }
 }

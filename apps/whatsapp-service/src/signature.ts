@@ -59,8 +59,9 @@ export function validateWebhookSignature(
     }
 
     return timingSafeEqual(receivedBuffer, expectedBuffer);
+    /* v8 ignore start - Buffer.from with 'hex' never throws, defensive only */
   } catch {
-    // Invalid hex in signature
     return false;
   }
+  /* v8 ignore stop */
 }

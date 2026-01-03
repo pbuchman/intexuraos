@@ -190,7 +190,6 @@ describe('retryFromFailed', () => {
 
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'openai', {
         status: 'pending',
-        error: undefined,
       });
     });
 
@@ -202,7 +201,6 @@ describe('retryFromFailed', () => {
 
       expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
         status: 'retrying',
-        synthesisError: undefined,
       });
     });
 

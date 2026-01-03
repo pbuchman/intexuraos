@@ -99,6 +99,7 @@ export async function getMessagesByUser(
     // Set next cursor if there are more results
     if (hasMore && resultDocs.length > 0) {
       const lastDoc = resultDocs[resultDocs.length - 1];
+      /* v8 ignore next - noUncheckedIndexedAccess guard, always defined after length check */
       if (lastDoc !== undefined) {
         const lastData = lastDoc.data() as WhatsAppMessage;
         result.nextCursor = encodeCursor(lastData.receivedAt, lastDoc.id);

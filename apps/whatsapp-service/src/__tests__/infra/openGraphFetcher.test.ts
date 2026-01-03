@@ -129,6 +129,47 @@ describe('OpenGraphFetcher', () => {
       }
     });
 
+    it('skips invalid favicon href and tries next selector', async () => {
+      const html = `
+        <html>
+        <head>
+          <link rel="icon" href="http://[invalid">
+          <link rel="shortcut icon" href="/valid-favicon.ico">
+          <title>Test</title>
+        </head>
+        </html>
+      `;
+
+      nock('https://example.com').get('/').reply(200, html);
+
+      const result = await fetcher.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.favicon).toBe('https://example.com/valid-favicon.ico');
+      }
+    });
+
+    it('handles invalid og:image URL gracefully', async () => {
+      const html = `
+        <html>
+        <head>
+          <meta property="og:image" content="http://[invalid">
+          <title>Test</title>
+        </head>
+        </html>
+      `;
+
+      nock('https://example.com').get('/').reply(200, html);
+
+      const result = await fetcher.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.image).toBeUndefined();
+      }
+    });
+
     it('handles HTML with no metadata gracefully', async () => {
       const html = `<html><body>Just text</body></html>`;
 

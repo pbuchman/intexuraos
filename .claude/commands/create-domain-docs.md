@@ -317,9 +317,9 @@ Documentation for domain layers across all services.
 
 ### Dual Output Pattern
 
-| Output                   | Destination                         | Content                              |
-| ------------------------ | ----------------------------------- | ------------------------------------ |
-| Documentation            | `docs/current/domain/{service}.md`  | Factual current state                |
-| Improvement Suggestions  | Chat (user-facing)                  | Issues found, recommended actions    |
+| Output                  | Destination                        | Content                           |
+| ----------------------- | ---------------------------------- | --------------------------------- |
+| Documentation           | `docs/current/domain/{service}.md` | Factual current state             |
+| Improvement Suggestions | Chat (user-facing)                 | Issues found, recommended actions |
 
 **Why separate?** Documentation should be stable and factual. Improvement suggestions are actionable feedback that may become outdated once addressed.
