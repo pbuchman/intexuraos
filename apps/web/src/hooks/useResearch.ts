@@ -100,6 +100,8 @@ export function useResearch(id: string): {
       return;
     }
 
+    let listenerFailed = false;
+
     const setupListener = async (): Promise<void> => {
       try {
         // Authenticate with Firebase if not already done
@@ -130,18 +132,26 @@ export function useResearch(id: string): {
             }
           },
           () => {
-            /* Listener error - silent fail, API still works */
+            listenerFailed = true;
           }
         );
       } catch {
-        /* Setup error - silent fail, API still works */
+        listenerFailed = true;
       }
     };
 
     void setupListener();
 
-    // 💰 CostGuard: Cleanup listener on unmount or when conditions change
+    // Polling fallback: if Firestore listener fails, poll every 5 seconds
+    const pollInterval = setInterval(() => {
+      if (listenerFailed) {
+        void refresh(false);
+      }
+    }, 5000);
+
+    // 💰 CostGuard: Cleanup listener and polling on unmount or when conditions change
     return (): void => {
+      clearInterval(pollInterval);
       if (unsubscribeRef.current !== null) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;

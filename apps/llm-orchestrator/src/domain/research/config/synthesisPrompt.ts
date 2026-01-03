@@ -59,7 +59,11 @@ RULES
 - Write in clear, professional prose
 `;
 
-export const TITLE_GENERATION_PROMPT = `Generate a concise, descriptive title (5-10 words maximum) for this research prompt. The title should capture the main topic or question being researched. Return only the title, no quotes or extra formatting.
+export const TITLE_GENERATION_PROMPT = `Generate a concise, descriptive title (5-10 words maximum) for this research prompt. The title should capture the main topic or question being researched.
+
+CRITICAL: Generate the title in the SAME LANGUAGE as the research prompt (Polish prompt → Polish title, Spanish prompt → Spanish title, etc.)
+
+Return only the title, no quotes or extra formatting.
 
 Research prompt:
 `;

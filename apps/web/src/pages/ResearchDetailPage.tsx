@@ -10,6 +10,7 @@ import {
   Link2Off,
   Loader2,
   Play,
+  Plus,
   RefreshCw,
   Share2,
   XCircle,
@@ -24,6 +25,7 @@ import {
   approveResearch,
   confirmPartialFailure,
   deleteResearch,
+  enhanceResearch,
   retryFromFailed,
   unshareResearch,
 } from '@/services/llmOrchestratorApi';
@@ -208,6 +210,10 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  const [selectedEnhanceLlms, setSelectedEnhanceLlms] = useState<LlmProvider[]>([]);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -336,6 +342,39 @@ export function ResearchDetailPage(): React.JSX.Element {
     } finally {
       setUnsharing(false);
     }
+  };
+
+  const handleEnhance = async (): Promise<void> => {
+    if (id === undefined || id === '' || selectedEnhanceLlms.length === 0) return;
+
+    setEnhancing(true);
+    setEnhanceError(null);
+
+    try {
+      const token = await getAccessToken();
+      const enhanced = await enhanceResearch(token, id, {
+        additionalLlms: selectedEnhanceLlms,
+      });
+      setShowEnhanceModal(false);
+      setSelectedEnhanceLlms([]);
+      void navigate(`/research/${enhanced.id}`);
+    } catch (err) {
+      setEnhanceError(err instanceof Error ? err.message : 'Failed to enhance research');
+    } finally {
+      setEnhancing(false);
+    }
+  };
+
+  const toggleEnhanceLlm = (provider: LlmProvider): void => {
+    setSelectedEnhanceLlms((prev) =>
+      prev.includes(provider) ? prev.filter((p) => p !== provider) : [...prev, provider]
+    );
+  };
+
+  const getAvailableEnhanceLlms = (): LlmProvider[] => {
+    if (research === null) return [];
+    const existingProviders = new Set(research.selectedLlms);
+    return ALL_PROVIDERS.filter((p) => !existingProviders.has(p));
   };
 
   useEffect(() => {
@@ -551,6 +590,17 @@ export function ResearchDetailPage(): React.JSX.Element {
                 Retry Research
               </Button>
             ) : null}
+            {research.status === 'completed' && getAvailableEnhanceLlms().length > 0 ? (
+              <Button
+                onClick={(): void => {
+                  setShowEnhanceModal(true);
+                }}
+                disabled={deleting}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Enhance
+              </Button>
+            ) : null}
             {showDeleteConfirm ? (
               <>
                 <Button
@@ -717,6 +767,67 @@ export function ResearchDetailPage(): React.JSX.Element {
                   copied={copiedSection === result.provider}
                 />
               ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showEnhanceModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
+            <p className="mb-4 text-sm text-slate-600">
+              Add more AI models to get additional perspectives on your research.
+            </p>
+
+            <div className="mb-4 space-y-2">
+              <p className="text-sm font-medium text-slate-700">Select additional models:</p>
+              {getAvailableEnhanceLlms().map((provider) => (
+                <label
+                  key={provider}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedEnhanceLlms.includes(provider)}
+                    onChange={(): void => {
+                      toggleEnhanceLlm(provider);
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                </label>
+              ))}
+            </div>
+
+            {enhanceError !== null ? (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {enhanceError}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowEnhanceModal(false);
+                  setSelectedEnhanceLlms([]);
+                  setEnhanceError(null);
+                }}
+                disabled={enhancing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={(): void => {
+                  void handleEnhance();
+                }}
+                disabled={enhancing || selectedEnhanceLlms.length === 0}
+                isLoading={enhancing}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Enhance
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

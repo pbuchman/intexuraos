@@ -75,5 +75,10 @@ Create a unified synthesis that:
 4. Provides a balanced conclusion
 5. Lists key sources from across all reports
 
+## CRITICAL REQUIREMENTS
+- Write the ENTIRE synthesis in the SAME LANGUAGE as the Original Research Prompt above (Polish prompt → Polish synthesis, Spanish prompt → Spanish synthesis, etc.)
+- Format ALL source URLs as clickable markdown links: [descriptive text](URL)
+- Preserve all URLs and citations from source reports
+
 Write in clear, professional prose.`;
 }

@@ -42,6 +42,8 @@ The confidence should reflect how certain you are about the classification:
 - 0.5-0.7: Somewhat uncertain
 - Below 0.5: Use "unclassified" instead
 
+CRITICAL: The title MUST be in the SAME LANGUAGE as the user's message (Polish message → Polish title, Spanish message → Spanish title, etc.)
+
 The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").
 The reasoning should briefly explain what keywords or patterns led to this classification.`;
 
