@@ -6,7 +6,7 @@ actions:
     endpoint:
       path: /actions/{actionId}/execute
       method: POST
-      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Approve
       variant: success
@@ -17,7 +17,7 @@ actions:
     endpoint:
       path: /actions/{actionId}/execute
       method: POST
-      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Retry
       variant: primary

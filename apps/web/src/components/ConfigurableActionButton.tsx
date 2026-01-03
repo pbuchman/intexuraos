@@ -19,6 +19,7 @@ import {
 import type { ResolvedActionButton } from '../types/actionConfig';
 import { executeAction } from '../services/actionExecutor';
 import { useApiClient } from '../hooks/useApiClient';
+import { config } from '../config';
 
 interface ConfigurableActionButtonProps {
   button: ResolvedActionButton;
@@ -86,10 +87,8 @@ export function ConfigurableActionButton({
     setIsExecuting(true);
 
     try {
-      // Get base URL from environment
-      const baseUrl = import.meta.env['INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'] as string;
+      const baseUrl = button.endpoint.baseUrl ?? config.commandsRouterServiceUrl;
 
-      // Execute action
       await executeAction(button.endpoint, button.action, request, baseUrl);
 
       // Call success callback

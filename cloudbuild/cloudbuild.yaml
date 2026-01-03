@@ -512,6 +512,8 @@ steps:
         else
           echo "web not affected, skipping build."
         fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-web'
