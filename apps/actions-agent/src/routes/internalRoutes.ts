@@ -512,6 +512,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Invalid message format' };
       }
 
+      request.log.info(
+        {
+          actionId: eventData.actionId,
+          actionType: eventData.actionType,
+          messageId: body.message.messageId,
+        },
+        'Processing action from PubSub'
+      );
+
       const parsedType = eventData.type as string;
       if (parsedType !== 'action.created') {
         request.log.warn(
@@ -549,6 +558,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await handler.execute(eventData);
 
       if (!result.ok) {
+        const isActionNotFound = result.error.message.includes('Action not found');
+
+        if (isActionNotFound) {
+          request.log.warn(
+            { actionId: eventData.actionId, actionType: eventData.actionType },
+            'Action not found - already processed or deleted, acknowledging message'
+          );
+          return {
+            success: true,
+            actionId: eventData.actionId,
+            skipped: true,
+            reason: 'action_not_found',
+          };
+        }
+
         request.log.error(
           { err: result.error, actionType: eventData.actionType, actionId: eventData.actionId },
           'Failed to process action'

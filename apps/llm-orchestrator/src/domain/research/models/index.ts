@@ -10,5 +10,6 @@ export {
   type SearchMode,
   type ShareInfo,
   createDraftResearch,
+  createLlmResults,
   createResearch,
 } from './Research.js';

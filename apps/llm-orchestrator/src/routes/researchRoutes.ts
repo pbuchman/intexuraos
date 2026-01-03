@@ -16,6 +16,7 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { requireAuth } from '@intexuraos/common-http';
 import {
   createDraftResearch,
+  createLlmResults,
   deleteResearch,
   type ExternalReport,
   getResearch,
@@ -269,11 +270,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Update draft
+      const newSelectedLlms = body.selectedLlms ?? existing.selectedLlms;
       const updates: Partial<Research> = {
         title,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms ?? existing.selectedLlms,
+        selectedLlms: newSelectedLlms,
         synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
+        llmResults: createLlmResults(newSelectedLlms),
       };
 
       if (body.externalReports !== undefined) {

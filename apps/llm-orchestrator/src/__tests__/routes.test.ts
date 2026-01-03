@@ -497,6 +497,38 @@ describe('Research Routes - Authenticated', () => {
       expect(body.data.prompt).toBe('Updated prompt');
       expect(body.data.selectedLlms).toEqual(['anthropic']);
       expect(body.data.synthesisLlm).toBe('google');
+      expect(body.data.llmResults).toHaveLength(1);
+      expect(body.data.llmResults[0]?.provider).toBe('anthropic');
+      expect(body.data.llmResults[0]?.status).toBe('pending');
+    });
+
+    it('regenerates llmResults when selectedLlms changes', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-456',
+        status: 'draft',
+        selectedLlms: ['google'],
+        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'pending' }],
+      });
+      fakeRepo.addResearch(draft);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-456',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedLlms: ['openai', 'anthropic'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.data.selectedLlms).toEqual(['openai', 'anthropic']);
+      expect(body.data.llmResults).toHaveLength(2);
+      expect(body.data.llmResults[0]?.provider).toBe('openai');
+      expect(body.data.llmResults[1]?.provider).toBe('anthropic');
+      expect(body.data.llmResults.every((r) => r.status === 'pending')).toBe(true);
     });
 
     it('regenerates title when prompt changes', async () => {
