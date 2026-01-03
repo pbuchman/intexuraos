@@ -14,11 +14,11 @@ export type { WhatsAppError };
  * Processing status for webhook events.
  */
 export type WebhookProcessingStatus =
-  | 'PENDING'
-  | 'PROCESSED'
-  | 'IGNORED'
-  | 'USER_UNMAPPED'
-  | 'FAILED';
+  | 'pending'
+  | 'processed'
+  | 'ignored'
+  | 'user_unmapped'
+  | 'failed';
 
 /**
  * Reason for ignored webhook.
@@ -105,7 +105,9 @@ export interface WhatsAppMessageRepository {
   /**
    * Save a new message.
    */
-  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, WhatsAppError>>;
+  saveMessage(
+    message: Omit<WhatsAppMessage, 'id'>
+  ): Promise<Result<WhatsAppMessage, WhatsAppError>>;
 
   /**
    * Get messages for a user, ordered by receivedAt descending.
@@ -126,7 +128,10 @@ export interface WhatsAppMessageRepository {
   /**
    * Find a message by user ID and message ID.
    */
-  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
+  findById(
+    userId: string,
+    messageId: string
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
 
   /**
    * Update message transcription state.

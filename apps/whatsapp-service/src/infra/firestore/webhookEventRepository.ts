@@ -6,11 +6,11 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 
 export type WebhookProcessingStatus =
-  | 'PENDING'
-  | 'PROCESSED'
-  | 'IGNORED'
-  | 'USER_UNMAPPED'
-  | 'FAILED';
+  | 'pending'
+  | 'processed'
+  | 'ignored'
+  | 'user_unmapped'
+  | 'failed';
 
 export interface IgnoredReason {
   code: string;

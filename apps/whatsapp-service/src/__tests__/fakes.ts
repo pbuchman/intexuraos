@@ -335,7 +335,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return this.messages.get(messageId);
   }
 
-  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, WhatsAppError>> {
+  saveMessage(
+    message: Omit<WhatsAppMessage, 'id'>
+  ): Promise<Result<WhatsAppMessage, WhatsAppError>> {
     if (this.shouldFailSave) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated message save failure' })
@@ -382,7 +384,10 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(undefined));
   }
 
-  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+  findById(
+    userId: string,
+    messageId: string
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(ok(null));
@@ -561,7 +566,9 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
-  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>> {
+  publishExtractLinkPreviews(
+    event: ExtractLinkPreviewsEvent
+  ): Promise<Result<void, WhatsAppError>> {
     this.extractLinkPreviewsEvents.push(event);
     return Promise.resolve(ok(undefined));
   }

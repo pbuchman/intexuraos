@@ -133,7 +133,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(mediaUrlResult.error);
     }
 
@@ -155,7 +155,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(downloadResult.error);
     }
 
@@ -188,7 +188,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(uploadResult.error);
     }
 
@@ -236,12 +236,12 @@ export class ProcessAudioMessageUseCase {
         { event: 'audio_save_failed', error: saveResult.error, eventId },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(saveResult.error);
     }
 
     // Update webhook event status to PROCESSED
-    await webhookEventRepository.updateEventStatus(eventId, 'PROCESSED', {});
+    await webhookEventRepository.updateEventStatus(eventId, 'processed', {});
 
     logger.info(
       {

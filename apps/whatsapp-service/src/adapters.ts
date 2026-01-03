@@ -73,7 +73,9 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
     return await saveUserMapping(userId, phoneNumbers);
   }
 
-  async getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>> {
+  async getMapping(
+    userId: string
+  ): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>> {
     return await getUserMapping(userId);
   }
 
@@ -85,7 +87,9 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
     return await findPhoneByUserId(userId);
   }
 
-  async disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
+  async disconnectMapping(
+    userId: string
+  ): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
     return await disconnectUserMapping(userId);
   }
 

@@ -21,7 +21,10 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     this.phoneNumberId = phoneNumberId;
   }
 
-  async sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, WhatsAppError>> {
+  async sendTextMessage(
+    phoneNumber: string,
+    message: string
+  ): Promise<Result<void, WhatsAppError>> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();

@@ -29,13 +29,13 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: '123456',
-        status: 'PENDING',
+        status: 'pending',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.id).toBeDefined();
-        expect(result.value.status).toBe('PENDING');
+        expect(result.value.status).toBe('pending');
         expect(result.value.signatureValid).toBe(true);
         expect(result.value.phoneNumberId).toBe('123456');
       }
@@ -49,7 +49,7 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       expect(result.ok).toBe(true);
@@ -67,16 +67,16 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'PROCESSED', {});
+      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {});
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.status).toBe('processed');
         expect(result.value.processedAt).toBeDefined();
       }
     });
@@ -87,18 +87,18 @@ describe('webhookEventRepository', () => {
         signatureValid: false,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'IGNORED', {
+      const result = await updateWebhookEventStatus(saved.value.id, 'ignored', {
         ignoredReason: { code: 'INVALID_SIG', message: 'Signature mismatch' },
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('IGNORED');
+        expect(result.value.status).toBe('ignored');
         expect(result.value.ignoredReason?.code).toBe('INVALID_SIG');
       }
     });
@@ -109,18 +109,18 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'FAILED', {
+      const result = await updateWebhookEventStatus(saved.value.id, 'failed', {
         failureDetails: 'Processing timeout',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('FAILED');
+        expect(result.value.status).toBe('failed');
         expect(result.value.failureDetails).toBe('Processing timeout');
       }
     });
@@ -131,24 +131,24 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'PROCESSED', {
+      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {
         inboxNoteId: 'note-123',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('PROCESSED');
+        expect(result.value.status).toBe('processed');
         expect(result.value.inboxNoteId).toBe('note-123');
       }
     });
 
     it('returns error for non-existent event', async () => {
-      const result = await updateWebhookEventStatus('nonexistent-id', 'PROCESSED', {});
+      const result = await updateWebhookEventStatus('nonexistent-id', 'processed', {});
 
       // Implementation catches Firestore error and returns PERSISTENCE_ERROR
       expect(result.ok).toBe(false);
@@ -171,7 +171,7 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: '2024-01-01T00:00:00Z',
         phoneNumberId: '999',
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
@@ -195,7 +195,7 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       expect(result.ok).toBe(false);
@@ -221,14 +221,14 @@ describe('webhookEventRepository', () => {
         signatureValid: true,
         receivedAt: new Date().toISOString(),
         phoneNumberId: null,
-        status: 'PENDING',
+        status: 'pending',
       });
 
       if (!saved.ok) throw new Error('Setup failed');
 
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'PROCESSED', {});
+      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {});
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
