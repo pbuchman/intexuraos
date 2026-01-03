@@ -20,6 +20,7 @@ import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';
 import type { Logger } from '../utils/logger.js';
+import { getExtensionFromMimeType } from '../utils/mimeType.js';
 
 /**
  * Image media information from webhook payload.
@@ -69,19 +70,6 @@ export interface ProcessImageMessageDeps {
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
-}
-
-/**
- * Get file extension from MIME type.
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeToExt: Record<string, string> = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  };
-  return mimeToExt[mimeType] ?? 'bin';
 }
 
 /**
