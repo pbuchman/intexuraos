@@ -14,12 +14,8 @@ import type {
 export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: ClaudeClient;
 
-  constructor(apiKey: string, researchModel?: string) {
-    const config: Parameters<typeof createClaudeClient>[0] = { apiKey };
-    if (researchModel !== undefined) {
-      config.researchModel = researchModel;
-    }
-    this.client = createClaudeClient(config);
+  constructor(apiKey: string, model: string) {
+    this.client = createClaudeClient({ apiKey, model });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
@@ -38,9 +34,9 @@ export class ClaudeAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async synthesize(
     originalPrompt: string,
     reports: { model: string; content: string }[],
-    inputContexts?: { content: string }[]
+    additionalSources?: { content: string; label?: string }[]
   ): Promise<Result<string, LlmError>> {
-    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {

@@ -14,7 +14,6 @@ export type {
   LlmApiKeys,
   LlmTestResult,
   LlmTestResults,
-  SearchMode,
   ResearchSettings,
   NotificationFilter,
   NotificationSettings,

@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { LlmProvider } from '../models/index.js';
+import type { SupportedModel } from '../models/index.js';
 import type { LlmSynthesisProvider, ResearchRepository, TitleGenerator } from '../ports/index.js';
 
 interface MinimalLogger {
@@ -19,7 +19,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: SupportedModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -30,16 +30,20 @@ export interface ProcessResearchDeps {
   logger: MinimalLogger;
   titleGenerator?: TitleGenerator;
   synthesizer?: LlmSynthesisProvider;
-  reportLlmSuccess?: (provider: LlmProvider) => void;
+  reportLlmSuccess?: (model: SupportedModel) => void;
+}
+
+export interface ProcessResearchResult {
+  triggerSynthesis: boolean;
 }
 
 export async function processResearch(
   researchId: string,
   deps: ProcessResearchDeps
-): Promise<void> {
+): Promise<ProcessResearchResult> {
   const researchResult = await deps.researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
-    return;
+    return { triggerSynthesis: false };
   }
 
   const research = researchResult.value;
@@ -52,18 +56,19 @@ export async function processResearch(
 
   // Generate title (use dedicated titleGenerator if available, else fall back to synthesizer)
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
-  const titleSource = deps.titleGenerator !== undefined ? 'google' : research.synthesisLlm;
+  const titleModel: SupportedModel =
+    deps.titleGenerator !== undefined ? 'gemini-2.5-flash' : research.synthesisModel;
   if (titleGen !== undefined) {
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
       await deps.researchRepo.update(researchId, { title: titleResult.value });
-      deps.logger.info({ researchId, provider: titleSource }, 'Title generated successfully');
+      deps.logger.info({ researchId, model: titleModel }, 'Title generated successfully');
       if (deps.reportLlmSuccess !== undefined) {
-        deps.reportLlmSuccess(titleSource);
+        deps.reportLlmSuccess(titleModel);
       }
     } else {
       deps.logger.warn(
-        { researchId, provider: titleSource, error: titleResult.error },
+        { researchId, model: titleModel, error: titleResult.error },
         'Title generation failed, using default title'
       );
     }
@@ -72,13 +77,36 @@ export async function processResearch(
   }
 
   // Dispatch LLM calls to Pub/Sub (runs in separate Cloud Run instances)
-  for (const provider of research.selectedLlms) {
+  // Skip models that already have completed results (for enhanced researches)
+  const pendingModels = research.llmResults
+    .filter((r) => r.status === 'pending')
+    .map((r) => r.model as SupportedModel);
+
+  deps.logger.info(
+    {
+      researchId,
+      totalModels: research.selectedModels.length,
+      pendingModels: pendingModels.length,
+    },
+    'Dispatching LLM calls'
+  );
+
+  for (const model of pendingModels) {
     await deps.llmCallPublisher.publishLlmCall({
       type: 'llm.call',
       researchId,
       userId: research.userId,
-      provider,
+      model,
       prompt: research.prompt,
     });
   }
+
+  // If no pending models (enhanced research with all pre-completed results),
+  // trigger synthesis immediately
+  if (pendingModels.length === 0) {
+    deps.logger.info({ researchId }, 'All LLM results already completed, triggering synthesis');
+    return { triggerSynthesis: true };
+  }
+
+  return { triggerSynthesis: false };
 }

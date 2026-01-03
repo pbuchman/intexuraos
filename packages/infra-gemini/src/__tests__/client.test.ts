@@ -16,7 +16,9 @@ vi.mock('@intexuraos/llm-audit', () => ({
 }));
 
 const { createAuditContext } = await import('@intexuraos/llm-audit');
-const { createGeminiClient, GEMINI_DEFAULTS } = await import('../index.js');
+const { createGeminiClient } = await import('../index.js');
+
+const TEST_MODEL = 'gemini-2.5-pro';
 
 describe('createGeminiClient', () => {
   beforeEach(() => {
@@ -34,7 +36,7 @@ describe('createGeminiClient', () => {
         },
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
@@ -44,7 +46,7 @@ describe('createGeminiClient', () => {
       }
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: GEMINI_DEFAULTS.researchModel,
+          model: TEST_MODEL,
           config: expect.objectContaining({
             tools: [{ googleSearch: {} }],
           }),
@@ -67,7 +69,7 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -83,7 +85,7 @@ describe('createGeminiClient', () => {
         candidates: [],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -102,7 +104,7 @@ describe('createGeminiClient', () => {
         },
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -123,7 +125,7 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -148,7 +150,7 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -163,7 +165,7 @@ describe('createGeminiClient', () => {
         candidates: [],
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -175,7 +177,7 @@ describe('createGeminiClient', () => {
     it('returns API_ERROR on general failure', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Server error'));
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -187,7 +189,7 @@ describe('createGeminiClient', () => {
     it('returns INVALID_KEY error when message contains API_KEY', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Invalid API_KEY provided'));
 
-      const client = createGeminiClient({ apiKey: 'bad-key' });
+      const client = createGeminiClient({ apiKey: 'bad-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -199,7 +201,7 @@ describe('createGeminiClient', () => {
     it('returns RATE_LIMITED error on 429', async () => {
       mockGenerateContent.mockRejectedValue(new Error('429 Too Many Requests'));
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -211,7 +213,7 @@ describe('createGeminiClient', () => {
     it('returns RATE_LIMITED error on quota exceeded', async () => {
       mockGenerateContent.mockRejectedValue(new Error('quota exceeded'));
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -223,7 +225,7 @@ describe('createGeminiClient', () => {
     it('returns TIMEOUT error on timeout', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Request timeout'));
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -239,7 +241,7 @@ describe('createGeminiClient', () => {
         text: 'Generated response',
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
@@ -248,7 +250,7 @@ describe('createGeminiClient', () => {
       }
       expect(mockGenerateContent).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: GEMINI_DEFAULTS.defaultModel,
+          model: TEST_MODEL,
         })
       );
     });
@@ -258,7 +260,7 @@ describe('createGeminiClient', () => {
         text: null,
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
@@ -270,114 +272,10 @@ describe('createGeminiClient', () => {
     it('returns error on failure', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Error'));
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Test');
 
       expect(result.ok).toBe(false);
-    });
-  });
-
-  describe('evaluate', () => {
-    it('returns evaluation result', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Evaluation response.',
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Rate this content');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Evaluation response.');
-      }
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: GEMINI_DEFAULTS.evaluateModel,
-        })
-      );
-    });
-
-    it('handles null text response', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: null,
-      });
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('');
-      }
-    });
-
-    it('returns error on failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Invalid API_KEY'));
-
-      const client = createGeminiClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Test prompt');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_KEY');
-      }
-    });
-  });
-
-  describe('custom models', () => {
-    it('uses custom researchModel when provided', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Response',
-        candidates: [],
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        researchModel: 'gemini-custom-research',
-      });
-      await client.research('Test prompt');
-
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'gemini-custom-research',
-        })
-      );
-    });
-
-    it('uses custom defaultModel when provided', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Response',
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        defaultModel: 'gemini-custom-default',
-      });
-      await client.generate('Test prompt');
-
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'gemini-custom-default',
-        })
-      );
-    });
-
-    it('uses custom evaluateModel when provided', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Response',
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        evaluateModel: 'gemini-custom-evaluate',
-      });
-      await client.evaluate('Test prompt');
-
-      expect(mockGenerateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'gemini-custom-evaluate',
-        })
-      );
     });
   });
 
@@ -398,7 +296,7 @@ describe('createGeminiClient', () => {
         error: vi.fn(),
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       await client.research('Test prompt');
 
       expect(createAuditContext).toHaveBeenCalledWith(
@@ -424,7 +322,7 @@ describe('createGeminiClient', () => {
         error: mockError,
       });
 
-      const client = createGeminiClient({ apiKey: 'test-key' });
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
       await client.research('Test prompt');
 
       expect(mockError).toHaveBeenCalled();

@@ -18,8 +18,8 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     userId: 'user-123',
     title: '',
     prompt: 'Test prompt',
-    selectedLlms: ['google'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro'],
+    synthesisModel: 'gemini-2.5-pro',
     status: 'pending',
     llmResults: [
       {
@@ -45,8 +45,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test research prompt',
-        selectedLlms: ['google', 'anthropic'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+        synthesisModel: 'gemini-2.5-pro',
       },
       {
         researchRepo: fakeRepo,
@@ -60,7 +60,7 @@ describe('submitResearch', () => {
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Test research prompt');
       expect(result.value.status).toBe('pending');
-      expect(result.value.selectedLlms).toEqual(['google', 'anthropic']);
+      expect(result.value.selectedModels).toEqual(['gemini-2.5-pro', 'claude-opus-4-5-20251101']);
       expect(result.value.llmResults).toHaveLength(2);
     }
   });
@@ -70,8 +70,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedLlms: ['google', 'openai', 'anthropic'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+        synthesisModel: 'gemini-2.5-pro',
       },
       {
         researchRepo: fakeRepo,
@@ -96,8 +96,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
       },
       {
         researchRepo: fakeRepo,
@@ -108,6 +108,47 @@ describe('submitResearch', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain('Test save failure');
+    }
+  });
+
+  it('sets skipSynthesis when provided', async () => {
+    const result = await submitResearch(
+      {
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
+        skipSynthesis: true,
+      },
+      {
+        researchRepo: fakeRepo,
+        generateId: (): string => 'id-123',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.skipSynthesis).toBe(true);
+    }
+  });
+
+  it('passes selectedModels to research creation', async () => {
+    const result = await submitResearch(
+      {
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: ['claude-opus-4-5-20251101'],
+        synthesisModel: 'gemini-2.5-pro',
+      },
+      {
+        researchRepo: fakeRepo,
+        generateId: (): string => 'id-123',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.llmResults[0]?.model).toBe('claude-opus-4-5-20251101');
     }
   });
 });

@@ -50,8 +50,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'awaiting_confirmation',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       {
         provider: 'google',
@@ -62,7 +62,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
       { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Rate limit' },
     ],
     partialFailure: {
-      failedProviders: ['openai'],
+      failedModels: ['o4-mini-deep-research'],
       detectedAt: '2024-01-01T10:00:00Z',
       retryCount: 0,
     },
@@ -117,8 +117,8 @@ describe('retryFailedLlms', () => {
       title: 'Test Research',
       prompt: 'Test research prompt',
       status: 'awaiting_confirmation',
-      selectedLlms: ['google', 'openai'],
-      synthesisLlm: 'google',
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+      synthesisModel: 'gemini-2.5-pro',
       llmResults: [
         {
           provider: 'google',
@@ -145,7 +145,7 @@ describe('retryFailedLlms', () => {
   it('returns error when max retries exceeded', async () => {
     const research = createTestResearch({
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 2,
       },
@@ -168,9 +168,13 @@ describe('retryFailedLlms', () => {
 
     await retryFailedLlms('research-1', deps);
 
-    expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'openai', {
-      status: 'pending',
-    });
+    expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith(
+      'research-1',
+      'o4-mini-deep-research',
+      {
+        status: 'pending',
+      }
+    );
   });
 
   it('updates research status to retrying with incremented retry count', async () => {
@@ -182,7 +186,7 @@ describe('retryFailedLlms', () => {
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'retrying',
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 1,
         userDecision: 'retry',
@@ -201,12 +205,12 @@ describe('retryFailedLlms', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'openai',
+      model: 'o4-mini-deep-research',
       prompt: 'Test research prompt',
     });
   });
 
-  it('returns success with retried providers', async () => {
+  it('returns success with retried models', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -214,20 +218,25 @@ describe('retryFailedLlms', () => {
 
     expect(result).toEqual({
       ok: true,
-      retriedProviders: ['openai'],
+      retriedModels: ['o4-mini-deep-research'],
     });
   });
 
-  it('handles multiple failed providers', async () => {
+  it('handles multiple failed models', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google', 'openai', 'anthropic'],
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
+        { provider: 'google', model: 'gemini-2.5-flash', status: 'completed', result: 'Result' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
-        { provider: 'anthropic', model: 'claude-3-opus', status: 'failed', error: 'Error 2' },
+        {
+          provider: 'anthropic',
+          model: 'claude-opus-4-5-20251101',
+          status: 'failed',
+          error: 'Error 2',
+        },
       ],
       partialFailure: {
-        failedProviders: ['openai', 'anthropic'],
+        failedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 0,
       },
@@ -238,7 +247,7 @@ describe('retryFailedLlms', () => {
 
     expect(result).toEqual({
       ok: true,
-      retriedProviders: ['openai', 'anthropic'],
+      retriedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
     expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledTimes(2);
@@ -247,7 +256,7 @@ describe('retryFailedLlms', () => {
   it('allows retry when retryCount is 1 (second retry)', async () => {
     const research = createTestResearch({
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 1,
       },

@@ -1,12 +1,12 @@
 import type { Result } from '@intexuraos/common-core';
-import type { LlmProvider } from '../models/actionEvent.js';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 
 export interface ResearchServiceClient {
   createDraft(params: {
     userId: string;
     title: string;
     prompt: string;
-    selectedLlms: LlmProvider[];
+    selectedModels: SupportedModel[];
     sourceActionId?: string;
   }): Promise<Result<{ id: string }>>;
 }

@@ -23,26 +23,17 @@ describe('GeminiAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key');
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro');
   });
 
   describe('constructor', () => {
-    it('passes researchModel to client when provided', () => {
+    it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-1.5-flash');
+      new GeminiAdapter('test-key', 'gemini-2.5-pro');
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        researchModel: 'gemini-1.5-flash',
-      });
-    });
-
-    it('does not pass researchModel when not provided', () => {
-      mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key');
-
-      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
+        model: 'gemini-2.5-pro',
       });
     });
   });

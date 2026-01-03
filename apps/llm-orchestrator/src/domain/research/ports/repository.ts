@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { LlmProvider, LlmResult, Research } from '../models/index.js';
+import type { LlmResult, Research } from '../models/index.js';
 
 export interface RepositoryError {
   code: 'NOT_FOUND' | 'FIRESTORE_ERROR' | 'CONFLICT';
@@ -25,7 +25,7 @@ export interface ResearchRepository {
 
   updateLlmResult(
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>>;
 

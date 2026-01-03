@@ -71,6 +71,13 @@ resource "google_service_account" "data_insights_service" {
   description  = "Service account for data-insights-service Cloud Run deployment"
 }
 
+# Service account for image-service
+resource "google_service_account" "image_service" {
+  account_id   = "intexuraos-image-svc-${var.environment}"
+  display_name = "IntexuraOS Image Service (${var.environment})"
+  description  = "Service account for image-service Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -153,6 +160,15 @@ resource "google_secret_manager_secret_iam_member" "data_insights_service_secret
   member    = "serviceAccount:${google_service_account.data_insights_service.email}"
 }
 
+# Image Service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "image_service_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.image_service.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -231,6 +247,13 @@ resource "google_project_iam_member" "data_insights_service_firestore" {
   member  = "serviceAccount:${google_service_account.data_insights_service.email}"
 }
 
+# Image Service: Firestore access
+resource "google_project_iam_member" "image_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.image_service.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -306,5 +329,12 @@ resource "google_project_iam_member" "data_insights_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.data_insights_service.email}"
+}
+
+# Image Service: Cloud Logging
+resource "google_project_iam_member" "image_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.image_service.email}"
 }
 

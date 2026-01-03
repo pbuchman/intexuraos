@@ -37,7 +37,7 @@ describe('LlmCallPublisher', () => {
     type: 'llm.call',
     researchId: 'research-123',
     userId: 'user-456',
-    provider: 'google',
+    model: 'gemini-2.5-pro',
     prompt: 'Test prompt',
   };
 
@@ -62,18 +62,18 @@ describe('LlmCallPublisher', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('publishes event for different providers', async () => {
+  it('publishes event for different models', async () => {
     const publisher = createLlmCallPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
     });
 
-    const providers: ('google' | 'openai' | 'anthropic')[] = ['google', 'openai', 'anthropic'];
+    const models = ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'] as const;
 
-    for (const provider of providers) {
+    for (const model of models) {
       const result = await publisher.publishLlmCall({
         ...event,
-        provider,
+        model,
       });
       expect(result.ok).toBe(true);
     }

@@ -189,13 +189,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Research settings',
             type: 'object',
             properties: {
-              searchMode: {
-                type: 'string',
-                enum: ['deep', 'quick'],
-                description: 'Search mode for research',
+              defaultModels: {
+                type: 'array',
+                items: { type: 'string' },
+                nullable: true,
+                description: 'Default models for research (null = use system defaults)',
               },
             },
-            required: ['searchMode'],
           },
           401: {
             description: 'Unauthorized',
@@ -230,12 +230,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await userSettingsRepository.getSettings(params.uid);
 
       if (!result.ok || result.value === null) {
-        return { searchMode: 'deep' };
+        return { defaultModels: null };
       }
 
       const settings = result.value;
       return {
-        searchMode: settings.researchSettings?.searchMode ?? 'deep',
+        defaultModels: settings.researchSettings?.defaultModels ?? null,
       };
     }
   );

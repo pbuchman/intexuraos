@@ -10,8 +10,10 @@ import {
   Link2Off,
   Loader2,
   Play,
+  Plus,
   RefreshCw,
   Share2,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -24,6 +26,8 @@ import {
   approveResearch,
   confirmPartialFailure,
   deleteResearch,
+  enhanceResearch,
+  retryFromFailed,
   unshareResearch,
 } from '@/services/llmOrchestratorApi';
 import type {
@@ -205,6 +209,13 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [unshareError, setUnshareError] = useState<string | null>(null);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  const [selectedEnhanceLlms, setSelectedEnhanceLlms] = useState<LlmProvider[]>([]);
+  const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -266,6 +277,23 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
+  const handleRetry = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setRetrying(true);
+    setRetryError(null);
+
+    try {
+      const token = await getAccessToken();
+      await retryFromFailed(token, id);
+      await refresh();
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Failed to retry research');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const handleCopyShareUrl = async (): Promise<void> => {
     if (research?.shareInfo?.shareUrl === undefined) return;
     await navigator.clipboard.writeText(research.shareInfo.shareUrl);
@@ -316,6 +344,47 @@ export function ResearchDetailPage(): React.JSX.Element {
     } finally {
       setUnsharing(false);
     }
+  };
+
+  const handleEnhance = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    const validContexts = enhanceContexts.filter((ctx) => ctx.trim().length > 0);
+    const hasChanges = selectedEnhanceLlms.length > 0 || validContexts.length > 0;
+    if (!hasChanges) return;
+
+    setEnhancing(true);
+    setEnhanceError(null);
+
+    try {
+      const token = await getAccessToken();
+      const enhanced = await enhanceResearch(token, id, {
+        ...(selectedEnhanceLlms.length > 0 && { additionalLlms: selectedEnhanceLlms }),
+        ...(validContexts.length > 0 && {
+          additionalContexts: validContexts.map((content) => ({ content })),
+        }),
+      });
+      setShowEnhanceModal(false);
+      setSelectedEnhanceLlms([]);
+      setEnhanceContexts([]);
+      void navigate(`/research/${enhanced.id}`);
+    } catch (err) {
+      setEnhanceError(err instanceof Error ? err.message : 'Failed to enhance research');
+    } finally {
+      setEnhancing(false);
+    }
+  };
+
+  const toggleEnhanceLlm = (provider: LlmProvider): void => {
+    setSelectedEnhanceLlms((prev) =>
+      prev.includes(provider) ? prev.filter((p) => p !== provider) : [...prev, provider]
+    );
+  };
+
+  const getAvailableEnhanceLlms = (): LlmProvider[] => {
+    if (research === null) return [];
+    const existingProviders = new Set(research.selectedLlms);
+    return ALL_PROVIDERS.filter((p) => !existingProviders.has(p));
   };
 
   useEffect(() => {
@@ -519,6 +588,30 @@ export function ResearchDetailPage(): React.JSX.Element {
           </div>
         ) : (
           <div className="mt-4 flex flex-wrap gap-3">
+            {research.status === 'failed' ? (
+              <Button
+                onClick={(): void => {
+                  void handleRetry();
+                }}
+                disabled={retrying || deleting}
+                isLoading={retrying}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry Research
+              </Button>
+            ) : null}
+            {research.status === 'completed' &&
+            (getAvailableEnhanceLlms().length > 0 || (research.inputContexts?.length ?? 0) < 5) ? (
+              <Button
+                onClick={(): void => {
+                  setShowEnhanceModal(true);
+                }}
+                disabled={deleting}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Enhance
+              </Button>
+            ) : null}
             {showDeleteConfirm ? (
               <>
                 <Button
@@ -547,7 +640,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onClick={(): void => {
                   setShowDeleteConfirm(true);
                 }}
-                disabled={deleting}
+                disabled={deleting || retrying}
               >
                 Delete
               </Button>
@@ -566,6 +659,12 @@ export function ResearchDetailPage(): React.JSX.Element {
             {deleteError}
           </div>
         ) : null}
+
+        {retryError !== null && retryError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {retryError}
+          </div>
+        ) : null}
       </div>
 
       <Card title="Original Prompt" className="mb-6">
@@ -575,6 +674,36 @@ export function ResearchDetailPage(): React.JSX.Element {
           </p>
         </blockquote>
       </Card>
+
+      {/* Research Summary - show when we have usage data */}
+      {research.llmResults.some((r) => r.inputTokens !== undefined) ? (
+        <Card title="Research Summary" className="mb-6">
+          <div className="flex flex-wrap gap-6">
+            {research.totalDurationMs !== undefined ? (
+              <div>
+                <p className="text-sm text-slate-500">Duration</p>
+                <p className="text-lg font-semibold">
+                  {(research.totalDurationMs / 1000).toFixed(1)}s
+                </p>
+              </div>
+            ) : null}
+            <div>
+              <p className="text-sm text-slate-500">Total Tokens</p>
+              <p className="text-lg font-semibold">
+                {research.llmResults
+                  .reduce((sum, r) => sum + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0)
+                  .toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Total Cost</p>
+              <p className="text-lg font-semibold text-green-600">
+                ${research.llmResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0).toFixed(4)}
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {showLlmStatus ? (
         <ProcessingStatus
@@ -679,6 +808,130 @@ export function ResearchDetailPage(): React.JSX.Element {
                   copied={copiedSection === result.provider}
                 />
               ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showEnhanceModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
+            <p className="mb-4 text-sm text-slate-600">
+              Add more AI models or additional context to get new perspectives.
+            </p>
+
+            {getAvailableEnhanceLlms().length > 0 ? (
+              <div className="mb-4 space-y-2">
+                <p className="text-sm font-medium text-slate-700">Select additional models:</p>
+                {getAvailableEnhanceLlms().map((provider) => (
+                  <label
+                    key={provider}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEnhanceLlms.includes(provider)}
+                      onChange={(): void => {
+                        toggleEnhanceLlm(provider);
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mb-4 space-y-2">
+              <p className="text-sm font-medium text-slate-700">
+                Additional context{' '}
+                <span className="font-normal text-slate-500">
+                  ({String((research.inputContexts?.length ?? 0) + enhanceContexts.length)}/5)
+                </span>
+              </p>
+
+              {(research.inputContexts?.length ?? 0) > 0 ? (
+                <p className="text-xs text-slate-500">
+                  {String(research.inputContexts?.length ?? 0)} existing context
+                  {(research.inputContexts?.length ?? 0) > 1 ? 's' : ''} will be included
+                </p>
+              ) : null}
+
+              {enhanceContexts.map((ctx, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <textarea
+                    value={ctx}
+                    onChange={(e): void => {
+                      setEnhanceContexts((prev) =>
+                        prev.map((c, i) => (i === idx ? e.target.value : c))
+                      );
+                    }}
+                    placeholder="Paste additional reference content..."
+                    className="flex-1 rounded-lg border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={2}
+                    disabled={enhancing}
+                  />
+                  <button
+                    type="button"
+                    onClick={(): void => {
+                      setEnhanceContexts((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    disabled={enhancing}
+                    className="self-start rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-500"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+
+              {(research.inputContexts?.length ?? 0) + enhanceContexts.length < 5 ? (
+                <button
+                  type="button"
+                  onClick={(): void => {
+                    setEnhanceContexts((prev) => [...prev, '']);
+                  }}
+                  disabled={enhancing}
+                  className="w-full rounded-lg border-2 border-dashed border-slate-200 py-2 text-sm text-slate-500 hover:border-slate-300 hover:text-slate-600"
+                >
+                  + Add context
+                </button>
+              ) : null}
+            </div>
+
+            {enhanceError !== null ? (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {enhanceError}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowEnhanceModal(false);
+                  setSelectedEnhanceLlms([]);
+                  setEnhanceContexts([]);
+                  setEnhanceError(null);
+                }}
+                disabled={enhancing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={(): void => {
+                  void handleEnhance();
+                }}
+                disabled={
+                  enhancing ||
+                  (selectedEnhanceLlms.length === 0 &&
+                    enhanceContexts.filter((c) => c.trim().length > 0).length === 0)
+                }
+                isLoading={enhancing}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Enhance
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

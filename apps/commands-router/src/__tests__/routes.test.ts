@@ -1022,15 +1022,15 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents).toHaveLength(0);
     });
 
-    it('includes selectedLlms in event payload', async () => {
+    it('includes selectedModels in event payload', async () => {
       app = await buildServer();
 
       fakeClassifier.setResult({
         type: 'research',
         confidence: 0.95,
         title: 'Research topic',
-        reasoning: 'Research query with LLM selection',
-        selectedLlms: ['google', 'anthropic'],
+        reasoning: 'Research query with model selection',
+        selectedModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'],
       });
 
       const event = {
@@ -1054,7 +1054,10 @@ describe('Commands Router Routes', () => {
 
       const publishedEvents = fakeEventPublisher.getPublishedEvents();
       expect(publishedEvents).toHaveLength(1);
-      expect(publishedEvents[0]?.payload.selectedLlms).toEqual(['google', 'anthropic']);
+      expect(publishedEvents[0]?.payload.selectedModels).toEqual([
+        'gemini-2.5-flash',
+        'claude-sonnet-4-5-20250929',
+      ]);
     });
   });
 
@@ -1323,7 +1326,7 @@ describe('Commands Router Routes', () => {
         confidence: 0.95,
         title: 'AI Trends Research',
         reasoning: 'Research query about AI trends',
-        selectedLlms: ['google', 'anthropic'],
+        selectedModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'],
       });
 
       await app.inject({
@@ -1337,7 +1340,10 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents[0]?.type).toBe('action.created');
       expect(publishedEvents[0]?.actionType).toBe('research');
       expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
-      expect(publishedEvents[0]?.payload.selectedLlms).toEqual(['google', 'anthropic']);
+      expect(publishedEvents[0]?.payload.selectedModels).toEqual([
+        'gemini-2.5-flash',
+        'claude-sonnet-4-5-20250929',
+      ]);
     });
   });
 

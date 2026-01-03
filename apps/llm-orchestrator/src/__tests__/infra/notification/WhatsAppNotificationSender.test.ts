@@ -122,42 +122,52 @@ describe('WhatsAppNotificationSender', () => {
   });
 
   describe('sendLlmFailure', () => {
-    it('publishes message with userId', async () => {
+    it('publishes message with userId and model name', async () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      const result = await sender.sendLlmFailure('user-123', 'research-456', 'google', 'API Error');
+      const result = await sender.sendLlmFailure(
+        'user-123',
+        'research-456',
+        'gemini-2.5-pro',
+        'API Error'
+      );
 
       expect(result.ok).toBe(true);
       expect(mockPublishSendMessage).toHaveBeenCalledWith({
         userId: 'user-123',
-        message: expect.stringContaining('Google'),
+        message: expect.stringContaining('gemini-2.5-pro'),
         correlationId: 'research-failure-research-456',
       });
     });
 
-    it('includes provider name in message for openai', async () => {
+    it('includes model name in message for openai models', async () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendLlmFailure('user-123', 'research-456', 'openai', 'Timeout');
+      await sender.sendLlmFailure('user-123', 'research-456', 'o4-mini-deep-research', 'Timeout');
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('OpenAI'),
+          message: expect.stringContaining('o4-mini-deep-research'),
         })
       );
     });
 
-    it('includes provider name in message for anthropic', async () => {
+    it('includes model name in message for anthropic models', async () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendLlmFailure('user-123', 'research-456', 'anthropic', 'Key invalid');
+      await sender.sendLlmFailure(
+        'user-123',
+        'research-456',
+        'claude-opus-4-5-20251101',
+        'Key invalid'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('Anthropic Claude'),
+          message: expect.stringContaining('claude-opus-4-5-20251101'),
         })
       );
     });
@@ -166,7 +176,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendLlmFailure('user-123', 'research-456', 'google', 'Rate limit exceeded');
+      await sender.sendLlmFailure(
+        'user-123',
+        'research-456',
+        'gemini-2.5-flash',
+        'Rate limit exceeded'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -6,6 +6,8 @@ import {
   getMobileNotificationsStatus,
   getNotionStatus,
   getWhatsAppStatus,
+  getLlmUsageStats,
+  type LlmUsageStats,
   type MobileNotificationsStatusResponse,
 } from '@/services';
 import type { NotionStatus, WhatsAppStatus } from '@/types';
@@ -33,6 +35,8 @@ export function SystemHealthPage(): React.JSX.Element {
     status: 'loading',
     description: 'Loading...',
   });
+  const [usageStats, setUsageStats] = useState<LlmUsageStats[]>([]);
+  const [usageStatsLoading, setUsageStatsLoading] = useState(true);
 
   const fetchStatuses = useCallback(async (): Promise<void> => {
     try {
@@ -107,6 +111,16 @@ export function SystemHealthPage(): React.JSX.Element {
           status: 'error',
           description: 'Failed to fetch status',
         });
+      }
+
+      // Fetch LLM usage stats
+      try {
+        const stats = await getLlmUsageStats(token);
+        setUsageStats(stats);
+      } catch {
+        // Silently fail - usage stats are optional
+      } finally {
+        setUsageStatsLoading(false);
       }
     } catch {
       setNotionState({ status: 'error', description: 'Authentication error' });
@@ -243,13 +257,94 @@ export function SystemHealthPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div>
+      <div className="mb-8">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">LLM Providers</h3>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {renderLlmWidget('Claude (Anthropic)', 'anthropic')}
           {renderLlmWidget('Gemini (Google)', 'google')}
           {renderLlmWidget('GPT (OpenAI)', 'openai')}
         </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">LLM Usage Statistics</h3>
+        {usageStatsLoading ? (
+          <p className="text-slate-500">Loading usage statistics...</p>
+        ) : usageStats.length === 0 ? (
+          <p className="text-slate-500">No usage data available yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Model
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Calls
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Success Rate
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Total Tokens
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Cost (USD)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-200">
+                {usageStats.map((stat) => (
+                  <tr key={`${stat.provider}_${stat.model}`}>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">
+                      <span className="font-medium">{stat.model}</span>
+                      <span className="text-slate-500 ml-2">({stat.provider})</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-600">
+                      {stat.calls.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-600">
+                      {stat.calls > 0
+                        ? `${((stat.successfulCalls / stat.calls) * 100).toFixed(1)}%`
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-600">
+                      {stat.totalTokens.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-600">
+                      ${stat.costUsd.toFixed(4)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-slate-50 font-medium">
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-900">Total</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-900">
+                    {usageStats.reduce((sum, s) => sum + s.calls, 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-900">
+                    {((): string => {
+                      const totalCalls = usageStats.reduce((sum, s) => sum + s.calls, 0);
+                      const successCalls = usageStats.reduce(
+                        (sum, s) => sum + s.successfulCalls,
+                        0
+                      );
+                      return totalCalls > 0
+                        ? `${((successCalls / totalCalls) * 100).toFixed(1)}%`
+                        : '-';
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-900">
+                    {usageStats.reduce((sum, s) => sum + s.totalTokens, 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-900">
+                    ${usageStats.reduce((sum, s) => sum + s.costUsd, 0).toFixed(4)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Layout>
   );

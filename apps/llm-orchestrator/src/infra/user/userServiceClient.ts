@@ -5,6 +5,9 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import type { SupportedModel, LlmProvider } from '@intexuraos/llm-contract';
+
+export type { SupportedModel, LlmProvider };
 
 /**
  * Configuration for the user service client.
@@ -32,20 +35,11 @@ export interface UserServiceError {
 }
 
 /**
- * LLM provider type.
- */
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
-
-/**
- * Search mode for research operations.
- */
-export type SearchMode = 'deep' | 'quick';
-
-/**
  * Research settings from user-service.
+ * defaultModels is null when user hasn't configured any (use system defaults).
  */
 export interface ResearchSettings {
-  searchMode: SearchMode;
+  defaultModels: SupportedModel[] | null;
 }
 
 /**
@@ -117,13 +111,13 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         );
 
         if (!response.ok) {
-          return ok({ searchMode: 'deep' });
+          return ok({ defaultModels: null });
         }
 
-        const data = (await response.json()) as { searchMode?: 'deep' | 'quick' };
-        return ok({ searchMode: data.searchMode ?? 'deep' });
+        const data = (await response.json()) as { defaultModels?: string[] | null };
+        return ok({ defaultModels: (data.defaultModels ?? null) as SupportedModel[] | null });
       } catch {
-        return ok({ searchMode: 'deep' });
+        return ok({ defaultModels: null });
       }
     },
 

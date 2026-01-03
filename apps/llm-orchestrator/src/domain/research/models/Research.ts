@@ -3,13 +3,13 @@
  * Core entities for the LLM research orchestration.
  */
 
-import { CLAUDE_DEFAULTS } from '@intexuraos/infra-claude';
-import { GEMINI_DEFAULTS } from '@intexuraos/infra-gemini';
-import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
+import {
+  getProviderForModel,
+  type LlmProvider,
+  type SupportedModel,
+} from '@intexuraos/llm-contract';
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
-
-export type SearchMode = 'deep' | 'quick';
+export type { LlmProvider, SupportedModel } from '@intexuraos/llm-contract';
 
 export type ResearchStatus =
   | 'draft'
@@ -24,7 +24,7 @@ export type ResearchStatus =
 export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
 
 export interface PartialFailure {
-  failedProviders: LlmProvider[];
+  failedModels: SupportedModel[];
   userDecision?: PartialFailureDecision;
   detectedAt: string;
   retryCount: number;
@@ -68,6 +68,7 @@ export interface ShareInfo {
   shareUrl: string;
   sharedAt: string;
   gcsPath: string;
+  coverImageId?: string;
 }
 
 export interface Research {
@@ -75,8 +76,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   externalReports?: ExternalReport[];
@@ -89,25 +90,23 @@ export interface Research {
   sourceActionId?: string;
   skipSynthesis?: boolean;
   shareInfo?: ShareInfo;
+  sourceResearchId?: string;
 }
 
-function getDefaultModel(provider: LlmProvider): string {
-  switch (provider) {
-    case 'google':
-      return GEMINI_DEFAULTS.researchModel;
-    case 'openai':
-      return GPT_DEFAULTS.researchModel;
-    case 'anthropic':
-      return CLAUDE_DEFAULTS.researchModel;
-  }
+export function createLlmResults(selectedModels: SupportedModel[]): LlmResult[] {
+  return selectedModels.map((model) => ({
+    provider: getProviderForModel(model),
+    model,
+    status: 'pending' as const,
+  }));
 }
 
 export function createResearch(params: {
   id: string;
   userId: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
 }): Research {
@@ -117,14 +116,10 @@ export function createResearch(params: {
     userId: params.userId,
     title: '',
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
     status: 'pending',
-    llmResults: params.selectedLlms.map((provider) => ({
-      provider,
-      model: getDefaultModel(provider),
-      status: 'pending' as const,
-    })),
+    llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
   };
 
@@ -154,8 +149,8 @@ export function createDraftResearch(params: {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   sourceActionId?: string;
   externalReports?: ExternalReport[];
 }): Research {
@@ -165,14 +160,10 @@ export function createDraftResearch(params: {
     userId: params.userId,
     title: params.title,
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
     status: 'draft',
-    llmResults: params.selectedLlms.map((provider) => ({
-      provider,
-      model: getDefaultModel(provider),
-      status: 'pending' as const,
-    })),
+    llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
   };
 
@@ -182,6 +173,69 @@ export function createDraftResearch(params: {
 
   if (params.externalReports !== undefined) {
     research.externalReports = params.externalReports;
+  }
+
+  return research;
+}
+
+export interface EnhanceResearchParams {
+  id: string;
+  userId: string;
+  sourceResearch: Research;
+  additionalModels?: SupportedModel[];
+  additionalContexts?: { content: string; model?: string }[];
+  synthesisModel?: SupportedModel;
+  removeContextIds?: string[];
+}
+
+export function createEnhancedResearch(params: EnhanceResearchParams): Research {
+  const now = new Date().toISOString();
+  const source = params.sourceResearch;
+
+  const completedResults = source.llmResults
+    .filter((r) => r.status === 'completed')
+    .map((r) => ({ ...r }));
+
+  const existingModels = new Set(completedResults.map((r) => r.model));
+  const newModels = (params.additionalModels ?? []).filter((m) => !existingModels.has(m));
+  const newResults = createLlmResults(newModels);
+
+  const allModels = [
+    ...new Set([...completedResults.map((r) => r.model as SupportedModel), ...newModels]),
+  ];
+
+  const removeSet = new Set(params.removeContextIds ?? []);
+  const existingContexts = (source.externalReports ?? []).filter((r) => !removeSet.has(r.id));
+
+  const additionalContexts: ExternalReport[] = (params.additionalContexts ?? []).map((ctx, idx) => {
+    const report: ExternalReport = {
+      id: `${params.id}-ext-${String(idx)}`,
+      content: ctx.content,
+      addedAt: now,
+    };
+    if (ctx.model !== undefined) {
+      report.model = ctx.model;
+    }
+    return report;
+  });
+
+  const allContexts = [...existingContexts, ...additionalContexts];
+
+  const research: Research = {
+    id: params.id,
+    userId: params.userId,
+    title: source.title,
+    prompt: source.prompt,
+    selectedModels: allModels,
+    synthesisModel: params.synthesisModel ?? source.synthesisModel,
+    status: 'pending',
+    llmResults: [...completedResults, ...newResults],
+    startedAt: now,
+    sourceResearchId: source.id,
+  };
+
+  if (allContexts.length > 0) {
+    research.externalReports = allContexts;
   }
 
   return research;

@@ -1,12 +1,12 @@
 import type { Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
-import type { LlmProvider } from '../../domain/research/models/Research.js';
+import type { SupportedModel } from '../../domain/research/models/Research.js';
 
 export interface LlmCallEvent {
   type: 'llm.call';
   researchId: string;
   userId: string;
-  provider: LlmProvider;
+  model: SupportedModel;
   prompt: string;
 }
 
@@ -31,7 +31,7 @@ export class LlmCallPublisherImpl extends BasePubSubPublisher implements LlmCall
     return await this.publishToTopic(
       this.topicName,
       event,
-      { researchId: event.researchId, provider: event.provider },
+      { researchId: event.researchId, model: event.model },
       'LLM call'
     );
   }

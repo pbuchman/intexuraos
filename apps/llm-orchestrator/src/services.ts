@@ -5,8 +5,8 @@
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
+import { FirestoreUsageStatsRepository } from './infra/usage/index.js';
 import {
-  createLlmProviders,
   createResearchProvider,
   createSynthesizer,
   createTitleGenerator,
@@ -19,23 +19,21 @@ import {
   type LlmCallPublisher,
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
-import {
-  createUserServiceClient,
-  type DecryptedApiKeys as InfraDecryptedApiKeys,
-  type UserServiceClient,
-} from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 
 export type { DecryptedApiKeys } from './infra/user/index.js';
+export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
 import {
-  type LlmProvider,
   type LlmResearchProvider,
   type LlmSynthesisProvider,
   type NotificationSender,
   type PricingRepository,
   type ResearchRepository,
-  type SearchMode,
   type ShareStoragePort,
+  type SupportedModel,
   type TitleGenerator,
+  type UsageStatsRepository,
 } from './domain/research/index.js';
 
 /**
@@ -52,24 +50,18 @@ export interface ShareConfig {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   pricingRepo: PricingRepository;
+  usageStatsRepo: UsageStatsRepository;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
+  imageServiceClient: ImageServiceClient | null;
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
-  createLlmProviders: (
-    apiKeys: InfraDecryptedApiKeys,
-    searchMode?: SearchMode
-  ) => Record<LlmProvider, LlmResearchProvider>;
-  createResearchProvider: (
-    provider: LlmProvider,
-    apiKey: string,
-    searchMode?: SearchMode
-  ) => LlmResearchProvider;
-  createSynthesizer: (provider: LlmProvider, apiKey: string) => LlmSynthesisProvider;
-  createTitleGenerator: (apiKey: string) => TitleGenerator;
+  createResearchProvider: (model: SupportedModel, apiKey: string) => LlmResearchProvider;
+  createSynthesizer: (model: SupportedModel, apiKey: string) => LlmSynthesisProvider;
+  createTitleGenerator: (model: string, apiKey: string) => TitleGenerator;
 }
 
 let container: ServiceContainer | null = null;
@@ -157,6 +149,7 @@ function createShareStorageAndConfig(): {
 export function initializeServices(): void {
   const researchRepo = new FirestoreResearchRepository();
   const pricingRepo = new FirestorePricingRepository();
+  const usageStatsRepo = new FirestoreUsageStatsRepository();
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
@@ -177,17 +170,27 @@ export function initializeServices(): void {
 
   const { shareStorage, shareConfig } = createShareStorageAndConfig();
 
+  const imageServiceUrl = process.env['INTEXURAOS_IMAGE_SERVICE_URL'];
+  const imageServiceClient =
+    imageServiceUrl !== undefined && imageServiceUrl !== ''
+      ? createImageServiceClient({
+          baseUrl: imageServiceUrl,
+          internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+        })
+      : null;
+
   container = {
     researchRepo,
     pricingRepo,
+    usageStatsRepo,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
     userServiceClient,
+    imageServiceClient,
     notificationSender,
     shareStorage,
     shareConfig,
-    createLlmProviders,
     createResearchProvider,
     createSynthesizer,
     createTitleGenerator,

@@ -9,7 +9,6 @@ import {
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient } from '@intexuraos/llm-contract';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
-import { GPT_DEFAULTS } from './types.js';
 
 export type GptClient = LLMClient;
 
@@ -98,22 +97,20 @@ async function logError(
 
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const researchModel = config.researchModel ?? GPT_DEFAULTS.researchModel;
-  const defaultModel = config.defaultModel ?? GPT_DEFAULTS.defaultModel;
-  const evaluateModel = config.evaluateModel ?? GPT_DEFAULTS.evaluateModel;
+  const { model } = config;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        researchModel,
+        model,
         researchPrompt
       );
 
       try {
         const response = await client.responses.create({
-          model: researchModel,
+          model,
           instructions:
             'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
           input: researchPrompt,
@@ -146,13 +143,13 @@ export function createGptClient(config: GptConfig): GptClient {
     async generate(prompt: string): Promise<Result<string, GptError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
         'generate',
-        defaultModel,
+        model,
         prompt
       );
 
       try {
         const response = await client.chat.completions.create({
-          model: defaultModel,
+          model,
           max_completion_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         });
@@ -162,29 +159,6 @@ export function createGptClient(config: GptConfig): GptClient {
         return ok(text);
       } catch (error) {
         await logError('generate', requestId, startTime, error, auditContext);
-        return err(mapGptError(error));
-      }
-    },
-
-    async evaluate(prompt: string): Promise<Result<string, GptError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'evaluate',
-        evaluateModel,
-        prompt
-      );
-
-      try {
-        const response = await client.chat.completions.create({
-          model: evaluateModel,
-          max_completion_tokens: 500,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const text = response.choices[0]?.message.content ?? '';
-        await logSuccess('evaluate', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('evaluate', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },

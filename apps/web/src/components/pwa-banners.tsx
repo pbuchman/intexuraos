@@ -1,5 +1,5 @@
 import type React from 'react';
-import { PlusSquare, Share, X } from 'lucide-react';
+import { Download, PlusSquare, Share, X } from 'lucide-react';
 import { usePWA } from '@/context/pwa-context';
 
 /**
@@ -43,30 +43,41 @@ export function IOSInstallBanner(): React.JSX.Element | null {
 
 /**
  * Android/Chrome install prompt banner.
- * Shows when beforeinstallprompt event is captured.
+ * Shows when beforeinstallprompt event is captured and not dismissed for current version.
  */
 export function AndroidInstallBanner(): React.JSX.Element | null {
-  const { canInstall, installApp } = usePWA();
+  const { showAndroidInstallPrompt, dismissAndroidInstallPrompt, installApp } = usePWA();
 
-  if (!canInstall) {
+  if (!showAndroidInstallPrompt) {
     return null;
   }
 
   return (
     <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-blue-600 p-4 text-white shadow-lg lg:hidden">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div>
-          <p className="text-sm font-semibold">Install IntexuraOS</p>
-          <p className="text-sm text-blue-100">Add to your home screen for quick access.</p>
-        </div>
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <button
-          onClick={(): void => {
-            void installApp();
-          }}
-          className="whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+          onClick={dismissAndroidInstallPrompt}
+          className="absolute -right-1 -top-1 p-1 text-blue-200 hover:text-white"
+          aria-label="Dismiss"
         >
-          Install
+          <X className="h-5 w-5" />
         </button>
+
+        <div className="flex items-center gap-4 pr-6">
+          <Download className="h-8 w-8 shrink-0 text-blue-200" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Install IntexuraOS</p>
+            <p className="text-sm text-blue-100">Add to your home screen for quick access.</p>
+          </div>
+          <button
+            onClick={(): void => {
+              void installApp();
+            }}
+            className="shrink-0 whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+          >
+            Install
+          </button>
+        </div>
       </div>
     </div>
   );

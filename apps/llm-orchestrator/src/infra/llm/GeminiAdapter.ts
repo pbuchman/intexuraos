@@ -14,12 +14,8 @@ import type {
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GeminiClient;
 
-  constructor(apiKey: string, researchModel?: string) {
-    const config: Parameters<typeof createGeminiClient>[0] = { apiKey };
-    if (researchModel !== undefined) {
-      config.researchModel = researchModel;
-    }
-    this.client = createGeminiClient(config);
+  constructor(apiKey: string, model: string) {
+    this.client = createGeminiClient({ apiKey, model });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
@@ -38,9 +34,9 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async synthesize(
     originalPrompt: string,
     reports: { model: string; content: string }[],
-    inputContexts?: { content: string }[]
+    additionalSources?: { content: string; label?: string }[]
   ): Promise<Result<string, LlmError>> {
-    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {

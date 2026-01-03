@@ -10,28 +10,54 @@ describe('buildResearchPrompt', () => {
     expect(result).toContain(userPrompt);
   });
 
-  it('includes all required output structure sections', () => {
+  it('includes output structure with flexibility for user structure', () => {
     const result = buildResearchPrompt('test query');
 
-    expect(result).toContain('### Executive Summary');
-    expect(result).toContain('### Key Findings');
-    expect(result).toContain('### Analysis');
-    expect(result).toContain('### Sources');
+    expect(result).toContain('## Output Structure');
+    expect(result).toContain('If the Research Request contains its own structure');
+    expect(result).toContain('Overview');
+    expect(result).toContain('Main Content');
   });
 
-  it('includes instructions for web search and source citation', () => {
+  it('includes research guidelines with dynamic year', () => {
     const result = buildResearchPrompt('test query');
+    const currentYear = new Date().getFullYear();
 
-    expect(result).toContain('Search the web');
+    expect(result).toContain('## Research Guidelines');
     expect(result).toContain('Cross-reference');
-    expect(result).toContain('Cite all sources');
+    expect(result).toContain(String(currentYear));
   });
 
-  it('includes quality standards', () => {
+  it('includes inline citation rules with example', () => {
     const result = buildResearchPrompt('test query');
 
-    expect(result).toContain('## Quality Standards');
-    expect(result).toContain('authoritative, reputable sources');
+    expect(result).toContain('## Citation Rules (CRITICAL)');
+    expect(result).toContain('Inline citations');
+    expect(result).toContain('Teide volcano');
+  });
+
+  it('includes what NOT to do section', () => {
+    const result = buildResearchPrompt('test query');
+
+    expect(result).toContain('## What NOT to Do');
+    expect(result).toContain('Do NOT invent or hallucinate sources');
+    expect(result).toContain('Do NOT use outdated information');
+  });
+
+  it('includes language requirement', () => {
+    const result = buildResearchPrompt('test query');
+
+    expect(result).toContain('## Language Requirement');
+    expect(result).toContain('SAME LANGUAGE');
+  });
+
+  it('includes adaptive behavior section', () => {
+    const result = buildResearchPrompt('test query');
+
+    expect(result).toContain('## Adaptive Behavior');
+    expect(result).toContain('Travel/lifestyle');
+    expect(result).toContain('Technical/programming');
+    expect(result).toContain('Medical/health');
   });
 
   it('returns a non-empty string for empty user prompt', () => {

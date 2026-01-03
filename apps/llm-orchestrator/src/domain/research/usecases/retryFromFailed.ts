@@ -6,7 +6,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { LlmProvider } from '../models/index.js';
+import type { SupportedModel } from '../models/index.js';
 import type { ResearchRepository } from '../ports/index.js';
 import type { RunSynthesisDeps } from './runSynthesis.js';
 import { runSynthesis } from './runSynthesis.js';
@@ -16,7 +16,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: SupportedModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -33,7 +33,7 @@ export interface RetryFromFailedResult {
   ok: boolean;
   error?: string;
   action?: RetryAction;
-  retriedProviders?: LlmProvider[];
+  retriedModels?: SupportedModel[];
 }
 
 export async function retryFromFailed(
@@ -63,10 +63,10 @@ export async function retryFromFailed(
   const hasSuccessfulLlms = research.llmResults.some((r) => r.status === 'completed');
 
   if (hasFailedLlms) {
-    const failedProviders = failedLlms.map((r) => r.provider);
+    const failedModels = failedLlms.map((r) => r.model) as SupportedModel[];
 
-    for (const provider of failedProviders) {
-      await researchRepo.updateLlmResult(researchId, provider, {
+    for (const model of failedModels) {
+      await researchRepo.updateLlmResult(researchId, model, {
         status: 'pending',
       });
     }
@@ -75,17 +75,17 @@ export async function retryFromFailed(
       status: 'retrying',
     });
 
-    for (const provider of failedProviders) {
+    for (const model of failedModels) {
       await llmCallPublisher.publishLlmCall({
         type: 'llm.call',
         researchId,
         userId: research.userId,
-        provider,
+        model,
         prompt: research.prompt,
       });
     }
 
-    return { ok: true, action: 'retried_llms', retriedProviders: failedProviders };
+    return { ok: true, action: 'retried_llms', retriedModels: failedModels };
   }
 
   if (hasSynthesisError && hasSuccessfulLlms) {

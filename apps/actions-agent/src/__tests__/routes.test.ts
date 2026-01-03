@@ -1381,6 +1381,48 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('returns 200 with skipped when action not found (already processed/deleted)', async () => {
+      fakeActionClient.setFailNext(true, new Error('Action not found: action-123'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload(),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        actionId: string;
+        skipped: boolean;
+        reason: string;
+      };
+      expect(body.success).toBe(true);
+      expect(body.actionId).toBe('action-123');
+      expect(body.skipped).toBe(true);
+      expect(body.reason).toBe('action_not_found');
+    });
+
+    it('returns 500 for other processing errors', async () => {
+      fakeActionClient.setFailNext(true, new Error('Database connection failed'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload(),
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toContain('Failed to update action status');
+    });
   });
 
   describe('POST /internal/actions/retry-pending', () => {

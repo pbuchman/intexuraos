@@ -5,6 +5,7 @@ This document describes how to configure GCP access for Claude Code when running
 ## Overview
 
 **Use this guide when:**
+
 - You're using Claude Code in a web browser or cloud environment
 - You don't have `gcloud` CLI installed
 - You need to authenticate using a Service Account key file
@@ -13,12 +14,12 @@ This document describes how to configure GCP access for Claude Code when running
 
 ## Differences from Local Development
 
-| Aspect | Local Development | Claude Code Cloud |
-|--------|------------------|-------------------|
+| Aspect         | Local Development                     | Claude Code Cloud   |
+| -------------- | ------------------------------------- | ------------------- |
 | Authentication | Application Default Credentials (ADC) | Service Account Key |
-| CLI Tools | `gcloud` CLI installed | No CLI tools needed |
-| User Account | Your personal GCP account | Service Account |
-| Setup Location | Your local machine | Cloud environment |
+| CLI Tools      | `gcloud` CLI installed                | No CLI tools needed |
+| User Account   | Your personal GCP account             | Service Account     |
+| Setup Location | Your local machine                    | Cloud environment   |
 
 ## Prerequisites
 
@@ -38,6 +39,7 @@ This document describes how to configure GCP access for Claude Code when running
 ### 1.2 Configure Service Account
 
 **Service account details:**
+
 - **Name**: `claude-code-dev`
 - **Service account ID**: `claude-code-dev` (auto-generated)
 - **Description**: `Service account for Claude Code development environment`
@@ -48,14 +50,15 @@ Click **CREATE AND CONTINUE**
 
 Add the following roles:
 
-| Role | Purpose |
-|------|---------|
-| **Cloud Datastore User** | Read/write Firestore collections |
-| **Secret Manager Secret Accessor** | Access secrets from Secret Manager |
-| **Storage Object Viewer** | Read from GCS buckets |
-| **Storage Object Admin** | Read/write to GCS buckets (for media uploads) |
+| Role                               | Purpose                                       |
+| ---------------------------------- | --------------------------------------------- |
+| **Cloud Datastore User**           | Read/write Firestore collections              |
+| **Secret Manager Secret Accessor** | Access secrets from Secret Manager            |
+| **Storage Object Viewer**          | Read from GCS buckets                         |
+| **Storage Object Admin**           | Read/write to GCS buckets (for media uploads) |
 
 To add each role:
+
 1. Click **Select a role**
 2. Search for the role name
 3. Select it
@@ -82,6 +85,7 @@ A JSON file will be downloaded to your computer (e.g., `YOUR-PROJECT-abc123.json
 Copy the entire contents of the downloaded JSON file and provide it to Claude Code when requested.
 
 Claude Code will:
+
 1. Create `/home/user/intexuraos/gcp-service-account.json`
 2. Add it to `.gitignore` (never committed to git)
 3. Create `.env.local` with `GOOGLE_APPLICATION_CREDENTIALS` pointing to the key file
@@ -96,6 +100,7 @@ After Claude Code configures the credentials, verify the setup:
 ```
 
 Expected output:
+
 ```
 ✅ GitHub: Ready for git operations
 ✅ GCP: Service account configured
@@ -150,6 +155,7 @@ curl http://localhost:8080/health
 ### "Could not load the default credentials"
 
 **Solution:**
+
 ```bash
 # Verify the environment variable is set
 echo $GOOGLE_APPLICATION_CREDENTIALS
@@ -164,6 +170,7 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 **Cause:** Service account lacks required IAM roles
 
 **Solution:**
+
 1. Go to [IAM & Admin → IAM](https://console.cloud.google.com/iam-admin/iam)
 2. Find `claude-code-dev@...` in the principals list
 3. Click the pencil icon to edit
@@ -172,19 +179,20 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 ### Key file not found
 
 **Solution:**
+
 1. Verify `.env.local` exists and contains `GOOGLE_APPLICATION_CREDENTIALS`
 2. Verify `gcp-service-account.json` exists
 3. If missing, regenerate the key (section 2)
 
 ## 7. Differences from Local Setup
 
-| Task | Local Development | Claude Code Cloud |
-|------|------------------|-------------------|
-| Install gcloud CLI | ✅ Required | ❌ Not needed |
-| Run `gcloud auth login` | ✅ Required | ❌ Not needed |
-| Service Account Key | ❌ Optional | ✅ Required |
-| `.env.local` file | ✅ Used | ✅ Used |
-| IAM Roles | Granted to user account | Granted to service account |
+| Task                    | Local Development       | Claude Code Cloud          |
+| ----------------------- | ----------------------- | -------------------------- |
+| Install gcloud CLI      | ✅ Required             | ❌ Not needed              |
+| Run `gcloud auth login` | ✅ Required             | ❌ Not needed              |
+| Service Account Key     | ❌ Optional             | ✅ Required                |
+| `.env.local` file       | ✅ Used                 | ✅ Used                    |
+| IAM Roles               | Granted to user account | Granted to service account |
 
 ## 8. Related Documentation
 

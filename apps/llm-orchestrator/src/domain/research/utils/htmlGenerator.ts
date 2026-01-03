@@ -15,6 +15,12 @@ export interface ExternalReportInput {
   model?: string;
 }
 
+export interface CoverImageInput {
+  thumbnailUrl: string;
+  fullSizeUrl: string;
+  alt: string;
+}
+
 export interface HtmlGeneratorInput {
   title: string;
   synthesizedResult: string;
@@ -23,6 +29,7 @@ export interface HtmlGeneratorInput {
   staticAssetsUrl: string;
   llmResults?: LlmResultInput[];
   externalReports?: ExternalReportInput[];
+  coverImage?: CoverImageInput;
 }
 
 // Configure marked with custom link renderer for external links
@@ -88,6 +95,13 @@ const PROSE_STYLES = `
   .meta {
     color: var(--color-text-muted);
     font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .cover-image {
+    width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
     margin-bottom: 2rem;
   }
 
@@ -278,6 +292,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
     staticAssetsUrl,
     llmResults,
     externalReports,
+    coverImage,
   } = input;
 
   const displayTitle = title !== '' ? title : 'Research Report';
@@ -288,6 +303,16 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
   });
 
   const renderedMarkdown = marked.parse(synthesizedResult, { async: false });
+
+  const ogImageMeta =
+    coverImage !== undefined
+      ? `<meta property="og:image" content="${escapeHtml(coverImage.thumbnailUrl)}">`
+      : '';
+
+  const coverImageHtml =
+    coverImage !== undefined
+      ? `<img class="cover-image" src="${escapeHtml(coverImage.fullSizeUrl)}" alt="${escapeHtml(coverImage.alt)}">`
+      : '';
 
   const completedResults =
     llmResults?.filter(
@@ -348,6 +373,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
   <meta property="og:title" content="${escapeHtml(displayTitle)}">
   <meta property="og:type" content="article">
   <meta property="og:url" content="${escapeHtml(shareUrl)}">
+  ${ogImageMeta}
 
   <link rel="icon" type="image/png" href="${staticAssetsUrl}/branding/exports/icon-dark.png">
 
@@ -363,6 +389,8 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
     <main class="prose">
       <h1>${escapeHtml(displayTitle)}</h1>
       <p class="meta">Generated on ${formattedDate}</p>
+
+      ${coverImageHtml}
 
       ${renderedMarkdown}
 

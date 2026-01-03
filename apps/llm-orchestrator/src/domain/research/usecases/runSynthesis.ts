@@ -11,7 +11,9 @@ import type {
   ShareStoragePort,
 } from '../ports/index.js';
 import type { ShareInfo } from '../models/Research.js';
+import type { CoverImageInput } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
+import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
 
 export interface ShareConfig {
   shareBaseUrl: string;
@@ -24,8 +26,11 @@ export interface RunSynthesisDeps {
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
+  imageServiceClient: ImageServiceClient | null;
+  userId: string;
   webAppUrl: string;
   reportLlmSuccess?: () => void;
+  logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void };
 }
 
 export async function runSynthesis(
@@ -38,8 +43,11 @@ export async function runSynthesis(
     notificationSender,
     shareStorage,
     shareConfig,
+    imageServiceClient,
+    userId,
     webAppUrl,
     reportLlmSuccess,
+    logger,
   } = deps;
 
   const researchResult = await researchRepo.findById(researchId);
@@ -91,15 +99,15 @@ export async function runSynthesis(
     content: r.result ?? '',
   }));
 
-  const externalReports = research.externalReports?.map((r) => {
-    const report: { content: string; model?: string } = { content: r.content };
+  const additionalSources = research.externalReports?.map((r) => {
+    const source: { content: string; label?: string } = { content: r.content };
     if (r.model !== undefined) {
-      report.model = r.model;
+      source.label = r.model;
     }
-    return report;
+    return source;
   });
 
-  const synthesisResult = await synthesizer.synthesize(research.prompt, reports, externalReports);
+  const synthesisResult = await synthesizer.synthesize(research.prompt, reports, additionalSources);
 
   if (!synthesisResult.ok) {
     await researchRepo.update(researchId, {
@@ -113,6 +121,26 @@ export async function runSynthesis(
   const now = new Date();
   const startedAt = new Date(research.startedAt);
   const totalDurationMs = now.getTime() - startedAt.getTime();
+
+  let coverImage: CoverImageInput | undefined;
+  let coverImageId: string | undefined;
+
+  if (imageServiceClient !== null) {
+    const imageResult = await generateCoverImage(
+      imageServiceClient,
+      synthesisResult.value,
+      userId,
+      logger
+    );
+    if (imageResult !== null) {
+      coverImage = {
+        thumbnailUrl: imageResult.thumbnailUrl,
+        fullSizeUrl: imageResult.fullSizeUrl,
+        alt: research.title,
+      };
+      coverImageId = imageResult.id;
+    }
+  }
 
   let shareInfo: ShareInfo | undefined;
   let shareUrl = `${webAppUrl}/#/research/${researchId}`;
@@ -132,6 +160,7 @@ export async function runSynthesis(
       staticAssetsUrl: shareConfig.staticAssetsUrl,
       llmResults: research.llmResults,
       ...(research.externalReports !== undefined && { externalReports: research.externalReports }),
+      ...(coverImage !== undefined && { coverImage }),
     });
 
     const uploadResult = await shareStorage.upload(fileName, html);
@@ -142,6 +171,7 @@ export async function runSynthesis(
         shareUrl,
         sharedAt: now.toISOString(),
         gcsPath: uploadResult.value.gcsPath,
+        ...(coverImageId !== undefined && { coverImageId }),
       };
     }
   }
@@ -166,4 +196,39 @@ export async function runSynthesis(
   );
 
   return { ok: true };
+}
+
+async function generateCoverImage(
+  client: ImageServiceClient,
+  synthesizedResult: string,
+  userId: string,
+  logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
+): Promise<GeneratedImageData | null> {
+  try {
+    logger?.info('Generating cover image prompt');
+
+    const promptResult = await client.generatePrompt(synthesizedResult, 'gemini-2.5-pro', userId);
+    if (!promptResult.ok) {
+      logger?.error({ error: promptResult.error }, 'Failed to generate cover image prompt');
+      return null;
+    }
+
+    logger?.info('Generating cover image');
+
+    const imageResult = await client.generateImage(
+      promptResult.value.prompt,
+      'gpt-image-1',
+      userId
+    );
+    if (!imageResult.ok) {
+      logger?.error({ error: imageResult.error }, 'Failed to generate cover image');
+      return null;
+    }
+
+    logger?.info('Cover image generated successfully');
+    return imageResult.value;
+  } catch (error) {
+    logger?.error({ error }, 'Unexpected error during cover image generation');
+    return null;
+  }
 }

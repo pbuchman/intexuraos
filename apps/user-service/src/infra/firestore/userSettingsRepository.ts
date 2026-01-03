@@ -126,7 +126,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         await docRef.set({
           userId,
           llmApiKeys: { [provider]: encryptedKey },
-          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });
@@ -184,7 +183,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         await docRef.set({
           userId,
           llmTestResults: { [provider]: testResult },
-          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });
@@ -218,7 +216,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         await docRef.set({
           userId,
           llmTestResults: { [provider]: { response: '', testedAt: now } },
-          researchSettings: { searchMode: 'deep' },
           createdAt: now,
           updatedAt: now,
         });

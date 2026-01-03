@@ -4,7 +4,6 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { LlmProvider } from '../models/Research.js';
 
 export interface NotificationError {
   code: 'SEND_FAILED' | 'USER_NOT_CONNECTED';
@@ -22,7 +21,7 @@ export interface NotificationSender {
   sendLlmFailure(
     userId: string,
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     error: string
   ): Promise<Result<void, NotificationError>>;
 }

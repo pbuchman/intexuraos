@@ -24,6 +24,7 @@
     "@intexuraos/infra-firestore": "*",
     "@intexuraos/infra-gemini": "*",
     "@intexuraos/infra-pubsub": "*",
+    "@intexuraos/llm-contract": "*",
     "fastify": "^5.1.0",
     "jose": "^5.9.6",
     "pino": "^10.1.0",

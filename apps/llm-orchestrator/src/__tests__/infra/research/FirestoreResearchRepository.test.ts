@@ -29,6 +29,9 @@ const mockGetFirestore = vi.fn().mockReturnValue({
 
 vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: mockGetFirestore,
+  FieldValue: {
+    delete: vi.fn().mockReturnValue({ _methodName: 'FieldValue.delete' }),
+  },
 }));
 
 const { FirestoreResearchRepository } =
@@ -49,8 +52,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedLlms: ['google' as const],
-        synthesisLlm: 'google' as const,
+        selectedModels: ['gemini-2.5-pro' as const],
+        synthesisModel: 'gemini-2.5-pro' as const,
         status: 'pending' as const,
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -121,8 +124,8 @@ describe('FirestoreResearchRepository', () => {
           userId: 'user-1',
           title: 'Test Research 1',
           prompt: 'Test',
-          selectedLlms: ['google'],
-          synthesisLlm: 'google',
+          selectedModels: ['gemini-2.5-pro'],
+          synthesisModel: 'gemini-2.5-pro',
           status: 'pending',
           llmResults: [],
           startedAt: '2024-01-01T00:00:00Z',
@@ -132,8 +135,8 @@ describe('FirestoreResearchRepository', () => {
           userId: 'user-1',
           title: 'Test Research 2',
           prompt: 'Test',
-          selectedLlms: ['google'],
-          synthesisLlm: 'google',
+          selectedModels: ['gemini-2.5-pro'],
+          synthesisModel: 'gemini-2.5-pro',
           status: 'pending',
           llmResults: [],
           startedAt: '2024-01-01T00:00:00Z',
@@ -244,8 +247,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'New Title',
         prompt: 'Test',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
         status: 'pending',
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -281,6 +284,18 @@ describe('FirestoreResearchRepository', () => {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
       }
     });
+
+    it('propagates findById error after successful update', async () => {
+      mockDocUpdate.mockResolvedValue(undefined);
+      mockDocGet.mockRejectedValueOnce(new Error('Read failed after update'));
+
+      const result = await repository.update('research-1', { title: 'New Title' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
   });
 
   describe('updateLlmResult', () => {
@@ -290,12 +305,12 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedLlms: ['google', 'anthropic'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+        synthesisModel: 'gemini-2.5-pro',
         status: 'pending',
         llmResults: [
-          { provider: 'google', model: 'gemini-1.5-flash-002', status: 'pending' },
-          { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', status: 'pending' },
+          { provider: 'google', model: 'gemini-2.5-pro', status: 'pending' },
+          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -305,7 +320,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'google', {
+      const result = await repository.updateLlmResult('research-1', 'gemini-2.5-pro', {
         status: 'completed',
         result: 'Result content',
       });
@@ -315,11 +330,11 @@ describe('FirestoreResearchRepository', () => {
         llmResults: [
           {
             provider: 'google',
-            model: 'gemini-1.5-flash-002',
+            model: 'gemini-2.5-pro',
             status: 'completed',
             result: 'Result content',
           },
-          { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', status: 'pending' },
+          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
         ],
       });
     });
@@ -327,7 +342,7 @@ describe('FirestoreResearchRepository', () => {
     it('returns NOT_FOUND when research does not exist', async () => {
       mockDocGet.mockResolvedValue({ exists: false });
 
-      const result = await repository.updateLlmResult('nonexistent', 'google', {
+      const result = await repository.updateLlmResult('nonexistent', 'gemini-2.0-flash', {
         status: 'completed',
       });
 
@@ -343,8 +358,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
         status: 'failed',
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
@@ -357,7 +372,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'google', {
+      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
         status: 'pending',
       });
 
@@ -379,8 +394,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
         status: 'retrying',
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
@@ -393,7 +408,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'google', {
+      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
         status: 'processing',
       });
 
@@ -415,8 +430,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedLlms: ['google'],
-        synthesisLlm: 'google',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
         status: 'processing',
         llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'processing' }],
         startedAt: '2024-01-01T00:00:00Z',
@@ -427,7 +442,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'google', {
+      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
         status: 'failed',
         error: 'New error',
       });
@@ -443,6 +458,34 @@ describe('FirestoreResearchRepository', () => {
           },
         ],
       });
+    });
+
+    it('returns error on Firestore failure', async () => {
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
+        status: 'processing',
+        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'processing' }],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+      mockDocUpdate.mockRejectedValueOnce(new Error('Update failed'));
+
+      const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
+      mockDoc.mockReturnValue(mockDocRef);
+
+      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
+        status: 'completed',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
     });
   });
 
@@ -470,6 +513,67 @@ describe('FirestoreResearchRepository', () => {
       });
 
       const result = await repository.delete('research-1');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+  });
+
+  describe('clearShareInfo', () => {
+    it('clears share info and returns updated research', async () => {
+      const updatedResearch: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedModels: ['gemini-2.5-pro'],
+        synthesisModel: 'gemini-2.5-pro',
+        status: 'completed',
+        llmResults: [],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocUpdate.mockResolvedValue(undefined);
+      mockDocGet.mockResolvedValue({ exists: true, data: () => updatedResearch });
+
+      const result = await repository.clearShareInfo('research-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.id).toBe('research-1');
+      }
+      expect(mockDocUpdate).toHaveBeenCalled();
+    });
+
+    it('returns NOT_FOUND if research does not exist after clearing', async () => {
+      mockDocUpdate.mockResolvedValue(undefined);
+      mockDocGet.mockResolvedValue({ exists: false });
+
+      const result = await repository.clearShareInfo('nonexistent');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('propagates findById error after clearing', async () => {
+      mockDocUpdate.mockResolvedValue(undefined);
+      mockDocGet.mockRejectedValueOnce(new Error('Read failed'));
+
+      const result = await repository.clearShareInfo('research-1');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+
+    it('returns error on Firestore update failure', async () => {
+      mockDocUpdate.mockRejectedValueOnce(new Error('Update failed'));
+
+      const result = await repository.clearShareInfo('research-1');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

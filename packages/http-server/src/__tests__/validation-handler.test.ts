@@ -132,6 +132,22 @@ describe('Validation Error Handler', () => {
       });
     });
 
+    it('handles invalid JSON body errors with 400 status', async () => {
+      const handler = createValidationErrorHandler();
+      const { reply, statusFn, failFn } = createMockReply();
+      const { request } = createMockRequest();
+
+      const jsonBodyError = {
+        code: 'FST_ERR_CTP_INVALID_JSON_BODY',
+        message: 'Unexpected token',
+      } as unknown as FastifyError;
+
+      await handler(jsonBodyError, request, reply);
+
+      expect(statusFn).toHaveBeenCalledWith(400);
+      expect(failFn).toHaveBeenCalledWith('INVALID_REQUEST', 'Invalid JSON body');
+    });
+
     it('handles non-validation errors as internal errors', async () => {
       const handler = createValidationErrorHandler();
       const { reply, statusFn, failFn } = createMockReply();

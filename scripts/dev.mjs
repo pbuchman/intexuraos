@@ -39,6 +39,7 @@ const SERVICES = [
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
   { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
   { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
+  { name: 'image-service', port: 8120, color: '\x1b[91m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
