@@ -3,7 +3,7 @@
  * These interfaces define what the domain needs from infrastructure.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxAction, InboxError, InboxNote } from '../models/InboxNote.js';
+import type { InboxError } from '../models/error.js';
 import type { TranscriptionState, WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type { LinkPreviewState } from '../models/LinkPreview.js';
 
@@ -41,7 +41,6 @@ export interface WhatsAppWebhookEvent {
   status: WebhookProcessingStatus;
   ignoredReason?: IgnoredReason;
   failureDetails?: string;
-  inboxNoteId?: string;
   processedAt?: string;
 }
 
@@ -53,23 +52,6 @@ export interface WhatsAppUserMappingPublic {
   connected: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-/**
- * Repository for persisting and retrieving Inbox Notes.
- */
-export interface InboxNotesRepository {
-  createNote(note: InboxNote): Promise<Result<InboxNote, InboxError>>;
-  getNote(noteId: string): Promise<Result<InboxNote | null, InboxError>>;
-  updateNote(noteId: string, updates: Partial<InboxNote>): Promise<Result<InboxNote, InboxError>>;
-}
-
-/**
- * Repository for reading Inbox Actions (read-only for phase 1).
- */
-export interface InboxActionsRepository {
-  getAction(actionId: string): Promise<Result<InboxAction | null, InboxError>>;
-  listActionsForNote(noteId: string): Promise<Result<InboxAction[], InboxError>>;
 }
 
 /**
@@ -111,7 +93,6 @@ export interface WhatsAppWebhookEventRepository {
     metadata: {
       ignoredReason?: IgnoredReason;
       failureDetails?: string;
-      inboxNoteId?: string;
     }
   ): Promise<Result<WhatsAppWebhookEvent, InboxError>>;
   getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>>;
