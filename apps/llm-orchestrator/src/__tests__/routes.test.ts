@@ -186,6 +186,18 @@ describe('Research Routes - Unauthenticated', () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
+
+  it('POST /research/:id/retry returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/research/test-id/retry',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
 });
 
 describe('Research Routes - Authenticated', () => {
@@ -1454,6 +1466,237 @@ describe('Research Routes - Authenticated', () => {
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('failed');
       expect(updatedResearch?.synthesisError).toBe('Maximum retry attempts exceeded');
+    });
+  });
+
+  describe('POST /research/:id/retry', () => {
+    function createFailedResearch(overrides?: Partial<Research>): Research {
+      return createTestResearch({
+        status: 'failed',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'Rate limit',
+          },
+        ],
+        ...overrides,
+      });
+    }
+
+    it('retries failed LLMs when status is failed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createFailedResearch();
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string; retriedProviders?: string[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('retried_llms');
+      expect(body.data.retriedProviders).toContain('openai');
+
+      const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
+      expect(updatedResearch?.status).toBe('retrying');
+    });
+
+    it('re-runs synthesis when LLMs succeeded but synthesis failed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'failed',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Result 1',
+          },
+          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+        ],
+        synthesisError: 'Synthesis failed',
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('retried_synthesis');
+
+      const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
+      expect(updatedResearch?.status).toBe('completed');
+    });
+
+    it('returns success when research is already completed (idempotent)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'completed' });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('already_completed');
+    });
+
+    it('returns 404 when research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/nonexistent-id/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 when user does not own research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createFailedResearch({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when research status is processing', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'processing' });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 503 when synthesis API key is missing', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createFailedResearch();
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('returns 500 when synthesis fails during retry', async () => {
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        generateId: () => 'new-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        notificationSender: new FakeNotificationSender(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        pricingRepo: new FakePricingRepository(),
+        shareStorage: null,
+        shareConfig: null,
+        createLlmProviders: () => createFakeLlmProviders(),
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+      };
+      setServices(services);
+
+      const newApp = await buildServer();
+      try {
+        const token = await createToken(TEST_USER_ID);
+        const research = createTestResearch({
+          status: 'failed',
+          llmResults: [
+            {
+              provider: 'google',
+              model: 'gemini-2.0-flash',
+              status: 'completed',
+              result: 'Result 1',
+            },
+            { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          ],
+          synthesisError: 'Previous failure',
+        });
+        fakeRepo.addResearch(research);
+        fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+        const response = await newApp.inject({
+          method: 'POST',
+          url: `/research/${research.id}/retry`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      } finally {
+        await newApp.close();
+      }
     });
   });
 });
