@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   BellRing,
@@ -99,6 +99,7 @@ export function Sidebar(): React.JSX.Element {
   );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Auto-expand settings when on a settings page
   useEffect(() => {
@@ -402,22 +403,22 @@ export function Sidebar(): React.JSX.Element {
                     location.pathname === '/notifications' &&
                     filterMatchesUrl(filter, location.search);
                   return (
-                    <NavLink
+                    <button
                       key={filter.id}
-                      to={buildFilterUrl(filter)}
-                      className={(): string =>
-                        `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                          isFilterActive
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                        }`
-                      }
+                      onClick={(): void => {
+                        void navigate(buildFilterUrl(filter));
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isFilterActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
                     >
                       <Filter className="h-4 w-4 shrink-0 text-blue-600" />
-                      <span className="truncate" title={filter.name}>
+                      <span className="truncate text-left" title={filter.name}>
                         {filter.name}
                       </span>
-                    </NavLink>
+                    </button>
                   );
                 })}
               </div>
