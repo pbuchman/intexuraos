@@ -2,7 +2,6 @@ import type { ActionServiceClient } from './domain/ports/actionServiceClient.js'
 import type { ResearchServiceClient } from './domain/ports/researchServiceClient.js';
 import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
-import type { ActionFiltersRepository } from './domain/ports/actionFiltersRepository.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -20,7 +19,6 @@ import { createLocalActionServiceClient } from './infra/action/localActionServic
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
-import { createFirestoreActionFiltersRepository } from './infra/firestore/actionFiltersRepository.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
@@ -29,7 +27,6 @@ export interface Services {
   researchServiceClient: ResearchServiceClient;
   notificationSender: NotificationSender;
   actionRepository: ActionRepository;
-  actionFiltersRepository: ActionFiltersRepository;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
@@ -63,8 +60,6 @@ export function initServices(config: ServiceConfig): void {
     userServiceUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
   });
-
-  const actionFiltersRepository = createFirestoreActionFiltersRepository();
 
   const actionEventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
@@ -100,7 +95,6 @@ export function initServices(config: ServiceConfig): void {
     researchServiceClient,
     notificationSender,
     actionRepository,
-    actionFiltersRepository,
     actionEventPublisher,
     whatsappPublisher,
     handleResearchActionUseCase,

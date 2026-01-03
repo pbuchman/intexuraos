@@ -156,19 +156,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Action saved to Firestore'
         );
-
-        try {
-          await services.actionFiltersRepository.addOptions(body.userId, {
-            status: action.status,
-            type: action.type,
-          });
-          request.log.info({ userId: body.userId }, 'Filter options updated');
-        } catch {
-          request.log.warn(
-            { userId: body.userId },
-            'Failed to update filter options (non-critical)'
-          );
-        }
       } catch (error) {
         request.log.error(
           {
