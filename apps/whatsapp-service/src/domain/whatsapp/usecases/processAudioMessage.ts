@@ -20,6 +20,7 @@ import type {
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { Logger } from '../utils/logger.js';
+import { getExtensionFromMimeType } from '../utils/mimeType.js';
 
 /**
  * Audio media information from webhook payload.
@@ -67,19 +68,6 @@ export interface ProcessAudioMessageDeps {
   messageRepository: WhatsAppMessageRepository;
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
-}
-
-/**
- * Get file extension from MIME type.
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeToExt: Record<string, string> = {
-    'audio/ogg': 'ogg',
-    'audio/mpeg': 'mp3',
-    'audio/mp4': 'm4a',
-    'audio/aac': 'aac',
-  };
-  return mimeToExt[mimeType] ?? 'bin';
 }
 
 /**
