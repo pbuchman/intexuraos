@@ -24,6 +24,7 @@ import {
   approveResearch,
   confirmPartialFailure,
   deleteResearch,
+  retryFromFailed,
   unshareResearch,
 } from '@/services/llmOrchestratorApi';
 import type {
@@ -205,6 +206,8 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [unshareError, setUnshareError] = useState<string | null>(null);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -263,6 +266,23 @@ export function ResearchDetailPage(): React.JSX.Element {
       setConfirmError(err instanceof Error ? err.message : 'Failed to confirm action');
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const handleRetry = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setRetrying(true);
+    setRetryError(null);
+
+    try {
+      const token = await getAccessToken();
+      await retryFromFailed(token, id);
+      await refresh();
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Failed to retry research');
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -519,6 +539,18 @@ export function ResearchDetailPage(): React.JSX.Element {
           </div>
         ) : (
           <div className="mt-4 flex flex-wrap gap-3">
+            {research.status === 'failed' ? (
+              <Button
+                onClick={(): void => {
+                  void handleRetry();
+                }}
+                disabled={retrying || deleting}
+                isLoading={retrying}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry Research
+              </Button>
+            ) : null}
             {showDeleteConfirm ? (
               <>
                 <Button
@@ -547,7 +579,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onClick={(): void => {
                   setShowDeleteConfirm(true);
                 }}
-                disabled={deleting}
+                disabled={deleting || retrying}
               >
                 Delete
               </Button>
@@ -564,6 +596,12 @@ export function ResearchDetailPage(): React.JSX.Element {
         {deleteError !== null && deleteError !== '' ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {deleteError}
+          </div>
+        ) : null}
+
+        {retryError !== null && retryError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {retryError}
           </div>
         ) : null}
       </div>

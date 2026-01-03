@@ -125,6 +125,18 @@ export async function confirmPartialFailure(
 }
 
 /**
+ * Retry a failed research by re-running failed LLMs or synthesis.
+ */
+export async function retryFromFailed(accessToken: string, id: string): Promise<Research> {
+  return await apiRequest<Research>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/retry`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
+/**
  * Remove public share access for a research.
  */
 export async function unshareResearch(accessToken: string, id: string): Promise<void> {
