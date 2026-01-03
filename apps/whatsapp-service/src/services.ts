@@ -24,7 +24,7 @@ import type {
   WhatsAppMessageSender,
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
-} from './domain/inbox/index.js';
+} from './domain/whatsapp/index.js';
 
 /**
  * Configuration for service initialization.

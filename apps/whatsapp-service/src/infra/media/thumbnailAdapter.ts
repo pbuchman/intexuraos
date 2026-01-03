@@ -7,7 +7,7 @@ import type {
   InboxError,
   ThumbnailGeneratorPort,
   ThumbnailResult,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import { generateThumbnail } from './thumbnailGenerator.js';
 
 /**

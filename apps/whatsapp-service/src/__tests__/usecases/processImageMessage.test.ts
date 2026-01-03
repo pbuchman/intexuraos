@@ -8,7 +8,7 @@ import {
   type ProcessImageMessageLogger,
   ProcessImageMessageUseCase,
   type WhatsAppWebhookEvent,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import {
   FakeMediaStorage,
   FakeThumbnailGeneratorPort,

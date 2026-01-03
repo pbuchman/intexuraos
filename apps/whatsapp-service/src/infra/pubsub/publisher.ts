@@ -12,7 +12,7 @@ import type {
   MediaCleanupEvent,
   TranscribeAudioEvent,
   WebhookProcessEvent,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 
 export interface GcpPubSubPublisherConfig {
   projectId: string;

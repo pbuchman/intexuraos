@@ -2,13 +2,13 @@
  * Tests for ProcessAudioMessageUseCase.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { WhatsAppWebhookEvent } from '../../domain/inbox/index.js';
+import type { WhatsAppWebhookEvent } from '../../domain/whatsapp/index.js';
 import {
   type ProcessAudioMessageDeps,
   type ProcessAudioMessageInput,
   type ProcessAudioMessageLogger,
   ProcessAudioMessageUseCase,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import {
   FakeMediaStorage,
   FakeWhatsAppCloudApiPort,

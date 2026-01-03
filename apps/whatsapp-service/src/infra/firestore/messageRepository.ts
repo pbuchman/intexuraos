@@ -9,7 +9,7 @@ import type {
   LinkPreviewState,
   TranscriptionState,
   WhatsAppMessage,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 
 const COLLECTION_NAME = 'whatsapp_messages';
 
