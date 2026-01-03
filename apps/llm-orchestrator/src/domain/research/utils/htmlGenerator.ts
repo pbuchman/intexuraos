@@ -1,7 +1,19 @@
 /**
  * Generate branded HTML from research markdown content.
  */
-import { marked } from 'marked';
+import { marked, Renderer } from 'marked';
+
+export interface LlmResultInput {
+  provider: string;
+  model: string;
+  result?: string;
+  status: string;
+}
+
+export interface ExternalReportInput {
+  content: string;
+  model?: string;
+}
 
 export interface HtmlGeneratorInput {
   title: string;
@@ -9,7 +21,23 @@ export interface HtmlGeneratorInput {
   shareUrl: string;
   sharedAt: string;
   staticAssetsUrl: string;
+  llmResults?: LlmResultInput[];
+  externalReports?: ExternalReportInput[];
 }
+
+// Configure marked with custom link renderer for external links
+const renderer = new Renderer();
+renderer.link = ({ href, title, text }): string => {
+  const titleAttr =
+    title !== null && title !== undefined && title !== '' ? ` title="${escapeHtml(title)}"` : '';
+  return `<a href="${escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+};
+
+marked.use({
+  renderer,
+  gfm: true,
+  breaks: true,
+});
 
 const PROSE_STYLES = `
   :root {
@@ -154,6 +182,60 @@ const PROSE_STYLES = `
     font-weight: 600;
   }
 
+  details {
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+  }
+
+  details summary {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-weight: 600;
+    background: #f1f5f9;
+    border-radius: 0.5rem;
+    list-style: none;
+  }
+
+  details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details summary::before {
+    content: '\\25B6';
+    display: inline-block;
+    margin-right: 0.5rem;
+    font-size: 0.75rem;
+    transition: transform 0.2s;
+  }
+
+  details[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  details[open] summary {
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+
+  details .detail-content {
+    padding: 1rem;
+  }
+
+  .provider-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+    text-transform: capitalize;
+  }
+
+  .provider-google { background: #e8f5e9; color: #2e7d32; }
+  .provider-openai { background: #e3f2fd; color: #1565c0; }
+  .provider-anthropic { background: #fce4ec; color: #c62828; }
+
   footer {
     margin-top: 3rem;
     padding-top: 1.5rem;
@@ -188,7 +270,15 @@ const PROSE_STYLES = `
 `;
 
 export function generateShareableHtml(input: HtmlGeneratorInput): string {
-  const { title, synthesizedResult, shareUrl, sharedAt, staticAssetsUrl } = input;
+  const {
+    title,
+    synthesizedResult,
+    shareUrl,
+    sharedAt,
+    staticAssetsUrl,
+    llmResults,
+    externalReports,
+  } = input;
 
   const displayTitle = title !== '' ? title : 'Research Report';
   const formattedDate = new Date(sharedAt).toLocaleDateString('en-US', {
@@ -198,6 +288,54 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
   });
 
   const renderedMarkdown = marked.parse(synthesizedResult, { async: false });
+
+  const completedResults =
+    llmResults?.filter(
+      (r) => r.status === 'completed' && r.result !== undefined && r.result !== ''
+    ) ?? [];
+
+  const llmResultsHtml =
+    completedResults.length > 0
+      ? `
+      <h2>Individual Provider Reports</h2>
+      ${completedResults
+        .map(
+          (r) => `
+        <details>
+          <summary>
+            ${escapeHtml(r.model)}
+            <span class="provider-badge provider-${r.provider}">${r.provider}</span>
+          </summary>
+          <div class="detail-content prose">
+            ${marked.parse(r.result ?? '', { async: false })}
+          </div>
+        </details>
+      `
+        )
+        .join('')}
+    `
+      : '';
+
+  const externalReportsHtml =
+    externalReports !== undefined && externalReports.length > 0
+      ? `
+      <h2>External Reports</h2>
+      ${externalReports
+        .map(
+          (r, i) => `
+        <details>
+          <summary>
+            ${r.model !== undefined && r.model !== '' ? escapeHtml(r.model) : `External Report ${String(i + 1)}`}
+          </summary>
+          <div class="detail-content prose">
+            ${marked.parse(r.content, { async: false })}
+          </div>
+        </details>
+      `
+        )
+        .join('')}
+    `
+      : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -211,14 +349,14 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
   <meta property="og:type" content="article">
   <meta property="og:url" content="${escapeHtml(shareUrl)}">
 
-  <link rel="icon" type="image/svg+xml" href="${staticAssetsUrl}/branding/exports/favicon/favicon.svg">
+  <link rel="icon" type="image/png" href="${staticAssetsUrl}/branding/exports/icon-dark.png">
 
   <style>${PROSE_STYLES}</style>
 </head>
 <body>
   <div class="container">
     <header>
-      <img src="${staticAssetsUrl}/branding/exports/primary/logo-primary-dark.svg" alt="IntexuraOS">
+      <img src="${staticAssetsUrl}/branding/exports/logo-primary-dark.png" alt="IntexuraOS">
       <span>IntexuraOS</span>
     </header>
 
@@ -227,6 +365,10 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
       <p class="meta">Generated on ${formattedDate}</p>
 
       ${renderedMarkdown}
+
+      ${llmResultsHtml}
+
+      ${externalReportsHtml}
     </main>
 
     <footer>

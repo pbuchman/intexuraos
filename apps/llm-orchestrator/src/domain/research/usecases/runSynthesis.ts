@@ -105,6 +105,8 @@ export async function runSynthesis(
       shareUrl,
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
+      llmResults: research.llmResults,
+      ...(research.externalReports !== undefined && { externalReports: research.externalReports }),
     });
 
     const uploadResult = await shareStorage.upload(fileName, html);

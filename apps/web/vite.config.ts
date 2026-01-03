@@ -126,7 +126,7 @@ export default defineConfig(({ mode }) => {
           ],
           // Don't cache API requests
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/],
+          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/, /^\/share\//],
         },
         devOptions: {
           enabled: false, // Disable in dev mode to avoid caching issues
