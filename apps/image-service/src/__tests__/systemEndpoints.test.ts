@@ -76,4 +76,24 @@ describe('System Endpoints', () => {
     expect(spec.paths['/prompts/generate']).toBeDefined();
     expect(spec.paths['/images/generate']).toBeDefined();
   });
+
+  it('returns 400 for invalid JSON body', async () => {
+    app = await buildServer();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/prompts/generate',
+      headers: { 'content-type': 'application/json' },
+      payload: 'not valid json',
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(body.error.message).toBe('Invalid JSON body');
+  });
 });
