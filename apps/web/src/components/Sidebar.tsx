@@ -52,9 +52,11 @@ const dataInsightsItems: NavItem[] = [
 /**
  * Build URL search params from a saved notification filter.
  * Arrays are joined with commas for URL encoding.
+ * Includes filterId to track which filter was explicitly selected.
  */
 function buildFilterUrl(filter: SavedNotificationFilter): string {
   const params = new URLSearchParams();
+  params.set('filterId', filter.id);
   if (filter.app !== undefined && filter.app.length > 0) {
     params.set('app', filter.app.join(','));
   }
@@ -64,15 +66,23 @@ function buildFilterUrl(filter: SavedNotificationFilter): string {
   if (filter.title !== undefined && filter.title !== '') {
     params.set('title', filter.title);
   }
-  const queryString = params.toString();
-  return queryString !== '' ? `/notifications?${queryString}` : '/notifications';
+  return `/notifications?${params.toString()}`;
 }
 
 /**
- * Check if a saved filter matches current URL search params.
+ * Check if a saved filter matches current URL.
+ * Prioritizes filterId param for explicit selection, falls back to criteria match.
  */
 function filterMatchesUrl(filter: SavedNotificationFilter, search: string): boolean {
   const params = new URLSearchParams(search);
+  const urlFilterId = params.get('filterId');
+
+  // If filterId is in URL, only match by ID (explicit selection)
+  if (urlFilterId !== null) {
+    return filter.id === urlFilterId;
+  }
+
+  // Fallback: match by criteria (for manually-entered filter params)
   const urlApp = params.get('app') ?? '';
   const urlSource = params.get('source') ?? '';
   const urlTitle = params.get('title') ?? '';

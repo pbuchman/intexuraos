@@ -15,10 +15,19 @@ import {
   type DecryptedApiKeys,
 } from './infra/user/index.js';
 
+interface LoggerLike {
+  info(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
+
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
   userServiceClient: UserServiceClient;
-  createPromptGenerator: (provider: 'google' | 'openai', apiKey: string) => PromptGenerator;
+  createPromptGenerator: (
+    provider: 'google' | 'openai',
+    apiKey: string,
+    logger?: LoggerLike
+  ) => PromptGenerator;
   createImageGenerator: (model: ImageGenerationModel, apiKey: string) => ImageGenerator;
   generateId: () => string;
 }
@@ -52,11 +61,15 @@ export function initializeServices(): void {
   container = {
     generatedImageRepository: createGeneratedImageRepository(),
     userServiceClient,
-    createPromptGenerator: (provider: 'google' | 'openai', apiKey: string): PromptGenerator => {
+    createPromptGenerator: (
+      provider: 'google' | 'openai',
+      apiKey: string,
+      logger?: LoggerLike
+    ): PromptGenerator => {
       if (provider === 'google') {
-        return createGeminiPromptAdapter({ apiKey });
+        return createGeminiPromptAdapter({ apiKey, logger });
       }
-      return createGptPromptAdapter({ apiKey });
+      return createGptPromptAdapter({ apiKey, logger });
     },
     createImageGenerator: (model: ImageGenerationModel, apiKey: string): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];

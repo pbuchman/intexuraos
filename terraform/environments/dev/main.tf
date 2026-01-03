@@ -309,6 +309,25 @@ module "whatsapp_media_bucket" {
 }
 
 # -----------------------------------------------------------------------------
+# Generated Images Bucket (public, for AI-generated images)
+# -----------------------------------------------------------------------------
+
+module "generated_images_bucket" {
+  source = "../../modules/generated-images-bucket"
+
+  project_id                    = var.project_id
+  region                        = var.region
+  environment                   = var.environment
+  image_service_service_account = module.iam.service_accounts["image_service"]
+  labels                        = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Firestore
 # -----------------------------------------------------------------------------
 
@@ -1045,7 +1064,7 @@ module "image_service" {
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID   = var.project_id
     INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
-    INTEXURAOS_IMAGE_BUCKET     = "intexuraos-images-${var.environment}"
+    INTEXURAOS_IMAGE_BUCKET     = module.generated_images_bucket.bucket_name
   }
 
   depends_on = [
@@ -1053,6 +1072,7 @@ module "image_service" {
     module.iam,
     module.secret_manager,
     module.user_service,
+    module.generated_images_bucket,
   ]
 }
 

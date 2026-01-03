@@ -49,7 +49,7 @@ export const promptRoutes: FastifyPluginCallback = (app, _opts, done) => {
         );
       }
 
-      const generator = createPromptGenerator(modelConfig.provider, apiKey);
+      const generator = createPromptGenerator(modelConfig.provider, apiKey, request.log);
       const result = await generator.generateThumbnailPrompt(text);
 
       if (!result.ok) {
