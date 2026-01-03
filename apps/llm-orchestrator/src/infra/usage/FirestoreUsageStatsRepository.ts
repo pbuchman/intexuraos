@@ -1,6 +1,9 @@
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 import type { UsageStatsRepository } from '../../domain/research/ports/usageStatsRepository.js';
-import type { LlmUsageStats, LlmUsageIncrement } from '../../domain/research/models/LlmUsageStats.js';
+import type {
+  LlmUsageStats,
+  LlmUsageIncrement,
+} from '../../domain/research/models/LlmUsageStats.js';
 import type { LlmProvider } from '../../domain/research/models/Research.js';
 
 const COLLECTION_NAME = 'llm_usage_stats';
@@ -50,11 +53,7 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
           { merge: true }
         );
       } else {
-        batch.set(
-          docRef,
-          { ...baseUpdate, failedCalls: FieldValue.increment(1) },
-          { merge: true }
-        );
+        batch.set(docRef, { ...baseUpdate, failedCalls: FieldValue.increment(1) }, { merge: true });
       }
     }
 

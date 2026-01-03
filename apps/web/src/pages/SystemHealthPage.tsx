@@ -325,7 +325,10 @@ export function SystemHealthPage(): React.JSX.Element {
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-900">
                     {((): string => {
                       const totalCalls = usageStats.reduce((sum, s) => sum + s.calls, 0);
-                      const successCalls = usageStats.reduce((sum, s) => sum + s.successfulCalls, 0);
+                      const successCalls = usageStats.reduce(
+                        (sum, s) => sum + s.successfulCalls,
+                        0
+                      );
                       return totalCalls > 0
                         ? `${((successCalls / totalCalls) * 100).toFixed(1)}%`
                         : '-';

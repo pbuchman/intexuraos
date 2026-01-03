@@ -5,11 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import {
-  createEnhancedResearch,
-  type Research,
-  type SupportedModel,
-} from '../models/index.js';
+import { createEnhancedResearch, type Research, type SupportedModel } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface EnhanceResearchInput {

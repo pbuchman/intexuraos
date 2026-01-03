@@ -188,9 +188,13 @@ describe('retryFromFailed', () => {
 
       await retryFromFailed('research-1', deps);
 
-      expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'o4-mini-deep-research', {
-        status: 'pending',
-      });
+      expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith(
+        'research-1',
+        'o4-mini-deep-research',
+        {
+          status: 'pending',
+        }
+      );
     });
 
     it('updates research status to retrying', async () => {
@@ -238,8 +242,18 @@ describe('retryFromFailed', () => {
         selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
-          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'failed', error: 'Error 2' },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'Error 1',
+          },
+          {
+            provider: 'anthropic',
+            model: 'claude-opus-4-5-20251101',
+            status: 'failed',
+            error: 'Error 2',
+          },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));

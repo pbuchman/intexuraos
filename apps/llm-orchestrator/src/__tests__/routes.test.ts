@@ -429,7 +429,11 @@ describe('Research Routes - Authenticated', () => {
       const saved = fakeRepo.getAll()[0];
       expect(saved).toBeDefined();
       if (saved !== undefined) {
-        expect(saved.selectedModels).toEqual(['gemini-2.5-pro', 'claude-opus-4-5-20251101', 'o4-mini-deep-research']);
+        expect(saved.selectedModels).toEqual([
+          'gemini-2.5-pro',
+          'claude-opus-4-5-20251101',
+          'o4-mini-deep-research',
+        ]);
         expect(saved.synthesisModel).toBe('gemini-2.5-pro');
       }
     });
@@ -524,7 +528,10 @@ describe('Research Routes - Authenticated', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
-      expect(body.data.selectedModels).toEqual(['o4-mini-deep-research', 'claude-opus-4-5-20251101']);
+      expect(body.data.selectedModels).toEqual([
+        'o4-mini-deep-research',
+        'claude-opus-4-5-20251101',
+      ]);
       expect(body.data.llmResults).toHaveLength(2);
       expect(body.data.llmResults[0]?.provider).toBe('openai');
       expect(body.data.llmResults[1]?.provider).toBe('anthropic');
@@ -1599,7 +1606,7 @@ describe('Research Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
         pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
+        usageStatsRepo: new FakeUsageStatsRepository(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
@@ -1866,7 +1873,7 @@ describe('Research Routes - Authenticated', () => {
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
+        usageStatsRepo: new FakeUsageStatsRepository(),
         shareStorage: null,
         shareConfig: null,
         createResearchProvider: () => createFakeLlmResearchProvider(),
@@ -2456,7 +2463,7 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
+        usageStatsRepo: new FakeUsageStatsRepository(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,

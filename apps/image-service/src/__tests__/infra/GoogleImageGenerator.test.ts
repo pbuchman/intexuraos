@@ -22,9 +22,12 @@ vi.mock('@google/genai', () => {
 });
 
 function createMockStorage(): ImageStorage & {
-  uploadMock: ReturnType<typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>>;
+  uploadMock: ReturnType<
+    typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
+  >;
 } {
-  const uploadMock = vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
+  const uploadMock =
+    vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
   return {
     uploadMock,
     upload: uploadMock,
@@ -92,9 +95,7 @@ describe('GoogleImageGenerator', () => {
         generatedImages: [{ image: { imageBytes: b64Image } }],
       });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -123,9 +124,7 @@ describe('GoogleImageGenerator', () => {
         generatedImages: [{ image: { imageBytes: b64Image } }],
       });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -136,10 +135,7 @@ describe('GoogleImageGenerator', () => {
 
       await generator.generate(testPrompt);
 
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(
-        testImageId,
-        Buffer.from(fakeImageData)
-      );
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData));
     });
 
     it('returns API_ERROR when no image data in response', async () => {
@@ -297,9 +293,7 @@ describe('GoogleImageGenerator', () => {
         generatedImages: [{ image: { imageBytes: b64Image } }],
       });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,

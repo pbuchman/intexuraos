@@ -13,12 +13,7 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
 
-function jsonResponse(
-  type: string,
-  confidence: number,
-  title: string,
-  reasoning?: string
-): string {
+function jsonResponse(type: string, confidence: number, title: string, reasoning?: string): string {
   return JSON.stringify({ type, confidence, title, reasoning: reasoning ?? 'Test reasoning' });
 }
 

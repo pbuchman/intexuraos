@@ -168,9 +168,13 @@ describe('retryFailedLlms', () => {
 
     await retryFailedLlms('research-1', deps);
 
-    expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'o4-mini-deep-research', {
-      status: 'pending',
-    });
+    expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith(
+      'research-1',
+      'o4-mini-deep-research',
+      {
+        status: 'pending',
+      }
+    );
   });
 
   it('updates research status to retrying with incremented retry count', async () => {
@@ -224,7 +228,12 @@ describe('retryFailedLlms', () => {
       llmResults: [
         { provider: 'google', model: 'gemini-2.5-flash', status: 'completed', result: 'Result' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
-        { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'failed', error: 'Error 2' },
+        {
+          provider: 'anthropic',
+          model: 'claude-opus-4-5-20251101',
+          status: 'failed',
+          error: 'Error 2',
+        },
       ],
       partialFailure: {
         failedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],

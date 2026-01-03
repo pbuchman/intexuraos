@@ -241,7 +241,12 @@ describe('checkLlmCompletion', () => {
           result: 'Google Result',
         },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
-        { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'failed', error: 'Error 2' },
+        {
+          provider: 'anthropic',
+          model: 'claude-opus-4-5-20251101',
+          status: 'failed',
+          error: 'Error 2',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

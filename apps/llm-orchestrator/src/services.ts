@@ -19,10 +19,7 @@ import {
   type LlmCallPublisher,
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
-import {
-  createUserServiceClient,
-  type UserServiceClient,
-} from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 
 export type { DecryptedApiKeys } from './infra/user/index.js';
 import {

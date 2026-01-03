@@ -49,9 +49,8 @@ vi.mock('@intexuraos/infra-firestore', () => ({
   },
 }));
 
-const { FirestoreUsageStatsRepository } = await import(
-  '../../../infra/usage/FirestoreUsageStatsRepository.js'
-);
+const { FirestoreUsageStatsRepository } =
+  await import('../../../infra/usage/FirestoreUsageStatsRepository.js');
 
 describe('FirestoreUsageStatsRepository', () => {
   let repository: InstanceType<typeof FirestoreUsageStatsRepository>;

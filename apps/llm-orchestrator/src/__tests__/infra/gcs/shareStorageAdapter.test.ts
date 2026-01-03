@@ -24,9 +24,8 @@ vi.mock('@google-cloud/storage', () => {
   };
 });
 
-const { GcsShareStorageAdapter, createShareStorage } = await import(
-  '../../../infra/gcs/shareStorageAdapter.js'
-);
+const { GcsShareStorageAdapter, createShareStorage } =
+  await import('../../../infra/gcs/shareStorageAdapter.js');
 
 describe('GcsShareStorageAdapter', () => {
   let adapter: InstanceType<typeof GcsShareStorageAdapter>;

@@ -135,7 +135,11 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     },
 
     async generate(prompt: string): Promise<Result<string, GeminiError>> {
-      const { requestId, startTime, auditContext } = createRequestContext('generate', model, prompt);
+      const { requestId, startTime, auditContext } = createRequestContext(
+        'generate',
+        model,
+        prompt
+      );
 
       try {
         const response = await ai.models.generateContent({

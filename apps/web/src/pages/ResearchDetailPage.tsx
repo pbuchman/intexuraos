@@ -680,10 +680,7 @@ export function ResearchDetailPage(): React.JSX.Element {
               <p className="text-sm text-slate-500">Total Tokens</p>
               <p className="text-lg font-semibold">
                 {research.llmResults
-                  .reduce(
-                    (sum, r) => sum + (r.inputTokens ?? 0) + (r.outputTokens ?? 0),
-                    0
-                  )
+                  .reduce((sum, r) => sum + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0)
                   .toLocaleString()}
               </p>
             </div>

@@ -395,7 +395,10 @@ describe('Settings Routes', () => {
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-pro', 'claude-opus-4-5-20251101']);
+      expect(body.data.researchSettings.defaultModels).toEqual([
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+      ]);
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(body.data.updatedAt).not.toBe('2025-01-01T00:00:00.000Z');
     });

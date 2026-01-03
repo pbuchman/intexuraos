@@ -35,7 +35,10 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
       const keysResult = await userServiceClient.getApiKeys(user.userId);
       if (!keysResult.ok) {
         reply.status(502);
-        return await reply.fail('DOWNSTREAM_ERROR', `Failed to get API keys: ${keysResult.error.message}`);
+        return await reply.fail(
+          'DOWNSTREAM_ERROR',
+          `Failed to get API keys: ${keysResult.error.message}`
+        );
       }
 
       const modelConfig = IMAGE_GENERATION_MODELS[model as ImageGenerationModel];

@@ -2,10 +2,7 @@
  * Factory functions for creating LLM adapters from API keys.
  */
 
-import {
-  getProviderForModel,
-  type SupportedModel,
-} from '@intexuraos/llm-contract';
+import { getProviderForModel, type SupportedModel } from '@intexuraos/llm-contract';
 import type {
   LlmResearchProvider,
   LlmSynthesisProvider,
@@ -15,10 +12,7 @@ import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
 
-export function createResearchProvider(
-  model: SupportedModel,
-  apiKey: string
-): LlmResearchProvider {
+export function createResearchProvider(model: SupportedModel, apiKey: string): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
@@ -31,10 +25,7 @@ export function createResearchProvider(
   }
 }
 
-export function createSynthesizer(
-  model: SupportedModel,
-  apiKey: string
-): LlmSynthesisProvider {
+export function createSynthesizer(model: SupportedModel, apiKey: string): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
@@ -47,9 +38,6 @@ export function createSynthesizer(
   }
 }
 
-export function createTitleGenerator(
-  model: string,
-  apiKey: string
-): TitleGenerator {
+export function createTitleGenerator(model: string, apiKey: string): TitleGenerator {
   return new GeminiAdapter(apiKey, model);
 }

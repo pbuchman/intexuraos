@@ -183,7 +183,10 @@ describe('retryPendingCommands usecase', () => {
 
     const events = eventPublisher.getPublishedEvents();
     expect(events).toHaveLength(1);
-    expect(events[0]?.payload.selectedModels).toEqual(['gemini-2.5-flash', 'o4-mini-deep-research']);
+    expect(events[0]?.payload.selectedModels).toEqual([
+      'gemini-2.5-flash',
+      'o4-mini-deep-research',
+    ]);
   });
 
   it('handles unclassified type without creating action', async () => {

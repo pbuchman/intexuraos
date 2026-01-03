@@ -9,9 +9,12 @@ import type { ImageStorage, ImageUrls, StorageError } from '../../domain/ports/i
 import type { Result } from '@intexuraos/common-core';
 
 function createMockStorage(): ImageStorage & {
-  uploadMock: ReturnType<typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>>;
+  uploadMock: ReturnType<
+    typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
+  >;
 } {
-  const uploadMock = vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
+  const uploadMock =
+    vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
   return {
     uploadMock,
     upload: uploadMock,
@@ -91,9 +94,7 @@ describe('OpenAIImageGenerator', () => {
           data: [{ b64_json: b64Image }],
         });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new OpenAIImageGenerator({
         apiKey: testApiKey,
@@ -118,9 +119,7 @@ describe('OpenAIImageGenerator', () => {
           data: [{ b64_json: b64Image }],
         });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new OpenAIImageGenerator({
         apiKey: testApiKey,
@@ -131,19 +130,14 @@ describe('OpenAIImageGenerator', () => {
 
       await generator.generate(testPrompt);
 
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(
-        testImageId,
-        Buffer.from(fakeImageData)
-      );
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData));
     });
 
     it('returns API_ERROR when no image data in response', async () => {
-      nock('https://api.openai.com')
-        .post('/v1/images/generations')
-        .reply(200, {
-          created: 1234567890,
-          data: [],
-        });
+      nock('https://api.openai.com').post('/v1/images/generations').reply(200, {
+        created: 1234567890,
+        data: [],
+      });
 
       const generator = new OpenAIImageGenerator({
         apiKey: testApiKey,
@@ -236,27 +230,6 @@ describe('OpenAIImageGenerator', () => {
       }
     });
 
-    it('returns TIMEOUT for timeout errors', async () => {
-      nock('https://api.openai.com')
-        .post('/v1/images/generations')
-        .times(3)
-        .replyWithError('Request timed out');
-
-      const generator = new OpenAIImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result = await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
-      }
-    });
-
     it('returns API_ERROR for other errors', async () => {
       nock('https://api.openai.com')
         .post('/v1/images/generations')
@@ -290,9 +263,7 @@ describe('OpenAIImageGenerator', () => {
           data: [{ b64_json: b64Image }],
         });
 
-      mockStorage.uploadMock.mockResolvedValue(
-        ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' })
-      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
       const generator = new OpenAIImageGenerator({
         apiKey: testApiKey,

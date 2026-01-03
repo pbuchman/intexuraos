@@ -37,9 +37,8 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
   },
 }));
 
-const { createSynthesizer, createTitleGenerator, createResearchProvider } = await import(
-  '../../../infra/llm/LlmAdapterFactory.js'
-);
+const { createSynthesizer, createTitleGenerator, createResearchProvider } =
+  await import('../../../infra/llm/LlmAdapterFactory.js');
 
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {

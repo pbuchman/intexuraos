@@ -62,7 +62,8 @@ export class GcsImageStorage implements ImageStorage {
     const width = metadata.width ?? 0;
     const height = metadata.height ?? 0;
 
-    const resizeOptions = width > height ? { width: THUMBNAIL_MAX_EDGE } : { height: THUMBNAIL_MAX_EDGE };
+    const resizeOptions =
+      width > height ? { width: THUMBNAIL_MAX_EDGE } : { height: THUMBNAIL_MAX_EDGE };
 
     return await image.resize(resizeOptions).jpeg({ quality: JPEG_QUALITY }).toBuffer();
   }
