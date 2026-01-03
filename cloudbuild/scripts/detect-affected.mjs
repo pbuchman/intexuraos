@@ -73,7 +73,7 @@ const SERVICE_DEPS = {
   'actions-agent': ['apps/actions-agent/', ...ALL_PACKAGES, ...COMMON_DEPS],
   'data-insights-service': ['apps/data-insights-service/', ...ALL_PACKAGES, ...COMMON_DEPS],
   web: ['apps/web/', ...COMMON_DEPS],
-  firestore: ['firestore.indexes.json', 'firestore.rules', 'firebase.json'],
+  firestore: ['firestore.indexes.json', 'firestore.rules', 'firebase.json', 'migrations/', 'scripts/migrate.mjs'],
 };
 
 /**
