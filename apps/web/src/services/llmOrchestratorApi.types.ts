@@ -3,6 +3,15 @@
  */
 
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
+
+export type SupportedModel =
+  | 'gemini-2.5-pro'
+  | 'gemini-2.5-flash'
+  | 'claude-opus-4-5-20251101'
+  | 'claude-sonnet-4-5-20250929'
+  | 'o4-mini-deep-research'
+  | 'gpt-5.2';
+
 export type ResearchStatus =
   | 'draft'
   | 'pending'
@@ -88,8 +97,8 @@ export interface Research {
  */
 export interface CreateResearchRequest {
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   inputContexts?: { content: string }[];
   skipSynthesis?: boolean;
 }
@@ -99,8 +108,8 @@ export interface CreateResearchRequest {
  */
 export interface SaveDraftRequest {
   prompt: string;
-  selectedLlms?: LlmProvider[];
-  synthesisLlm?: LlmProvider;
+  selectedModels?: SupportedModel[];
+  synthesisModel?: SupportedModel;
   inputContexts?: { content: string }[];
 }
 

@@ -5,7 +5,10 @@ import { getServices } from '../services.js';
 import {
   generateImageBodySchema,
   generateImageResponseSchema,
+  deleteImageParamsSchema,
+  deleteImageResponseSchema,
   type GenerateImageBody,
+  type DeleteImageParams,
 } from './schemas/index.js';
 
 export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
@@ -57,10 +60,20 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      const saveResult = await generatedImageRepository.save(result.value);
+      const { imageStorage } = getServices();
+
+      const generatedImage = { ...result.value, userId: user.userId };
+      const saveResult = await generatedImageRepository.save(generatedImage);
       if (!saveResult.ok) {
-        // Best-effort tracking - image was generated successfully and URLs are valid
-        request.log.error({ error: saveResult.error }, 'Failed to save generated image');
+        request.log.error({ error: saveResult.error }, 'Failed to save generated image to DB');
+
+        const deleteResult = await imageStorage.delete(result.value.id);
+        if (!deleteResult.ok) {
+          request.log.error({ error: deleteResult.error }, 'Failed to cleanup orphaned image');
+        }
+
+        reply.status(500);
+        return await reply.fail('INTERNAL_ERROR', 'Failed to save image record');
       }
 
       return await reply.ok({
@@ -68,6 +81,53 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
         thumbnailUrl: result.value.thumbnailUrl,
         fullSizeUrl: result.value.fullSizeUrl,
       });
+    }
+  );
+
+  app.delete<{ Params: DeleteImageParams }>(
+    '/images/:id',
+    {
+      schema: {
+        operationId: 'deleteImage',
+        summary: 'Delete a generated image',
+        description:
+          'Deletes a generated image from storage and database. Only the creator can delete.',
+        tags: ['images'],
+        security: [{ bearerAuth: [] }],
+        params: deleteImageParamsSchema,
+        response: {
+          200: deleteImageResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+
+      const { imageStorage, generatedImageRepository } = getServices();
+
+      const imageResult = await generatedImageRepository.findById(request.params.id);
+      if (!imageResult.ok) {
+        reply.status(404);
+        return await reply.fail('NOT_FOUND', 'Image not found');
+      }
+
+      if (imageResult.value.userId !== user.userId) {
+        reply.status(403);
+        return await reply.fail('FORBIDDEN', 'Not authorized to delete this image');
+      }
+
+      const storageResult = await imageStorage.delete(request.params.id);
+      if (!storageResult.ok) {
+        request.log.error({ error: storageResult.error }, 'Failed to delete image from storage');
+      }
+
+      const repoResult = await generatedImageRepository.delete(request.params.id);
+      if (!repoResult.ok) {
+        request.log.error({ error: repoResult.error }, 'Failed to delete image from database');
+      }
+
+      return await reply.ok({ deleted: true });
     }
   );
 

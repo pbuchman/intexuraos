@@ -52,3 +52,31 @@ export interface GenerateImageBody {
   prompt: string;
   model: 'gpt-image-1' | 'nano-banana-pro';
 }
+
+export const deleteImageParamsSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string', description: 'Image ID to delete' },
+  },
+} as const;
+
+export const deleteImageResponseSchema = {
+  type: 'object',
+  required: ['success', 'data'],
+  properties: {
+    success: { type: 'boolean', enum: [true] },
+    data: {
+      type: 'object',
+      required: ['deleted'],
+      properties: {
+        deleted: { type: 'boolean', enum: [true] },
+      },
+    },
+    diagnostics: { $ref: 'Diagnostics#' },
+  },
+} as const;
+
+export interface DeleteImageParams {
+  id: string;
+}

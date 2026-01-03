@@ -4,6 +4,7 @@ import { setServices, resetServices } from '../services.js';
 import {
   FakeGeneratedImageRepository,
   FakeImageGenerator,
+  FakeImageStorage,
   FakePromptGenerator,
   FakeUserServiceClient,
 } from './fakes.js';
@@ -49,6 +50,7 @@ describe('promptRoutes', () => {
 
     setServices({
       generatedImageRepository: fakeRepo,
+      imageStorage: new FakeImageStorage(),
       userServiceClient: fakeUserServiceClient,
       createPromptGenerator: () => fakePromptGenerator,
       createImageGenerator: () => fakeImageGenerator,

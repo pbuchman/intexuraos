@@ -55,6 +55,22 @@ export class GcsImageStorage implements ImageStorage {
     }
   }
 
+  async delete(id: string): Promise<Result<void, StorageError>> {
+    try {
+      const bucket = this.storage.bucket(this.bucketName);
+      await Promise.all([
+        bucket.file(`images/${id}/full.png`).delete({ ignoreNotFound: true }),
+        bucket.file(`images/${id}/thumbnail.jpg`).delete({ ignoreNotFound: true }),
+      ]);
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'STORAGE_ERROR',
+        message: `Failed to delete image: ${getErrorMessage(error, 'Unknown GCS error')}`,
+      });
+    }
+  }
+
   private async createThumbnail(imageData: Buffer): Promise<Buffer> {
     const image = sharp(imageData);
     const metadata = await image.metadata();

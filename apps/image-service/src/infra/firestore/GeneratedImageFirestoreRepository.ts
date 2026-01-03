@@ -10,6 +10,7 @@ const COLLECTION_NAME = 'generated_images';
 
 interface GeneratedImageDocument {
   id: string;
+  userId: string;
   prompt: string;
   thumbnailUrl: string;
   fullSizeUrl: string;
@@ -25,6 +26,7 @@ export class GeneratedImageFirestoreRepository implements GeneratedImageReposito
 
       const doc: GeneratedImageDocument = {
         id: image.id,
+        userId: image.userId,
         prompt: image.prompt,
         thumbnailUrl: image.thumbnailUrl,
         fullSizeUrl: image.fullSizeUrl,
@@ -58,6 +60,7 @@ export class GeneratedImageFirestoreRepository implements GeneratedImageReposito
       const data = snapshot.data() as GeneratedImageDocument;
       return ok({
         id: data.id,
+        userId: data.userId,
         prompt: data.prompt,
         thumbnailUrl: data.thumbnailUrl,
         fullSizeUrl: data.fullSizeUrl,
@@ -67,6 +70,19 @@ export class GeneratedImageFirestoreRepository implements GeneratedImageReposito
     } catch (error) {
       return err({
         code: 'READ_FAILED',
+        message: getErrorMessage(error),
+      });
+    }
+  }
+
+  async delete(id: string): Promise<Result<void, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      await db.collection(COLLECTION_NAME).doc(id).delete();
+      return ok(undefined);
+    } catch (error) {
+      return err({
+        code: 'WRITE_FAILED',
         message: getErrorMessage(error),
       });
     }

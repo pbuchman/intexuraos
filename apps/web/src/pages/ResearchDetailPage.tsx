@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Share2,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -214,6 +215,7 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [selectedEnhanceLlms, setSelectedEnhanceLlms] = useState<LlmProvider[]>([]);
+  const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -345,7 +347,11 @@ export function ResearchDetailPage(): React.JSX.Element {
   };
 
   const handleEnhance = async (): Promise<void> => {
-    if (id === undefined || id === '' || selectedEnhanceLlms.length === 0) return;
+    if (id === undefined || id === '') return;
+
+    const validContexts = enhanceContexts.filter((ctx) => ctx.trim().length > 0);
+    const hasChanges = selectedEnhanceLlms.length > 0 || validContexts.length > 0;
+    if (!hasChanges) return;
 
     setEnhancing(true);
     setEnhanceError(null);
@@ -353,10 +359,14 @@ export function ResearchDetailPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const enhanced = await enhanceResearch(token, id, {
-        additionalLlms: selectedEnhanceLlms,
+        ...(selectedEnhanceLlms.length > 0 && { additionalLlms: selectedEnhanceLlms }),
+        ...(validContexts.length > 0 && {
+          additionalContexts: validContexts.map((content) => ({ content })),
+        }),
       });
       setShowEnhanceModal(false);
       setSelectedEnhanceLlms([]);
+      setEnhanceContexts([]);
       void navigate(`/research/${enhanced.id}`);
     } catch (err) {
       setEnhanceError(err instanceof Error ? err.message : 'Failed to enhance research');
@@ -590,7 +600,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 Retry Research
               </Button>
             ) : null}
-            {research.status === 'completed' && getAvailableEnhanceLlms().length > 0 ? (
+            {research.status === 'completed' &&
+            (getAvailableEnhanceLlms().length > 0 || (research.inputContexts?.length ?? 0) < 5) ? (
               <Button
                 onClick={(): void => {
                   setShowEnhanceModal(true);
@@ -803,30 +814,88 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       {showEnhanceModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
             <p className="mb-4 text-sm text-slate-600">
-              Add more AI models to get additional perspectives on your research.
+              Add more AI models or additional context to get new perspectives.
             </p>
 
+            {getAvailableEnhanceLlms().length > 0 ? (
+              <div className="mb-4 space-y-2">
+                <p className="text-sm font-medium text-slate-700">Select additional models:</p>
+                {getAvailableEnhanceLlms().map((provider) => (
+                  <label
+                    key={provider}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEnhanceLlms.includes(provider)}
+                      onChange={(): void => {
+                        toggleEnhanceLlm(provider);
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+
             <div className="mb-4 space-y-2">
-              <p className="text-sm font-medium text-slate-700">Select additional models:</p>
-              {getAvailableEnhanceLlms().map((provider) => (
-                <label
-                  key={provider}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedEnhanceLlms.includes(provider)}
-                    onChange={(): void => {
-                      toggleEnhanceLlm(provider);
+              <p className="text-sm font-medium text-slate-700">
+                Additional context{' '}
+                <span className="font-normal text-slate-500">
+                  ({String((research.inputContexts?.length ?? 0) + enhanceContexts.length)}/5)
+                </span>
+              </p>
+
+              {(research.inputContexts?.length ?? 0) > 0 ? (
+                <p className="text-xs text-slate-500">
+                  {String(research.inputContexts?.length ?? 0)} existing context
+                  {(research.inputContexts?.length ?? 0) > 1 ? 's' : ''} will be included
+                </p>
+              ) : null}
+
+              {enhanceContexts.map((ctx, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <textarea
+                    value={ctx}
+                    onChange={(e): void => {
+                      setEnhanceContexts((prev) =>
+                        prev.map((c, i) => (i === idx ? e.target.value : c))
+                      );
                     }}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    placeholder="Paste additional reference content..."
+                    className="flex-1 rounded-lg border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={2}
+                    disabled={enhancing}
                   />
-                  <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
-                </label>
+                  <button
+                    type="button"
+                    onClick={(): void => {
+                      setEnhanceContexts((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    disabled={enhancing}
+                    className="self-start rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-500"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               ))}
+
+              {(research.inputContexts?.length ?? 0) + enhanceContexts.length < 5 ? (
+                <button
+                  type="button"
+                  onClick={(): void => {
+                    setEnhanceContexts((prev) => [...prev, '']);
+                  }}
+                  disabled={enhancing}
+                  className="w-full rounded-lg border-2 border-dashed border-slate-200 py-2 text-sm text-slate-500 hover:border-slate-300 hover:text-slate-600"
+                >
+                  + Add context
+                </button>
+              ) : null}
             </div>
 
             {enhanceError !== null ? (
@@ -841,6 +910,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onClick={(): void => {
                   setShowEnhanceModal(false);
                   setSelectedEnhanceLlms([]);
+                  setEnhanceContexts([]);
                   setEnhanceError(null);
                 }}
                 disabled={enhancing}
@@ -851,7 +921,11 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onClick={(): void => {
                   void handleEnhance();
                 }}
-                disabled={enhancing || selectedEnhanceLlms.length === 0}
+                disabled={
+                  enhancing ||
+                  (selectedEnhanceLlms.length === 0 &&
+                    enhanceContexts.filter((c) => c.trim().length > 0).length === 0)
+                }
                 isLoading={enhancing}
               >
                 <Plus className="mr-2 h-4 w-4" />

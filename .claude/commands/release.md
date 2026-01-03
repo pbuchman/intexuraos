@@ -43,6 +43,7 @@ git show <commit-hash>               # See actual diff
 ```
 
 **DO NOT trust the commit message.** Read the diff and determine:
+
 - What files were added/modified/deleted?
 - What functions/classes/routes were added?
 - What behavior changed?
@@ -52,27 +53,27 @@ git show <commit-hash>               # See actual diff
 
 #### Functional Changes (User-Facing)
 
-| Path Pattern | Category |
-|-------------|----------|
-| `apps/*/src/routes/*.ts` | API Endpoints - read the route to see method/path |
-| `apps/*/src/domain/*/models/*.ts` | Domain Models - note new types/interfaces |
-| `apps/*/src/domain/*/usecases/*.ts` | Use Cases - describe the business logic |
-| `apps/web/src/components/*.tsx` | Web UI Components |
-| `apps/web/src/pages/*.tsx` | Web UI Pages |
-| `packages/infra-*` | Integration Features (if adding new provider) |
+| Path Pattern                        | Category                                          |
+| ----------------------------------- | ------------------------------------------------- |
+| `apps/*/src/routes/*.ts`            | API Endpoints - read the route to see method/path |
+| `apps/*/src/domain/*/models/*.ts`   | Domain Models - note new types/interfaces         |
+| `apps/*/src/domain/*/usecases/*.ts` | Use Cases - describe the business logic           |
+| `apps/web/src/components/*.tsx`     | Web UI Components                                 |
+| `apps/web/src/pages/*.tsx`          | Web UI Pages                                      |
+| `packages/infra-*`                  | Integration Features (if adding new provider)     |
 
 #### Technical Changes (Infrastructure)
 
-| Path Pattern | Category |
-|-------------|----------|
-| `apps/*/` (new directory) | Services Created |
-| `packages/*/` (new directory) | Packages Created |
-| `terraform/**` | Infrastructure (Terraform) |
-| `**/Dockerfile` | Docker Configuration |
-| `.github/workflows/*` | CI/CD Pipeline |
-| `firestore.indexes.json` | Database Design |
-| `**/vitest.config.ts`, `**/__tests__/**` | Testing Infrastructure |
-| `scripts/*` | Development Tools |
+| Path Pattern                             | Category                   |
+| ---------------------------------------- | -------------------------- |
+| `apps/*/` (new directory)                | Services Created           |
+| `packages/*/` (new directory)            | Packages Created           |
+| `terraform/**`                           | Infrastructure (Terraform) |
+| `**/Dockerfile`                          | Docker Configuration       |
+| `.github/workflows/*`                    | CI/CD Pipeline             |
+| `firestore.indexes.json`                 | Database Design            |
+| `**/vitest.config.ts`, `**/__tests__/**` | Testing Infrastructure     |
+| `scripts/*`                              | Development Tools          |
 
 ### 6. Build the Changelog Entry
 
@@ -82,15 +83,19 @@ Read the actual code to write meaningful descriptions:
 ## [NEW_VERSION] - YYYY-MM-DD
 
 ### Added
+
 - [Describe new features based on actual code added]
 
 ### Changed
+
 - [Describe modifications based on actual diff]
 
 ### Fixed
+
 - [Describe bug fixes based on what the code now does differently]
 
 ### Technical
+
 - [Infrastructure/architecture changes]
 
 ---

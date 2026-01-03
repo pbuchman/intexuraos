@@ -7,5 +7,8 @@ export {
 export {
   generateImageBodySchema,
   generateImageResponseSchema,
+  deleteImageParamsSchema,
+  deleteImageResponseSchema,
   type GenerateImageBody,
+  type DeleteImageParams,
 } from './imageSchemas.js';

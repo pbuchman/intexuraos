@@ -6,6 +6,8 @@ export interface ImageGenerationError {
   message: string;
 }
 
+export type GeneratedImageData = Omit<GeneratedImage, 'userId'>;
+
 export interface ImageGenerator {
-  generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>>;
+  generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>>;
 }

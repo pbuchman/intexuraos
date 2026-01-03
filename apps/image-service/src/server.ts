@@ -15,7 +15,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-import { promptRoutes, imageRoutes } from './routes/index.js';
+import { promptRoutes, imageRoutes, internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'image-service';
 const SERVICE_VERSION = '0.0.1';
@@ -129,6 +129,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
         { name: 'system', description: 'System endpoints (health, docs)' },
         { name: 'prompts', description: 'Image prompt generation endpoints' },
         { name: 'images', description: 'Image generation endpoints' },
+        { name: 'internal', description: 'Internal service-to-service endpoints' },
       ],
     },
   };
@@ -206,6 +207,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(promptRoutes);
   await app.register(imageRoutes);
+  await app.register(internalRoutes);
 
   app.get(
     '/openapi.json',

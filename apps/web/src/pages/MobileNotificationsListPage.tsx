@@ -178,6 +178,29 @@ function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean 
   );
 }
 
+/**
+ * Check if current filters match a saved filter's values.
+ */
+function filtersMatchSaved(
+  filters: ActiveFilters,
+  titleInput: string,
+  savedFilter: SavedNotificationFilter
+): boolean {
+  const savedApp =
+    savedFilter.app !== undefined && savedFilter.app.length > 0 ? savedFilter.app.join(',') : '';
+  const savedSource =
+    savedFilter.source !== undefined && savedFilter.source.length > 0
+      ? savedFilter.source.join(',')
+      : '';
+  const savedTitle = savedFilter.title ?? '';
+
+  return (
+    filters.app === savedApp &&
+    filters.source === savedSource &&
+    (filters.title === savedTitle || titleInput === savedTitle)
+  );
+}
+
 export function MobileNotificationsListPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -359,6 +382,11 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         title: newTitle,
       });
       setTitleInput(newTitle);
+    } else {
+      // No URL params - clear all filters (e.g., when clicking "All" in sidebar)
+      setFilters({ app: '', source: '', title: '' });
+      setTitleInput('');
+      setFilterName('');
     }
   }, [searchParams]);
 
@@ -546,33 +574,48 @@ export function MobileNotificationsListPage(): React.JSX.Element {
           ) : null}
         </div>
 
-        {/* Save filter row */}
-        {hasActiveFilters(filters, titleInput) ? (
-          <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-500">Filter name</label>
-              <input
-                type="text"
-                value={filterName}
-                onChange={(e): void => {
-                  setFilterName(e.target.value);
+        {/* Save filter row - only show if filters are active AND modified from any selected saved filter */}
+        {((): React.JSX.Element | null => {
+          if (!hasActiveFilters(filters, titleInput)) return null;
+
+          const currentFilterId = searchParams.get('filterId');
+          if (currentFilterId !== null) {
+            const currentSavedFilter = savedFilters.find((f) => f.id === currentFilterId);
+            if (
+              currentSavedFilter !== undefined &&
+              filtersMatchSaved(filters, titleInput, currentSavedFilter)
+            ) {
+              return null;
+            }
+          }
+
+          return (
+            <div className="mt-4 flex items-end gap-3 border-t border-slate-200 pt-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-500">Filter name</label>
+                <input
+                  type="text"
+                  value={filterName}
+                  onChange={(e): void => {
+                    setFilterName(e.target.value);
+                  }}
+                  placeholder="e.g., Important"
+                  className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                onClick={(): void => {
+                  void handleSaveFilter();
                 }}
-                placeholder="e.g., Important"
-                className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+                disabled={isSaving || filterName.trim() === ''}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                Save Filter
+              </button>
             </div>
-            <button
-              onClick={(): void => {
-                void handleSaveFilter();
-              }}
-              disabled={isSaving || filterName.trim() === ''}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              Save Filter
-            </button>
-          </div>
-        ) : null}
+          );
+        })()}
 
         {/* Saved filters list */}
         {savedFilters.length > 0 ? (

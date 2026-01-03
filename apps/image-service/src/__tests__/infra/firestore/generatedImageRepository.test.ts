@@ -7,6 +7,7 @@ import type { GeneratedImage } from '../../../domain/index.js';
 function createTestImage(overrides: Partial<GeneratedImage> = {}): GeneratedImage {
   return {
     id: 'img-123',
+    userId: 'user-123',
     prompt: 'A beautiful sunset over mountains',
     thumbnailUrl: 'https://storage.googleapis.com/bucket/images/img-123/thumbnail.jpg',
     fullSizeUrl: 'https://storage.googleapis.com/bucket/images/img-123/full.png',

@@ -3,6 +3,7 @@ import type {
   PromptGenerator,
   ImageGenerator,
   ImageGenerationModel,
+  ImageStorage,
 } from './domain/index.js';
 import { IMAGE_GENERATION_MODELS } from './domain/index.js';
 import { createGeneratedImageRepository } from './infra/firestore/index.js';
@@ -22,6 +23,7 @@ interface LoggerLike {
 
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
+  imageStorage: ImageStorage;
   userServiceClient: UserServiceClient;
   createPromptGenerator: (
     provider: 'google' | 'openai',
@@ -60,6 +62,7 @@ export function initializeServices(): void {
 
   container = {
     generatedImageRepository: createGeneratedImageRepository(),
+    imageStorage: storage,
     userServiceClient,
     createPromptGenerator: (
       provider: 'google' | 'openai',

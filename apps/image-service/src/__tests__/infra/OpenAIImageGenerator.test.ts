@@ -12,12 +12,16 @@ function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
   >;
+  deleteMock: ReturnType<typeof vi.fn<(id: string) => Promise<Result<void, StorageError>>>>;
 } {
   const uploadMock =
     vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
+  const deleteMock = vi.fn<(id: string) => Promise<Result<void, StorageError>>>();
   return {
     uploadMock,
+    deleteMock,
     upload: uploadMock,
+    delete: deleteMock,
   };
 }
 

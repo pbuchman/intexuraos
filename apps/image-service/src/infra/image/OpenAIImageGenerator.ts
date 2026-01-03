@@ -1,8 +1,12 @@
 // eslint-disable-next-line no-restricted-imports -- Image generation API not available in infra-gpt
 import OpenAI from 'openai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { GeneratedImage, ImageGenerationModel } from '../../domain/index.js';
-import type { ImageGenerationError, ImageGenerator } from '../../domain/ports/imageGenerator.js';
+import type { ImageGenerationModel } from '../../domain/index.js';
+import type {
+  GeneratedImageData,
+  ImageGenerationError,
+  ImageGenerator,
+} from '../../domain/ports/imageGenerator.js';
 import type { ImageStorage } from '../../domain/ports/imageStorage.js';
 
 export interface OpenAIImageGeneratorConfig {
@@ -25,7 +29,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
   }
 
-  async generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>> {
+  async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
     const id = this.generateId();
 
     try {
@@ -49,7 +53,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
         return err({ code: 'STORAGE_ERROR', message: uploadResult.error.message });
       }
 
-      const image: GeneratedImage = {
+      const image: GeneratedImageData = {
         id,
         prompt,
         thumbnailUrl: uploadResult.value.thumbnailUrl,

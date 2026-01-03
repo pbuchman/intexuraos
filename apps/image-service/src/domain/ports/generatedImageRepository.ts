@@ -9,4 +9,5 @@ export interface RepositoryError {
 export interface GeneratedImageRepository {
   save(image: GeneratedImage): Promise<Result<GeneratedImage, RepositoryError>>;
   findById(id: string): Promise<Result<GeneratedImage, RepositoryError>>;
+  delete(id: string): Promise<Result<void, RepositoryError>>;
 }

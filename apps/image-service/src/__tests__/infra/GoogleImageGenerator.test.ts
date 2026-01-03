@@ -6,8 +6,10 @@ import {
 } from '../../infra/image/GoogleImageGenerator.js';
 import type { ImageStorage, ImageUrls, StorageError } from '../../domain/ports/imageStorage.js';
 import type { Result } from '@intexuraos/common-core';
-import type { GeneratedImage } from '../../domain/index.js';
-import type { ImageGenerationError } from '../../domain/ports/imageGenerator.js';
+import type {
+  GeneratedImageData,
+  ImageGenerationError,
+} from '../../domain/ports/imageGenerator.js';
 
 const mockGenerateImages = vi.fn();
 
@@ -25,12 +27,16 @@ function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
   >;
+  deleteMock: ReturnType<typeof vi.fn<(id: string) => Promise<Result<void, StorageError>>>>;
 } {
   const uploadMock =
     vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>();
+  const deleteMock = vi.fn<(id: string) => Promise<Result<void, StorageError>>>();
   return {
     uploadMock,
+    deleteMock,
     upload: uploadMock,
+    delete: deleteMock,
   };
 }
 
@@ -74,7 +80,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(true);
@@ -150,7 +156,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -172,7 +178,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -200,7 +206,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -220,7 +226,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -239,7 +245,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -258,7 +264,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -277,7 +283,7 @@ describe('GoogleImageGenerator', () => {
         generateId: (): string => testImageId,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(false);
@@ -301,7 +307,7 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
       });
 
-      const result: Result<GeneratedImage, ImageGenerationError> =
+      const result: Result<GeneratedImageData, ImageGenerationError> =
         await generator.generate(testPrompt);
 
       expect(result.ok).toBe(true);

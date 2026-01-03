@@ -9,6 +9,7 @@ import {
 import {
   FakeGeneratedImageRepository,
   FakeImageGenerator,
+  FakeImageStorage,
   FakePromptGenerator,
   FakeUserServiceClient,
 } from './fakes.js';
@@ -34,11 +35,13 @@ describe('services', () => {
     it('returns container after setServices', () => {
       const fakeRepo = new FakeGeneratedImageRepository();
       const fakeImageGenerator = new FakeImageGenerator();
+      const fakeImageStorage = new FakeImageStorage();
       const fakePromptGenerator = new FakePromptGenerator();
       const fakeUserServiceClient = new FakeUserServiceClient();
 
       const container: ServiceContainer = {
         generatedImageRepository: fakeRepo,
+        imageStorage: fakeImageStorage,
         userServiceClient: fakeUserServiceClient,
         createPromptGenerator: () => fakePromptGenerator,
         createImageGenerator: () => fakeImageGenerator,

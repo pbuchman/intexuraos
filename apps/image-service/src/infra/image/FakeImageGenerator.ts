@@ -1,6 +1,9 @@
 import { ok, type Result } from '@intexuraos/common-core';
-import type { GeneratedImage } from '../../domain/index.js';
-import type { ImageGenerationError, ImageGenerator } from '../../domain/ports/imageGenerator.js';
+import type {
+  GeneratedImageData,
+  ImageGenerationError,
+  ImageGenerator,
+} from '../../domain/ports/imageGenerator.js';
 
 export interface FakeImageGeneratorConfig {
   bucketName: string;
@@ -19,7 +22,7 @@ export class FakeImageGenerator implements ImageGenerator {
     this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
   }
 
-  async generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>> {
+  async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
     const id = this.generateId();
     const now = new Date().toISOString();
 
@@ -27,7 +30,7 @@ export class FakeImageGenerator implements ImageGenerator {
     const thumbnailUrl = `${baseUrl}/images/${id}/thumbnail.jpg`;
     const fullSizeUrl = `${baseUrl}/images/${id}/full.png`;
 
-    const image: GeneratedImage = {
+    const image: GeneratedImageData = {
       id,
       prompt,
       thumbnailUrl,
