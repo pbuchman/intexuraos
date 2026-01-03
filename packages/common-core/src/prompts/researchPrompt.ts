@@ -35,8 +35,10 @@ ${userPrompt}
 (Numbered list of all URLs referenced, with brief description of each)
 
 ## Quality Standards
+- CRITICAL: Write ENTIRELY in the SAME LANGUAGE as the Research Request above (Polish request → Polish response, Spanish request → Spanish response, etc.)
 - Only use authoritative, reputable sources
 - Distinguish between facts, opinions, and speculation
 - Note any limitations or gaps in available information
+- Format all source URLs as clickable markdown links: [source name](URL)
 - Be thorough but concise`;
 }

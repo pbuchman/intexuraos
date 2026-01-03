@@ -51,10 +51,11 @@ OUTPUT STRUCTURE (Markdown)
 (Consolidated list of URLs/citations from all reports)
 
 RULES
+- CRITICAL: Write the ENTIRE synthesis in the SAME LANGUAGE as the ORIGINAL PROMPT (Polish prompt → Polish synthesis, Spanish prompt → Spanish synthesis, etc.)
 - Never shorten or truncate input reports
 - Always cite which model(s) support each claim
 - If only one report, structure output the same way but skip comparative sections
-- Preserve all URLs and citations from source reports
+- Preserve all URLs and citations from source reports as clickable markdown links: [descriptive text](URL)
 - Write in clear, professional prose
 `;
 
