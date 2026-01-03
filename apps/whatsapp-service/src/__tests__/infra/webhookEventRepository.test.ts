@@ -72,11 +72,11 @@ describe('webhookEventRepository', () => {
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {});
+      const result = await updateWebhookEventStatus(saved.value.id, 'completed', {});
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('processed');
+        expect(result.value.status).toBe('completed');
         expect(result.value.processedAt).toBeDefined();
       }
     });
@@ -136,19 +136,19 @@ describe('webhookEventRepository', () => {
 
       if (!saved.ok) throw new Error('Setup failed');
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {
+      const result = await updateWebhookEventStatus(saved.value.id, 'completed', {
         inboxNoteId: 'note-123',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.status).toBe('processed');
+        expect(result.value.status).toBe('completed');
         expect(result.value.inboxNoteId).toBe('note-123');
       }
     });
 
     it('returns error for non-existent event', async () => {
-      const result = await updateWebhookEventStatus('nonexistent-id', 'processed', {});
+      const result = await updateWebhookEventStatus('nonexistent-id', 'completed', {});
 
       // Implementation catches Firestore error and returns PERSISTENCE_ERROR
       expect(result.ok).toBe(false);
@@ -228,7 +228,7 @@ describe('webhookEventRepository', () => {
 
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await updateWebhookEventStatus(saved.value.id, 'processed', {});
+      const result = await updateWebhookEventStatus(saved.value.id, 'completed', {});
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

@@ -669,7 +669,7 @@ async function handleTextMessage(
     'Text message saved to database'
   );
 
-  await webhookEventRepository.updateEventStatus(savedEvent.id, 'processed', {});
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 
   // Publish command ingest event for text message
   const services = getServices();

@@ -15,7 +15,7 @@ export type { WhatsAppError };
  */
 export type WebhookProcessingStatus =
   | 'pending'
-  | 'processed'
+  | 'completed'
   | 'ignored'
   | 'user_unmapped'
   | 'failed';
