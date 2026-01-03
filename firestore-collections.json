@@ -66,10 +66,6 @@
       "owner": "actions-agent",
       "description": "Action items and their execution lifecycle"
     },
-    "actions_filters": {
-      "owner": "actions-agent",
-      "description": "User filter options and saved filters for actions"
-    },
     "custom_data_sources": {
       "owner": "data-insights-service",
       "description": "User-created custom data sources for analysis"
