@@ -45,7 +45,7 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
-} from '../domain/inbox/index.js';
+} from '../domain/whatsapp/index.js';
 import { randomUUID } from 'node:crypto';
 
 /**

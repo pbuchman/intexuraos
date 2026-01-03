@@ -4,7 +4,7 @@ import {
   getCountryCallingCode,
   parsePhoneNumberWithError,
 } from 'libphonenumber-js';
-import { normalizePhoneNumber } from '../domain/inbox/index.js';
+import { normalizePhoneNumber } from '../domain/whatsapp/index.js';
 
 // Re-export for backwards compatibility with existing imports
 export { normalizePhoneNumber };

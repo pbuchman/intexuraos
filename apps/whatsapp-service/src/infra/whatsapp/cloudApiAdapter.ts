@@ -9,7 +9,7 @@ import type {
   MediaUrlInfo,
   SendMessageResult,
   WhatsAppCloudApiPort,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 
 /**
  * WhatsApp Cloud API adapter implementation.

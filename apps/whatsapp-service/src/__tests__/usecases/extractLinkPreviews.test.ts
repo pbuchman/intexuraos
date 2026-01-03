@@ -8,7 +8,7 @@ import {
   type LinkPreview,
   type LinkPreviewError,
   type WhatsAppMessage,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import type { Result } from '@intexuraos/common-core';
 import { FakeLinkPreviewFetcherPort, FakeWhatsAppMessageRepository } from '../fakes.js';
 

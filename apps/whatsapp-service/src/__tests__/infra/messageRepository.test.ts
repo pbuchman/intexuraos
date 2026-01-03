@@ -13,7 +13,7 @@ import {
   updateLinkPreview,
   updateTranscription,
 } from '../../infra/firestore/index.js';
-import type { WhatsAppMessage } from '../../domain/inbox/index.js';
+import type { WhatsAppMessage } from '../../domain/whatsapp/index.js';
 
 /**
  * Helper to create test message data.

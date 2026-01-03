@@ -4,7 +4,7 @@
  */
 import sharp from 'sharp';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../../domain/inbox/index.js';
+import type { InboxError } from '../../domain/whatsapp/index.js';
 
 const MAX_THUMBNAIL_EDGE = 256;
 const JPEG_QUALITY = 80;

@@ -4,7 +4,7 @@
  */
 import { Storage } from '@google-cloud/storage';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError, MediaStoragePort, UploadResult } from '../../domain/inbox/index.js';
+import type { InboxError, MediaStoragePort, UploadResult } from '../../domain/whatsapp/index.js';
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 900; // 15 minutes
 

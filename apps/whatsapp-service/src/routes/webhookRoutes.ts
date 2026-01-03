@@ -15,7 +15,7 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
-import { ProcessAudioMessageUseCase, ProcessImageMessageUseCase } from '../domain/inbox/index.js';
+import { ProcessAudioMessageUseCase, ProcessImageMessageUseCase } from '../domain/whatsapp/index.js';
 import {
   extractAudioMedia,
   extractDisplayPhoneNumber,
