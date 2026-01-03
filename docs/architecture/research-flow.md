@@ -1,60 +1,85 @@
-# Research Flow - Complete Lifecycle
+# Research Flow — Complete Lifecycle
+
+> Complete documentation of research status transitions, LLM execution, synthesis, and error handling.
+
+---
+
+## Table of Contents
+
+1. [Status State Machine](#status-state-machine)
+2. [Phase 1: Research Creation](#phase-1-research-creation)
+3. [Phase 2: LLM Execution](#phase-2-llm-execution)
+4. [Phase 3: Completion Detection](#phase-3-completion-detection)
+5. [Phase 4: Synthesis](#phase-4-synthesis)
+6. [Phase 5: Partial Failure Handling](#phase-5-partial-failure-handling)
+7. [Phase 6: Retry from Failed](#phase-6-retry-from-failed)
+8. [Frontend Display Logic](#frontend-display-logic)
+9. [Reference](#reference)
+
+---
 
 ## Status State Machine
 
 ```
-                                    ┌─────────────┐
-                                    │   draft     │
-                                    └──────┬──────┘
-                                           │ POST /research (start)
-                                           ▼
-                                    ┌─────────────┐
-                              ┌─────│ processing  │─────┐
-                              │     └─────────────┘     │
-                              │                         │
-                   all LLMs   │                         │  some LLMs
-                   complete   │                         │  failed
-                              ▼                         ▼
-                       ┌─────────────┐          ┌───────────────────┐
-                       │synthesizing │          │awaiting_confirmation│
-                       └──────┬──────┘          └─────────┬─────────┘
-                              │                           │
-              ┌───────────────┼───────────────┐           │
-              │               │               │           │
-         success         skip synth      failure    ┌─────┴─────┐
-              │               │               │     │     │     │
-              ▼               ▼               ▼     ▼     ▼     ▼
-        ┌──────────┐   ┌──────────┐    ┌────────┐ proceed retry cancel
-        │completed │   │completed │    │ failed │   │     │     │
-        │(w/synth) │   │(no synth)│    └────┬───┘   │     │     │
-        └──────────┘   └──────────┘         │       │     │     ▼
-                                            │       │     │  ┌────────┐
-                                            │       │     │  │ failed │
-                                            │       │     │  └────────┘
-                                            │       │     ▼
-                                            │       │  ┌──────────┐
-                                            │       │  │ retrying │──┐
-                                            │       │  └──────────┘  │
-                                            │       │       ▲        │
-                                            │       │       └────────┘
-                                            │       │      (back to LLM
-                                            │       │       processing)
-                                            │       ▼
-                                            │  ┌─────────────┐
-                                            │  │synthesizing │
-                                            │  └──────┬──────┘
-                                            │         │
-                                            └─────────┴──► completed/failed
+                                         ┌─────────────┐
+                                         │    draft    │
+                                         └──────┬──────┘
+                                                │
+                                       POST /research (start)
+                                                │
+                                                ▼
+                                         ┌─────────────┐
+                                    ┌────┤ processing  ├────┐
+                                    │    └─────────────┘    │
+                                    │                       │
+                         all LLMs   │                       │   some LLMs
+                         complete   │                       │   failed
+                                    ▼                       ▼
+                            ┌─────────────┐       ┌────────────────────┐
+                            │synthesizing │       │awaiting_confirmation│
+                            └──────┬──────┘       └─────────┬──────────┘
+                                   │                        │
+               ┌───────────────────┼───────────────┐        │
+               │                   │               │        │
+          success            skip synth       failure   ┌───┴───┐
+               │                   │               │    │   │   │
+               ▼                   ▼               ▼    ▼   ▼   ▼
+        ┌───────────┐       ┌───────────┐    ┌────────┐ P   R   C
+        │ completed │       │ completed │    │ failed │ r   e   a
+        │ (w/synth) │       │ (no synth)│    └────┬───┘ o   t   n
+        └───────────┘       └───────────┘         │     c   r   c
+                                                  │     e   y   e
+                                                  │     e       l
+                                                  │     d       │
+                                                  │     │       ▼
+                                                  │     │   ┌────────┐
+                                                  │     │   │ failed │
+                                                  │     │   └────────┘
+                                                  │     │
+                                                  │     ▼
+                                                  │ ┌──────────┐
+                                                  │ │ retrying │◄──┐
+                                                  │ └────┬─────┘   │
+                                                  │      │         │
+                                                  │      └─────────┘
+                                                  │   (back to processing)
+                                                  │
+                                                  │      ▼
+                                                  │ ┌─────────────┐
+                                                  │ │synthesizing │
+                                                  │ └──────┬──────┘
+                                                  │        │
+                                                  └────────┴──► completed / failed
 ```
 
 ---
 
 ## Phase 1: Research Creation
 
-### Draft Creation
+### 1.1 Draft Creation
 
 ```
-User fills form → POST /research/draft → status: draft
+User fills form  ──►  POST /research/draft  ──►  status: draft
 ```
 
 | Field             | Source                                          |
@@ -66,10 +91,10 @@ User fills form → POST /research/draft → status: draft
 | `externalReports` | Optional user-provided context                  |
 | `status`          | `draft`                                         |
 
-### Start Research
+### 1.2 Start Research
 
 ```
-User clicks Start → POST /research → status: processing
+User clicks Start  ──►  POST /research  ──►  status: processing
 ```
 
 **Validation:**
@@ -88,30 +113,30 @@ User clicks Start → POST /research → status: processing
 
 ## Phase 2: LLM Execution
 
-### Pub/Sub Flow
+### 2.1 Pub/Sub Flow
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ llm.call    │────▶│ process-llm │────▶│ LLM API     │
-│ event       │     │ -call       │     │ (Google/    │
-│             │     │ endpoint    │     │ OpenAI/etc) │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                                               ▼
-                                        ┌─────────────┐
-                                        │ Update      │
-                                        │ llmResult   │
-                                        │ in Firestore│
-                                        └──────┬──────┘
-                                               │
-                                               ▼
-                                        ┌─────────────┐
-                                        │ checkLlm    │
-                                        │ Completion  │
-                                        └─────────────┘
+┌──────────────┐      ┌───────────────┐      ┌──────────────┐
+│  llm.call    │      │  process-llm  │      │   LLM API    │
+│   event      │─────►│  -call        │─────►│   (Google/   │
+│              │      │   endpoint    │      │  OpenAI/etc) │
+└──────────────┘      └───────────────┘      └──────┬───────┘
+                                                    │
+                                                    ▼
+                                             ┌──────────────┐
+                                             │ Update       │
+                                             │ llmResult    │
+                                             │ in Firestore │
+                                             └──────┬───────┘
+                                                    │
+                                                    ▼
+                                             ┌──────────────┐
+                                             │ checkLlm     │
+                                             │ Completion   │
+                                             └──────────────┘
 ```
 
-### LLM Result States
+### 2.2 LLM Result States
 
 | Status       | Meaning                   |
 | ------------ | ------------------------- |
@@ -124,10 +149,9 @@ User clicks Start → POST /research → status: processing
 
 ## Phase 3: Completion Detection
 
-### checkLlmCompletion Logic
+### 3.1 checkLlmCompletion Logic
 
 ```typescript
-// Called after each LLM result is stored
 function checkLlmCompletion(researchId): CompletionAction {
   const pending = results.filter((r) => r.status === 'pending' || r.status === 'processing');
   const completed = results.filter((r) => r.status === 'completed');
@@ -140,20 +164,20 @@ function checkLlmCompletion(researchId): CompletionAction {
 }
 ```
 
-### Decision Matrix
+### 3.2 Decision Matrix
 
 | Completed | Failed | Pending | Action                                       |
-| --------- | ------ | ------- | -------------------------------------------- |
-| 0         | > 0    | 0       | Mark `failed`, error: "All LLM calls failed" |
-| > 0       | 0      | 0       | Run synthesis (or skip)                      |
-| > 0       | > 0    | 0       | Set `awaiting_confirmation`                  |
-| any       | any    | > 0     | Wait (no action)                             |
+| :-------: | :----: | :-----: | -------------------------------------------- |
+|     0     |  > 0   |    0    | Mark `failed`, error: "All LLM calls failed" |
+|    > 0    |   0    |    0    | Run synthesis (or skip)                      |
+|    > 0    |  > 0   |    0    | Set `awaiting_confirmation`                  |
+|    any    |  any   |   > 0   | Wait (no action)                             |
 
 ---
 
 ## Phase 4: Synthesis
 
-### Synthesis Skip Logic
+### 4.1 Skip Logic
 
 ```typescript
 const successfulResults = llmResults.filter((r) => r.status === 'completed');
@@ -163,38 +187,38 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 ```
 
 | Successful LLMs | External Reports | Action                             |
-| --------------- | ---------------- | ---------------------------------- |
-| 0               | 0                | Error: "No successful LLM results" |
-| 0               | > 0              | Run synthesis (external only)      |
-| 1               | 0                | Skip synthesis, mark completed     |
-| 1               | > 0              | Run synthesis                      |
-| > 1             | any              | Run synthesis                      |
+| :-------------: | :--------------: | ---------------------------------- |
+|        0        |        0         | Error: "No successful LLM results" |
+|        0        |       > 0        | Run synthesis (external only)      |
+|        1        |        0         | Skip synthesis, mark completed     |
+|        1        |       > 0        | Run synthesis                      |
+|       > 1       |       any        | Run synthesis                      |
 
-### Synthesis Flow
+### 4.2 Synthesis Flow
 
 ```
-┌─────────────────┐
-│ runSynthesis    │
-└────────┬────────┘
+┌──────────────────┐
+│   runSynthesis   │
+└────────┬─────────┘
          │
          ▼
-┌─────────────────┐     ┌─────────────────┐
-│ Skip synthesis? │─YES─▶│ Mark completed  │
-│                 │      │ (no synthesized │
-└────────┬────────┘      │  Result)        │
-         │ NO            └─────────────────┘
+┌──────────────────┐      ┌──────────────────┐
+│ Skip synthesis?  │─YES─►│  Mark completed  │
+│                  │      │  (no synthesized │
+└────────┬─────────┘      │   Result)        │
+         │ NO             └──────────────────┘
          ▼
-┌─────────────────┐
-│ Build prompt    │
-│ with source     │
-│ attribution     │
-└────────┬────────┘
+┌──────────────────┐
+│  Build prompt    │
+│  with source     │
+│  attribution     │
+└────────┬─────────┘
          │
          ▼
-┌─────────────────┐
-│ Call synthesis  │
-│ LLM             │
-└────────┬────────┘
+┌──────────────────┐
+│ Call synthesis   │
+│      LLM         │
+└────────┬─────────┘
          │
     ┌────┴────┐
     │         │
@@ -207,7 +231,7 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 └────────┘ └────────┘
 ```
 
-### Post-Synthesis Actions
+### 4.3 Post-Synthesis Actions
 
 1. Generate shareable HTML (if share storage configured)
 2. Upload to GCS
@@ -218,19 +242,22 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 
 ## Phase 5: Partial Failure Handling
 
-### awaiting_confirmation State
+### 5.1 awaiting_confirmation State
 
-```
-Research has:
-- status: 'awaiting_confirmation'
-- partialFailure: {
+```typescript
+{
+  status: 'awaiting_confirmation',
+  partialFailure: {
     failedProviders: ['openai', 'anthropic'],
     detectedAt: '2024-01-01T10:00:00Z',
     retryCount: 0
   }
+}
 ```
 
-### User Actions (POST /research/:id/confirm)
+### 5.2 User Actions
+
+**Endpoint:** `POST /research/:id/confirm`
 
 | Action    | Effect                                     |
 | --------- | ------------------------------------------ |
@@ -238,88 +265,98 @@ Research has:
 | `retry`   | Re-run failed LLMs (max 2 retries)         |
 | `cancel`  | Mark as `failed` with "Cancelled by user"  |
 
-### Retry Flow (from awaiting_confirmation)
+### 5.3 Retry Flow
 
 ```
-┌─────────────────────┐
-│ User clicks Retry   │
-│ (awaiting_confirm.) │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ retryCount < 2?     │
-└──────────┬──────────┘
-           │
-     ┌─────┴─────┐
-     │ YES       │ NO
-     ▼           ▼
-┌──────────┐  ┌──────────┐
-│ Reset    │  │ Mark     │
-│ failed   │  │ failed   │
-│ LLMs to  │  │ "Max     │
-│ pending  │  │ retries" │
-└────┬─────┘  └──────────┘
-     │
-     ▼
-┌──────────────┐
-│ status:      │
-│ retrying     │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ Publish      │
-│ llm.call     │
-│ events       │
-└──────────────┘
-       │
-       ▼
+┌───────────────────────┐
+│   User clicks Retry   │
+│ (awaiting_confirmation│
+└───────────┬───────────┘
+            │
+            ▼
+┌───────────────────────┐
+│   retryCount < 2 ?    │
+└───────────┬───────────┘
+            │
+      ┌─────┴─────┐
+      │           │
+     YES          NO
+      │           │
+      ▼           ▼
+┌───────────┐  ┌───────────┐
+│ Reset     │  │ Mark      │
+│ failed    │  │ failed    │
+│ LLMs to   │  │ "Max      │
+│ pending   │  │ retries"  │
+└─────┬─────┘  └───────────┘
+      │
+      ▼
+┌───────────────┐
+│    status:    │
+│   retrying    │
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│   Publish     │
+│   llm.call    │
+│    events     │
+└───────────────┘
+        │
+        ▼
   (back to Phase 2)
 ```
 
 ---
 
-## Phase 6: Retry from Failed (NEW)
+## Phase 6: Retry from Failed
 
-### Entry Condition
+> **NEW** — Allows retry from terminal `failed` status.
 
-```
-research.status === 'failed'
-```
+### 6.1 Entry Condition
 
-### Retry Flow
-
-```
-┌─────────────────────┐
-│ User clicks Retry   │
-│ (status: failed)    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Any failed LLMs?    │
-└──────────┬──────────┘
-           │
-     ┌─────┴─────┐
-     │ YES       │ NO
-     ▼           ▼
-┌──────────┐  ┌──────────────┐
-│ Retry    │  │ synthesisErr │
-│ LLMs     │  │ exists?      │
-│ (same as │  └──────┬───────┘
-│ Phase 5) │         │
-└──────────┘   ┌─────┴─────┐
-               │ YES       │ NO
-               ▼           ▼
-         ┌──────────┐  ┌──────────┐
-         │ Re-run   │  │ Mark as  │
-         │ synthesis│  │ completed│
-         └──────────┘  │(idempot.)│
-                       └──────────┘
+```typescript
+research.status === 'failed';
 ```
 
-### Endpoint: POST /research/:id/retry
+### 6.2 Retry Flow
+
+```
+┌───────────────────────┐
+│   User clicks Retry   │
+│   (status: failed)    │
+└───────────┬───────────┘
+            │
+            ▼
+┌───────────────────────┐
+│   Any failed LLMs?    │
+└───────────┬───────────┘
+            │
+      ┌─────┴─────┐
+      │           │
+     YES          NO
+      │           │
+      ▼           ▼
+┌───────────┐  ┌───────────────┐
+│ Retry     │  │ synthesisErr  │
+│ LLMs      │  │   exists?     │
+│ (same as  │  └───────┬───────┘
+│ Phase 5)  │          │
+└───────────┘    ┌─────┴─────┐
+                 │           │
+                YES          NO
+                 │           │
+                 ▼           ▼
+           ┌───────────┐ ┌───────────┐
+           │ Re-run    │ │ Mark as   │
+           │ synthesis │ │ completed │
+           └───────────┘ │(idempotent│
+                         └───────────┘
+```
+
+### 6.3 Endpoint Behavior
+
+**Endpoint:** `POST /research/:id/retry`
 
 | Current Status              | Action           | Result                   |
 | --------------------------- | ---------------- | ------------------------ |
@@ -357,7 +394,9 @@ const showSynthesisNotAvailable =
 
 ---
 
-## Error Handling Summary
+## Reference
+
+### Error Handling Summary
 
 | Error Type           | Status   | User Action            |
 | -------------------- | -------- | ---------------------- |
@@ -367,18 +406,14 @@ const showSynthesisNotAvailable =
 | API key invalid      | `failed` | Update API keys, retry |
 | Cancelled by user    | `failed` | Create new research    |
 
----
-
-## Pub/Sub Topics
+### Pub/Sub Topics
 
 | Topic             | Publisher        | Subscriber       | Purpose                   |
 | ----------------- | ---------------- | ---------------- | ------------------------- |
 | `llm-call`        | llm-orchestrator | llm-orchestrator | Trigger LLM API call      |
 | `research-events` | llm-orchestrator | actions-agent    | Research lifecycle events |
 
----
-
-## Key Files
+### Key Files
 
 | File                             | Purpose                     |
 | -------------------------------- | --------------------------- |

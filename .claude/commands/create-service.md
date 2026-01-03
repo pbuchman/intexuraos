@@ -451,6 +451,20 @@ npm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
 
+### 15. Update Domain Docs Registry (if service has domain layer)
+
+If your service has a `src/domain/` directory, update the domain documentation registry:
+
+**File:** `.claude/commands/create-domain-docs.md`
+
+Add your service to the "Available Services with Domain Layers" table:
+
+```markdown
+| `<service-name>` | models, ports, usecases |
+```
+
+This ensures `/create-domain-docs` can generate documentation for your service's domain layer.
+
 ---
 
 ## Service Requirements Checklist
@@ -467,6 +481,7 @@ cd terraform && terraform fmt -recursive && terraform validate
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
+- [ ] Updated domain docs registry (if service has domain layer)
 - [ ] `npm run ci` passes
 - [ ] `terraform validate` passes
 

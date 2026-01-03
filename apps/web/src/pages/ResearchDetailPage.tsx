@@ -4,8 +4,10 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Copy,
   FileText,
   Link2,
+  Link2Off,
   Loader2,
   Play,
   RefreshCw,
@@ -264,6 +266,15 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
+  const handleCopyShareUrl = async (): Promise<void> => {
+    if (research?.shareInfo?.shareUrl === undefined) return;
+    await navigator.clipboard.writeText(research.shareInfo.shareUrl);
+    setShareToast('Link copied to clipboard');
+    setTimeout(() => {
+      setShareToast(null);
+    }, 2000);
+  };
+
   const handleShare = async (): Promise<void> => {
     if (research?.shareInfo?.shareUrl === undefined) return;
 
@@ -281,19 +292,11 @@ export function ResearchDetailPage(): React.JSX.Element {
         await navigator.share(shareData);
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-          await navigator.clipboard.writeText(shareUrl);
-          setShareToast('Link copied to clipboard');
-          setTimeout(() => {
-            setShareToast(null);
-          }, 2000);
+          await handleCopyShareUrl();
         }
       }
     } else {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareToast('Link copied to clipboard');
-      setTimeout(() => {
-        setShareToast(null);
-      }, 2000);
+      await handleCopyShareUrl();
     }
   };
 
@@ -402,6 +405,15 @@ export function ResearchDetailPage(): React.JSX.Element {
             <Button
               variant="secondary"
               onClick={(): void => {
+                void handleCopyShareUrl();
+              }}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copy
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={(): void => {
                 void handleShare();
               }}
             >
@@ -418,7 +430,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                   disabled={unsharing}
                   isLoading={unsharing}
                 >
-                  Confirm Remove
+                  Confirm
                 </Button>
                 <Button
                   variant="secondary"
@@ -437,7 +449,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   setShowUnshareConfirm(true);
                 }}
               >
-                Remove Share
+                <Link2Off className="mr-2 h-4 w-4" />
+                Unshare
               </Button>
             )}
           </div>
