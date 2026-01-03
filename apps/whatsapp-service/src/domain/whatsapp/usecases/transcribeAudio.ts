@@ -25,6 +25,7 @@ import type { SpeechTranscriptionPort } from '../ports/transcription.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { Logger } from '../utils/logger.js';
 
 /**
  * Input for transcribing an audio message.
@@ -60,12 +61,9 @@ export const DEFAULT_TRANSCRIPTION_POLL_CONFIG: TranscriptionPollingConfig = {
 };
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface TranscribeAudioLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type TranscribeAudioLogger = Logger;
 
 /**
  * Dependencies for TranscribeAudioUseCase.

@@ -19,6 +19,7 @@ import type {
 } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
+import type { Logger } from '../utils/logger.js';
 
 /**
  * Audio media information from webhook payload.
@@ -54,12 +55,9 @@ export interface ProcessAudioMessageResult {
 }
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface ProcessAudioMessageLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type ProcessAudioMessageLogger = Logger;
 
 /**
  * Dependencies for ProcessAudioMessageUseCase.

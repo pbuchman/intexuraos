@@ -19,6 +19,7 @@ import type {
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';
+import type { Logger } from '../utils/logger.js';
 
 /**
  * Image media information from webhook payload.
@@ -55,12 +56,9 @@ export interface ProcessImageMessageResult {
 }
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface ProcessImageMessageLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type ProcessImageMessageLogger = Logger;
 
 /**
  * Dependencies for ProcessImageMessageUseCase.
