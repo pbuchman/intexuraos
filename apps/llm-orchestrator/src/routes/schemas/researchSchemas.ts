@@ -237,3 +237,29 @@ export const confirmPartialFailureResponseSchema = {
     },
   },
 } as const;
+
+export const retryResearchResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        action: { type: 'string' },
+        message: { type: 'string' },
+        retriedProviders: {
+          type: 'array',
+          items: llmProviderSchema,
+          nullable: true,
+        },
+      },
+    },
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

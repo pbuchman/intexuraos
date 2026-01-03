@@ -23,6 +23,7 @@ import {
   type PartialFailureDecision,
   type Research,
   retryFailedLlms,
+  retryResearch,
   runSynthesis,
   submitResearch,
   unshareResearch,
@@ -39,6 +40,7 @@ import {
   listResearchesQuerySchema,
   listResearchesResponseSchema,
   researchIdParamsSchema,
+  retryResearchResponseSchema,
   saveDraftBodySchema,
   saveDraftResponseSchema,
   updateDraftBodySchema,
@@ -590,6 +592,101 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.ok({ action: 'cancel', message: 'Research cancelled' });
         }
       }
+    }
+  );
+
+  // POST /research/:id/retry
+  fastify.post(
+    '/research/:id/retry',
+    {
+      schema: {
+        operationId: 'retryResearch',
+        summary: 'Retry failed research',
+        description:
+          'Intelligently retry failed research by re-running failed LLM calls and/or synthesis as needed.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        response: {
+          200: retryResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const {
+        researchRepo,
+        userServiceClient,
+        llmCallPublisher,
+        createSynthesizer,
+        notificationSender,
+        shareStorage,
+        shareConfig,
+      } = getServices();
+      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+
+      // Get research and check ownership
+      const existing = await getResearch(id, { researchRepo });
+
+      if (!existing.ok) {
+        return await reply.fail('INTERNAL_ERROR', existing.error.message);
+      }
+
+      if (existing.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      if (existing.value.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Access denied');
+      }
+
+      // Get API keys for potential synthesis
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+
+      const synthesisProvider = existing.value.synthesisLlm;
+      const synthesisKey = apiKeysResult.value[synthesisProvider];
+      if (synthesisKey === undefined) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API key required for synthesis with ${synthesisProvider}`
+        );
+      }
+
+      const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+
+      // Retry research
+      const result = await retryResearch(id, {
+        researchRepo,
+        llmCallPublisher,
+        synthesisDeps: {
+          researchRepo,
+          synthesizer,
+          notificationSender,
+          shareStorage,
+          shareConfig,
+          webAppUrl,
+          reportLlmSuccess: (): void => {
+            void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
+          },
+        },
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error ?? 'Retry failed');
+      }
+
+      return await reply.ok({
+        action: result.action ?? 'unknown',
+        message: result.message ?? 'Retry initiated',
+        ...(result.retriedProviders !== undefined && { retriedProviders: result.retriedProviders }),
+      });
     }
   );
 

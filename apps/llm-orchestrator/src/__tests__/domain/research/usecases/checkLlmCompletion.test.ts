@@ -275,4 +275,135 @@ describe('checkLlmCompletion', () => {
     expect(result).toEqual({ type: 'all_completed' });
     expect(deps.mockRepo.update).not.toHaveBeenCalled();
   });
+
+  describe('retry mode handling', () => {
+    it('marks as failed when retrying status and still have failures', async () => {
+      const research = createTestResearch({
+        status: 'retrying',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'Still failing after retry',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await checkLlmCompletion('research-1', deps);
+
+      expect(result).toEqual({ type: 'partial_failure', failedProviders: ['openai'] });
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        status: 'failed',
+        synthesisError: '1 LLM provider still failed after retry',
+        completedAt: '2024-01-01T12:00:00.000Z',
+      });
+    });
+
+    it('marks as failed with correct plural message when multiple providers fail in retry', async () => {
+      const research = createTestResearch({
+        status: 'retrying',
+        selectedLlms: ['google', 'openai', 'anthropic'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'Error 1',
+          },
+          {
+            provider: 'anthropic',
+            model: 'claude-3-opus',
+            status: 'failed',
+            error: 'Error 2',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await checkLlmCompletion('research-1', deps);
+
+      expect(result).toEqual({
+        type: 'partial_failure',
+        failedProviders: ['openai', 'anthropic'],
+      });
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        status: 'failed',
+        synthesisError: '2 LLM providers still failed after retry',
+        completedAt: '2024-01-01T12:00:00.000Z',
+      });
+    });
+
+    it('returns all_completed when retrying and all succeed', async () => {
+      const research = createTestResearch({
+        status: 'retrying',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'completed',
+            result: 'OpenAI Result (after retry)',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await checkLlmCompletion('research-1', deps);
+
+      expect(result).toEqual({ type: 'all_completed' });
+      expect(deps.mockRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('uses awaiting_confirmation for first-run failures (not retry mode)', async () => {
+      const research = createTestResearch({
+        status: 'processing',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'failed',
+            error: 'First failure',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await checkLlmCompletion('research-1', deps);
+
+      expect(result).toEqual({ type: 'partial_failure', failedProviders: ['openai'] });
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        status: 'awaiting_confirmation',
+        partialFailure: {
+          failedProviders: ['openai'],
+          detectedAt: '2024-01-01T12:00:00.000Z',
+          retryCount: 0,
+        },
+      });
+    });
+  });
 });

@@ -53,6 +53,21 @@ export async function checkLlmCompletion(
     return { type: 'all_completed' };
   }
 
+  // Check if we're in retry mode
+  const wasRetrying = research.status === 'retrying';
+
+  if (wasRetrying) {
+    // Retry mode and still have failures → mark as failed
+    const failedProviders = failed.map((r) => r.provider);
+    await researchRepo.update(researchId, {
+      status: 'failed',
+      synthesisError: `${failed.length} LLM provider${failed.length === 1 ? '' : 's'} still failed after retry`,
+      completedAt: new Date().toISOString(),
+    });
+    return { type: 'partial_failure', failedProviders };
+  }
+
+  // First run with failures → awaiting_confirmation
   const failedProviders = failed.map((r) => r.provider);
   const retryCount = research.partialFailure?.retryCount ?? 0;
 
