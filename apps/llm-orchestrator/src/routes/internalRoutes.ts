@@ -319,6 +319,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             notificationSender: services.notificationSender,
             shareStorage: services.shareStorage,
             shareConfig: services.shareConfig,
+            imageServiceClient: services.imageServiceClient,
+            userId: research.userId,
             webAppUrl,
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(research.userId, synthesisProvider);
@@ -804,6 +806,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               notificationSender,
               shareStorage,
               shareConfig,
+              imageServiceClient: services.imageServiceClient,
+              userId: event.userId,
               webAppUrl,
               reportLlmSuccess: (): void => {
                 void userServiceClient.reportLlmSuccess(event.userId, synthesisProvider);

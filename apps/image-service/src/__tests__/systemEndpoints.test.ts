@@ -73,8 +73,9 @@ describe('System Endpoints', () => {
     };
     expect(spec.openapi).toMatch(/^3\./);
     expect(spec.info.title).toBe('image-service');
-    expect(spec.paths['/prompts/generate']).toBeDefined();
-    expect(spec.paths['/images/generate']).toBeDefined();
+    expect(spec.paths['/internal/images/prompts/generate']).toBeDefined();
+    expect(spec.paths['/internal/images/generate']).toBeDefined();
+    expect(spec.paths['/internal/images/{id}']).toBeDefined();
   });
 
   it('returns 400 for invalid JSON body', async () => {
@@ -82,7 +83,7 @@ describe('System Endpoints', () => {
 
     const response = await app.inject({
       method: 'POST',
-      url: '/prompts/generate',
+      url: '/internal/images/prompts/generate',
       headers: { 'content-type': 'application/json' },
       payload: 'not valid json',
     });

@@ -11,14 +11,15 @@ import {
   getNotificationFilters,
 } from '@/services';
 import type { MobileNotification, SavedNotificationFilter } from '@/types';
-import { Bell, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
 
 /**
  * Active filter state for multi-dimension filtering.
+ * App and source support multiple selections (OR within dimension).
  */
 interface ActiveFilters {
-  app: string;
-  source: string;
+  app: string[];
+  source: string[];
   title: string;
 }
 
@@ -171,11 +172,21 @@ function NotificationCard({
  */
 function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean {
   return (
-    filters.app !== '' ||
-    filters.source !== '' ||
+    filters.app.length > 0 ||
+    filters.source.length > 0 ||
     filters.title !== '' ||
     (titleInput !== undefined && titleInput !== '')
   );
+}
+
+/**
+ * Check if two string arrays have the same values (order-independent).
+ */
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((val, idx) => val === sortedB[idx]);
 }
 
 /**
@@ -186,18 +197,100 @@ function filtersMatchSaved(
   titleInput: string,
   savedFilter: SavedNotificationFilter
 ): boolean {
-  const savedApp =
-    savedFilter.app !== undefined && savedFilter.app.length > 0 ? savedFilter.app.join(',') : '';
-  const savedSource =
-    savedFilter.source !== undefined && savedFilter.source.length > 0
-      ? savedFilter.source.join(',')
-      : '';
+  const savedApp = savedFilter.app ?? [];
+  const savedSource = savedFilter.source ?? [];
   const savedTitle = savedFilter.title ?? '';
 
   return (
-    filters.app === savedApp &&
-    filters.source === savedSource &&
+    arraysEqual(filters.app, savedApp) &&
+    arraysEqual(filters.source, savedSource) &&
     (filters.title === savedTitle || titleInput === savedTitle)
+  );
+}
+
+interface MultiSelectDropdownProps {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  allLabel: string;
+}
+
+function MultiSelectDropdown({
+  label,
+  options,
+  selected,
+  onChange,
+  allLabel,
+}: MultiSelectDropdownProps): React.JSX.Element {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const toggleOption = (option: string): void => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  const displayText =
+    selected.length === 0
+      ? allLabel
+      : selected.length === 1
+        ? selected[0]
+        : `${String(selected.length)} selected`;
+
+  return (
+    <div className="relative flex flex-col gap-1">
+      <label className="text-xs text-slate-500">{label}</label>
+      <button
+        type="button"
+        onClick={(): void => {
+          setIsOpen(!isOpen);
+        }}
+        className="flex min-w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      >
+        <span className="truncate">{displayText}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-10"
+            onClick={(): void => {
+              setIsOpen(false);
+            }}
+          />
+          <div className="absolute top-full z-20 mt-1 max-h-60 w-full min-w-[200px] overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+            {options.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={(): void => {
+                  toggleOption(option);
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+              >
+                <div
+                  className={`flex h-4 w-4 items-center justify-center rounded border ${
+                    selected.includes(option)
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-300'
+                  }`}
+                >
+                  {selected.includes(option) ? <Check className="h-3 w-3" /> : null}
+                </div>
+                <span className="truncate text-sm text-slate-700">{option}</span>
+              </button>
+            ))}
+            {options.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-400">No options available</div>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -213,7 +306,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   // Multi-dimension filter state
-  const [filters, setFilters] = useState<ActiveFilters>({ app: '', source: '', title: '' });
+  const [filters, setFilters] = useState<ActiveFilters>({ app: [], source: [], title: '' });
   // Separate state for title input (immediate update for UX, applied on blur)
   const [titleInput, setTitleInput] = useState('');
 
@@ -256,11 +349,11 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
         const token = await getAccessToken();
         const options: { source?: string[]; app?: string[]; title?: string } = {};
-        if (filters.source !== '') {
-          options.source = [filters.source];
+        if (filters.source.length > 0) {
+          options.source = filters.source;
         }
-        if (filters.app !== '') {
-          options.app = [filters.app];
+        if (filters.app.length > 0) {
+          options.app = filters.app;
         }
         if (filters.title !== '') {
           options.title = filters.title;
@@ -288,11 +381,11 @@ export function MobileNotificationsListPage(): React.JSX.Element {
       const options: { cursor: string; source?: string[]; app?: string[]; title?: string } = {
         cursor: nextCursor,
       };
-      if (filters.source !== '') {
-        options.source = [filters.source];
+      if (filters.source.length > 0) {
+        options.source = filters.source;
       }
-      if (filters.app !== '') {
-        options.app = [filters.app];
+      if (filters.app.length > 0) {
+        options.app = filters.app;
       }
       if (filters.title !== '') {
         options.title = filters.title;
@@ -316,16 +409,15 @@ export function MobileNotificationsListPage(): React.JSX.Element {
   }, [fetchNotifications]);
 
   const handleClearFilters = (): void => {
-    setFilters({ app: '', source: '', title: '' });
+    setFilters({ app: [], source: [], title: '' });
     setTitleInput('');
     setFilterName('');
     setSearchParams(new URLSearchParams());
   };
 
   const handleApplySavedFilter = (filter: SavedNotificationFilter): void => {
-    const newApp = filter.app !== undefined && filter.app.length > 0 ? filter.app.join(',') : '';
-    const newSource =
-      filter.source !== undefined && filter.source.length > 0 ? filter.source.join(',') : '';
+    const newApp = filter.app ?? [];
+    const newSource = filter.source ?? [];
     const newTitle = filter.title ?? '';
 
     setFilters({ app: newApp, source: newSource, title: newTitle });
@@ -333,8 +425,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
     const params = new URLSearchParams();
     params.set('filterId', filter.id);
-    if (newApp !== '') params.set('app', newApp);
-    if (newSource !== '') params.set('source', newSource);
+    if (newApp.length > 0) params.set('app', newApp.join(','));
+    if (newSource.length > 0) params.set('source', newSource.join(','));
     if (newTitle !== '') params.set('title', newTitle);
     setSearchParams(params);
   };
@@ -376,15 +468,17 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     const urlTitle = searchParams.get('title');
     if (urlApp !== null || urlSource !== null || urlTitle !== null) {
       const newTitle = urlTitle ?? '';
+      const appArray = urlApp !== null && urlApp !== '' ? urlApp.split(',') : [];
+      const sourceArray = urlSource !== null && urlSource !== '' ? urlSource.split(',') : [];
       setFilters({
-        app: urlApp ?? '',
-        source: urlSource ?? '',
+        app: appArray,
+        source: sourceArray,
         title: newTitle,
       });
       setTitleInput(newTitle);
     } else {
       // No URL params - clear all filters (e.g., when clicking "All" in sidebar)
-      setFilters({ app: '', source: '', title: '' });
+      setFilters({ app: [], source: [], title: '' });
       setTitleInput('');
       setFilterName('');
     }
@@ -412,11 +506,11 @@ export function MobileNotificationsListPage(): React.JSX.Element {
       source?: string[];
       title?: string;
     } = { name: filterName.trim() };
-    if (filters.app !== '') {
-      newFilterInput.app = [filters.app];
+    if (filters.app.length > 0) {
+      newFilterInput.app = filters.app;
     }
-    if (filters.source !== '') {
-      newFilterInput.source = [filters.source];
+    if (filters.source.length > 0) {
+      newFilterInput.source = filters.source;
     }
     if (titleInput !== '') {
       newFilterInput.title = titleInput;
@@ -503,43 +597,27 @@ export function MobileNotificationsListPage(): React.JSX.Element {
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
-          {/* App dropdown */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">App</label>
-            <select
-              value={filters.app}
-              onChange={(e): void => {
-                setFilters((prev) => ({ ...prev, app: e.target.value }));
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Apps</option>
-              {appOptions.map((app) => (
-                <option key={app} value={app}>
-                  {app}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* App multi-select */}
+          <MultiSelectDropdown
+            label="App"
+            options={appOptions}
+            selected={filters.app}
+            onChange={(selected): void => {
+              setFilters((prev) => ({ ...prev, app: selected }));
+            }}
+            allLabel="All Apps"
+          />
 
-          {/* Source dropdown */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Source</label>
-            <select
-              value={filters.source}
-              onChange={(e): void => {
-                setFilters((prev) => ({ ...prev, source: e.target.value }));
-              }}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Sources</option>
-              {sourceOptions.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Source multi-select */}
+          <MultiSelectDropdown
+            label="Source"
+            options={sourceOptions}
+            selected={filters.source}
+            onChange={(selected): void => {
+              setFilters((prev) => ({ ...prev, source: selected }));
+            }}
+            allLabel="All Sources"
+          />
 
           {/* Title text input */}
           <div className="flex flex-col gap-1">

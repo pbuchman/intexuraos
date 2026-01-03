@@ -1,6 +1,6 @@
 export const generateImageBodySchema = {
   type: 'object',
-  required: ['prompt', 'model'],
+  required: ['prompt', 'model', 'userId'],
   properties: {
     prompt: {
       type: 'string',
@@ -12,6 +12,10 @@ export const generateImageBodySchema = {
       type: 'string',
       enum: ['gpt-image-1', 'nano-banana-pro'],
       description: 'Image generation model to use',
+    },
+    userId: {
+      type: 'string',
+      description: 'User ID for API key lookup and image ownership',
     },
   },
   additionalProperties: false,
@@ -51,6 +55,7 @@ export const generateImageResponseSchema = {
 export interface GenerateImageBody {
   prompt: string;
   model: 'gpt-image-1' | 'nano-banana-pro';
+  userId: string;
 }
 
 export const deleteImageParamsSchema = {

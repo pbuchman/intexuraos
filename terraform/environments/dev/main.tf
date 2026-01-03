@@ -914,6 +914,7 @@ module "llm_orchestrator" {
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
     INTEXURAOS_SHARED_CONTENT_BUCKET         = module.shared_content.bucket_name
     INTEXURAOS_SHARE_BASE_URL                = "https://${var.web_app_domain}/share/research"
+    INTEXURAOS_IMAGE_SERVICE_URL             = module.image_service.service_url
   }
 
   depends_on = [
@@ -921,6 +922,7 @@ module "llm_orchestrator" {
     module.iam,
     module.secret_manager,
     module.shared_content,
+    module.image_service,
   ]
 }
 

@@ -1,6 +1,6 @@
 export const generatePromptBodySchema = {
   type: 'object',
-  required: ['text', 'model'],
+  required: ['text', 'model', 'userId'],
   properties: {
     text: {
       type: 'string',
@@ -12,6 +12,10 @@ export const generatePromptBodySchema = {
       type: 'string',
       enum: ['gpt-4.1', 'gemini-2.5-pro'],
       description: 'LLM model to use for prompt generation',
+    },
+    userId: {
+      type: 'string',
+      description: 'User ID for API key lookup',
     },
   },
   additionalProperties: false,
@@ -68,4 +72,5 @@ export const generatePromptResponseSchema = {
 export interface GeneratePromptBody {
   text: string;
   model: 'gpt-4.1' | 'gemini-2.5-pro';
+  userId: string;
 }

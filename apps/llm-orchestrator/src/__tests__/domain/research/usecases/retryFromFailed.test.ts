@@ -59,6 +59,8 @@ function createMockDeps(): RetryFromFailedDeps & {
       notificationSender: mockNotificationSender,
       shareStorage: null,
       shareConfig: null,
+      imageServiceClient: null,
+      userId: 'user-1',
       webAppUrl: 'https://app.example.com',
     },
     mockRepo,

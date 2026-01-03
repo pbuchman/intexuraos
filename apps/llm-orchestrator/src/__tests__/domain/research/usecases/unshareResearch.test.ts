@@ -13,6 +13,7 @@ import type { Research } from '../../../../domain/research/models/index.js';
 function createMockDeps(): UnshareResearchDeps & {
   mockRepo: { findById: ReturnType<typeof vi.fn>; clearShareInfo: ReturnType<typeof vi.fn> };
   mockShareStorage: { delete: ReturnType<typeof vi.fn> };
+  mockImageServiceClient: { deleteImage: ReturnType<typeof vi.fn> };
 } {
   const mockRepo = {
     findById: vi.fn(),
@@ -29,11 +30,19 @@ function createMockDeps(): UnshareResearchDeps & {
     delete: vi.fn().mockResolvedValue(ok(undefined)),
   };
 
+  const mockImageServiceClient = {
+    generatePrompt: vi.fn(),
+    generateImage: vi.fn(),
+    deleteImage: vi.fn().mockResolvedValue(ok(undefined)),
+  };
+
   return {
     researchRepo: mockRepo,
     shareStorage: mockShareStorage,
+    imageServiceClient: mockImageServiceClient,
     mockRepo,
     mockShareStorage,
+    mockImageServiceClient,
   };
 }
 
@@ -135,6 +144,7 @@ describe('unshareResearch', () => {
     const result = await unshareResearch('research-1', 'user-1', {
       researchRepo: deps.researchRepo,
       shareStorage: null,
+      imageServiceClient: null,
     });
 
     expect(result).toEqual({ ok: true });
@@ -164,5 +174,80 @@ describe('unshareResearch', () => {
     const result = await unshareResearch('research-1', 'user-1', deps);
 
     expect(result).toEqual({ ok: false, error: 'Failed to update research' });
+  });
+
+  describe('cover image deletion', () => {
+    it('deletes cover image when coverImageId exists', async () => {
+      const research = createTestResearch({
+        shareInfo: {
+          shareToken: 'abc123',
+          slug: 'test-research',
+          shareUrl: 'https://example.com/share/test.html',
+          sharedAt: '2024-01-01T12:00:00Z',
+          gcsPath: 'research/abc123-test-research.html',
+          coverImageId: 'image-123',
+        },
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await unshareResearch('research-1', 'user-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockImageServiceClient.deleteImage).toHaveBeenCalledWith('image-123');
+    });
+
+    it('does not call deleteImage when coverImageId is undefined', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      await unshareResearch('research-1', 'user-1', deps);
+
+      expect(deps.mockImageServiceClient.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('continues on image delete failure (graceful degradation)', async () => {
+      const research = createTestResearch({
+        shareInfo: {
+          shareToken: 'abc123',
+          slug: 'test-research',
+          shareUrl: 'https://example.com/share/test.html',
+          sharedAt: '2024-01-01T12:00:00Z',
+          gcsPath: 'research/abc123-test-research.html',
+          coverImageId: 'image-123',
+        },
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+      deps.mockImageServiceClient.deleteImage.mockResolvedValue(
+        err({ code: 'STORAGE_ERROR', message: 'Failed to delete image' })
+      );
+
+      const result = await unshareResearch('research-1', 'user-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.clearShareInfo).toHaveBeenCalledWith('research-1');
+    });
+
+    it('works when imageServiceClient is null', async () => {
+      const research = createTestResearch({
+        shareInfo: {
+          shareToken: 'abc123',
+          slug: 'test-research',
+          shareUrl: 'https://example.com/share/test.html',
+          sharedAt: '2024-01-01T12:00:00Z',
+          gcsPath: 'research/abc123-test-research.html',
+          coverImageId: 'image-123',
+        },
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await unshareResearch('research-1', 'user-1', {
+        researchRepo: deps.researchRepo,
+        shareStorage: deps.shareStorage,
+        imageServiceClient: null,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.clearShareInfo).toHaveBeenCalledWith('research-1');
+    });
   });
 });

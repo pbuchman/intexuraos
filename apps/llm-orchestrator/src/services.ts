@@ -20,8 +20,10 @@ import {
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 
 export type { DecryptedApiKeys } from './infra/user/index.js';
+export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -53,6 +55,7 @@ export interface ServiceContainer {
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
+  imageServiceClient: ImageServiceClient | null;
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
@@ -167,6 +170,15 @@ export function initializeServices(): void {
 
   const { shareStorage, shareConfig } = createShareStorageAndConfig();
 
+  const imageServiceUrl = process.env['INTEXURAOS_IMAGE_SERVICE_URL'];
+  const imageServiceClient =
+    imageServiceUrl !== undefined && imageServiceUrl !== ''
+      ? createImageServiceClient({
+          baseUrl: imageServiceUrl,
+          internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+        })
+      : null;
+
   container = {
     researchRepo,
     pricingRepo,
@@ -175,6 +187,7 @@ export function initializeServices(): void {
     researchEventPublisher,
     llmCallPublisher,
     userServiceClient,
+    imageServiceClient,
     notificationSender,
     shareStorage,
     shareConfig,

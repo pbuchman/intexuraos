@@ -8,37 +8,53 @@
  * Instructs the LLM to search the web, cross-reference sources, and cite findings.
  */
 export function buildResearchPrompt(userPrompt: string): string {
-  return `You are a senior research analyst conducting comprehensive research.
+  const currentYear = new Date().getFullYear();
+  return `Conduct comprehensive research on the following topic.
 
 ## Research Request
+
 ${userPrompt}
 
-## Instructions
-1. **Search the web** for current, authoritative information on this topic
-2. **Cross-reference** multiple sources to verify accuracy
-3. **Prioritize** recent information (prefer sources from 2024-2025)
-4. **Include** specific data, statistics, expert opinions, and real examples
-5. **Cite all sources** with full URLs
+## Output Structure
 
-## Required Output Structure
+If the Research Request contains its own structure (headings, bullet points, numbered questions), follow that structure.
 
-### Executive Summary
-(2-3 sentence overview of key findings)
+Otherwise, use this default structure:
+- **Overview**: 2-3 sentences summarizing key findings
+- **Main Content**: Organized by theme/topic with supporting evidence
+- **Summary**: Brief synthesis noting any conflicting viewpoints or gaps
 
-### Key Findings
-(Organized by theme/topic, each with supporting evidence)
+## Adaptive Behavior
 
-### Analysis
-(Your synthesis of the information, noting any conflicting viewpoints)
+Adjust your approach based on the topic:
+- **Travel/lifestyle**: Practical recommendations, booking links, local tips
+- **Technical/programming**: Precise definitions, code examples, official docs
+- **Medical/health**: Clear disclaimers, cite medical sources, no diagnosis
+- **Legal/financial**: General info only, recommend professional advice
+- **Comparison requests**: Structured pros/cons, objective criteria
+- **Other topics**: Balanced, factual approach with appropriate depth
 
-### Sources
-(Numbered list of all URLs referenced, with brief description of each)
+## Research Guidelines
 
-## Quality Standards
-- CRITICAL: Write ENTIRELY in the SAME LANGUAGE as the Research Request above (Polish request → Polish response, Spanish request → Spanish response, etc.)
-- Only use authoritative, reputable sources
-- Distinguish between facts, opinions, and speculation
-- Note any limitations or gaps in available information
-- Format all source URLs as clickable markdown links: [source name](URL)
-- Be thorough but concise`;
+- **Prioritize recent sources** (prefer ${String(currentYear - 1)}-${String(currentYear)})
+- **Cross-reference** multiple sources to verify accuracy
+- **Include specifics**: data, statistics, expert opinions, real examples
+- **Distinguish** between facts, opinions, and speculation
+
+## Citation Rules (CRITICAL)
+
+- **Inline citations**: Include source links DIRECTLY in the paragraph where information is mentioned. Example: "The Teide volcano is Spain's highest peak ([Canary Tourism](https://example.com/teide))."
+- **List items**: Each recommended place, product, or service must have its source linked inline
+- **All URLs**: Format as clickable markdown links: [descriptive text](URL)
+- **Sources section**: Only list additional sources at the end if they weren't already cited inline
+
+## What NOT to Do
+
+- Do NOT invent or hallucinate sources - if you can't find a source, say so
+- Do NOT use outdated information when recent data is available
+- Do NOT include sources you haven't actually accessed
+
+## Language Requirement
+
+Write the ENTIRE response in the SAME LANGUAGE as the Research Request (Polish → Polish, Spanish → Spanish, etc.)`;
 }

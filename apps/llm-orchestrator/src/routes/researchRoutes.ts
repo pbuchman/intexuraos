@@ -502,6 +502,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const {
         researchRepo,
         userServiceClient,
+        imageServiceClient,
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
@@ -567,6 +568,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             notificationSender,
             shareStorage,
             shareConfig,
+            imageServiceClient,
+            userId: user.userId,
             webAppUrl,
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
@@ -644,6 +647,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const {
         researchRepo,
         userServiceClient,
+        imageServiceClient,
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
@@ -693,6 +697,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           notificationSender,
           shareStorage,
           shareConfig,
+          imageServiceClient,
+          userId: user.userId,
           webAppUrl,
           reportLlmSuccess: (): void => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
@@ -866,11 +872,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as ResearchIdParams;
-      const { researchRepo, shareStorage } = getServices();
+      const { researchRepo, shareStorage, imageServiceClient } = getServices();
 
       const result = await unshareResearch(params.id, user.userId, {
         researchRepo,
         shareStorage,
+        imageServiceClient,
+        logger: request.log,
       });
 
       if (!result.ok) {

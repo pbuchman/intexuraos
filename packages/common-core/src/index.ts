@@ -22,5 +22,5 @@ export {
   buildResearchPrompt,
   buildSynthesisPrompt,
   type SynthesisReport,
-  type ExternalReport,
+  type AdditionalSource,
 } from './prompts/index.js';

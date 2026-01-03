@@ -55,6 +55,8 @@ function createMockDeps(): RunSynthesisDeps & {
     notificationSender: mockNotificationSender,
     shareStorage: null,
     shareConfig: null,
+    imageServiceClient: null,
+    userId: 'user-1',
     webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
     mockRepo,
@@ -203,7 +205,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       expect.any(Array),
-      [{ content: 'External report 1', model: 'external-model' }, { content: 'External report 2' }]
+      [{ content: 'External report 1', label: 'external-model' }, { content: 'External report 2' }]
     );
   });
 
@@ -273,6 +275,8 @@ describe('runSynthesis', () => {
       notificationSender: deps.notificationSender,
       shareStorage: null,
       shareConfig: null,
+      imageServiceClient: null,
+      userId: 'user-1',
       webAppUrl: 'https://app.example.com',
     };
 
@@ -571,6 +575,129 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+      });
+    });
+
+    it('includes cover image in shareInfo when image generation succeeds', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi.fn().mockResolvedValue(ok({ prompt: 'generated prompt' })),
+        generateImage: vi.fn().mockResolvedValue(
+          ok({
+            id: 'img-123',
+            thumbnailUrl: 'https://storage.example.com/thumb.jpg',
+            fullSizeUrl: 'https://storage.example.com/full.png',
+          })
+        ),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
+        'Synthesized result',
+        'gemini-2.5-pro',
+        'user-1'
+      );
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
+        'generated prompt',
+        'gpt-image-1',
+        'user-1'
+      );
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.objectContaining({
+          coverImageId: 'img-123',
+        }),
+      });
+    });
+
+    it('continues without cover image when prompt generation fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Failed' })),
+        generateImage: vi.fn(),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.not.objectContaining({
+          coverImageId: expect.anything(),
+        }),
+      });
+    });
+
+    it('continues without cover image when image generation fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi.fn().mockResolvedValue(ok({ prompt: 'generated prompt' })),
+        generateImage: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Failed' })),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.not.objectContaining({
+          coverImageId: expect.anything(),
+        }),
       });
     });
   });
