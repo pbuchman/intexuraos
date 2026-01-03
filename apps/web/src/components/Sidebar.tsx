@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Bell,
@@ -23,8 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context';
-import { getUserSettings } from '@/services/authApi';
-import type { NotificationFilter } from '@/types';
+import { getNotificationFilters } from '@/services/mobileNotificationsApi';
+import type { SavedNotificationFilter } from '@/types';
 
 interface NavItem {
   to: string;
@@ -50,17 +50,18 @@ const dataInsightsItems: NavItem[] = [
 ];
 
 /**
- * Build URL search params from a notification filter.
+ * Build URL search params from a saved notification filter.
+ * Arrays are joined with commas for URL encoding.
  */
-function buildFilterUrl(filter: NotificationFilter): string {
+function buildFilterUrl(filter: SavedNotificationFilter): string {
   const params = new URLSearchParams();
-  if (filter.app !== undefined) {
-    params.set('app', filter.app);
+  if (filter.app !== undefined && filter.app.length > 0) {
+    params.set('app', filter.app.join(','));
   }
-  if (filter.source !== undefined) {
-    params.set('source', filter.source);
+  if (filter.source !== undefined && filter.source.length > 0) {
+    params.set('source', filter.source.join(','));
   }
-  if (filter.title !== undefined) {
+  if (filter.title !== undefined && filter.title !== '') {
     params.set('title', filter.title);
   }
   const queryString = params.toString();
@@ -68,23 +69,24 @@ function buildFilterUrl(filter: NotificationFilter): string {
 }
 
 /**
- * Check if a filter matches current URL search params.
+ * Check if a saved filter matches current URL search params.
  */
-function filterMatchesUrl(filter: NotificationFilter, search: string): boolean {
+function filterMatchesUrl(filter: SavedNotificationFilter, search: string): boolean {
   const params = new URLSearchParams(search);
   const urlApp = params.get('app') ?? '';
   const urlSource = params.get('source') ?? '';
   const urlTitle = params.get('title') ?? '';
 
-  return (
-    (filter.app ?? '') === urlApp &&
-    (filter.source ?? '') === urlSource &&
-    (filter.title ?? '') === urlTitle
-  );
+  const filterApp = filter.app !== undefined && filter.app.length > 0 ? filter.app.join(',') : '';
+  const filterSource =
+    filter.source !== undefined && filter.source.length > 0 ? filter.source.join(',') : '';
+  const filterTitle = filter.title ?? '';
+
+  return filterApp === urlApp && filterSource === urlSource && filterTitle === urlTitle;
 }
 
 export function Sidebar(): React.JSX.Element {
-  const { getAccessToken, user } = useAuth();
+  const { getAccessToken } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -95,7 +97,7 @@ export function Sidebar(): React.JSX.Element {
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
     window.location.hash.includes('/data-insights')
   );
-  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
 
   // Auto-expand settings when on a settings page
@@ -126,20 +128,31 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Fetch saved filters
+  // Fetch saved filters from mobile-notifications-service
+  const fetchFilters = useCallback(async (): Promise<void> => {
+    try {
+      const token = await getAccessToken();
+      const data = await getNotificationFilters(token);
+      setSavedFilters(data.savedFilters);
+    } catch {
+      /* Best-effort fetch, ignore errors */
+    }
+  }, [getAccessToken]);
+
   useEffect(() => {
-    const fetchFilters = async (): Promise<void> => {
-      if (user?.sub === undefined) return;
-      try {
-        const token = await getAccessToken();
-        const settings = await getUserSettings(token, user.sub);
-        setSavedFilters(settings.notifications.filters);
-      } catch {
-        /* Best-effort fetch, ignore errors */
-      }
-    };
     void fetchFilters();
-  }, [getAccessToken, user?.sub]);
+  }, [fetchFilters]);
+
+  // Listen for custom event to refresh filters (dispatched by MobileNotificationsListPage)
+  useEffect(() => {
+    const handleRefresh = (): void => {
+      void fetchFilters();
+    };
+    window.addEventListener('notification-filters-changed', handleRefresh);
+    return (): void => {
+      window.removeEventListener('notification-filters-changed', handleRefresh);
+    };
+  }, [fetchFilters]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -385,7 +398,7 @@ export function Sidebar(): React.JSX.Element {
                 </NavLink>
                 {savedFilters.map((filter) => (
                   <NavLink
-                    key={filter.name}
+                    key={filter.id}
                     to={buildFilterUrl(filter)}
                     className={(): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -396,7 +409,9 @@ export function Sidebar(): React.JSX.Element {
                     }
                   >
                     <Filter className="h-4 w-4 shrink-0 text-blue-600" />
-                    <span title={filter.name}>{filter.name}</span>
+                    <span className="truncate" title={filter.name}>
+                      {filter.name}
+                    </span>
                   </NavLink>
                 ))}
               </div>

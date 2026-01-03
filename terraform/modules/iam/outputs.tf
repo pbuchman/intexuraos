@@ -11,6 +11,7 @@ output "service_accounts" {
     commands_router              = google_service_account.commands_router.email
     actions_agent                = google_service_account.actions_agent.email
     data_insights_service        = google_service_account.data_insights_service.email
+    image_service                = google_service_account.image_service.email
   }
 }
 
@@ -62,5 +63,10 @@ output "actions_agent_sa" {
 output "data_insights_service_sa" {
   description = "Data Insights Service service account email"
   value       = google_service_account.data_insights_service.email
+}
+
+output "image_service_sa" {
+  description = "Image Service service account email"
+  value       = google_service_account.image_service.email
 }
 

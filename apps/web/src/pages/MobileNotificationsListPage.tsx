@@ -180,7 +180,7 @@ function hasActiveFilters(filters: ActiveFilters, titleInput?: string): boolean 
 
 export function MobileNotificationsListPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
@@ -298,6 +298,22 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     setFilterName('');
   };
 
+  const handleApplySavedFilter = (filter: SavedNotificationFilter): void => {
+    const newApp = filter.app !== undefined && filter.app.length > 0 ? filter.app.join(',') : '';
+    const newSource =
+      filter.source !== undefined && filter.source.length > 0 ? filter.source.join(',') : '';
+    const newTitle = filter.title ?? '';
+
+    setFilters({ app: newApp, source: newSource, title: newTitle });
+    setTitleInput(newTitle);
+
+    const params = new URLSearchParams();
+    if (newApp !== '') params.set('app', newApp);
+    if (newSource !== '') params.set('source', newSource);
+    if (newTitle !== '') params.set('title', newTitle);
+    setSearchParams(params);
+  };
+
   const handleDelete = async (notificationId: string): Promise<void> => {
     setDeletingIds((prev) => new Set(prev).add(notificationId));
 
@@ -382,6 +398,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
       setSavedFilters((prev) => [...prev, createdFilter]);
       setFilterName('');
       setError(null);
+      // Notify sidebar to refresh its filter list
+      window.dispatchEvent(new CustomEvent('notification-filters-changed'));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to save filter');
     } finally {
@@ -399,6 +417,8 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       await deleteSavedNotificationFilter(token, filterId);
+      // Notify sidebar to refresh its filter list
+      window.dispatchEvent(new CustomEvent('notification-filters-changed'));
     } catch (e) {
       // Revert on error
       setSavedFilters((prev) => [...prev, filterToDelete]);
@@ -560,14 +580,22 @@ export function MobileNotificationsListPage(): React.JSX.Element {
               {savedFilters.map((filter) => (
                 <div
                   key={filter.id}
-                  className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-slate-700 shadow-sm"
+                  className="flex items-center gap-1 rounded-full bg-white pl-3 pr-1 py-1 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:ring-blue-400 transition-all"
                 >
-                  <span>{filter.name}</span>
+                  <button
+                    onClick={(): void => {
+                      handleApplySavedFilter(filter);
+                    }}
+                    className="hover:text-blue-600 transition-colors"
+                    aria-label={`Apply filter ${filter.name}`}
+                  >
+                    {filter.name}
+                  </button>
                   <button
                     onClick={(): void => {
                       void handleDeleteFilter(filter.id);
                     }}
-                    className="text-slate-400 hover:text-red-600"
+                    className="p-1 text-slate-400 hover:text-red-600 rounded-full hover:bg-slate-100 transition-colors"
                     aria-label={`Delete filter ${filter.name}`}
                   >
                     <X className="h-3 w-3" />

@@ -73,6 +73,10 @@
     "custom_data_sources": {
       "owner": "data-insights-service",
       "description": "User-created custom data sources for analysis"
+    },
+    "generated_images": {
+      "owner": "image-service",
+      "description": "Generated thumbnail images and their metadata"
     }
   }
 }

@@ -179,6 +179,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    image_service = {
+      name      = "intexuraos-image-service"
+      app_path  = "apps/image-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -1012,6 +1019,43 @@ module "data_insights_service" {
   ]
 }
 
+# Image Service - Thumbnail prompt generation and image creation
+module "image_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.image_service.name
+  service_account = module.iam.service_accounts["image_service"]
+  port            = local.services.image_service.port
+  min_scale       = local.services.image_service.min_scale
+  max_scale       = local.services.image_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/image-service:latest"
+
+  secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
+    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
+    INTEXURAOS_IMAGE_BUCKET     = "intexuraos-images-${var.environment}"
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+    module.user_service,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Build Trigger
 # -----------------------------------------------------------------------------
@@ -1274,6 +1318,11 @@ output "actions_agent_url" {
 output "data_insights_service_url" {
   description = "Data Insights Service URL"
   value       = module.data_insights_service.service_url
+}
+
+output "image_service_url" {
+  description = "Image Service URL"
+  value       = module.image_service.service_url
 }
 
 output "firestore_database" {
