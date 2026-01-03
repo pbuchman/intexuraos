@@ -14,6 +14,8 @@ export interface ActionConfigEndpoint {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   /** Optional request body with {{variable}} interpolation */
   body?: Record<string, unknown>;
+  /** Base URL for the API endpoint (resolved from config) */
+  baseUrl?: string;
 }
 
 /**

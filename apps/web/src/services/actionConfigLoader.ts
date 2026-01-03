@@ -5,6 +5,14 @@
 
 import { load as parseYaml } from 'js-yaml';
 import type { ActionConfig } from '../types/actionConfig';
+import { config as appConfig } from '../config';
+
+type ConfigKey = keyof typeof appConfig;
+
+const ENV_VAR_MAPPING: Record<string, ConfigKey> = {
+  INTEXURAOS_ACTIONS_AGENT_URL: 'actionsAgentUrl',
+  INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL: 'commandsRouterServiceUrl',
+};
 
 interface CacheEntry {
   config: ActionConfig;
@@ -71,7 +79,35 @@ async function fetchAndParseConfig(): Promise<ActionConfig> {
     throw new Error('Invalid YAML: expected object at root');
   }
 
-  return parsed as ActionConfig;
+  return resolveEnvVariables(parsed as ActionConfig);
+}
+
+/**
+ * Resolves ${VARIABLE_NAME} placeholders in the configuration using app config.
+ *
+ * @param config - Raw configuration with placeholders
+ * @returns Configuration with resolved values
+ */
+function resolveEnvVariables(config: ActionConfig): ActionConfig {
+  const resolved = structuredClone(config);
+  const envVarPattern = /^\$\{(\w+)}$/;
+
+  for (const action of Object.values(resolved.actions)) {
+    const endpoint = action.endpoint;
+
+    if (typeof endpoint.baseUrl === 'string') {
+      const match = envVarPattern.exec(endpoint.baseUrl);
+      if (match !== null) {
+        const varName = match[1];
+        const configKey = varName !== undefined ? ENV_VAR_MAPPING[varName] : undefined;
+        if (configKey !== undefined) {
+          endpoint.baseUrl = appConfig[configKey];
+        }
+      }
+    }
+  }
+
+  return resolved;
 }
 
 /**
