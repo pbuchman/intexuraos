@@ -266,3 +266,55 @@ export const retryFromFailedResponseSchema = {
     },
   },
 } as const;
+
+export const enhanceResearchBodySchema = {
+  type: 'object',
+  properties: {
+    additionalLlms: {
+      type: 'array',
+      items: llmProviderSchema,
+      maxItems: 3,
+      description: 'Additional LLM providers to run research with',
+    },
+    additionalContexts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: {
+            type: 'string',
+            maxLength: 60000,
+          },
+          model: {
+            type: 'string',
+            maxLength: 100,
+          },
+        },
+      },
+      maxItems: 5,
+      description: 'Additional custom sources/contexts to include',
+    },
+    synthesisLlm: llmProviderSchema,
+    removeContextIds: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'IDs of existing contexts to remove',
+    },
+  },
+} as const;
+
+export const enhanceResearchResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: researchSchema,
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

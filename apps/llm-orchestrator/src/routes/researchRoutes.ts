@@ -8,6 +8,7 @@
  * POST   /research/:id/approve - Approve draft research
  * POST   /research/:id/confirm - Confirm partial failure decision
  * POST   /research/:id/retry   - Retry from failed status
+ * POST   /research/:id/enhance - Create enhanced research from completed
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
  */
@@ -18,6 +19,7 @@ import {
   createDraftResearch,
   createLlmResults,
   deleteResearch,
+  enhanceResearch,
   type ExternalReport,
   getResearch,
   listResearches,
@@ -39,6 +41,8 @@ import {
   createResearchBodySchema,
   createResearchResponseSchema,
   deleteResearchResponseSchema,
+  enhanceResearchBodySchema,
+  enhanceResearchResponseSchema,
   getResearchResponseSchema,
   listResearchesQuerySchema,
   listResearchesResponseSchema,
@@ -75,6 +79,13 @@ interface ResearchIdParams {
 
 interface ConfirmPartialFailureBody {
   action: PartialFailureDecision;
+}
+
+interface EnhanceResearchBody {
+  additionalLlms?: LlmProvider[];
+  additionalContexts?: { content: string; model?: string }[];
+  synthesisLlm?: LlmProvider;
+  removeContextIds?: string[];
 }
 
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -721,6 +732,89 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           retriedProviders: retryResult.retriedProviders,
         }),
       });
+    }
+  );
+
+  // POST /research/:id/enhance
+  fastify.post(
+    '/research/:id/enhance',
+    {
+      schema: {
+        operationId: 'enhanceResearch',
+        summary: 'Enhance completed research',
+        description:
+          'Create a new research based on a completed one, reusing successful LLM results and adding new providers or contexts.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: enhanceResearchBodySchema,
+        response: {
+          201: enhanceResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const body = request.body as EnhanceResearchBody;
+      const { researchRepo, generateId, researchEventPublisher, userServiceClient } = getServices();
+
+      // Fetch user's search mode setting
+      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
+      const searchMode: SearchMode = researchSettingsResult.ok
+        ? researchSettingsResult.value.searchMode
+        : 'deep';
+
+      const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
+        sourceResearchId: id,
+        userId: user.userId,
+        searchMode,
+      };
+      if (body.additionalLlms !== undefined) {
+        enhanceInput.additionalLlms = body.additionalLlms;
+      }
+      if (body.additionalContexts !== undefined) {
+        enhanceInput.additionalContexts = body.additionalContexts;
+      }
+      if (body.synthesisLlm !== undefined) {
+        enhanceInput.synthesisLlm = body.synthesisLlm;
+      }
+      if (body.removeContextIds !== undefined) {
+        enhanceInput.removeContextIds = body.removeContextIds;
+      }
+
+      const result = await enhanceResearch(enhanceInput, { researchRepo, generateId });
+
+      if (!result.ok) {
+        switch (result.error.type) {
+          case 'NOT_FOUND':
+            return await reply.fail('NOT_FOUND', 'Research not found');
+          case 'FORBIDDEN':
+            return await reply.fail('FORBIDDEN', 'Access denied');
+          case 'INVALID_STATUS':
+            return await reply.fail(
+              'CONFLICT',
+              `Cannot enhance research in ${result.error.status} status`
+            );
+          case 'NO_CHANGES':
+            return await reply.fail('CONFLICT', 'At least one change is required');
+          case 'REPO_ERROR':
+            return await reply.fail('INTERNAL_ERROR', result.error.error.message);
+        }
+      }
+
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: result.value.id,
+        userId: user.userId,
+        triggeredBy: 'create',
+      });
+
+      return await reply.code(201).ok(result.value);
     }
   );
 

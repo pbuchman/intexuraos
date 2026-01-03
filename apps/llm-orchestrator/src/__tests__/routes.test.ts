@@ -1058,6 +1058,187 @@ describe('Research Routes - Authenticated', () => {
     });
   });
 
+  describe('POST /research/:id/enhance', () => {
+    function createCompletedResearch(overrides?: Partial<Research>): Research {
+      return createTestResearch({
+        status: 'completed',
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+        ],
+        completedAt: '2024-01-01T00:05:00Z',
+        ...overrides,
+      });
+    }
+
+    it('creates enhanced research with additional LLMs', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalLlms: ['anthropic'] },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.sourceResearchId).toBe(source.id);
+      expect(body.data.selectedLlms).toContain('anthropic');
+    });
+
+    it('returns 404 when source research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/nonexistent/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalLlms: ['anthropic'] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for other users research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalLlms: ['anthropic'] },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when source research is not completed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createTestResearch({ status: 'processing' });
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalLlms: ['anthropic'] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 409 when no changes provided', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('creates enhanced research with new synthesis LLM', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { synthesisLlm: 'anthropic' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.synthesisLlm).toBe('anthropic');
+    });
+
+    it('creates enhanced research with additional contexts', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalContexts: [{ content: 'Additional context' }] },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.externalReports?.length).toBeGreaterThan(0);
+    });
+
+    it('creates enhanced research with removed contexts', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({
+        externalReports: [{ id: 'ctx-1', content: 'Context', addedAt: '2024-01-01T00:00:00Z' }],
+      });
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { removeContextIds: ['ctx-1'] },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 500 when save fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+      fakeRepo.setFailNextSave(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalLlms: ['anthropic'] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
   describe('DELETE /research/:id/share', () => {
     function createSharedResearch(overrides?: Partial<Research>): Research {
       return createTestResearch({

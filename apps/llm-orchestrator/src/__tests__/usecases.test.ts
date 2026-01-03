@@ -110,6 +110,48 @@ describe('submitResearch', () => {
       expect(result.error.message).toContain('Test save failure');
     }
   });
+
+  it('sets skipSynthesis when provided', async () => {
+    const result = await submitResearch(
+      {
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        skipSynthesis: true,
+      },
+      {
+        researchRepo: fakeRepo,
+        generateId: (): string => 'id-123',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.skipSynthesis).toBe(true);
+    }
+  });
+
+  it('passes searchMode to research creation', async () => {
+    const result = await submitResearch(
+      {
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedLlms: ['anthropic'],
+        synthesisLlm: 'google',
+        searchMode: 'quick',
+      },
+      {
+        researchRepo: fakeRepo,
+        generateId: (): string => 'id-123',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.llmResults[0]?.model).toBe('claude-sonnet-4-5-20250929');
+    }
+  });
 });
 
 describe('getResearch', () => {

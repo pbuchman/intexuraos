@@ -4,6 +4,7 @@ import type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
   ListResearchesResponse,
+  LlmProvider,
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
@@ -143,6 +144,32 @@ export async function unshareResearch(accessToken: string, id: string): Promise<
   await apiRequest<null>(config.llmOrchestratorUrl, `/research/${id}/share`, accessToken, {
     method: 'DELETE',
   });
+}
+
+export interface EnhanceResearchRequest {
+  additionalLlms?: LlmProvider[];
+  additionalContexts?: { content: string; model?: string }[];
+  synthesisLlm?: LlmProvider;
+  removeContextIds?: string[];
+}
+
+/**
+ * Create an enhanced research from a completed one.
+ */
+export async function enhanceResearch(
+  accessToken: string,
+  id: string,
+  request: EnhanceResearchRequest
+): Promise<Research> {
+  return await apiRequest<Research>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/enhance`,
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
 }
 
 export type {

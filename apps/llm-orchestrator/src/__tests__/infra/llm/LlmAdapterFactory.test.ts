@@ -80,6 +80,36 @@ describe('LlmAdapterFactory', () => {
       expect(providers.openai).toBeUndefined();
       expect(providers.anthropic).toBeUndefined();
     });
+
+    it('creates providers with default model for quick search mode', () => {
+      const keys = {
+        google: 'google-key',
+        openai: 'openai-key',
+        anthropic: 'anthropic-key',
+      };
+
+      const providers = createLlmProviders(keys, 'quick');
+
+      expect((providers.google as unknown as { model: string | undefined }).model).toBeDefined();
+      expect((providers.openai as unknown as { model: string | undefined }).model).toBeDefined();
+      expect((providers.anthropic as unknown as { model: string | undefined }).model).toBeDefined();
+    });
+
+    it('creates providers with undefined model for deep search mode', () => {
+      const keys = {
+        google: 'google-key',
+        openai: 'openai-key',
+        anthropic: 'anthropic-key',
+      };
+
+      const providers = createLlmProviders(keys, 'deep');
+
+      expect((providers.google as unknown as { model: string | undefined }).model).toBeUndefined();
+      expect((providers.openai as unknown as { model: string | undefined }).model).toBeUndefined();
+      expect(
+        (providers.anthropic as unknown as { model: string | undefined }).model
+      ).toBeUndefined();
+    });
   });
 
   describe('createSynthesizer', () => {

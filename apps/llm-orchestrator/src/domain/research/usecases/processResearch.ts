@@ -33,13 +33,17 @@ export interface ProcessResearchDeps {
   reportLlmSuccess?: (provider: LlmProvider) => void;
 }
 
+export interface ProcessResearchResult {
+  triggerSynthesis: boolean;
+}
+
 export async function processResearch(
   researchId: string,
   deps: ProcessResearchDeps
-): Promise<void> {
+): Promise<ProcessResearchResult> {
   const researchResult = await deps.researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
-    return;
+    return { triggerSynthesis: false };
   }
 
   const research = researchResult.value;
@@ -72,7 +76,21 @@ export async function processResearch(
   }
 
   // Dispatch LLM calls to Pub/Sub (runs in separate Cloud Run instances)
-  for (const provider of research.selectedLlms) {
+  // Skip providers that already have completed results (for enhanced researches)
+  const pendingProviders = research.llmResults
+    .filter((r) => r.status === 'pending')
+    .map((r) => r.provider);
+
+  deps.logger.info(
+    {
+      researchId,
+      totalProviders: research.selectedLlms.length,
+      pendingProviders: pendingProviders.length,
+    },
+    'Dispatching LLM calls'
+  );
+
+  for (const provider of pendingProviders) {
     await deps.llmCallPublisher.publishLlmCall({
       type: 'llm.call',
       researchId,
@@ -81,4 +99,13 @@ export async function processResearch(
       prompt: research.prompt,
     });
   }
+
+  // If no pending providers (enhanced research with all pre-completed results),
+  // trigger synthesis immediately
+  if (pendingProviders.length === 0) {
+    deps.logger.info({ researchId }, 'All LLM results already completed, triggering synthesis');
+    return { triggerSynthesis: true };
+  }
+
+  return { triggerSynthesis: false };
 }

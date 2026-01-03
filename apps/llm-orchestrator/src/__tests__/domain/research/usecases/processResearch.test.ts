@@ -177,8 +177,15 @@ describe('processResearch', () => {
     expect(deps.mockReportSuccess).not.toHaveBeenCalled();
   });
 
-  it('publishes LLM call for each selected provider', async () => {
-    const research = createTestResearch({ selectedLlms: ['google', 'openai', 'anthropic'] });
+  it('publishes LLM call for each pending provider', async () => {
+    const research = createTestResearch({
+      selectedLlms: ['google', 'openai', 'anthropic'],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+      ],
+    });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     await processResearch('research-1', deps);
@@ -207,8 +214,14 @@ describe('processResearch', () => {
     });
   });
 
-  it('publishes in order of selectedLlms', async () => {
-    const research = createTestResearch({ selectedLlms: ['anthropic', 'google'] });
+  it('publishes in order of llmResults', async () => {
+    const research = createTestResearch({
+      selectedLlms: ['anthropic', 'google'],
+      llmResults: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+      ],
+    });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     await processResearch('research-1', deps);
@@ -216,6 +229,66 @@ describe('processResearch', () => {
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
     expect(calls[0]?.[0].provider).toBe('anthropic');
     expect(calls[1]?.[0].provider).toBe('google');
+  });
+
+  it('skips already completed llmResults', async () => {
+    const research = createTestResearch({
+      selectedLlms: ['google', 'openai', 'anthropic'],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Existing' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await processResearch('research-1', deps);
+
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
+    expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'google' })
+    );
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'openai' })
+    );
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'anthropic' })
+    );
+  });
+
+  it('triggers synthesis when all results already completed', async () => {
+    const research = createTestResearch({
+      selectedLlms: ['google', 'openai'],
+      llmResults: [
+        {
+          provider: 'google',
+          model: 'gemini-2.0-flash',
+          status: 'completed',
+          result: 'Google result',
+        },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'completed',
+          result: 'OpenAI result',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await processResearch('research-1', deps);
+
+    expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalled();
+    expect(result.triggerSynthesis).toBe(true);
+  });
+
+  it('does not trigger synthesis when pending results exist', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await processResearch('research-1', deps);
+
+    expect(result.triggerSynthesis).toBe(false);
   });
 
   it('works without optional dependencies', async () => {
@@ -235,6 +308,26 @@ describe('processResearch', () => {
       startedAt: '2024-01-01T00:00:00.000Z',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
+  });
+
+  it('generates title without reportLlmSuccess callback', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const depsWithoutCallback: ProcessResearchDeps = {
+      researchRepo: deps.researchRepo,
+      llmCallPublisher: deps.llmCallPublisher,
+      logger: mockLogger,
+      titleGenerator: {
+        generateTitle: vi.fn().mockResolvedValue(ok('Title Without Callback')),
+      },
+    };
+
+    await processResearch('research-1', depsWithoutCallback);
+
+    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+      title: 'Title Without Callback',
+    });
   });
 
   it('returns immediately after dispatching (does not wait for LLM results)', async () => {
