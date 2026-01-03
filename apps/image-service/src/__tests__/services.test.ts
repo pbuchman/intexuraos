@@ -39,9 +39,9 @@ describe('services', () => {
 
       const container: ServiceContainer = {
         generatedImageRepository: fakeRepo,
-        imageGenerator: fakeImageGenerator,
         userServiceClient: fakeUserServiceClient,
         createPromptGenerator: () => fakePromptGenerator,
+        createImageGenerator: () => fakeImageGenerator,
         generateId: () => 'test-id',
       };
 
@@ -57,7 +57,7 @@ describe('services', () => {
 
       const services = getServices();
       expect(services.generatedImageRepository).toBeDefined();
-      expect(services.imageGenerator).toBeDefined();
+      expect(services.createImageGenerator).toBeDefined();
       expect(services.userServiceClient).toBeDefined();
       expect(services.createPromptGenerator).toBeDefined();
       expect(services.generateId).toBeDefined();
@@ -81,6 +81,26 @@ describe('services', () => {
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
+    });
+
+    it('createImageGenerator returns OpenAI generator for gpt-image-1', () => {
+      initializeServices();
+
+      const services = getServices();
+      const generator = services.createImageGenerator('gpt-image-1', 'test-key');
+
+      expect(generator).toBeDefined();
+      expect(generator.generate).toBeDefined();
+    });
+
+    it('createImageGenerator returns Google generator for nano-banana-pro', () => {
+      initializeServices();
+
+      const services = getServices();
+      const generator = services.createImageGenerator('nano-banana-pro', 'test-key');
+
+      expect(generator).toBeDefined();
+      expect(generator.generate).toBeDefined();
     });
 
     it('generateId returns a UUID', () => {

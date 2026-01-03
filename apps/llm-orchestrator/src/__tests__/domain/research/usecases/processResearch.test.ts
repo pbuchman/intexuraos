@@ -70,8 +70,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'pending',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
       { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
@@ -133,11 +133,11 @@ describe('processResearch', () => {
 
     expect(deps.mockTitleGenerator.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Generated Title' });
-    expect(deps.mockReportSuccess).toHaveBeenCalledWith('google');
+    expect(deps.mockReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
   });
 
   it('uses synthesizer for title generation when titleGenerator not provided', async () => {
-    const research = createTestResearch({ synthesisLlm: 'anthropic' });
+    const research = createTestResearch({ synthesisModel: 'claude-opus-4-5-20251101' });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     const mockSynthesizer = {
@@ -158,7 +158,7 @@ describe('processResearch', () => {
 
     expect(mockSynthesizer.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Synthesizer Title' });
-    expect(mockReportSuccess).toHaveBeenCalledWith('anthropic');
+    expect(mockReportSuccess).toHaveBeenCalledWith('claude-opus-4-5-20251101');
   });
 
   it('does not update title when title generation fails', async () => {
@@ -179,7 +179,7 @@ describe('processResearch', () => {
 
   it('publishes LLM call for each pending provider', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google', 'openai', 'anthropic'],
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
@@ -195,31 +195,31 @@ describe('processResearch', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'google',
+      model: 'gemini-2.0-flash',
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'openai',
+      model: 'o4-mini-deep-research',
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
       prompt: 'Test research prompt',
     });
   });
 
   it('publishes in order of llmResults', async () => {
     const research = createTestResearch({
-      selectedLlms: ['anthropic', 'google'],
+      selectedModels: ['claude-sonnet-4-5-20250929', 'gemini-2.5-flash'],
       llmResults: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', status: 'pending' },
+        { provider: 'google', model: 'gemini-2.5-flash', status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -227,13 +227,13 @@ describe('processResearch', () => {
     await processResearch('research-1', deps);
 
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
-    expect(calls[0]?.[0].provider).toBe('anthropic');
-    expect(calls[1]?.[0].provider).toBe('google');
+    expect(calls[0]?.[0].model).toBe('claude-sonnet-4-5-20250929');
+    expect(calls[1]?.[0].model).toBe('gemini-2.5-flash');
   });
 
   it('skips already completed llmResults', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google', 'openai', 'anthropic'],
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
       llmResults: [
         { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Existing' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
@@ -246,19 +246,19 @@ describe('processResearch', () => {
 
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
     expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'google' })
+      expect.objectContaining({ model: 'gemini-2.0-flash' })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'openai' })
+      expect.objectContaining({ model: 'o4-mini-deep-research' })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'anthropic' })
+      expect.objectContaining({ model: 'claude-sonnet-4-20250514' })
     );
   });
 
   it('triggers synthesis when all results already completed', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google', 'openai'],
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
       llmResults: [
         {
           provider: 'google',

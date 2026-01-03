@@ -49,9 +49,9 @@ describe('promptRoutes', () => {
 
     setServices({
       generatedImageRepository: fakeRepo,
-      imageGenerator: fakeImageGenerator,
       userServiceClient: fakeUserServiceClient,
       createPromptGenerator: () => fakePromptGenerator,
+      createImageGenerator: () => fakeImageGenerator,
       generateId: () => 'test-id',
     });
   });

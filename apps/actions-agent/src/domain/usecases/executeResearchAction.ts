@@ -1,10 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
-import type { LlmProvider } from '../models/actionEvent.js';
 
 export interface ExecuteResearchActionDeps {
   actionRepository: ActionRepository;
@@ -53,12 +53,12 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    const selectedLlms: LlmProvider[] = ['anthropic'];
+    const selectedModels: SupportedModel[] = ['claude-opus-4-5-20251101'];
     const result = await researchServiceClient.createDraft({
       userId: action.userId,
       title: action.title,
       prompt: action.title,
-      selectedLlms,
+      selectedModels,
       sourceActionId: action.id,
     });
 

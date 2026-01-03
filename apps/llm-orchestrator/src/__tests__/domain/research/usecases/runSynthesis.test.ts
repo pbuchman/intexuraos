@@ -71,8 +71,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       {
         provider: 'google',
@@ -305,7 +305,7 @@ describe('runSynthesis', () => {
   describe('skip synthesis logic', () => {
     it('skips synthesis when only 1 successful LLM and no external reports', async () => {
       const research = createTestResearch({
-        selectedLlms: ['google'],
+        selectedModels: ['gemini-2.5-pro'],
         llmResults: [
           {
             provider: 'google',
@@ -351,7 +351,7 @@ describe('runSynthesis', () => {
 
     it('runs synthesis when 1 LLM succeeds with external reports', async () => {
       const research = createTestResearch({
-        selectedLlms: ['google'],
+        selectedModels: ['gemini-2.5-pro'],
         llmResults: [
           {
             provider: 'google',
@@ -418,7 +418,7 @@ describe('runSynthesis', () => {
 
     it('sends notification with app URL when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedLlms: ['google'],
+        selectedModels: ['gemini-2.5-pro'],
         llmResults: [
           {
             provider: 'google',
@@ -442,7 +442,7 @@ describe('runSynthesis', () => {
 
     it('does not report LLM success when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedLlms: ['google'],
+        selectedModels: ['gemini-2.5-pro'],
         llmResults: [
           {
             provider: 'google',

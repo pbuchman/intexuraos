@@ -11,6 +11,7 @@
  * POST   /research/:id/enhance - Create enhanced research from completed
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
+ * GET    /llm/usage-stats     - Get aggregated LLM usage statistics
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -23,16 +24,16 @@ import {
   type ExternalReport,
   getResearch,
   listResearches,
-  type LlmProvider,
   type PartialFailureDecision,
   type Research,
-  type SearchMode,
+  type SupportedModel,
   retryFailedLlms,
   retryFromFailed,
   runSynthesis,
   submitResearch,
   unshareResearch,
 } from '../domain/research/index.js';
+import { getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   approveResearchResponseSchema,
@@ -55,16 +56,16 @@ import {
 
 interface CreateResearchBody {
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm?: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel?: SupportedModel;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
 }
 
 interface SaveDraftBody {
   prompt: string;
-  selectedLlms?: LlmProvider[];
-  synthesisLlm?: LlmProvider;
+  selectedModels?: SupportedModel[];
+  synthesisModel?: SupportedModel;
   externalReports?: { content: string; model?: string }[];
 }
 
@@ -82,9 +83,9 @@ interface ConfirmPartialFailureBody {
 }
 
 interface EnhanceResearchBody {
-  additionalLlms?: LlmProvider[];
+  additionalModels?: SupportedModel[];
   additionalContexts?: { content: string; model?: string }[];
-  synthesisLlm?: LlmProvider;
+  synthesisModel?: SupportedModel;
   removeContextIds?: string[];
 }
 
@@ -111,20 +112,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, researchEventPublisher, userServiceClient } = getServices();
-
-      // Fetch user's search mode setting
-      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
-      const searchMode: SearchMode = researchSettingsResult.ok
-        ? researchSettingsResult.value.searchMode
-        : 'deep';
+      const { researchRepo, generateId, researchEventPublisher } = getServices();
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms,
-        synthesisLlm: body.synthesisLlm ?? body.selectedLlms[0] ?? 'google',
-        searchMode,
+        selectedModels: body.selectedModels,
+        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
       };
       if (body.externalReports !== undefined) {
         submitParams.externalReports = body.externalReports;
@@ -178,16 +172,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
-      // Fetch user's search mode setting
-      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
-      const searchMode: SearchMode = researchSettingsResult.ok
-        ? researchSettingsResult.value.searchMode
-        : 'deep';
-
       // Generate title using Gemini if Google API key is available
       let title: string;
       if (apiKeys.google !== undefined) {
-        const titleGenerator = createTitleGenerator(apiKeys.google);
+        const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
       } else {
@@ -196,15 +184,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Create draft research
-      const resolvedSelectedLlms = body.selectedLlms ?? ['google', 'openai', 'anthropic'];
+      const defaultModels: SupportedModel[] = [
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'o4-mini-deep-research',
+      ];
+      const resolvedSelectedModels = body.selectedModels ?? defaultModels;
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedLlms: resolvedSelectedLlms,
-        synthesisLlm: body.synthesisLlm ?? resolvedSelectedLlms[0] ?? 'google',
-        searchMode,
+        selectedModels: resolvedSelectedModels,
+        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
       };
       if (body.externalReports !== undefined) {
         const now = new Date().toISOString();
@@ -283,17 +275,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
-      // Fetch user's search mode setting
-      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
-      const searchMode: SearchMode = researchSettingsResult.ok
-        ? researchSettingsResult.value.searchMode
-        : 'deep';
-
       // Regenerate title if prompt changed
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
-          const titleGenerator = createTitleGenerator(apiKeys.google);
+          const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
         } else {
@@ -302,13 +288,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Update draft
-      const newSelectedLlms = body.selectedLlms ?? existing.selectedLlms;
+      const newSelectedModels = body.selectedModels ?? existing.selectedModels;
       const updates: Partial<Research> = {
         title,
         prompt: body.prompt,
-        selectedLlms: newSelectedLlms,
-        synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
-        llmResults: createLlmResults(newSelectedLlms, searchMode),
+        selectedModels: newSelectedModels,
+        synthesisModel: body.synthesisModel ?? existing.synthesisModel,
+        llmResults: createLlmResults(newSelectedModels),
       };
 
       if (body.externalReports !== undefined) {
@@ -557,12 +543,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
           }
 
-          const synthesisProvider = research.synthesisLlm;
+          const synthesisModel = research.synthesisModel;
+          const synthesisProvider = getProviderForModel(synthesisModel);
           const synthesisKey = apiKeysResult.value[synthesisProvider];
           if (synthesisKey === undefined) {
             return await reply.fail(
               'MISCONFIGURED',
-              `API key required for synthesis with ${synthesisProvider}`
+              `API key required for synthesis with ${synthesisModel}`
             );
           }
 
@@ -573,7 +560,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+          const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
@@ -608,7 +595,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (retryResult.ok) {
             return await reply.ok({
               action: 'retry',
-              message: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+              message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
             });
           }
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
@@ -686,16 +673,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
-      const synthesisProvider = research.synthesisLlm;
+      const synthesisModel = research.synthesisModel;
+      const synthesisProvider = getProviderForModel(synthesisModel);
       const synthesisKey = apiKeysResult.value[synthesisProvider];
       if (synthesisKey === undefined) {
         return await reply.fail(
           'MISCONFIGURED',
-          `API key required for synthesis with ${synthesisProvider}`
+          `API key required for synthesis with ${synthesisModel}`
         );
       }
 
-      const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+      const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
 
       const retryResult = await retryFromFailed(id, {
         researchRepo,
@@ -720,7 +708,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const messages: Record<string, string> = {
-        retried_llms: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+        retried_llms: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
         retried_synthesis: 'Re-running synthesis',
         already_completed: 'Research is already completed',
       };
@@ -728,8 +716,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return await reply.ok({
         action: retryResult.action,
         message: messages[retryResult.action ?? 'already_completed'],
-        ...(retryResult.retriedProviders !== undefined && {
-          retriedProviders: retryResult.retriedProviders,
+        ...(retryResult.retriedModels !== undefined && {
+          retriedModels: retryResult.retriedModels,
         }),
       });
     }
@@ -760,27 +748,20 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as ResearchIdParams;
       const body = request.body as EnhanceResearchBody;
-      const { researchRepo, generateId, researchEventPublisher, userServiceClient } = getServices();
-
-      // Fetch user's search mode setting
-      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
-      const searchMode: SearchMode = researchSettingsResult.ok
-        ? researchSettingsResult.value.searchMode
-        : 'deep';
+      const { researchRepo, generateId, researchEventPublisher } = getServices();
 
       const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
         sourceResearchId: id,
         userId: user.userId,
-        searchMode,
       };
-      if (body.additionalLlms !== undefined) {
-        enhanceInput.additionalLlms = body.additionalLlms;
+      if (body.additionalModels !== undefined) {
+        enhanceInput.additionalModels = body.additionalModels;
       }
       if (body.additionalContexts !== undefined) {
         enhanceInput.additionalContexts = body.additionalContexts;
       }
-      if (body.synthesisLlm !== undefined) {
-        enhanceInput.synthesisLlm = body.synthesisLlm;
+      if (body.synthesisModel !== undefined) {
+        enhanceInput.synthesisModel = body.synthesisModel;
       }
       if (body.removeContextIds !== undefined) {
         enhanceInput.removeContextIds = body.removeContextIds;
@@ -906,6 +887,57 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(null);
+    }
+  );
+
+  // GET /llm/usage-stats
+  fastify.get(
+    '/llm/usage-stats',
+    {
+      schema: {
+        operationId: 'getLlmUsageStats',
+        summary: 'Get LLM usage statistics',
+        description: 'Get aggregated LLM usage statistics (calls, tokens, costs) per model.',
+        tags: ['llm'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    provider: { type: 'string' },
+                    model: { type: 'string' },
+                    period: { type: 'string' },
+                    calls: { type: 'number' },
+                    successfulCalls: { type: 'number' },
+                    failedCalls: { type: 'number' },
+                    inputTokens: { type: 'number' },
+                    outputTokens: { type: 'number' },
+                    totalTokens: { type: 'number' },
+                    costUsd: { type: 'number' },
+                    lastUpdatedAt: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { usageStatsRepo } = getServices();
+      const stats = await usageStatsRepo.getAllTotals();
+
+      return await reply.ok(stats);
     }
   );
 

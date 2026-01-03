@@ -1,12 +1,12 @@
 /**
  * Retry failed LLMs use case.
- * Re-runs only the failed LLM providers after user confirms 'retry'.
+ * Re-runs only the failed LLM models after user confirms 'retry'.
  * Max 2 retries allowed.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { LlmProvider } from '../models/index.js';
+import type { SupportedModel } from '../models/index.js';
 import type { ResearchRepository } from '../ports/index.js';
 
 const MAX_RETRIES = 2;
@@ -16,7 +16,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: SupportedModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -29,7 +29,7 @@ export interface RetryFailedLlmsDeps {
 export interface RetryResult {
   ok: boolean;
   error?: string;
-  retriedProviders?: LlmProvider[];
+  retriedModels?: SupportedModel[];
 }
 
 export async function retryFailedLlms(
@@ -63,10 +63,10 @@ export async function retryFailedLlms(
     return { ok: false, error: 'Maximum retry attempts exceeded' };
   }
 
-  const failedProviders = research.partialFailure.failedProviders;
+  const failedModels = research.partialFailure.failedModels;
 
-  for (const provider of failedProviders) {
-    await researchRepo.updateLlmResult(researchId, provider, {
+  for (const model of failedModels) {
+    await researchRepo.updateLlmResult(researchId, model, {
       status: 'pending',
     });
   }
@@ -80,15 +80,15 @@ export async function retryFailedLlms(
     },
   });
 
-  for (const provider of failedProviders) {
+  for (const model of failedModels) {
     await llmCallPublisher.publishLlmCall({
       type: 'llm.call',
       researchId,
       userId: research.userId,
-      provider,
+      model,
       prompt: research.prompt,
     });
   }
 
-  return { ok: true, retriedProviders: failedProviders };
+  return { ok: true, retriedModels: failedModels };
 }

@@ -75,8 +75,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'failed',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       {
         provider: 'google',
@@ -188,7 +188,7 @@ describe('retryFromFailed', () => {
 
       await retryFromFailed('research-1', deps);
 
-      expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'openai', {
+      expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith('research-1', 'o4-mini-deep-research', {
         status: 'pending',
       });
     });
@@ -215,7 +215,7 @@ describe('retryFromFailed', () => {
         type: 'llm.call',
         researchId: 'research-1',
         userId: 'user-1',
-        provider: 'openai',
+        model: 'o4-mini-deep-research',
         prompt: 'Test research prompt',
       });
     });
@@ -229,17 +229,17 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedProviders: ['openai'],
+        retriedModels: ['o4-mini-deep-research'],
       });
     });
 
     it('handles multiple failed providers', async () => {
       const research = createTestResearch({
-        selectedLlms: ['google', 'openai', 'anthropic'],
+        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-          { provider: 'openai', model: 'o4-mini', status: 'failed', error: 'Error 1' },
-          { provider: 'anthropic', model: 'claude-3-opus', status: 'failed', error: 'Error 2' },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
+          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'failed', error: 'Error 2' },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -249,7 +249,7 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedProviders: ['openai', 'anthropic'],
+        retriedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
       });
       expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledTimes(2);

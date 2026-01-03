@@ -171,21 +171,21 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          researchSettings?: { searchMode: string };
+          researchSettings?: { defaultModels?: string[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe('auth0|new-user');
-      expect(body.data.researchSettings?.searchMode).toBe('deep');
+      expect(body.data.researchSettings).toBeUndefined();
     });
 
     it('returns existing settings', { timeout: 20000 }, async () => {
       const userId = 'auth0|existing-user';
       fakeSettingsRepo.setSettings({
         userId,
-        researchSettings: { searchMode: 'quick' },
+        researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-15T00:00:00.000Z',
       });
@@ -209,14 +209,14 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          researchSettings: { searchMode: string };
+          researchSettings: { defaultModels: string[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
-      expect(body.data.researchSettings.searchMode).toBe('quick');
+      expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-flash']);
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(body.data.updatedAt).toBe('2025-01-15T00:00:00.000Z');
     });
@@ -256,7 +256,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: '/users/user-123/settings',
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -279,7 +279,7 @@ describe('Settings Routes', () => {
           authorization: 'Bearer invalid-token',
         },
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -306,7 +306,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -335,7 +335,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -344,25 +344,25 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          researchSettings: { searchMode: string };
+          researchSettings: { defaultModels: string[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe(userId);
-      expect(body.data.researchSettings.searchMode).toBe('quick');
+      expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-flash']);
 
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored).toBeDefined();
-      expect(stored?.researchSettings?.searchMode).toBe('quick');
+      expect(stored?.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
     });
 
-    it('updates existing settings with deep searchMode', { timeout: 20000 }, async () => {
+    it('updates existing settings with new defaultModels', { timeout: 20000 }, async () => {
       const userId = 'auth0|existing-patch-user';
       fakeSettingsRepo.setSettings({
         userId,
-        researchSettings: { searchMode: 'quick' },
+        researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -380,7 +380,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'deep' },
+          researchSettings: { defaultModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'] },
         },
       });
 
@@ -389,18 +389,18 @@ describe('Settings Routes', () => {
         success: boolean;
         data: {
           userId: string;
-          researchSettings: { searchMode: string };
+          researchSettings: { defaultModels: string[] };
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.researchSettings.searchMode).toBe('deep');
+      expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-pro', 'claude-opus-4-5-20251101']);
       expect(body.data.createdAt).toBe('2025-01-01T00:00:00.000Z');
       expect(body.data.updatedAt).not.toBe('2025-01-01T00:00:00.000Z');
     });
 
-    it('returns 400 when searchMode is invalid', { timeout: 20000 }, async () => {
+    it('returns 400 when defaultModels contains invalid model', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const token = await createToken({
@@ -414,7 +414,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'invalid-mode' },
+          researchSettings: { defaultModels: ['invalid-model'] },
         },
       });
 
@@ -425,7 +425,7 @@ describe('Settings Routes', () => {
       const userId = 'auth0|user-empty-body';
       fakeSettingsRepo.setSettings({
         userId,
-        researchSettings: { searchMode: 'deep' },
+        researchSettings: { defaultModels: ['gemini-2.5-pro'] },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -449,11 +449,11 @@ describe('Settings Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          researchSettings: { searchMode: string };
+          researchSettings: { defaultModels: string[] };
         };
       };
       expect(body.success).toBe(true);
-      expect(body.data.researchSettings.searchMode).toBe('deep');
+      expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-pro']);
     });
 
     it('returns 500 when get fails during update', { timeout: 20000 }, async () => {
@@ -472,7 +472,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -501,7 +501,7 @@ describe('Settings Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         },
       });
 
@@ -521,7 +521,7 @@ describe('Settings Routes', () => {
         const userId = 'auth0|user-preserve-keys';
         fakeSettingsRepo.setSettings({
           userId,
-          researchSettings: { searchMode: 'deep' },
+          researchSettings: { defaultModels: ['gemini-2.5-pro'] },
           llmApiKeys: {
             google: { ciphertext: 'encrypted-key', iv: 'test-iv', tag: 'test-tag' },
           },
@@ -542,7 +542,7 @@ describe('Settings Routes', () => {
             authorization: `Bearer ${token}`,
           },
           payload: {
-            researchSettings: { searchMode: 'quick' },
+            researchSettings: { defaultModels: ['gemini-2.5-flash'] },
           },
         });
 
@@ -550,7 +550,7 @@ describe('Settings Routes', () => {
 
         const stored = fakeSettingsRepo.getStoredSettings(userId);
         expect(stored?.llmApiKeys?.google).toBeDefined();
-        expect(stored?.researchSettings?.searchMode).toBe('quick');
+        expect(stored?.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     );
 
@@ -572,16 +572,16 @@ describe('Settings Routes', () => {
             authorization: `Bearer ${token}`,
             'content-type': 'application/json',
           },
-          payload: JSON.stringify({ researchSettings: { searchMode: 'quick' } }),
+          payload: JSON.stringify({ researchSettings: { defaultModels: ['gemini-2.5-flash'] } }),
         });
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body) as {
           success: boolean;
-          data: { researchSettings: { searchMode: string } };
+          data: { researchSettings: { defaultModels: string[] } };
         };
         expect(body.success).toBe(true);
-        expect(body.data.researchSettings.searchMode).toBe('quick');
+        expect(body.data.researchSettings.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     );
   });

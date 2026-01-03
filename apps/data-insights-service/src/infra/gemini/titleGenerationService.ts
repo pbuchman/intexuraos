@@ -9,6 +9,8 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
 
+const TITLE_GENERATION_MODEL = 'gemini-2.5-flash';
+
 /**
  * Error from title generation operations.
  */
@@ -67,7 +69,7 @@ export function createTitleGenerationService(
       }
 
       const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({ apiKey });
+      const geminiClient = createGeminiClient({ apiKey, model: TITLE_GENERATION_MODEL });
 
       const contentPreview = content.length > 5000 ? content.slice(0, 5000) + '...' : content;
       const prompt = TITLE_PROMPT_TEMPLATE.replace('{CONTENT}', contentPreview);

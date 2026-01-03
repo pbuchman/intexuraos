@@ -9,7 +9,6 @@ import {
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient } from '@intexuraos/llm-contract';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
-import { GEMINI_DEFAULTS } from './types.js';
 
 export type GeminiClient = LLMClient;
 
@@ -96,22 +95,20 @@ async function logError(
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const defaultModel = config.defaultModel ?? GEMINI_DEFAULTS.defaultModel;
-  const evaluateModel = config.evaluateModel ?? GEMINI_DEFAULTS.evaluateModel;
-  const researchModel = config.researchModel ?? GEMINI_DEFAULTS.researchModel;
+  const { model } = config;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        researchModel,
+        model,
         researchPrompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: researchModel,
+          model,
           contents: researchPrompt,
           config: {
             tools: [{ googleSearch: {} }],
@@ -138,15 +135,11 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     },
 
     async generate(prompt: string): Promise<Result<string, GeminiError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'generate',
-        defaultModel,
-        prompt
-      );
+      const { requestId, startTime, auditContext } = createRequestContext('generate', model, prompt);
 
       try {
         const response = await ai.models.generateContent({
-          model: defaultModel,
+          model,
           contents: prompt,
         });
 
@@ -156,29 +149,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         return ok(text);
       } catch (error) {
         await logError('generate', requestId, startTime, error, auditContext);
-        return err(mapGeminiError(error));
-      }
-    },
-
-    async evaluate(prompt: string): Promise<Result<string, GeminiError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'evaluate',
-        evaluateModel,
-        prompt
-      );
-
-      try {
-        const response = await ai.models.generateContent({
-          model: evaluateModel,
-          contents: prompt,
-        });
-
-        const text = response.text ?? '';
-
-        await logSuccess('evaluate', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('evaluate', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },

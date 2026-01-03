@@ -7,20 +7,18 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import {
   createEnhancedResearch,
-  type LlmProvider,
   type Research,
-  type SearchMode,
+  type SupportedModel,
 } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface EnhanceResearchInput {
   sourceResearchId: string;
   userId: string;
-  additionalLlms?: LlmProvider[];
+  additionalModels?: SupportedModel[];
   additionalContexts?: { content: string; model?: string }[];
-  synthesisLlm?: LlmProvider;
+  synthesisModel?: SupportedModel;
   removeContextIds?: string[];
-  searchMode?: SearchMode;
 }
 
 export interface EnhanceResearchDeps {
@@ -58,12 +56,12 @@ export async function enhanceResearch(
     return err({ type: 'INVALID_STATUS', status: source.status });
   }
 
-  const hasNewLlms = (params.additionalLlms?.length ?? 0) > 0;
+  const hasNewModels = (params.additionalModels?.length ?? 0) > 0;
   const hasNewContexts = (params.additionalContexts?.length ?? 0) > 0;
   const hasRemovedContexts = (params.removeContextIds?.length ?? 0) > 0;
-  const hasSynthesisChange = params.synthesisLlm !== undefined;
+  const hasSynthesisChange = params.synthesisModel !== undefined;
 
-  if (!hasNewLlms && !hasNewContexts && !hasRemovedContexts && !hasSynthesisChange) {
+  if (!hasNewModels && !hasNewContexts && !hasRemovedContexts && !hasSynthesisChange) {
     return err({ type: 'NO_CHANGES' });
   }
 
@@ -72,20 +70,17 @@ export async function enhanceResearch(
     userId: params.userId,
     sourceResearch: source,
   };
-  if (params.additionalLlms !== undefined) {
-    enhanceParams.additionalLlms = params.additionalLlms;
+  if (params.additionalModels !== undefined) {
+    enhanceParams.additionalModels = params.additionalModels;
   }
   if (params.additionalContexts !== undefined) {
     enhanceParams.additionalContexts = params.additionalContexts;
   }
-  if (params.synthesisLlm !== undefined) {
-    enhanceParams.synthesisLlm = params.synthesisLlm;
+  if (params.synthesisModel !== undefined) {
+    enhanceParams.synthesisModel = params.synthesisModel;
   }
   if (params.removeContextIds !== undefined) {
     enhanceParams.removeContextIds = params.removeContextIds;
-  }
-  if (params.searchMode !== undefined) {
-    enhanceParams.searchMode = params.searchMode;
   }
   const enhanced = createEnhancedResearch(enhanceParams);
 

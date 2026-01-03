@@ -312,7 +312,7 @@ describe('Internal Routes', () => {
       expect(body.error).toBe('Unauthorized');
     });
 
-    it('returns default searchMode when user has no settings', async () => {
+    it('returns null defaultModels when user has no settings', async () => {
       app = await buildServer();
 
       const response = await app.inject({
@@ -324,11 +324,11 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { searchMode: string };
-      expect(body.searchMode).toBe('deep');
+      const body = JSON.parse(response.body) as { defaultModels: string[] | null };
+      expect(body.defaultModels).toBeNull();
     });
 
-    it('returns default searchMode when repository fails', async () => {
+    it('returns null defaultModels when repository fails', async () => {
       fakeSettingsRepo.setFailNextGet(true);
 
       app = await buildServer();
@@ -342,11 +342,11 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { searchMode: string };
-      expect(body.searchMode).toBe('deep');
+      const body = JSON.parse(response.body) as { defaultModels: string[] | null };
+      expect(body.defaultModels).toBeNull();
     });
 
-    it('returns default searchMode when settings exist but no researchSettings', async () => {
+    it('returns null defaultModels when settings exist but no researchSettings', async () => {
       const userId = 'user-no-research-settings';
       fakeSettingsRepo.setSettings({
         userId,
@@ -366,16 +366,16 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { searchMode: string };
-      expect(body.searchMode).toBe('deep');
+      const body = JSON.parse(response.body) as { defaultModels: string[] | null };
+      expect(body.defaultModels).toBeNull();
     });
 
-    it('returns configured searchMode from user settings', async () => {
+    it('returns configured defaultModels from user settings', async () => {
       const userId = 'user-with-research-settings';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
-        researchSettings: { searchMode: 'quick' },
+        researchSettings: { defaultModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'] },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -391,8 +391,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { searchMode: string };
-      expect(body.searchMode).toBe('quick');
+      const body = JSON.parse(response.body) as { defaultModels: string[] | null };
+      expect(body.defaultModels).toEqual(['gemini-2.5-flash', 'claude-sonnet-4-5-20250929']);
     });
   });
 });

@@ -13,6 +13,7 @@ import {
   type GetUserSettingsErrorCode,
   updateUserSettings,
   type UpdateUserSettingsErrorCode,
+  type ResearchSettings,
 } from '../domain/settings/index.js';
 
 /**
@@ -49,13 +50,22 @@ function mapUpdateErrorCode(
 const researchSettingsSchema = {
   type: 'object',
   properties: {
-    searchMode: {
-      type: 'string',
-      enum: ['deep', 'quick'],
-      description: 'Search mode: deep (research models) or quick (default models with web search)',
+    defaultModels: {
+      type: 'array',
+      items: {
+        type: 'string',
+        enum: [
+          'gemini-2.5-pro',
+          'gemini-2.5-flash',
+          'claude-opus-4-5-20251101',
+          'claude-sonnet-4-5-20250929',
+          'o4-mini-deep-research',
+          'gpt-5.2',
+        ],
+      },
+      description: 'Default models for research. If empty, system defaults are used.',
     },
   },
-  required: ['searchMode'],
 } as const;
 
 /**
@@ -241,17 +251,11 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const params = request.params as { uid: string };
       const body = request.body as {
-        researchSettings?: {
-          searchMode: 'deep' | 'quick';
-        };
+        researchSettings?: ResearchSettings;
       };
       const { userSettingsRepository } = getServices();
 
-      const input: {
-        userId: string;
-        requestingUserId: string;
-        researchSettings?: { searchMode: 'deep' | 'quick' };
-      } = {
+      const input: Parameters<typeof updateUserSettings>[0] = {
         userId: params.uid,
         requestingUserId: user.userId,
       };

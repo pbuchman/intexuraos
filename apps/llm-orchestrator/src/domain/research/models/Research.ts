@@ -3,13 +3,13 @@
  * Core entities for the LLM research orchestration.
  */
 
-import { CLAUDE_DEFAULTS } from '@intexuraos/infra-claude';
-import { GEMINI_DEFAULTS } from '@intexuraos/infra-gemini';
-import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
+import {
+  getProviderForModel,
+  type LlmProvider,
+  type SupportedModel,
+} from '@intexuraos/llm-contract';
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
-
-export type SearchMode = 'deep' | 'quick';
+export type { LlmProvider, SupportedModel } from '@intexuraos/llm-contract';
 
 export type ResearchStatus =
   | 'draft'
@@ -24,7 +24,7 @@ export type ResearchStatus =
 export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
 
 export interface PartialFailure {
-  failedProviders: LlmProvider[];
+  failedModels: SupportedModel[];
   userDecision?: PartialFailureDecision;
   detectedAt: string;
   retryCount: number;
@@ -75,8 +75,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   externalReports?: ExternalReport[];
@@ -92,24 +92,10 @@ export interface Research {
   sourceResearchId?: string;
 }
 
-export function getModelForMode(provider: LlmProvider, searchMode: SearchMode): string {
-  switch (provider) {
-    case 'google':
-      return searchMode === 'quick' ? GEMINI_DEFAULTS.defaultModel : GEMINI_DEFAULTS.researchModel;
-    case 'openai':
-      return searchMode === 'quick' ? GPT_DEFAULTS.defaultModel : GPT_DEFAULTS.researchModel;
-    case 'anthropic':
-      return searchMode === 'quick' ? CLAUDE_DEFAULTS.defaultModel : CLAUDE_DEFAULTS.researchModel;
-  }
-}
-
-export function createLlmResults(
-  selectedLlms: LlmProvider[],
-  searchMode: SearchMode = 'deep'
-): LlmResult[] {
-  return selectedLlms.map((provider) => ({
-    provider,
-    model: getModelForMode(provider, searchMode),
+export function createLlmResults(selectedModels: SupportedModel[]): LlmResult[] {
+  return selectedModels.map((model) => ({
+    provider: getProviderForModel(model),
+    model,
     status: 'pending' as const,
   }));
 }
@@ -118,23 +104,21 @@ export function createResearch(params: {
   id: string;
   userId: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
-  searchMode?: SearchMode;
 }): Research {
   const now = new Date().toISOString();
-  const resolvedSearchMode = params.searchMode ?? 'deep';
   const research: Research = {
     id: params.id,
     userId: params.userId,
     title: '',
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
     status: 'pending',
-    llmResults: createLlmResults(params.selectedLlms, resolvedSearchMode),
+    llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
   };
 
@@ -164,23 +148,21 @@ export function createDraftResearch(params: {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   sourceActionId?: string;
   externalReports?: ExternalReport[];
-  searchMode?: SearchMode;
 }): Research {
   const now = new Date().toISOString();
-  const resolvedSearchMode = params.searchMode ?? 'deep';
   const research: Research = {
     id: params.id,
     userId: params.userId,
     title: params.title,
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
     status: 'draft',
-    llmResults: createLlmResults(params.selectedLlms, resolvedSearchMode),
+    llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
   };
 
@@ -199,27 +181,27 @@ export interface EnhanceResearchParams {
   id: string;
   userId: string;
   sourceResearch: Research;
-  additionalLlms?: LlmProvider[];
+  additionalModels?: SupportedModel[];
   additionalContexts?: { content: string; model?: string }[];
-  synthesisLlm?: LlmProvider;
+  synthesisModel?: SupportedModel;
   removeContextIds?: string[];
-  searchMode?: SearchMode;
 }
 
 export function createEnhancedResearch(params: EnhanceResearchParams): Research {
   const now = new Date().toISOString();
-  const resolvedSearchMode = params.searchMode ?? 'deep';
   const source = params.sourceResearch;
 
   const completedResults = source.llmResults
     .filter((r) => r.status === 'completed')
     .map((r) => ({ ...r }));
 
-  const existingProviders = new Set(completedResults.map((r) => r.provider));
-  const newProviders = (params.additionalLlms ?? []).filter((p) => !existingProviders.has(p));
-  const newResults = createLlmResults(newProviders, resolvedSearchMode);
+  const existingModels = new Set(completedResults.map((r) => r.model));
+  const newModels = (params.additionalModels ?? []).filter((m) => !existingModels.has(m));
+  const newResults = createLlmResults(newModels);
 
-  const allProviders = [...new Set([...completedResults.map((r) => r.provider), ...newProviders])];
+  const allModels = [
+    ...new Set([...completedResults.map((r) => r.model as SupportedModel), ...newModels]),
+  ];
 
   const removeSet = new Set(params.removeContextIds ?? []);
   const existingContexts = (source.externalReports ?? []).filter((r) => !removeSet.has(r.id));
@@ -243,8 +225,8 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
     userId: params.userId,
     title: source.title,
     prompt: source.prompt,
-    selectedLlms: allProviders,
-    synthesisLlm: params.synthesisLlm ?? source.synthesisLlm,
+    selectedModels: allModels,
+    synthesisModel: params.synthesisModel ?? source.synthesisModel,
     status: 'pending',
     llmResults: [...completedResults, ...newResults],
     startedAt: now,

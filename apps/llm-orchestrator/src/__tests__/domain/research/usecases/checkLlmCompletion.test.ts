@@ -40,10 +40,10 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
-      { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+      { provider: 'google', model: 'gemini-2.5-pro', status: 'pending' },
       { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
@@ -85,7 +85,7 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are still in pending state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
+        { provider: 'google', model: 'gemini-2.5-pro', status: 'completed', result: 'Result' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
       ],
     });
@@ -100,7 +100,7 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are in processing state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
+        { provider: 'google', model: 'gemini-2.5-pro', status: 'completed', result: 'Result' },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'processing' },
       ],
     });
@@ -117,7 +117,7 @@ describe('checkLlmCompletion', () => {
       llmResults: [
         {
           provider: 'google',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           status: 'completed',
           result: 'Google Result',
         },
@@ -140,7 +140,7 @@ describe('checkLlmCompletion', () => {
   it('returns all_failed and updates research when all LLMs failed', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'API Error' },
+        { provider: 'google', model: 'gemini-2.5-pro', status: 'failed', error: 'API Error' },
         {
           provider: 'openai',
           model: 'o4-mini-deep-research',
@@ -166,7 +166,7 @@ describe('checkLlmCompletion', () => {
       llmResults: [
         {
           provider: 'google',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           status: 'completed',
           result: 'Google Result',
         },
@@ -182,11 +182,11 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedProviders: ['openai'] });
+    expect(result).toEqual({ type: 'partial_failure', failedModels: ['o4-mini-deep-research'] });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T12:00:00.000Z',
         retryCount: 0,
       },
@@ -196,14 +196,14 @@ describe('checkLlmCompletion', () => {
   it('preserves retry count from previous partial failure', async () => {
     const research = createTestResearch({
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 1,
       },
       llmResults: [
         {
           provider: 'google',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           status: 'completed',
           result: 'Google Result',
         },
@@ -219,11 +219,11 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedProviders: ['openai'] });
+    expect(result).toEqual({ type: 'partial_failure', failedModels: ['o4-mini-deep-research'] });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
-        failedProviders: ['openai'],
+        failedModels: ['o4-mini-deep-research'],
         detectedAt: '2024-01-01T12:00:00.000Z',
         retryCount: 1,
       },
@@ -232,16 +232,16 @@ describe('checkLlmCompletion', () => {
 
   it('handles multiple failed providers', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google', 'openai', 'anthropic'],
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
       llmResults: [
         {
           provider: 'google',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           status: 'completed',
           result: 'Google Result',
         },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
-        { provider: 'anthropic', model: 'claude-3-opus', status: 'failed', error: 'Error 2' },
+        { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'failed', error: 'Error 2' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -250,22 +250,22 @@ describe('checkLlmCompletion', () => {
 
     expect(result).toEqual({
       type: 'partial_failure',
-      failedProviders: ['openai', 'anthropic'],
+      failedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
     });
   });
 
-  it('ignores stale llmResults for providers not in selectedLlms', async () => {
+  it('ignores stale llmResults for providers not in selectedModels', async () => {
     const research = createTestResearch({
-      selectedLlms: ['google'],
+      selectedModels: ['gemini-2.5-pro'],
       llmResults: [
         {
           provider: 'google',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           status: 'completed',
           result: 'Google Result',
         },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
-        { provider: 'anthropic', model: 'claude-3-opus', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

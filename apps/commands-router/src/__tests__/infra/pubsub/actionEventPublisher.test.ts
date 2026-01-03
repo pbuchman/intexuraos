@@ -47,7 +47,7 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'What are the latest AI trends?',
           confidence: 0.95,
-          selectedLlms: ['google', 'anthropic'],
+          selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -128,18 +128,18 @@ describe('ActionEventPublisher', () => {
       }
     });
 
-    it('includes selectedLlms in event data', async () => {
+    it('includes selectedModels in event data', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-456',
         userId: 'user-789',
         commandId: 'cmd-123',
         actionType: 'research',
-        title: 'Multi-LLM research',
+        title: 'Multi-model research',
         payload: {
           prompt: 'Compare AI models',
           confidence: 0.92,
-          selectedLlms: ['google', 'openai', 'anthropic'],
+          selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -151,7 +151,11 @@ describe('ActionEventPublisher', () => {
 
       const callArg = mockPublishMessage.mock.calls[0]?.[0] as { data: Buffer };
       const publishedData = JSON.parse(callArg.data.toString()) as ActionCreatedEvent;
-      expect(publishedData.payload.selectedLlms).toEqual(['google', 'openai', 'anthropic']);
+      expect(publishedData.payload.selectedModels).toEqual([
+        'gemini-2.5-pro',
+        'o4-mini-deep-research',
+        'claude-opus-4-5-20251101',
+      ]);
     });
   });
 });

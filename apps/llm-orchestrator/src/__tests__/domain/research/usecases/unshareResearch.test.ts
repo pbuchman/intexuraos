@@ -44,8 +44,8 @@ function createTestResearchBase(): Omit<Research, 'shareInfo'> {
     title: 'Test Research',
     prompt: 'Test prompt',
     status: 'completed',
-    selectedLlms: ['google'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [],
     startedAt: '2024-01-01T10:00:00Z',
   };

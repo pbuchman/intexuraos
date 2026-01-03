@@ -5,7 +5,8 @@ import type { ResearchServiceClient } from '../domain/ports/researchServiceClien
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
 import type { Action } from '../domain/models/action.js';
-import type { ActionCreatedEvent, LlmProvider } from '../domain/models/actionEvent.js';
+import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -60,7 +61,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedLlms: LlmProvider[];
+    selectedModels: SupportedModel[];
     sourceActionId?: string;
   } | null = null;
   private nextResearchId = 'research-123';
@@ -84,7 +85,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedLlms: LlmProvider[];
+    selectedModels: SupportedModel[];
     sourceActionId?: string;
   }): Promise<Result<{ id: string }>> {
     if (this.failNext) {

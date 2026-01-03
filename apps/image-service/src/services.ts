@@ -1,7 +1,14 @@
-import type { GeneratedImageRepository, PromptGenerator, ImageGenerator } from './domain/index.js';
+import type {
+  GeneratedImageRepository,
+  PromptGenerator,
+  ImageGenerator,
+  ImageGenerationModel,
+} from './domain/index.js';
+import { IMAGE_GENERATION_MODELS } from './domain/index.js';
 import { createGeneratedImageRepository } from './infra/firestore/index.js';
-import { createFakeImageGenerator } from './infra/image/index.js';
+import { createOpenAIImageGenerator, createGoogleImageGenerator } from './infra/image/index.js';
 import { createGeminiPromptAdapter, createGptPromptAdapter } from './infra/llm/index.js';
+import { createGcsImageStorage } from './infra/storage/index.js';
 import {
   createUserServiceClient,
   type UserServiceClient,
@@ -10,9 +17,9 @@ import {
 
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
-  imageGenerator: ImageGenerator;
   userServiceClient: UserServiceClient;
   createPromptGenerator: (provider: 'google' | 'openai', apiKey: string) => PromptGenerator;
+  createImageGenerator: (model: ImageGenerationModel, apiKey: string) => ImageGenerator;
   generateId: () => string;
 }
 
@@ -35,6 +42,7 @@ export function resetServices(): void {
 
 export function initializeServices(): void {
   const bucketName = process.env['INTEXURAOS_IMAGE_BUCKET'] ?? '';
+  const storage = createGcsImageStorage(bucketName);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
@@ -43,13 +51,19 @@ export function initializeServices(): void {
 
   container = {
     generatedImageRepository: createGeneratedImageRepository(),
-    imageGenerator: createFakeImageGenerator({ bucketName }),
     userServiceClient,
     createPromptGenerator: (provider: 'google' | 'openai', apiKey: string): PromptGenerator => {
       if (provider === 'google') {
         return createGeminiPromptAdapter({ apiKey });
       }
       return createGptPromptAdapter({ apiKey });
+    },
+    createImageGenerator: (model: ImageGenerationModel, apiKey: string): ImageGenerator => {
+      const config = IMAGE_GENERATION_MODELS[model];
+      if (config.provider === 'openai') {
+        return createOpenAIImageGenerator({ apiKey, model, storage });
+      }
+      return createGoogleImageGenerator({ apiKey, model, storage });
     },
     generateId: (): string => crypto.randomUUID(),
   };

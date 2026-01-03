@@ -10,7 +10,7 @@ export const generateImageBodySchema = {
     },
     model: {
       type: 'string',
-      enum: ['gpt-image-1', 'dall-e-3'],
+      enum: ['gpt-image-1', 'nano-banana-pro'],
       description: 'Image generation model to use',
     },
   },
@@ -50,5 +50,5 @@ export const generateImageResponseSchema = {
 
 export interface GenerateImageBody {
   prompt: string;
-  model: 'gpt-image-1' | 'dall-e-3';
+  model: 'gpt-image-1' | 'nano-banana-pro';
 }

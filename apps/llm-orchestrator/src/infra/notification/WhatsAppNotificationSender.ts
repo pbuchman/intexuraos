@@ -10,11 +10,7 @@ import {
   type WhatsAppSendPublisherConfig,
 } from '@intexuraos/infra-pubsub';
 import { ok, type Result } from '@intexuraos/common-core';
-import type {
-  LlmProvider,
-  NotificationError,
-  NotificationSender,
-} from '../../domain/research/index.js';
+import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
 
 export class WhatsAppNotificationSender implements NotificationSender {
   private readonly publisher: WhatsAppSendPublisher;
@@ -42,10 +38,10 @@ export class WhatsAppNotificationSender implements NotificationSender {
   async sendLlmFailure(
     userId: string,
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     error: string
   ): Promise<Result<void, NotificationError>> {
-    const message = this.formatFailureMessage(provider, error);
+    const message = this.formatFailureMessage(model, error);
     await this.publisher.publishSendMessage({
       userId,
       message,
@@ -60,19 +56,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
     return `Research Complete!\n\n"${displayTitle}"\n${shareUrl}`;
   }
 
-  private formatFailureMessage(provider: LlmProvider, error: string): string {
-    const providerName = this.getProviderDisplayName(provider);
-    return `Research Alert: ${providerName} failed.\n\nError: ${error}\n\nCheck your dashboard for options.`;
-  }
-
-  private getProviderDisplayName(provider: LlmProvider): string {
-    switch (provider) {
-      case 'google':
-        return 'Google Gemini';
-      case 'openai':
-        return 'OpenAI GPT';
-      case 'anthropic':
-        return 'Anthropic Claude';
-    }
+  private formatFailureMessage(model: string, error: string): string {
+    return `Research Alert: ${model} failed.\n\nError: ${error}\n\nCheck your dashboard for options.`;
   }
 }

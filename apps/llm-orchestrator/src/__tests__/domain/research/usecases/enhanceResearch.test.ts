@@ -42,8 +42,8 @@ function createCompletedResearch(overrides: Partial<Research> = {}): Research {
     title: 'Original Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       {
         provider: 'google',
@@ -81,7 +81,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'nonexistent',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -100,7 +100,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'research-1',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -118,7 +118,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -136,7 +136,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -173,7 +173,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -182,7 +182,7 @@ describe('enhanceResearch', () => {
     if (result.ok) {
       expect(result.value.id).toBe('generated-id');
       expect(result.value.sourceResearchId).toBe('source-research-id');
-      expect(result.value.selectedLlms).toContain('anthropic');
+      expect(result.value.selectedModels).toContain('claude-opus-4-5-20251101');
       expect(result.value.llmResults).toHaveLength(3);
     }
     expect(deps.mockRepo.save).toHaveBeenCalledOnce();
@@ -196,14 +196,14 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisLlm: 'anthropic',
+      synthesisModel: 'claude-opus-4-5-20251101',
     };
 
     const result = await enhanceResearch(params, deps);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.synthesisLlm).toBe('anthropic');
+      expect(result.value.synthesisModel).toBe('claude-opus-4-5-20251101');
     }
   });
 
@@ -256,7 +256,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
+      additionalModels: ['claude-opus-4-5-20251101'],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -267,7 +267,7 @@ describe('enhanceResearch', () => {
     }
   });
 
-  it('passes searchMode to enhanced research', async () => {
+  it('passes synthesisModel to enhanced research', async () => {
     const source = createCompletedResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(source));
     deps.mockRepo.save.mockImplementation((research: Research) => ok(research));
@@ -275,8 +275,8 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalLlms: ['anthropic'],
-      searchMode: 'quick',
+      additionalModels: ['claude-opus-4-5-20251101'],
+      synthesisModel: 'gemini-2.5-flash',
     };
 
     const result = await enhanceResearch(params, deps);
@@ -287,7 +287,7 @@ describe('enhanceResearch', () => {
         llmResults: expect.arrayContaining([
           expect.objectContaining({
             provider: 'anthropic',
-            model: 'claude-sonnet-4-5-20250929',
+            model: 'claude-opus-4-5-20251101',
           }),
         ]),
       })

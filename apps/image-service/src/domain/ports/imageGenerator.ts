@@ -7,5 +7,5 @@ export interface ImageGenerationError {
 }
 
 export interface ImageGenerator {
-  generate(prompt: string, model: string): Promise<Result<GeneratedImage, ImageGenerationError>>;
+  generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>>;
 }

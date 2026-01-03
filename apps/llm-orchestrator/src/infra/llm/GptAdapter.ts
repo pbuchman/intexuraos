@@ -14,12 +14,8 @@ import type {
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
 
-  constructor(apiKey: string, researchModel?: string) {
-    const config: Parameters<typeof createGptClient>[0] = { apiKey };
-    if (researchModel !== undefined) {
-      config.researchModel = researchModel;
-    }
-    this.client = createGptClient(config);
+  constructor(apiKey: string, model: string) {
+    this.client = createGptClient({ apiKey, model });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

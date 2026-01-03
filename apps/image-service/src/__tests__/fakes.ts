@@ -55,16 +55,18 @@ export class FakeImageGenerator implements ImageGenerator {
   private shouldFail = false;
   private errorCode: ImageGenerationError['code'] = 'API_ERROR';
   private idCounter = 1;
+  private readonly model: string;
+
+  constructor(model = 'gpt-image-1') {
+    this.model = model;
+  }
 
   setFailNext(fail: boolean, code: ImageGenerationError['code'] = 'API_ERROR'): void {
     this.shouldFail = fail;
     this.errorCode = code;
   }
 
-  async generate(
-    prompt: string,
-    model: string
-  ): Promise<Result<GeneratedImage, ImageGenerationError>> {
+  async generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>> {
     if (this.shouldFail) {
       this.shouldFail = false;
       return err({ code: this.errorCode, message: 'Simulated generation failure' });
@@ -74,9 +76,9 @@ export class FakeImageGenerator implements ImageGenerator {
     return ok({
       id,
       prompt,
-      thumbnailUrl: `https://storage.googleapis.com/test-bucket/${id}/thumbnail.png`,
-      fullSizeUrl: `https://storage.googleapis.com/test-bucket/${id}/full.png`,
-      model,
+      thumbnailUrl: `https://storage.googleapis.com/test-bucket/images/${id}/thumbnail.jpg`,
+      fullSizeUrl: `https://storage.googleapis.com/test-bucket/images/${id}/full.png`,
+      model: this.model,
       createdAt: new Date().toISOString(),
     });
   }

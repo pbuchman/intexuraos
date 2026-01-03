@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
+import { IMAGE_GENERATION_MODELS, type ImageGenerationModel } from '../domain/index.js';
 import { getServices } from '../services.js';
 import {
   generateImageBodySchema,
@@ -14,7 +15,7 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
       schema: {
         operationId: 'generateImage',
         summary: 'Generate image from prompt',
-        description: 'Generates an image from the provided prompt (fake implementation)',
+        description: 'Generates an image using OpenAI GPT-image-1 or Google Nano Banana Pro',
         tags: ['images'],
         security: [{ bearerAuth: [] }],
         body: generateImageBodySchema,
@@ -29,9 +30,24 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
       const { prompt, model } = request.body;
 
-      const { imageGenerator, generatedImageRepository } = getServices();
+      const { userServiceClient, createImageGenerator, generatedImageRepository } = getServices();
 
-      const result = await imageGenerator.generate(prompt, model);
+      const keysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!keysResult.ok) {
+        reply.status(502);
+        return await reply.fail('DOWNSTREAM_ERROR', `Failed to get API keys: ${keysResult.error.message}`);
+      }
+
+      const modelConfig = IMAGE_GENERATION_MODELS[model as ImageGenerationModel];
+      const apiKey = keysResult.value[modelConfig.provider];
+
+      if (apiKey === undefined) {
+        reply.status(400);
+        return await reply.fail('INVALID_REQUEST', `No ${modelConfig.provider} API key configured`);
+      }
+
+      const imageGenerator = createImageGenerator(model as ImageGenerationModel, apiKey);
+      const result = await imageGenerator.generate(prompt);
 
       if (!result.ok) {
         reply.status(502);

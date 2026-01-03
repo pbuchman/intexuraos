@@ -51,10 +51,10 @@ describe('ImageGenerationModel', () => {
       });
     });
 
-    it('has dall-e-3 with openai provider', () => {
-      expect(IMAGE_GENERATION_MODELS['dall-e-3']).toEqual({
-        provider: 'openai',
-        modelId: 'dall-e-3',
+    it('has nano-banana-pro with google provider', () => {
+      expect(IMAGE_GENERATION_MODELS['nano-banana-pro']).toEqual({
+        provider: 'google',
+        modelId: 'imagen-3.0-generate-002',
       });
     });
   });
@@ -64,8 +64,8 @@ describe('ImageGenerationModel', () => {
       expect(isValidImageGenerationModel('gpt-image-1')).toBe(true);
     });
 
-    it('returns true for dall-e-3', () => {
-      expect(isValidImageGenerationModel('dall-e-3')).toBe(true);
+    it('returns true for nano-banana-pro', () => {
+      expect(isValidImageGenerationModel('nano-banana-pro')).toBe(true);
     });
 
     it('returns false for invalid model', () => {

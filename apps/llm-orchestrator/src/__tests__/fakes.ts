@@ -11,12 +11,15 @@ import type {
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
+  LlmUsageIncrement,
+  LlmUsageStats,
   NotificationError,
   PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
   TitleGenerator,
+  UsageStatsRepository,
 } from '../domain/research/index.js';
 import type {
   DecryptedApiKeys,
@@ -88,14 +91,14 @@ export class FakeResearchRepository implements ResearchRepository {
 
   async updateLlmResult(
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>> {
     const existing = this.researches.get(researchId);
     if (existing === undefined) {
       return err({ code: 'NOT_FOUND', message: 'Research not found' });
     }
-    const llmIndex = existing.llmResults.findIndex((r) => r.provider === provider);
+    const llmIndex = existing.llmResults.findIndex((r) => r.model === model);
     if (llmIndex >= 0) {
       const llmResult = existing.llmResults[llmIndex];
       if (llmResult !== undefined) {
@@ -174,7 +177,7 @@ export class FakeUserServiceClient implements UserServiceClient {
   }
 
   async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
-    const settings = this.researchSettings.get(userId) ?? { searchMode: 'deep' };
+    const settings = this.researchSettings.get(userId) ?? { defaultModels: null };
     return ok(settings);
   }
 
@@ -245,7 +248,7 @@ export class FakeNotificationSender implements NotificationSender {
   private sentFailures: {
     userId: string;
     researchId: string;
-    provider: LlmProvider;
+    model: string;
     error: string;
   }[] = [];
 
@@ -262,10 +265,10 @@ export class FakeNotificationSender implements NotificationSender {
   async sendLlmFailure(
     userId: string,
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     error: string
   ): Promise<Result<void, NotificationError>> {
-    this.sentFailures.push({ userId, researchId, provider, error });
+    this.sentFailures.push({ userId, researchId, model, error });
     return ok(undefined);
   }
 
@@ -281,7 +284,7 @@ export class FakeNotificationSender implements NotificationSender {
   getSentFailures(): {
     userId: string;
     researchId: string;
-    provider: LlmProvider;
+    model: string;
     error: string;
   }[] {
     return [...this.sentFailures];
@@ -375,7 +378,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }[] = [];
   private failNextPublish = false;
@@ -384,7 +387,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
     if (this.failNextPublish) {
@@ -399,7 +402,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }[] {
     return [...this.publishedEvents];
@@ -440,5 +443,58 @@ export class FakePricingRepository implements PricingRepository {
 
   clear(): void {
     this.pricing.clear();
+  }
+}
+
+export class FakeUsageStatsRepository implements UsageStatsRepository {
+  private stats = new Map<string, LlmUsageStats>();
+
+  async increment(data: LlmUsageIncrement): Promise<void> {
+    const key = `${data.provider}_${data.model}_total`;
+    const existing = this.stats.get(key);
+
+    if (existing !== undefined) {
+      this.stats.set(key, {
+        ...existing,
+        calls: existing.calls + 1,
+        successfulCalls: existing.successfulCalls + (data.success ? 1 : 0),
+        failedCalls: existing.failedCalls + (data.success ? 0 : 1),
+        inputTokens: existing.inputTokens + data.inputTokens,
+        outputTokens: existing.outputTokens + data.outputTokens,
+        totalTokens: existing.totalTokens + data.inputTokens + data.outputTokens,
+        costUsd: existing.costUsd + data.costUsd,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+    } else {
+      this.stats.set(key, {
+        provider: data.provider,
+        model: data.model,
+        period: 'total',
+        calls: 1,
+        successfulCalls: data.success ? 1 : 0,
+        failedCalls: data.success ? 0 : 1,
+        inputTokens: data.inputTokens,
+        outputTokens: data.outputTokens,
+        totalTokens: data.inputTokens + data.outputTokens,
+        costUsd: data.costUsd,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  async getAllTotals(): Promise<LlmUsageStats[]> {
+    return Array.from(this.stats.values()).filter((s) => s.period === 'total');
+  }
+
+  async getByPeriod(period: string): Promise<LlmUsageStats[]> {
+    return Array.from(this.stats.values()).filter((s) => s.period === period);
+  }
+
+  getAll(): LlmUsageStats[] {
+    return Array.from(this.stats.values());
+  }
+
+  clear(): void {
+    this.stats.clear();
   }
 }

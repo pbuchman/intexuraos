@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { EncryptedValue } from '@intexuraos/common-core';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 import { FirestoreUserSettingsRepository } from '../../infra/firestore/index.js';
 import type { LlmTestResult, UserSettings } from '../../domain/settings/index.js';
 
@@ -27,7 +28,7 @@ function createTestSettings(overrides: Partial<UserSettings> = {}): UserSettings
   const now = new Date().toISOString();
   return {
     userId: 'user-123',
-    researchSettings: { searchMode: 'deep' },
+    researchSettings: { defaultModels: ['gemini-2.5-pro'] },
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -60,7 +61,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('returns settings for existing user', async () => {
       const settings = createTestSettings({
-        researchSettings: { searchMode: 'quick' },
+        researchSettings: { defaultModels: ['gemini-2.5-flash'] },
       });
       await repo.saveSettings(settings);
 
@@ -69,7 +70,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.userId).toBe('user-123');
-        expect(result.value.researchSettings?.searchMode).toBe('quick');
+        expect(result.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     });
 
@@ -127,7 +128,7 @@ describe('FirestoreUserSettingsRepository', () => {
   describe('saveSettings', () => {
     it('saves new settings', async () => {
       const settings = createTestSettings({
-        researchSettings: { searchMode: 'quick' },
+        researchSettings: { defaultModels: ['gemini-2.5-flash'] },
       });
 
       const result = await repo.saveSettings(settings);
@@ -141,7 +142,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
+        expect(stored.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     });
 
@@ -183,7 +184,7 @@ describe('FirestoreUserSettingsRepository', () => {
         response: 'Hello from GPT!',
       };
       const initialSettings = createTestSettings({
-        researchSettings: { searchMode: 'deep' },
+        researchSettings: { defaultModels: ['gemini-2.5-pro'] },
         llmTestResults: { openai: testResult },
       });
       await repo.saveSettings(initialSettings);
@@ -192,9 +193,9 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(getResult.ok).toBe(true);
       const existingSettings = (getResult as { ok: true; value: typeof initialSettings }).value;
 
-      const updatedSettings = {
+      const updatedSettings: UserSettings = {
         ...existingSettings,
-        researchSettings: { searchMode: 'quick' as const },
+        researchSettings: { defaultModels: ['gemini-2.5-flash'] as SupportedModel[] },
         updatedAt: new Date().toISOString(),
       };
       await repo.saveSettings(updatedSettings);
@@ -202,7 +203,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const result = await repo.getSettings('user-123');
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.researchSettings?.searchMode).toBe('quick');
+        expect(result.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
         expect(result.value.llmTestResults?.openai?.response).toBe('Hello from GPT!');
       }
     });
@@ -221,14 +222,14 @@ describe('FirestoreUserSettingsRepository', () => {
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
         expect(stored.value.llmApiKeys?.google).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('deep');
+        expect(stored.value.researchSettings).toBeUndefined();
       }
     });
 
     it('updates existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         })
       );
 
@@ -241,7 +242,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmApiKeys?.anthropic).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
+        expect(stored.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     });
 
@@ -329,7 +330,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         })
       );
 
@@ -346,7 +347,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.response).toBe('OpenAI response');
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
+        expect(stored.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     });
 
@@ -384,7 +385,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates testedAt for existing settings document', async () => {
       await repo.saveSettings(
         createTestSettings({
-          researchSettings: { searchMode: 'quick' },
+          researchSettings: { defaultModels: ['gemini-2.5-flash'] },
         })
       );
 
@@ -396,7 +397,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
+        expect(stored.value.researchSettings?.defaultModels).toEqual(['gemini-2.5-flash']);
       }
     });
 

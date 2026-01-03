@@ -4,22 +4,16 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import {
-  createResearch,
-  type LlmProvider,
-  type Research,
-  type SearchMode,
-} from '../models/index.js';
+import { createResearch, type Research, type SupportedModel } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {
   userId: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
-  searchMode?: SearchMode;
 }
 
 export interface SubmitResearchDeps {
@@ -35,12 +29,9 @@ export async function submitResearch(
     id: deps.generateId(),
     userId: params.userId,
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
   };
-  if (params.searchMode !== undefined) {
-    createParams.searchMode = params.searchMode;
-  }
   if (params.externalReports !== undefined) {
     createParams.externalReports = params.externalReports;
   }

@@ -23,26 +23,17 @@ describe('GptAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key');
+    adapter = new GptAdapter('test-key', 'o4-mini-deep-research');
   });
 
   describe('constructor', () => {
-    it('passes researchModel to client when provided', () => {
+    it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', 'gpt-4o-mini');
+      new GptAdapter('test-key', 'o4-mini-deep-research');
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        researchModel: 'gpt-4o-mini',
-      });
-    });
-
-    it('does not pass researchModel when not provided', () => {
-      mockCreateGptClient.mockClear();
-      new GptAdapter('test-key');
-
-      expect(mockCreateGptClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
+        model: 'o4-mini-deep-research',
       });
     });
   });

@@ -4,6 +4,7 @@
  */
 
 import type { EncryptedValue } from '@intexuraos/common-core';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 
 /**
  * LLM provider identifiers.
@@ -38,17 +39,11 @@ export interface LlmTestResults {
 }
 
 /**
- * Search mode for research operations.
- * - 'deep': Uses research-optimized models (slower, more thorough)
- * - 'quick': Uses default models with web search (faster, cheaper)
- */
-export type SearchMode = 'deep' | 'quick';
-
-/**
  * Research-related settings.
+ * If defaultModels is undefined, system defaults will be used.
  */
 export interface ResearchSettings {
-  searchMode: SearchMode;
+  defaultModels?: SupportedModel[];
 }
 
 /**
@@ -88,7 +83,6 @@ export function createDefaultSettings(userId: string): UserSettings {
   const now = new Date().toISOString();
   return {
     userId,
-    researchSettings: { searchMode: 'deep' },
     createdAt: now,
     updatedAt: now,
   };

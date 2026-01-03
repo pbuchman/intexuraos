@@ -4,35 +4,35 @@ import type { ImageGenerationError, ImageGenerator } from '../../domain/ports/im
 
 export interface FakeImageGeneratorConfig {
   bucketName: string;
+  model: string;
   generateId?: () => string;
 }
 
 export class FakeImageGenerator implements ImageGenerator {
   private readonly bucketName: string;
+  private readonly model: string;
   private readonly generateId: () => string;
 
   constructor(config: FakeImageGeneratorConfig) {
     this.bucketName = config.bucketName;
+    this.model = config.model;
     this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
   }
 
-  async generate(
-    prompt: string,
-    model: string
-  ): Promise<Result<GeneratedImage, ImageGenerationError>> {
+  async generate(prompt: string): Promise<Result<GeneratedImage, ImageGenerationError>> {
     const id = this.generateId();
     const now = new Date().toISOString();
 
     const baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
-    const thumbnailUrl = `${baseUrl}/${id}/thumbnail.png`;
-    const fullSizeUrl = `${baseUrl}/${id}/full.png`;
+    const thumbnailUrl = `${baseUrl}/images/${id}/thumbnail.jpg`;
+    const fullSizeUrl = `${baseUrl}/images/${id}/full.png`;
 
     const image: GeneratedImage = {
       id,
       prompt,
       thumbnailUrl,
       fullSizeUrl,
-      model,
+      model: this.model,
       createdAt: now,
     };
 

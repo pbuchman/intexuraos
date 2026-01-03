@@ -41,12 +41,13 @@ describe('imageRoutes', () => {
     fakeImageGenerator = new FakeImageGenerator();
     fakePromptGenerator = new FakePromptGenerator();
     fakeUserServiceClient = new FakeUserServiceClient();
+    fakeUserServiceClient.setApiKeys({ openai: 'test-openai-key', google: 'test-google-key' });
 
     setServices({
       generatedImageRepository: fakeRepo,
-      imageGenerator: fakeImageGenerator,
       userServiceClient: fakeUserServiceClient,
       createPromptGenerator: () => fakePromptGenerator,
+      createImageGenerator: () => fakeImageGenerator,
       generateId: () => 'test-id',
     });
   });
@@ -74,7 +75,7 @@ describe('imageRoutes', () => {
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(true);
       expect(body.data.id).toBeDefined();
-      expect(body.data.thumbnailUrl).toContain('thumbnail.png');
+      expect(body.data.thumbnailUrl).toContain('thumbnail.jpg');
       expect(body.data.fullSizeUrl).toContain('full.png');
     });
 
@@ -159,7 +160,7 @@ describe('imageRoutes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('works with dall-e-3 model', async () => {
+    it('works with nano-banana-pro model', async () => {
       const app = await buildServer();
 
       const response = await app.inject({
@@ -168,13 +169,52 @@ describe('imageRoutes', () => {
         headers: { authorization: 'Bearer valid-token' },
         payload: {
           prompt: 'A beautiful sunset over the ocean with silhouetted palm trees.',
-          model: 'dall-e-3',
+          model: 'nano-banana-pro',
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(true);
+    });
+
+    it('returns 400 when no API key is configured for model provider', async () => {
+      fakeUserServiceClient.setApiKeys({ openai: 'test-openai-key' });
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/images/generate',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          prompt: 'A beautiful sunset over the ocean with silhouetted palm trees.',
+          model: 'nano-banana-pro',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('google');
+    });
+
+    it('returns 502 when user service fails', async () => {
+      fakeUserServiceClient.setFailNext(true, 'NETWORK_ERROR');
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/images/generate',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          prompt: 'A beautiful sunset over the ocean with silhouetted palm trees.',
+          model: 'gpt-image-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
 
     it('returns 502 when image generation fails', async () => {

@@ -119,3 +119,20 @@ export interface ConfirmPartialFailureResponse {
   action: PartialFailureDecision;
   message: string;
 }
+
+/**
+ * LLM usage statistics per model.
+ */
+export interface LlmUsageStats {
+  provider: LlmProvider;
+  model: string;
+  period: string;
+  calls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  lastUpdatedAt: string;
+}

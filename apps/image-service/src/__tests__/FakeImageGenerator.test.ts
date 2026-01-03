@@ -5,10 +5,11 @@ describe('FakeImageGenerator', () => {
   it('generates an image with correct structure', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
+      model: 'gpt-image-1',
       generateId: () => 'test-id-123',
     });
 
-    const result = await generator.generate('A sunset over the ocean', 'gpt-image-1');
+    const result = await generator.generate('A sunset over the ocean');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -16,10 +17,10 @@ describe('FakeImageGenerator', () => {
       expect(result.value.prompt).toBe('A sunset over the ocean');
       expect(result.value.model).toBe('gpt-image-1');
       expect(result.value.thumbnailUrl).toBe(
-        'https://storage.googleapis.com/test-bucket/test-id-123/thumbnail.png'
+        'https://storage.googleapis.com/test-bucket/images/test-id-123/thumbnail.jpg'
       );
       expect(result.value.fullSizeUrl).toBe(
-        'https://storage.googleapis.com/test-bucket/test-id-123/full.png'
+        'https://storage.googleapis.com/test-bucket/images/test-id-123/full.png'
       );
       expect(result.value.createdAt).toBeDefined();
     }
@@ -28,9 +29,10 @@ describe('FakeImageGenerator', () => {
   it('uses crypto.randomUUID by default for id generation', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
+      model: 'nano-banana-pro',
     });
 
-    const result = await generator.generate('A sunset', 'dall-e-3');
+    const result = await generator.generate('A sunset');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -43,14 +45,15 @@ describe('FakeImageGenerator', () => {
   it('preserves prompt and model in generated image', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'my-bucket',
+      model: 'nano-banana-pro',
     });
 
-    const result = await generator.generate('Mountain landscape with snow', 'dall-e-3');
+    const result = await generator.generate('Mountain landscape with snow');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.prompt).toBe('Mountain landscape with snow');
-      expect(result.value.model).toBe('dall-e-3');
+      expect(result.value.model).toBe('nano-banana-pro');
     }
   });
 });
