@@ -7,9 +7,15 @@ import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/
 import { THUMBNAIL_PROMPT_SYSTEM } from './systemPrompt.js';
 import { parseThumbnailPromptResponse } from './parseResponse.js';
 
+interface LoggerLike {
+  info(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
+
 export interface GptPromptAdapterConfig {
   apiKey: string;
   model?: string;
+  logger?: LoggerLike | undefined;
 }
 
 const DEFAULT_MODEL = 'gpt-4.1';
@@ -17,10 +23,12 @@ const DEFAULT_MODEL = 'gpt-4.1';
 export class GptPromptAdapter implements PromptGenerator {
   private readonly client: OpenAI;
   private readonly model: string;
+  private readonly logger: LoggerLike | undefined;
 
   constructor(config: GptPromptAdapterConfig) {
     this.client = new OpenAI({ apiKey: config.apiKey });
     this.model = config.model ?? DEFAULT_MODEL;
+    this.logger = config.logger;
   }
 
   async generateThumbnailPrompt(
@@ -49,12 +57,14 @@ export class GptPromptAdapter implements PromptGenerator {
 
       const responseText = response.choices[0]?.message.content ?? '';
 
-      // eslint-disable-next-line no-console
-      console.info('[GptPromptAdapter] Response received', {
-        requestId,
-        durationMs: Date.now() - startTime.getTime(),
-        responseLength: responseText.length,
-      });
+      this.logger?.info(
+        {
+          requestId,
+          durationMs: Date.now() - startTime.getTime(),
+          responseLength: responseText.length,
+        },
+        'GPT prompt response received'
+      );
 
       const parseResult = parseThumbnailPromptResponse(responseText);
 
@@ -81,12 +91,10 @@ export class GptPromptAdapter implements PromptGenerator {
     } catch (error) {
       const message = getErrorMessage(error);
 
-      // eslint-disable-next-line no-console
-      console.error('[GptPromptAdapter] Error', {
-        requestId,
-        durationMs: Date.now() - startTime.getTime(),
-        error: message,
-      });
+      this.logger?.error(
+        { requestId, durationMs: Date.now() - startTime.getTime(), err: message },
+        'GPT prompt generation failed'
+      );
 
       await auditContext.error({ error: message });
       return err(mapGptError(message));

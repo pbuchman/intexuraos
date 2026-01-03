@@ -296,6 +296,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     setFilters({ app: '', source: '', title: '' });
     setTitleInput('');
     setFilterName('');
+    setSearchParams(new URLSearchParams());
   };
 
   const handleApplySavedFilter = (filter: SavedNotificationFilter): void => {
@@ -308,6 +309,7 @@ export function MobileNotificationsListPage(): React.JSX.Element {
     setTitleInput(newTitle);
 
     const params = new URLSearchParams();
+    params.set('filterId', filter.id);
     if (newApp !== '') params.set('app', newApp);
     if (newSource !== '') params.set('source', newSource);
     if (newTitle !== '') params.set('title', newTitle);

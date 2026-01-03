@@ -59,6 +59,7 @@ export const imageRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
       const saveResult = await generatedImageRepository.save(result.value);
       if (!saveResult.ok) {
+        // Best-effort tracking - image was generated successfully and URLs are valid
         request.log.error({ error: saveResult.error }, 'Failed to save generated image');
       }
 

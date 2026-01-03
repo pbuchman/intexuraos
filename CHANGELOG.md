@@ -5,6 +5,7 @@
 This changelog provides a comprehensive record of IntexuraOS development.
 
 **Version Coverage:**
+
 - This changelog includes all changes from initial commit (December 28, 2025) through version 0.0.3 (January 3, 2026)
 - Total commits analyzed: 444
 - Total files: 7,209
@@ -17,6 +18,7 @@ This changelog provides a comprehensive record of IntexuraOS development.
 ## [0.0.4] - 2026-01-03
 
 ### Added
+
 - Automated changelog generation system
 - Comprehensive project history analysis
 - Release notes automation script
@@ -30,6 +32,7 @@ This release includes comprehensive development across the platform with 187 fun
 ## Functional Changes (User-Facing Features & API)
 
 ### API Endpoints - Actions Agent
+
 1. `GET /router/actions` - List user actions with status filtering
 2. `PATCH /router/actions/:id` - Update action details
 3. `DELETE /router/actions/:id` - Delete action
@@ -40,6 +43,7 @@ This release includes comprehensive development across the platform with 187 fun
 8. `POST /internal/whatsapp/pubsub/process-command` - Process WhatsApp commands via Pub/Sub
 
 ### API Endpoints - User Service
+
 9. `POST /device/code` - Initiate OAuth Device Authorization Flow
 10. `POST /device/token` - Poll for device authorization token
 11. `GET /oauth/chatgpt-actions/authorize` - ChatGPT Actions OAuth authorization
@@ -54,6 +58,7 @@ This release includes comprehensive development across the platform with 187 fun
 20. `POST /firebase-token` - Exchange Auth0 token for Firebase custom token
 
 ### API Endpoints - WhatsApp Service
+
 21. `GET /webhook` - WhatsApp webhook verification
 22. `POST /webhook` - Receive WhatsApp messages
 23. `GET /messages/:id/media/:mediaId` - Get signed URL for media file
@@ -63,6 +68,7 @@ This release includes comprehensive development across the platform with 187 fun
 27. `PUT /mapping-config` - Update contact mapping configuration
 
 ### API Endpoints - Mobile Notifications Service
+
 28. `POST /connect` - Create signature connection for device
 29. `GET /connect/:signature` - Get connection status
 30. `POST /webhook` - Receive mobile notifications
@@ -71,12 +77,14 @@ This release includes comprehensive development across the platform with 187 fun
 33. `GET /notifications/filters` - Get available filter options
 
 ### API Endpoints - Notion Service
+
 34. `GET /integration/oauth/authorize` - Notion OAuth authorization
 35. `POST /integration/oauth/callback` - Notion OAuth callback
 36. `GET /integration/status` - Check Notion integration status
 37. `POST /webhook` - Notion webhook receiver
 
 ### API Endpoints - PromptVault Service
+
 38. `POST /prompts` - Create new prompt template
 39. `GET /prompts` - List prompt templates
 40. `GET /prompts/:id` - Get specific prompt
@@ -84,6 +92,7 @@ This release includes comprehensive development across the platform with 187 fun
 42. `DELETE /prompts/:id` - Delete prompt
 
 ### API Endpoints - LLM Orchestrator
+
 43. `POST /research` - Create research request
 44. `POST /research/draft` - Create draft research
 45. `GET /research` - List user's research
@@ -100,48 +109,57 @@ This release includes comprehensive development across the platform with 187 fun
 56. `POST /internal/llm/pubsub/report-analytics` - Report LLM analytics
 
 ### API Endpoints - Commands Router
+
 57. `POST /router/commands` - Process natural language command
 58. `GET /router/commands/:id` - Get command processing status
 59. `POST /internal/commands/process` - Process command (internal)
 
 ### API Endpoints - Data Insights Service
+
 60. `GET /insights` - Get data insights for user
 61. `POST /insights/custom-sources` - Add custom data source
 62. `GET /insights/custom-sources` - List custom data sources
 63. `DELETE /insights/custom-sources/:id` - Delete custom data source
 
 ### Domain Models - Actions Agent
+
 64. Action model with status workflow (pending → awaiting_approval → processing → completed/failed/rejected)
 65. ActionFilter model for filtering actions
 66. Command model representing user commands
 67. Contact model for WhatsApp contact mapping
 
 ### Domain Models - User Service
+
 68. User identity model with Auth0 integration
 69. AuthToken model with refresh token encryption
 70. ApiKey model for LLM provider keys
 
 ### Domain Models - WhatsApp Service
+
 71. WhatsAppMessage model with media support
 72. MediaFile model for images and audio
 73. LinkPreview model with OpenGraph metadata
 74. ContactMapping model
 
 ### Domain Models - Mobile Notifications
+
 75. MobileNotification model
 76. SignatureConnection model for device pairing
 
 ### Domain Models - LLM Orchestrator
+
 77. Research model with multi-LLM support
 78. LlmResult model for individual provider results
 79. ResearchShare model for public sharing
 80. Pricing model for cost tracking
 
 ### Domain Models - PromptVault
+
 81. Prompt template model
 82. PromptVersion model
 
 ### Use Cases - Actions Agent
+
 83. CreateActionUseCase - Create action from command
 84. ListActionsUseCase - List actions with filtering
 85. UpdateActionUseCase - Update action details
@@ -152,6 +170,7 @@ This release includes comprehensive development across the platform with 187 fun
 90. ProcessCommandUseCase - Process WhatsApp command
 
 ### Use Cases - User Service
+
 91. InitiateDeviceAuthUseCase - Start OAuth device flow
 92. PollDeviceTokenUseCase - Poll for authorization
 93. ExchangeChatGPTTokenUseCase - ChatGPT OAuth exchange
@@ -160,20 +179,23 @@ This release includes comprehensive development across the platform with 187 fun
 96. ExchangeFirebaseTokenUseCase - Get Firebase custom token
 
 ### Use Cases - WhatsApp Service
+
 97. ProcessTextMessageUseCase - Handle text messages
 98. ProcessImageMessageUseCase - Handle image messages
 99. ProcessAudioMessageUseCase - Handle audio messages
-100. GenerateThumbnailUseCase - Create image thumbnails
-101. GetMediaSignedUrlUseCase - Generate signed URLs
-102. DeleteMessageUseCase - Delete message with media cleanup
+100.  GenerateThumbnailUseCase - Create image thumbnails
+101.  GetMediaSignedUrlUseCase - Generate signed URLs
+102.  DeleteMessageUseCase - Delete message with media cleanup
 
 ### Use Cases - Mobile Notifications
+
 103. CreateConnectionUseCase - Pair device
 104. ProcessNotificationUseCase - Store notification
 105. ListNotificationsUseCase - Filter and list
 106. DeleteNotificationUseCase - Remove notification
 
 ### Use Cases - LLM Orchestrator
+
 107. CreateResearchUseCase - Initialize research
 108. ProcessResearchUseCase - Orchestrate multi-LLM execution
 109. ProcessLlmCallUseCase - Execute single LLM provider
@@ -185,15 +207,18 @@ This release includes comprehensive development across the platform with 187 fun
 115. RetryFailedLlmsUseCase - Retry specific failed providers
 
 ### Use Cases - Commands Router
+
 116. ProcessCommandUseCase - Parse natural language
 117. CreateActionsFromCommandUseCase - Generate actions
 
 ### Use Cases - Data Insights Service
+
 118. GenerateInsightsUseCase - Analyze user data
 119. AddCustomSourceUseCase - Add custom data
 120. GenerateTitleUseCase - Generate insight titles
 
 ### Web UI Components
+
 121. Header - App header with navigation
 122. Sidebar - Main navigation sidebar
 123. Layout - Page layout wrapper
@@ -214,6 +239,7 @@ This release includes comprehensive development across the platform with 187 fun
 138. ResearchViewer - Research results display
 
 ### Web UI Pages/Views
+
 139. Home page - Landing page
 140. Login page - Authentication
 141. Dashboard - Main user dashboard
@@ -230,6 +256,7 @@ This release includes comprehensive development across the platform with 187 fun
 152. OAuth callback handlers (Notion, ChatGPT)
 
 ### Integration Features
+
 153. WhatsApp Business Cloud API integration
 154. Notion API integration for prompt storage
 155. Auth0 OAuth integration
@@ -242,6 +269,7 @@ This release includes comprehensive development across the platform with 187 fun
 162. Firebase Firestore database integration
 
 ### Search and Filtering
+
 163. Action status filtering (pending, completed, failed, etc.)
 164. Mobile notification filtering by app package
 165. Multi-select filters for notifications
@@ -249,6 +277,7 @@ This release includes comprehensive development across the platform with 187 fun
 167. Date range filtering for notifications
 
 ### Media Handling
+
 168. WhatsApp image download and storage
 169. WhatsApp audio download and storage
 170. Image thumbnail generation (256px max edge)
@@ -258,18 +287,21 @@ This release includes comprehensive development across the platform with 187 fun
 174. Audio transcription via Speechmatics
 
 ### Sharing and Collaboration
+
 175. Public research sharing with HTML generation
 176. Shareable research links
 177. Research HTML with embedded results
 178. PWA share target support
 
 ### Cost and Analytics
+
 179. LLM token usage tracking
 180. Cost calculation per research
 181. Provider cost breakdown
 182. Analytics event publishing
 
 ### Progressive Web App (PWA) Features
+
 183. PWA manifest configuration
 184. Service worker registration
 185. Install prompts for iOS/Android
@@ -281,6 +313,7 @@ This release includes comprehensive development across the platform with 187 fun
 ## Technical Changes (Architecture & Infrastructure)
 
 ### Services/Applications Created
+
 1. **user-service** - User management and OAuth
 2. **whatsapp-service** - WhatsApp message handling
 3. **mobile-notifications-service** - Mobile notification aggregation
@@ -297,6 +330,7 @@ This release includes comprehensive development across the platform with 187 fun
 14. **srt-service** - Speech-to-text service (planned)
 
 ### Shared Packages Created
+
 15. **@intexuraos/common-core** - Result types, error handling
 16. **@intexuraos/common-http** - HTTP utilities, JWT validation
 17. **@intexuraos/http-contracts** - OpenAPI schema types
@@ -313,6 +347,7 @@ This release includes comprehensive development across the platform with 187 fun
 28. **@intexuraos/llm-contract** - LLM provider interface
 
 ### Architecture Patterns
+
 29. Hexagonal architecture (ports & adapters)
 30. Domain-driven design (DDD) structure
 31. Repository pattern for data access
@@ -322,6 +357,7 @@ This release includes comprehensive development across the platform with 187 fun
 35. Fake implementations for testing
 
 ### Testing Infrastructure
+
 36. Vitest test runner configuration
 37. Coverage thresholds at 95%
 38. Fake Firestore implementation
@@ -333,6 +369,7 @@ This release includes comprehensive development across the platform with 187 fun
 44. 914 test files created
 
 ### Build System
+
 45. TypeScript monorepo configuration
 46. npm workspaces setup
 47. Shared tsconfig.base.json
@@ -344,6 +381,7 @@ This release includes comprehensive development across the platform with 187 fun
 53. npm scripts for testing, linting, type-checking
 
 ### CI/CD Pipeline
+
 54. GitHub Actions CI workflow
 55. Affected service detection
 56. Cloud Build integration
@@ -355,6 +393,7 @@ This release includes comprehensive development across the platform with 187 fun
 62. Issue import automation
 
 ### Infrastructure as Code (Terraform)
+
 63. Cloud Run service modules
 64. Firestore database configuration
 65. Google Cloud Storage buckets
@@ -369,6 +408,7 @@ This release includes comprehensive development across the platform with 187 fun
 74. Terraform state management
 
 ### Docker Configuration
+
 75. Multi-stage Dockerfile per service
 76. Node.js Alpine base images
 77. Production-optimized builds
@@ -377,6 +417,7 @@ This release includes comprehensive development across the platform with 187 fun
 80. Non-root user execution
 
 ### Database Design
+
 81. Firestore collection ownership registry (firestore-collections.json)
 82. Firestore composite indexes (firestore.indexes.json)
 83. Firestore security rules
@@ -385,6 +426,7 @@ This release includes comprehensive development across the platform with 187 fun
 86. Optimized query patterns
 
 ### Pub/Sub Architecture
+
 87. Base publisher class pattern
 88. Event-driven LLM processing
 89. WhatsApp command processing events
@@ -395,17 +437,19 @@ This release includes comprehensive development across the platform with 187 fun
 94. Message deduplication with messageId
 
 ### Security Implementations
+
 95. Refresh token encryption (AES-256-GCM)
 96. Token redaction in logs
 97. JWKS-based JWT validation
 98. Internal auth token validation
 99. Signed URLs for private media
-100. Secret Manager for credentials
-101. Service-to-service authentication
-102. CORS configuration
+100.  Secret Manager for credentials
+101.  Service-to-service authentication
+102.  CORS configuration
 
 ### Environment Management
-103. INTEXURAOS_* prefix standardization
+
+103. INTEXURAOS\_\* prefix standardization
 104. .env.example files per service
 105. Environment variable validation
 106. Local development configuration
@@ -413,6 +457,7 @@ This release includes comprehensive development across the platform with 187 fun
 108. Local development script
 
 ### Code Quality
+
 109. ESLint rules enforcement
 110. TypeScript strict mode
 111. noUncheckedIndexedAccess
@@ -424,6 +469,7 @@ This release includes comprehensive development across the platform with 187 fun
 117. Comment standards
 
 ### Documentation
+
 118. Comprehensive README.md
 119. Architecture documentation (docs/)
 120. Service-to-service communication guide
@@ -436,6 +482,7 @@ This release includes comprehensive development across the platform with 187 fun
 127. Continuity workflow documentation
 
 ### Development Tools
+
 128. VS Code integration (.idea/)
 129. EditorConfig for consistency
 130. Prettier configuration
@@ -446,6 +493,7 @@ This release includes comprehensive development across the platform with 187 fun
 135. Session start prompts
 
 ### Monitoring and Logging
+
 136. Structured logging with Pino
 137. Request ID tracking
 138. LLM audit logging
@@ -454,6 +502,7 @@ This release includes comprehensive development across the platform with 187 fun
 141. logIncomingRequest utility
 
 ### Verification Scripts
+
 142. firestore-collections.json verification
 143. Pub/Sub publisher verification
 144. Firestore connection check script
@@ -462,22 +511,26 @@ This release includes comprehensive development across the platform with 187 fun
 147. Fake data generation scripts
 
 ### Migration System
+
 148. Firestore migrations directory
 149. Migration versioning
 150. Migration execution tracking
 
 ### Cost Optimization
+
 151. Cloud Run max_scale=1
 152. Efficient query patterns
 153. Media cleanup jobs
 154. Composite index optimization
 
 ### Package Management
+
 155. Workspace dependency resolution
 156. Shared dependency versions
 157. Package.json scripts standardization
 
 ### Error Handling
+
 158. Result type pattern
 159. Error code enumerations
 160. Custom error types per domain
@@ -485,6 +538,7 @@ This release includes comprehensive development across the platform with 187 fun
 162. Graceful degradation patterns
 
 ### API Standards
+
 163. OpenAPI 3.0 specifications
 164. Consistent response format
 165. Error response format
@@ -492,11 +546,13 @@ This release includes comprehensive development across the platform with 187 fun
 167. Filter parameter conventions
 
 ### Development Workflows
+
 168. Continuity system for complex tasks
 169. Step-by-step planning
 170. Progress tracking
 
 ### Performance Optimizations
+
 171. Firestore batch operations
 172. Parallel LLM execution
 173. Async media processing
@@ -505,6 +561,7 @@ This release includes comprehensive development across the platform with 187 fun
 ---
 
 **Summary for v0.0.3:**
+
 - Total Functional Changes: 187
 - Total Technical Changes: 174
 - Total commits: 444
@@ -512,4 +569,4 @@ This release includes comprehensive development across the platform with 187 fun
 
 ---
 
-*Note: This changelog analyzes actual code changes (files, routes, components, use cases) from git history, not just commit messages.*
+_Note: This changelog analyzes actual code changes (files, routes, components, use cases) from git history, not just commit messages._

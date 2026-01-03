@@ -7,9 +7,15 @@ import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/
 import { THUMBNAIL_PROMPT_SYSTEM } from './systemPrompt.js';
 import { parseThumbnailPromptResponse } from './parseResponse.js';
 
+interface LoggerLike {
+  info(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
+
 export interface GeminiPromptAdapterConfig {
   apiKey: string;
   model?: string;
+  logger?: LoggerLike | undefined;
 }
 
 const DEFAULT_MODEL = 'gemini-2.5-pro';
@@ -17,10 +23,12 @@ const DEFAULT_MODEL = 'gemini-2.5-pro';
 export class GeminiPromptAdapter implements PromptGenerator {
   private readonly ai: GoogleGenAI;
   private readonly model: string;
+  private readonly logger: LoggerLike | undefined;
 
   constructor(config: GeminiPromptAdapterConfig) {
     this.ai = new GoogleGenAI({ apiKey: config.apiKey });
     this.model = config.model ?? DEFAULT_MODEL;
+    this.logger = config.logger;
   }
 
   async generateThumbnailPrompt(
@@ -49,12 +57,14 @@ export class GeminiPromptAdapter implements PromptGenerator {
 
       const responseText = response.text ?? '';
 
-      // eslint-disable-next-line no-console
-      console.info('[GeminiPromptAdapter] Response received', {
-        requestId,
-        durationMs: Date.now() - startTime.getTime(),
-        responseLength: responseText.length,
-      });
+      this.logger?.info(
+        {
+          requestId,
+          durationMs: Date.now() - startTime.getTime(),
+          responseLength: responseText.length,
+        },
+        'Gemini prompt response received'
+      );
 
       const parseResult = parseThumbnailPromptResponse(responseText);
 
@@ -81,12 +91,10 @@ export class GeminiPromptAdapter implements PromptGenerator {
     } catch (error) {
       const message = getErrorMessage(error);
 
-      // eslint-disable-next-line no-console
-      console.error('[GeminiPromptAdapter] Error', {
-        requestId,
-        durationMs: Date.now() - startTime.getTime(),
-        error: message,
-      });
+      this.logger?.error(
+        { requestId, durationMs: Date.now() - startTime.getTime(), err: message },
+        'Gemini prompt generation failed'
+      );
 
       await auditContext.error({ error: message });
       return err(mapGeminiError(message));
