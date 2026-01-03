@@ -22,7 +22,7 @@ import type {
   TranscriptionJobSubmitResult,
   TranscriptionPortError,
   TranscriptionTextResult,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 
 const logger = pino({ name: 'speechmatics-adapter' });
 

@@ -3,7 +3,7 @@
  * Abstracts Pub/Sub-specific operations for the domain layer.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxError } from './repositories.js';
+import type { WhatsAppError } from './repositories.js';
 import type {
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
@@ -20,29 +20,29 @@ export interface EventPublisherPort {
    * Publish a media cleanup event.
    * Triggers async media deletion.
    */
-  publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>>;
+  publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a command ingest event.
    * Triggers command classification in commands-router.
    */
-  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, InboxError>>;
+  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a webhook process event.
    * Triggers async webhook processing after returning 200 to Meta.
    */
-  publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, InboxError>>;
+  publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a transcribe audio event.
    * Triggers async audio transcription (up to 5 min polling).
    */
-  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, InboxError>>;
+  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Publish a link preview extraction event.
    * Triggers async Open Graph metadata fetching.
    */
-  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, InboxError>>;
+  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>>;
 }

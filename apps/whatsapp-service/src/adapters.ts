@@ -5,7 +5,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type {
   IgnoredReason,
-  InboxError,
+  WhatsAppError,
   LinkPreviewState,
   TranscriptionState,
   WebhookProcessingStatus,
@@ -15,7 +15,7 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
-} from './domain/inbox/index.js';
+} from './domain/whatsapp/index.js';
 import {
   deleteMessage,
   disconnectUserMapping,
@@ -41,7 +41,7 @@ import {
 export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventRepository {
   async saveEvent(
     event: Omit<WhatsAppWebhookEvent, 'id'>
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
     return await saveWebhookEvent(event);
   }
 
@@ -53,11 +53,11 @@ export class WebhookEventRepositoryAdapter implements WhatsAppWebhookEventReposi
       failureDetails?: string;
       inboxNoteId?: string;
     }
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
     return await updateWebhookEventStatus(eventId, status, metadata);
   }
 
-  async getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>> {
+  async getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>> {
     return await getWebhookEvent(eventId);
   }
 }
@@ -69,27 +69,31 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
   async saveMapping(
     userId: string,
     phoneNumbers: string[]
-  ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+  ): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
     return await saveUserMapping(userId, phoneNumbers);
   }
 
-  async getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+  async getMapping(
+    userId: string
+  ): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>> {
     return await getUserMapping(userId);
   }
 
-  async findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
+  async findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, WhatsAppError>> {
     return await findUserByPhoneNumber(phoneNumber);
   }
 
-  async findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>> {
+  async findPhoneByUserId(userId: string): Promise<Result<string | null, WhatsAppError>> {
     return await findPhoneByUserId(userId);
   }
 
-  async disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+  async disconnectMapping(
+    userId: string
+  ): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
     return await disconnectUserMapping(userId);
   }
 
-  async isConnected(userId: string): Promise<Result<boolean, InboxError>> {
+  async isConnected(userId: string): Promise<Result<boolean, WhatsAppError>> {
     return await isUserConnected(userId);
   }
 }
@@ -100,25 +104,25 @@ export class UserMappingRepositoryAdapter implements WhatsAppUserMappingReposito
 export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
   async saveMessage(
     message: Omit<WhatsAppMessage, 'id'>
-  ): Promise<Result<WhatsAppMessage, InboxError>> {
+  ): Promise<Result<WhatsAppMessage, WhatsAppError>> {
     return await saveMessage(message);
   }
 
   async getMessagesByUser(
     userId: string,
     options?: { limit?: number; cursor?: string }
-  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>> {
     return await getMessagesByUser(userId, options);
   }
 
-  async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+  async getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     return await getMessage(messageId);
   }
 
   async findById(
     userId: string,
     messageId: string
-  ): Promise<Result<WhatsAppMessage | null, InboxError>> {
+  ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     return await findById(userId, messageId);
   }
 
@@ -126,7 +130,7 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
     userId: string,
     messageId: string,
     transcription: TranscriptionState
-  ): Promise<Result<void, InboxError>> {
+  ): Promise<Result<void, WhatsAppError>> {
     return await updateTranscription(userId, messageId, transcription);
   }
 
@@ -134,11 +138,11 @@ export class MessageRepositoryAdapter implements WhatsAppMessageRepository {
     userId: string,
     messageId: string,
     linkPreview: LinkPreviewState
-  ): Promise<Result<void, InboxError>> {
+  ): Promise<Result<void, WhatsAppError>> {
     return await updateLinkPreview(userId, messageId, linkPreview);
   }
 
-  async deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+  async deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>> {
     return await deleteMessage(messageId);
   }
 }

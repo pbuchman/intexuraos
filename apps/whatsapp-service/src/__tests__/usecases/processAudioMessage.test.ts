@@ -2,13 +2,13 @@
  * Tests for ProcessAudioMessageUseCase.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { WhatsAppWebhookEvent } from '../../domain/inbox/index.js';
+import type { WhatsAppWebhookEvent } from '../../domain/whatsapp/index.js';
 import {
   type ProcessAudioMessageDeps,
   type ProcessAudioMessageInput,
   type ProcessAudioMessageLogger,
   ProcessAudioMessageUseCase,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import {
   FakeMediaStorage,
   FakeWhatsAppCloudApiPort,
@@ -51,7 +51,7 @@ function createTestWebhookEvent(eventId = 'test-event-id'): WhatsAppWebhookEvent
     signatureValid: true,
     receivedAt: new Date().toISOString(),
     phoneNumberId: '123456789012345',
-    status: 'PENDING',
+    status: 'pending',
   };
 }
 describe('ProcessAudioMessageUseCase', () => {
@@ -179,7 +179,7 @@ describe('ProcessAudioMessageUseCase', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
     it('returns error when downloadMedia fails', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
@@ -188,7 +188,7 @@ describe('ProcessAudioMessageUseCase', () => {
       const result = await usecase.execute(input, logger);
       expect(result.ok).toBe(false);
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
     it('returns error when audio upload fails', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
@@ -200,7 +200,7 @@ describe('ProcessAudioMessageUseCase', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
     it('returns error when message save fails', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
@@ -212,7 +212,7 @@ describe('ProcessAudioMessageUseCase', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
   });
 });

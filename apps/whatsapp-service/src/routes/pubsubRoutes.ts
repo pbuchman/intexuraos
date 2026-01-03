@@ -10,8 +10,8 @@ import type {
   SendMessageEvent,
   TranscribeAudioEvent,
   WebhookProcessEvent,
-} from '../domain/inbox/index.js';
-import { TranscribeAudioUseCase } from '../domain/inbox/index.js';
+} from '../domain/whatsapp/index.js';
+import { TranscribeAudioUseCase } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Config } from '../config.js';
 import { processWebhookEvent } from './webhookRoutes.js';

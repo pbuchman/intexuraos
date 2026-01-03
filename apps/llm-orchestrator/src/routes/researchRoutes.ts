@@ -7,6 +7,7 @@
  * GET    /research/:id        - Get single research
  * POST   /research/:id/approve - Approve draft research
  * POST   /research/:id/confirm - Confirm partial failure decision
+ * POST   /research/:id/retry   - Retry from failed status
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
  */
@@ -23,6 +24,7 @@ import {
   type PartialFailureDecision,
   type Research,
   retryFailedLlms,
+  retryFromFailed,
   runSynthesis,
   submitResearch,
   unshareResearch,
@@ -39,6 +41,7 @@ import {
   listResearchesQuerySchema,
   listResearchesResponseSchema,
   researchIdParamsSchema,
+  retryFromFailedResponseSchema,
   saveDraftBodySchema,
   saveDraftResponseSchema,
   updateDraftBodySchema,
@@ -226,7 +229,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as { id: string };
       const body = request.body as SaveDraftBody;
-      const { researchRepo, userServiceClient, createTitleGenerator } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
 
       // Get existing research
       const existingResult = await researchRepo.findById(id);
@@ -277,7 +280,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const now = new Date().toISOString();
         updates.externalReports = body.externalReports.map((report) => {
           const externalReport: ExternalReport = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             content: report.content,
             addedAt: now,
           };
@@ -590,6 +593,110 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.ok({ action: 'cancel', message: 'Research cancelled' });
         }
       }
+    }
+  );
+
+  // POST /research/:id/retry
+  fastify.post(
+    '/research/:id/retry',
+    {
+      schema: {
+        operationId: 'retryFromFailed',
+        summary: 'Retry from failed status',
+        description:
+          'Retry a failed research by re-running failed LLMs or synthesis. Idempotent: returns success if nothing to retry.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        response: {
+          200: retryFromFailedResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const {
+        researchRepo,
+        userServiceClient,
+        notificationSender,
+        llmCallPublisher,
+        createSynthesizer,
+        shareStorage,
+        shareConfig,
+      } = getServices();
+      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+
+      const existing = await getResearch(id, { researchRepo });
+
+      if (!existing.ok) {
+        return await reply.fail('INTERNAL_ERROR', existing.error.message);
+      }
+
+      if (existing.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+
+      if (existing.value.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Access denied');
+      }
+
+      const research = existing.value;
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+
+      const synthesisProvider = research.synthesisLlm;
+      const synthesisKey = apiKeysResult.value[synthesisProvider];
+      if (synthesisKey === undefined) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API key required for synthesis with ${synthesisProvider}`
+        );
+      }
+
+      const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+
+      const retryResult = await retryFromFailed(id, {
+        researchRepo,
+        llmCallPublisher,
+        synthesisDeps: {
+          synthesizer,
+          notificationSender,
+          shareStorage,
+          shareConfig,
+          webAppUrl,
+          reportLlmSuccess: (): void => {
+            void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
+          },
+        },
+      });
+
+      if (!retryResult.ok) {
+        if (retryResult.error?.startsWith('Cannot retry from status') === true) {
+          return await reply.fail('CONFLICT', retryResult.error);
+        }
+        return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
+      }
+
+      const messages: Record<string, string> = {
+        retried_llms: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+        retried_synthesis: 'Re-running synthesis',
+        already_completed: 'Research is already completed',
+      };
+
+      return await reply.ok({
+        action: retryResult.action,
+        message: messages[retryResult.action ?? 'already_completed'],
+        ...(retryResult.retriedProviders !== undefined && {
+          retriedProviders: retryResult.retriedProviders,
+        }),
+      });
     }
   );
 

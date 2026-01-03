@@ -336,6 +336,114 @@ describe('FirestoreResearchRepository', () => {
         expect(result.error.code).toBe('NOT_FOUND');
       }
     });
+
+    it('clears error field when status is set to pending', async () => {
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        status: 'failed',
+        llmResults: [
+          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
+        ],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+      mockDocUpdate.mockResolvedValue(undefined);
+
+      const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
+      mockDoc.mockReturnValue(mockDocRef);
+
+      const result = await repository.updateLlmResult('research-1', 'google', {
+        status: 'pending',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockDocUpdate).toHaveBeenCalledWith({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'pending',
+          },
+        ],
+      });
+    });
+
+    it('clears error field when status is set to processing', async () => {
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        status: 'retrying',
+        llmResults: [
+          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
+        ],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+      mockDocUpdate.mockResolvedValue(undefined);
+
+      const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
+      mockDoc.mockReturnValue(mockDocRef);
+
+      const result = await repository.updateLlmResult('research-1', 'google', {
+        status: 'processing',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockDocUpdate).toHaveBeenCalledWith({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'processing',
+          },
+        ],
+      });
+    });
+
+    it('preserves error field when status is not pending or processing', async () => {
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        status: 'processing',
+        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'processing' }],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+      mockDocUpdate.mockResolvedValue(undefined);
+
+      const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
+      mockDoc.mockReturnValue(mockDocRef);
+
+      const result = await repository.updateLlmResult('research-1', 'google', {
+        status: 'failed',
+        error: 'New error',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockDocUpdate).toHaveBeenCalledWith({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'failed',
+            error: 'New error',
+          },
+        ],
+      });
+    });
   });
 
   describe('delete', () => {

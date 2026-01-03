@@ -10,7 +10,7 @@
  * 6. Update webhook event status
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/InboxNote.js';
+import type { WhatsAppError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
   WhatsAppMessageRepository,
@@ -19,6 +19,8 @@ import type {
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { ThumbnailGeneratorPort } from '../ports/thumbnailGenerator.js';
+import type { Logger } from '../utils/logger.js';
+import { getExtensionFromMimeType } from '../utils/mimeType.js';
 
 /**
  * Image media information from webhook payload.
@@ -55,12 +57,9 @@ export interface ProcessImageMessageResult {
 }
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface ProcessImageMessageLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type ProcessImageMessageLogger = Logger;
 
 /**
  * Dependencies for ProcessImageMessageUseCase.
@@ -71,19 +70,6 @@ export interface ProcessImageMessageDeps {
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
-}
-
-/**
- * Get file extension from MIME type.
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeToExt: Record<string, string> = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  };
-  return mimeToExt[mimeType] ?? 'bin';
 }
 
 /**
@@ -102,7 +88,7 @@ export class ProcessImageMessageUseCase {
   async execute(
     input: ProcessImageMessageInput,
     logger: ProcessImageMessageLogger
-  ): Promise<Result<ProcessImageMessageResult, InboxError>> {
+  ): Promise<Result<ProcessImageMessageResult, WhatsAppError>> {
     const {
       webhookEventRepository,
       messageRepository,
@@ -141,7 +127,7 @@ export class ProcessImageMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(mediaUrlResult.error);
     }
 
@@ -163,7 +149,7 @@ export class ProcessImageMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(downloadResult.error);
     }
 
@@ -188,7 +174,7 @@ export class ProcessImageMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(thumbnailResult.error);
     }
 
@@ -218,7 +204,7 @@ export class ProcessImageMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(uploadResult.error);
     }
 
@@ -248,7 +234,7 @@ export class ProcessImageMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(thumbnailUploadResult.error);
     }
 
@@ -302,12 +288,12 @@ export class ProcessImageMessageUseCase {
         { event: 'image_save_failed', error: saveResult.error, eventId },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(saveResult.error);
     }
 
     // Update webhook event status to PROCESSED
-    await webhookEventRepository.updateEventStatus(eventId, 'PROCESSED', {});
+    await webhookEventRepository.updateEventStatus(eventId, 'completed', {});
 
     logger.info(
       {

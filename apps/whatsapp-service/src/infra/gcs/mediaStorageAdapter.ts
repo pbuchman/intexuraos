@@ -4,7 +4,7 @@
  */
 import { Storage } from '@google-cloud/storage';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError, MediaStoragePort, UploadResult } from '../../domain/inbox/index.js';
+import type { WhatsAppError, MediaStoragePort, UploadResult } from '../../domain/whatsapp/index.js';
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 900; // 15 minutes
 
@@ -53,7 +53,7 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>> {
+  ): Promise<Result<UploadResult, WhatsAppError>> {
     const gcsPath = buildMediaPath(userId, messageId, mediaId, extension);
 
     try {
@@ -84,7 +84,7 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>> {
+  ): Promise<Result<UploadResult, WhatsAppError>> {
     const gcsPath = buildThumbnailPath(userId, messageId, mediaId, extension);
 
     try {
@@ -108,7 +108,7 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
     }
   }
 
-  async delete(gcsPath: string): Promise<Result<void, InboxError>> {
+  async delete(gcsPath: string): Promise<Result<void, WhatsAppError>> {
     try {
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(gcsPath);
@@ -127,7 +127,7 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
   async getSignedUrl(
     gcsPath: string,
     ttlSeconds: number = DEFAULT_SIGNED_URL_TTL_SECONDS
-  ): Promise<Result<string, InboxError>> {
+  ): Promise<Result<string, WhatsAppError>> {
     try {
       const bucket = this.storage.bucket(this.bucketName);
       const file = bucket.file(gcsPath);

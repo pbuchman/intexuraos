@@ -8,13 +8,13 @@ output "repository_id" {
   value       = google_cloudbuildv2_repository.intexuraos.id
 }
 
-output "manual_trigger_id" {
-  description = "Manual trigger ID for main branch"
+output "deploy_trigger_id" {
+  description = "Deploy trigger ID"
   value       = google_cloudbuild_trigger.manual_main.trigger_id
 }
 
-output "manual_trigger_name" {
-  description = "Manual trigger name"
+output "deploy_trigger_name" {
+  description = "Deploy trigger name"
   value       = google_cloudbuild_trigger.manual_main.name
 }
 
@@ -26,4 +26,15 @@ output "cloud_build_service_account" {
 output "cloud_build_service_account_name" {
   description = "Cloud Build service account full resource name (for WIF)"
   value       = google_service_account.cloud_build.name
+}
+
+# GitHub Actions OIDC outputs - use these values for GitHub secrets
+output "github_actions_workload_identity_provider" {
+  description = "Workload Identity Provider for GitHub Actions (use as GCP_WORKLOAD_IDENTITY_PROVIDER secret)"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "github_actions_service_account" {
+  description = "Service account for GitHub Actions (use as GCP_SERVICE_ACCOUNT secret)"
+  value       = google_service_account.cloud_build.email
 }

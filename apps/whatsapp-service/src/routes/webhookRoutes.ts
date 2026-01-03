@@ -15,7 +15,10 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
-import { ProcessAudioMessageUseCase, ProcessImageMessageUseCase } from '../domain/inbox/index.js';
+import {
+  ProcessAudioMessageUseCase,
+  ProcessImageMessageUseCase,
+} from '../domain/whatsapp/index.js';
 import {
   extractAudioMedia,
   extractDisplayPhoneNumber,
@@ -238,7 +241,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           signatureValid: true,
           receivedAt,
           phoneNumberId,
-          status: 'PENDING',
+          status: 'pending',
         });
 
         if (!saveResult.ok) {
@@ -290,7 +293,7 @@ export async function processWebhookEvent(
         { eventId: savedEvent.id, reason: 'no_sender' },
         'No sender phone number found in payload'
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_SENDER',
           message: 'No sender phone number in webhook payload',
@@ -324,7 +327,7 @@ export async function processWebhookEvent(
         { eventId: savedEvent.id, messageType },
         'Ignoring unsupported message type'
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
           message: `Only text, image, and audio messages are supported. Received: ${messageType ?? 'unknown'}`,
@@ -337,7 +340,7 @@ export async function processWebhookEvent(
     // Validate message content
     if (messageType === 'text' && messageText === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring text message without body');
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'EMPTY_TEXT_MESSAGE',
           message: 'Text message has no body',
@@ -348,7 +351,7 @@ export async function processWebhookEvent(
 
     if (messageType === 'image' && imageMedia === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring image message without media info');
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_IMAGE_MEDIA',
           message: 'Image message has no media info',
@@ -359,7 +362,7 @@ export async function processWebhookEvent(
 
     if (messageType === 'audio' && audioMedia === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring audio message without media info');
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'IGNORED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'NO_AUDIO_MEDIA',
           message: 'Audio message has no media info',
@@ -377,7 +380,7 @@ export async function processWebhookEvent(
         { eventId: savedEvent.id, fromNumber, error: userIdResult.error },
         'Failed to look up user by phone number'
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
         failureDetails: userIdResult.error.message,
       });
       return;
@@ -388,9 +391,9 @@ export async function processWebhookEvent(
         { eventId: savedEvent.id, fromNumber },
         'No user mapping found for phone number'
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'USER_UNMAPPED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'user_unmapped', {
         ignoredReason: {
-          code: 'USER_UNMAPPED',
+          code: 'user_unmapped',
           message: `No user mapping found for phone number: ${fromNumber}`,
           details: { phoneNumber: fromNumber },
         },
@@ -412,7 +415,7 @@ export async function processWebhookEvent(
         { eventId: savedEvent.id, userId },
         'User mapping exists but is disconnected'
       );
-      await webhookEventRepository.updateEventStatus(savedEvent.id, 'USER_UNMAPPED', {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'user_unmapped', {
         ignoredReason: {
           code: 'USER_DISCONNECTED',
           message: 'User mapping exists but is disconnected',
@@ -653,7 +656,7 @@ async function handleTextMessage(
       { error: saveResult.error, eventId: savedEvent.id },
       'Failed to save message'
     );
-    await webhookEventRepository.updateEventStatus(savedEvent.id, 'FAILED', {
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
       failureDetails: `Failed to save message: ${saveResult.error.message}`,
     });
     return;
@@ -666,7 +669,7 @@ async function handleTextMessage(
     'Text message saved to database'
   );
 
-  await webhookEventRepository.updateEventStatus(savedEvent.id, 'PROCESSED', {});
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 
   // Publish command ingest event for text message
   const services = getServices();

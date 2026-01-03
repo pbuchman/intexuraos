@@ -3,7 +3,7 @@
  * Abstracts GCS-specific operations for the domain layer.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxError } from './repositories.js';
+import type { WhatsAppError } from './repositories.js';
 
 /**
  * Result of a media upload operation.
@@ -37,7 +37,7 @@ export interface MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>>;
+  ): Promise<Result<UploadResult, WhatsAppError>>;
 
   /**
    * Upload thumbnail to storage.
@@ -57,14 +57,14 @@ export interface MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>>;
+  ): Promise<Result<UploadResult, WhatsAppError>>;
 
   /**
    * Delete a file from storage.
    *
    * @param gcsPath - GCS path of the file to delete
    */
-  delete(gcsPath: string): Promise<Result<void, InboxError>>;
+  delete(gcsPath: string): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Generate a signed URL for file access.
@@ -73,5 +73,5 @@ export interface MediaStoragePort {
    * @param ttlSeconds - Time-to-live in seconds (default: 900 = 15 minutes)
    * @returns Signed URL for the file
    */
-  getSignedUrl(gcsPath: string, ttlSeconds?: number): Promise<Result<string, InboxError>>;
+  getSignedUrl(gcsPath: string, ttlSeconds?: number): Promise<Result<string, WhatsAppError>>;
 }

@@ -10,14 +10,14 @@
  * - Send result to user via WhatsApp
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MediaStoragePort } from '../../domain/inbox/index.js';
+import type { MediaStoragePort } from '../../domain/whatsapp/index.js';
 import {
   type TranscribeAudioDeps,
   type TranscribeAudioInput,
   type TranscribeAudioLogger,
   TranscribeAudioUseCase,
   type TranscriptionPollingConfig,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import {
   FakeEventPublisher,
   FakeMediaStorage,

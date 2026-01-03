@@ -3,8 +3,8 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { InboxError } from './webhookEventRepository.js';
-import { normalizePhoneNumber } from '../../domain/inbox/index.js';
+import type { WhatsAppError } from './webhookEventRepository.js';
+import { normalizePhoneNumber } from '../../domain/whatsapp/index.js';
 
 export interface WhatsAppUserMappingPublic {
   phoneNumbers: string[];
@@ -22,7 +22,7 @@ const COLLECTION_NAME = 'whatsapp_user_mappings';
 export async function saveUserMapping(
   userId: string,
   phoneNumbers: string[]
-): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
   try {
     const db = getFirestore();
 
@@ -77,7 +77,7 @@ export async function saveUserMapping(
 
 export async function getUserMapping(
   userId: string
-): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
@@ -100,7 +100,7 @@ export async function getUserMapping(
 
 export async function findUserByPhoneNumber(
   phoneNumber: string
-): Promise<Result<string | null, InboxError>> {
+): Promise<Result<string | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     // Normalize phone number to match stored format (without "+")
@@ -114,6 +114,7 @@ export async function findUserByPhoneNumber(
 
     if (snapshot.empty) return ok(null);
     const doc = snapshot.docs[0];
+    /* v8 ignore next - noUncheckedIndexedAccess guard, always defined after !empty check */
     if (!doc) return ok(null);
     return ok((doc.data() as WhatsAppUserMappingDoc).userId);
   } catch (error) {
@@ -126,7 +127,7 @@ export async function findUserByPhoneNumber(
 
 export async function disconnectUserMapping(
   userId: string
-): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
   try {
     const db = getFirestore();
     const docRef = db.collection(COLLECTION_NAME).doc(userId);
@@ -155,7 +156,7 @@ export async function disconnectUserMapping(
   }
 }
 
-export async function isUserConnected(userId: string): Promise<Result<boolean, InboxError>> {
+export async function isUserConnected(userId: string): Promise<Result<boolean, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
@@ -171,7 +172,7 @@ export async function isUserConnected(userId: string): Promise<Result<boolean, I
 
 export async function findPhoneByUserId(
   userId: string
-): Promise<Result<string | null, InboxError>> {
+): Promise<Result<string | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(userId).get();

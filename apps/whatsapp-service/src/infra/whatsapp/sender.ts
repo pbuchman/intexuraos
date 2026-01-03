@@ -3,8 +3,8 @@
  * Sends messages using the WhatsApp Business Cloud API.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WhatsAppMessageSender } from '../../domain/inbox/index.js';
-import type { InboxError } from '../../domain/inbox/models/InboxNote.js';
+import type { WhatsAppMessageSender } from '../../domain/whatsapp/index.js';
+import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const REQUEST_TIMEOUT_MS = 30000;
@@ -21,7 +21,10 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     this.phoneNumberId = phoneNumberId;
   }
 
-  async sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, InboxError>> {
+  async sendTextMessage(
+    phoneNumber: string,
+    message: string
+  ): Promise<Result<void, WhatsAppError>> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();

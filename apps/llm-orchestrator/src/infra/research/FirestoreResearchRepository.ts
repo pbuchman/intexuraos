@@ -122,9 +122,17 @@ export class FirestoreResearchRepository implements ResearchRepository {
       }
 
       const research = doc.data() as Research;
-      const llmResults = research.llmResults.map((r) =>
-        r.provider === provider ? { ...r, ...result } : r
-      );
+      const llmResults = research.llmResults.map((r) => {
+        if (r.provider !== provider) {
+          return r;
+        }
+        const merged = { ...r, ...result };
+        if (result.status === 'pending' || result.status === 'processing') {
+          const { error: _error, ...withoutError } = merged;
+          return withoutError;
+        }
+        return merged;
+      });
 
       await docRef.update({ llmResults });
       return ok(undefined);

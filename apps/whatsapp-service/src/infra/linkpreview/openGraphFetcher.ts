@@ -3,8 +3,8 @@
  * Fetches and parses HTML to extract link preview data.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { LinkPreviewFetcherPort } from '../../domain/inbox/ports/linkPreviewFetcher.js';
-import type { LinkPreview, LinkPreviewError } from '../../domain/inbox/models/LinkPreview.js';
+import type { LinkPreviewFetcherPort } from '../../domain/whatsapp/ports/linkPreviewFetcher.js';
+import type { LinkPreview, LinkPreviewError } from '../../domain/whatsapp/models/LinkPreview.js';
 import * as cheerio from 'cheerio';
 
 /**
@@ -67,6 +67,7 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
     const url = new URL(baseUrl);
     return `${url.origin}/favicon.ico`;
   } catch {
+    /* v8 ignore next - baseUrl comes from valid fetch URL, defensive only */
     return undefined;
   }
 }

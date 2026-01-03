@@ -6,11 +6,11 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 
 export type WebhookProcessingStatus =
-  | 'PENDING'
-  | 'PROCESSED'
-  | 'IGNORED'
-  | 'USER_UNMAPPED'
-  | 'FAILED';
+  | 'pending'
+  | 'completed'
+  | 'ignored'
+  | 'user_unmapped'
+  | 'failed';
 
 export interface IgnoredReason {
   code: string;
@@ -33,9 +33,9 @@ export interface WhatsAppWebhookEvent {
 
 /**
  * Error type for inbox operations.
- * Intentionally matches domain InboxError for structural compatibility.
+ * Intentionally matches domain WhatsAppError for structural compatibility.
  */
-export interface InboxError {
+export interface WhatsAppError {
   code: 'NOT_FOUND' | 'VALIDATION_ERROR' | 'PERSISTENCE_ERROR' | 'INTERNAL_ERROR';
   message: string;
   details?: Record<string, unknown>;
@@ -45,7 +45,7 @@ const WHATSAPP_EVENTS_COLLECTION = 'whatsapp_webhook_events';
 
 export async function saveWebhookEvent(
   event: Omit<WhatsAppWebhookEvent, 'id'>
-): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
   try {
     const db = getFirestore();
     const id = randomUUID();
@@ -69,7 +69,7 @@ export async function updateWebhookEventStatus(
     failureDetails?: string;
     inboxNoteId?: string;
   }
-): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
   try {
     const db = getFirestore();
     const docRef = db.collection(WHATSAPP_EVENTS_COLLECTION).doc(eventId);
@@ -98,7 +98,7 @@ export async function updateWebhookEventStatus(
 
 export async function getWebhookEvent(
   eventId: string
-): Promise<Result<WhatsAppWebhookEvent | null, InboxError>> {
+): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(WHATSAPP_EVENTS_COLLECTION).doc(eventId).get();
