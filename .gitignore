@@ -26,6 +26,10 @@ apps/*/.env
 .envrc
 .envrc.local
 
+# GCP Service Account Keys
+*service-account*.json
+gcp-*.json
+
 # Terraform
 terraform/.terraform/
 terraform/**/.terraform/
