@@ -24,6 +24,7 @@ import {
   type LlmProvider,
   type PartialFailureDecision,
   type Research,
+  type SearchMode,
   retryFailedLlms,
   retryFromFailed,
   runSynthesis,
@@ -99,13 +100,20 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, researchEventPublisher } = getServices();
+      const { researchRepo, generateId, researchEventPublisher, userServiceClient } = getServices();
+
+      // Fetch user's search mode setting
+      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
+      const searchMode: SearchMode = researchSettingsResult.ok
+        ? researchSettingsResult.value.searchMode
+        : 'deep';
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
         selectedLlms: body.selectedLlms,
         synthesisLlm: body.synthesisLlm ?? body.selectedLlms[0] ?? 'google',
+        searchMode,
       };
       if (body.externalReports !== undefined) {
         submitParams.externalReports = body.externalReports;
@@ -159,6 +167,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
+      // Fetch user's search mode setting
+      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
+      const searchMode: SearchMode = researchSettingsResult.ok
+        ? researchSettingsResult.value.searchMode
+        : 'deep';
+
       // Generate title using Gemini if Google API key is available
       let title: string;
       if (apiKeys.google !== undefined) {
@@ -179,6 +193,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         prompt: body.prompt,
         selectedLlms: resolvedSelectedLlms,
         synthesisLlm: body.synthesisLlm ?? resolvedSelectedLlms[0] ?? 'google',
+        searchMode,
       };
       if (body.externalReports !== undefined) {
         const now = new Date().toISOString();
@@ -257,6 +272,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
+      // Fetch user's search mode setting
+      const researchSettingsResult = await userServiceClient.getResearchSettings(user.userId);
+      const searchMode: SearchMode = researchSettingsResult.ok
+        ? researchSettingsResult.value.searchMode
+        : 'deep';
+
       // Regenerate title if prompt changed
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
@@ -276,7 +297,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         prompt: body.prompt,
         selectedLlms: newSelectedLlms,
         synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
-        llmResults: createLlmResults(newSelectedLlms),
+        llmResults: createLlmResults(newSelectedLlms, searchMode),
       };
 
       if (body.externalReports !== undefined) {

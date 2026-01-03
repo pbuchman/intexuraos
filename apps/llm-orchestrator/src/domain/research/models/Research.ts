@@ -91,21 +91,24 @@ export interface Research {
   shareInfo?: ShareInfo;
 }
 
-export function getDefaultModel(provider: LlmProvider): string {
+export function getModelForMode(provider: LlmProvider, searchMode: SearchMode): string {
   switch (provider) {
     case 'google':
-      return GEMINI_DEFAULTS.researchModel;
+      return searchMode === 'quick' ? GEMINI_DEFAULTS.defaultModel : GEMINI_DEFAULTS.researchModel;
     case 'openai':
-      return GPT_DEFAULTS.researchModel;
+      return searchMode === 'quick' ? GPT_DEFAULTS.defaultModel : GPT_DEFAULTS.researchModel;
     case 'anthropic':
-      return CLAUDE_DEFAULTS.researchModel;
+      return searchMode === 'quick' ? CLAUDE_DEFAULTS.defaultModel : CLAUDE_DEFAULTS.researchModel;
   }
 }
 
-export function createLlmResults(selectedLlms: LlmProvider[]): LlmResult[] {
+export function createLlmResults(
+  selectedLlms: LlmProvider[],
+  searchMode: SearchMode = 'deep'
+): LlmResult[] {
   return selectedLlms.map((provider) => ({
     provider,
-    model: getDefaultModel(provider),
+    model: getModelForMode(provider, searchMode),
     status: 'pending' as const,
   }));
 }
@@ -118,8 +121,10 @@ export function createResearch(params: {
   synthesisLlm: LlmProvider;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
+  searchMode?: SearchMode;
 }): Research {
   const now = new Date().toISOString();
+  const resolvedSearchMode = params.searchMode ?? 'deep';
   const research: Research = {
     id: params.id,
     userId: params.userId,
@@ -128,11 +133,7 @@ export function createResearch(params: {
     selectedLlms: params.selectedLlms,
     synthesisLlm: params.synthesisLlm,
     status: 'pending',
-    llmResults: params.selectedLlms.map((provider) => ({
-      provider,
-      model: getDefaultModel(provider),
-      status: 'pending' as const,
-    })),
+    llmResults: createLlmResults(params.selectedLlms, resolvedSearchMode),
     startedAt: now,
   };
 
@@ -166,8 +167,10 @@ export function createDraftResearch(params: {
   synthesisLlm: LlmProvider;
   sourceActionId?: string;
   externalReports?: ExternalReport[];
+  searchMode?: SearchMode;
 }): Research {
   const now = new Date().toISOString();
+  const resolvedSearchMode = params.searchMode ?? 'deep';
   const research: Research = {
     id: params.id,
     userId: params.userId,
@@ -176,11 +179,7 @@ export function createDraftResearch(params: {
     selectedLlms: params.selectedLlms,
     synthesisLlm: params.synthesisLlm,
     status: 'draft',
-    llmResults: params.selectedLlms.map((provider) => ({
-      provider,
-      model: getDefaultModel(provider),
-      status: 'pending' as const,
-    })),
+    llmResults: createLlmResults(params.selectedLlms, resolvedSearchMode),
     startedAt: now,
   };
 

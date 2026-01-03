@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { createResearch, type LlmProvider, type Research } from '../models/index.js';
+import { createResearch, type LlmProvider, type Research, type SearchMode } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {
@@ -14,6 +14,7 @@ export interface SubmitResearchParams {
   synthesisLlm: LlmProvider;
   externalReports?: { content: string; model?: string }[];
   skipSynthesis?: boolean;
+  searchMode?: SearchMode;
 }
 
 export interface SubmitResearchDeps {
@@ -32,6 +33,9 @@ export async function submitResearch(
     selectedLlms: params.selectedLlms,
     synthesisLlm: params.synthesisLlm,
   };
+  if (params.searchMode !== undefined) {
+    createParams.searchMode = params.searchMode;
+  }
   if (params.externalReports !== undefined) {
     createParams.externalReports = params.externalReports;
   }
