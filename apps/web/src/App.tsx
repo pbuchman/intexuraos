@@ -4,6 +4,15 @@ import { AuthProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
+
+(function handleShareTargetRedirect(): void {
+  if (window.location.hash !== '') return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('title') || params.has('text') || params.has('url')) {
+    window.location.replace(`${window.location.origin}/#/share-target${window.location.search}`);
+  }
+})();
+
 import {
   ApiKeysSettingsPage,
   DataSourceFormPage,

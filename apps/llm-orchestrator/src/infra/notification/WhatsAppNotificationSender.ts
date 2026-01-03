@@ -26,9 +26,10 @@ export class WhatsAppNotificationSender implements NotificationSender {
   async sendResearchComplete(
     userId: string,
     researchId: string,
-    title: string
+    title: string,
+    shareUrl: string
   ): Promise<Result<void, NotificationError>> {
-    const message = this.formatMessage(title);
+    const message = this.formatResearchCompleteMessage(title, shareUrl);
     await this.publisher.publishSendMessage({
       userId,
       message,
@@ -54,9 +55,9 @@ export class WhatsAppNotificationSender implements NotificationSender {
     return ok(undefined);
   }
 
-  private formatMessage(title: string): string {
+  private formatResearchCompleteMessage(title: string, shareUrl: string): string {
     const displayTitle = title !== '' ? title : 'Untitled Research';
-    return `Research Complete!\n\n"${displayTitle}"\n\nView results in your dashboard.`;
+    return `Research Complete!\n\n"${displayTitle}"\n${shareUrl}`;
   }
 
   private formatFailureMessage(provider: LlmProvider, error: string): string {

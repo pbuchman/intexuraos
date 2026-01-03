@@ -99,12 +99,8 @@ describe('FirestoreUserSettingsRepository', () => {
         llmTestResults: { google: testResult },
       });
 
-      // Save settings with test results
       const saveResult = await repo.saveSettings(settings);
       expect(saveResult.ok).toBe(true);
-
-      // Manually add test results since saveSettings doesn't persist them
-      await repo.updateLlmTestResult('user-123', 'google', testResult);
 
       const result = await repo.getSettings('user-123');
 
@@ -178,6 +174,36 @@ describe('FirestoreUserSettingsRepository', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toContain('Write failed');
+      }
+    });
+
+    it('preserves llmTestResults when updating other fields', async () => {
+      const testResult: LlmTestResult = {
+        testedAt: new Date().toISOString(),
+        response: 'Hello from GPT!',
+      };
+      const initialSettings = createTestSettings({
+        researchSettings: { searchMode: 'deep' },
+        llmTestResults: { openai: testResult },
+      });
+      await repo.saveSettings(initialSettings);
+
+      const getResult = await repo.getSettings('user-123');
+      expect(getResult.ok).toBe(true);
+      const existingSettings = (getResult as { ok: true; value: typeof initialSettings }).value;
+
+      const updatedSettings = {
+        ...existingSettings,
+        researchSettings: { searchMode: 'quick' as const },
+        updatedAt: new Date().toISOString(),
+      };
+      await repo.saveSettings(updatedSettings);
+
+      const result = await repo.getSettings('user-123');
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.researchSettings?.searchMode).toBe('quick');
+        expect(result.value.llmTestResults?.openai?.response).toBe('Hello from GPT!');
       }
     });
   });

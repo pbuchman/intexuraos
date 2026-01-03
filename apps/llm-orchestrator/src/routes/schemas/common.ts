@@ -72,6 +72,18 @@ export const partialFailureSchema = {
   required: ['failedProviders', 'detectedAt', 'retryCount'],
 } as const;
 
+export const shareInfoSchema = {
+  type: 'object',
+  properties: {
+    shareToken: { type: 'string' },
+    slug: { type: 'string' },
+    shareUrl: { type: 'string' },
+    sharedAt: { type: 'string' },
+    gcsPath: { type: 'string' },
+  },
+  required: ['shareToken', 'slug', 'shareUrl', 'sharedAt', 'gcsPath'],
+} as const;
+
 export const researchSchema = {
   type: 'object',
   properties: {
@@ -102,6 +114,7 @@ export const researchSchema = {
     synthesizedResult: { type: 'string', nullable: true },
     synthesisError: { type: 'string', nullable: true },
     partialFailure: { ...partialFailureSchema, nullable: true },
+    shareInfo: { ...shareInfoSchema, nullable: true },
     startedAt: { type: 'string' },
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },

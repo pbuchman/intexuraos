@@ -27,9 +27,9 @@ interface FiltersDoc {
   savedFilters: {
     id: string;
     name: string;
-    app?: string;
-    device?: string;
-    source?: string;
+    app?: string[];
+    device?: string[];
+    source?: string[];
     title?: string;
     createdAt: string;
   }[];
@@ -121,13 +121,12 @@ export class FirestoreNotificationFiltersRepository implements NotificationFilte
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
       const now = new Date().toISOString();
 
-      const updateData: Record<string, unknown> = { updatedAt: now };
-
+      const optionsData: Record<string, unknown> = {};
       for (const [field, value] of Object.entries(options)) {
-        updateData[`options.${field}`] = FieldValue.arrayUnion(value);
+        optionsData[field] = FieldValue.arrayUnion(value);
       }
 
-      await docRef.set(updateData, { merge: true });
+      await docRef.set({ options: optionsData, updatedAt: now }, { merge: true });
       return ok(undefined);
     } catch (error) {
       return err({

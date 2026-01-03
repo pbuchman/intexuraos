@@ -545,7 +545,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       const services = getServices();
-      const { researchRepo, userServiceClient, notificationSender } = services;
+      const { researchRepo, userServiceClient, notificationSender, shareStorage, shareConfig } =
+        services;
+      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
       try {
         const researchResult = await researchRepo.findById(event.researchId);
@@ -722,11 +724,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             );
             break;
           case 'all_completed': {
-            request.log.info(
-              { researchId: event.researchId },
-              'All LLMs completed, triggering synthesis'
-            );
-
             const freshResearch = await researchRepo.findById(event.researchId);
             if (!freshResearch.ok || freshResearch.value === null) {
               request.log.error(
@@ -735,6 +732,32 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               );
               break;
             }
+
+            if (freshResearch.value.skipSynthesis === true) {
+              request.log.info(
+                { researchId: event.researchId },
+                'All LLMs completed, skipping synthesis (skipSynthesis flag set)'
+              );
+              const now = new Date();
+              const startedAt = new Date(freshResearch.value.startedAt);
+              await researchRepo.update(event.researchId, {
+                status: 'completed',
+                completedAt: now.toISOString(),
+                totalDurationMs: now.getTime() - startedAt.getTime(),
+              });
+              void notificationSender.sendResearchComplete(
+                freshResearch.value.userId,
+                event.researchId,
+                freshResearch.value.title,
+                `${webAppUrl}/#/research/${event.researchId}`
+              );
+              break;
+            }
+
+            request.log.info(
+              { researchId: event.researchId },
+              'All LLMs completed, triggering synthesis'
+            );
 
             const synthesisProvider = freshResearch.value.synthesisLlm;
             const synthesisKey = apiKeysResult.value[synthesisProvider];
@@ -756,6 +779,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               researchRepo,
               synthesizer,
               notificationSender,
+              shareStorage,
+              shareConfig,
+              webAppUrl,
               reportLlmSuccess: (): void => {
                 void userServiceClient.reportLlmSuccess(event.userId, synthesisProvider);
               },

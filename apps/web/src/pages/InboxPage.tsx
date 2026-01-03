@@ -16,7 +16,7 @@ import {
   getActions,
   getCommands,
 } from '@/services';
-import type { Action, Command, CommandType } from '@/types';
+import type { Action, ActionStatus, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
@@ -26,8 +26,11 @@ import {
   Bell,
   Calendar,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Clock,
   FileText,
+  Filter,
   HelpCircle,
   Inbox,
   Link,
@@ -43,6 +46,26 @@ import {
 } from 'lucide-react';
 
 type TabId = 'commands' | 'actions';
+
+const ALL_ACTION_STATUSES: ActionStatus[] = [
+  'pending',
+  'awaiting_approval',
+  'processing',
+  'completed',
+  'failed',
+  'rejected',
+  'archived',
+];
+
+const STATUS_LABELS: Record<ActionStatus, string> = {
+  pending: 'Pending',
+  awaiting_approval: 'Awaiting Approval',
+  processing: 'Processing',
+  completed: 'Completed',
+  failed: 'Failed',
+  rejected: 'Rejected',
+  archived: 'Archived',
+};
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-4 w-4';
@@ -281,6 +304,8 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
+  const [statusFilter, setStatusFilter] = useState<ActionStatus[]>([]);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
   // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
   const {
@@ -404,9 +429,10 @@ export function InboxPage(): React.JSX.Element {
         setError(null);
 
         const token = await getAccessToken();
+        const actionsOptions = statusFilter.length > 0 ? { status: statusFilter } : undefined;
         const [commandsRes, actionsRes] = await Promise.all([
           getCommands(token),
-          getActions(token),
+          getActions(token, actionsOptions),
         ]);
 
         setCommands(commandsRes.commands);
@@ -420,7 +446,7 @@ export function InboxPage(): React.JSX.Element {
         setIsRefreshing(false);
       }
     },
-    [getAccessToken]
+    [getAccessToken, statusFilter]
   );
 
   const loadMoreCommands = async (): Promise<void> => {
@@ -446,7 +472,11 @@ export function InboxPage(): React.JSX.Element {
     try {
       setIsLoadingMore(true);
       const token = await getAccessToken();
-      const response = await getActions(token, { cursor: actionsCursor });
+      const options: { cursor: string; status?: ActionStatus[] } = { cursor: actionsCursor };
+      if (statusFilter.length > 0) {
+        options.status = statusFilter;
+      }
+      const response = await getActions(token, options);
 
       setActions((prev) => [...prev, ...response.actions]);
       setActionsCursor(response.nextCursor);
@@ -499,6 +529,29 @@ export function InboxPage(): React.JSX.Element {
     }
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
+
+  // Handle status filter changes
+  const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
+  useEffect(() => {
+    // Skip refetch if filter hasn't changed (prevents double fetch on mount)
+    if (
+      statusFilterRef.current.length === statusFilter.length &&
+      statusFilterRef.current.every((s, i) => s === statusFilter[i])
+    ) {
+      return;
+    }
+    statusFilterRef.current = statusFilter;
+
+    if (!isLoadingRef.current) {
+      void fetchData(true);
+    }
+  }, [statusFilter, fetchData]);
+
+  const handleToggleStatus = (status: ActionStatus): void => {
+    setStatusFilter((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
+  };
 
   // Deep linking: open action modal from URL query parameter
   useEffect(() => {
@@ -630,6 +683,67 @@ export function InboxPage(): React.JSX.Element {
         </button>
       </div>
 
+      {/* Status Filter for Actions */}
+      {activeTab === 'actions' && (
+        <div className="mb-4">
+          <button
+            onClick={(): void => {
+              setIsFilterExpanded((prev) => !prev);
+            }}
+            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+          >
+            <Filter className="h-4 w-4" />
+            Filter by status
+            {statusFilter.length > 0 && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                {String(statusFilter.length)}
+              </span>
+            )}
+            {isFilterExpanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+
+          {isFilterExpanded && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {ALL_ACTION_STATUSES.map((status) => (
+                <label
+                  key={status}
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    statusFilter.includes(status)
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={statusFilter.includes(status)}
+                    onChange={(): void => {
+                      handleToggleStatus(status);
+                    }}
+                    className="sr-only"
+                  />
+                  {getStatusIcon(status)}
+                  {STATUS_LABELS[status]}
+                </label>
+              ))}
+              {statusFilter.length > 0 && (
+                <button
+                  onClick={(): void => {
+                    setStatusFilter([]);
+                  }}
+                  className="text-sm text-slate-500 hover:text-slate-700"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       <div className="space-y-3">
         {activeTab === 'actions' && (
@@ -638,9 +752,13 @@ export function InboxPage(): React.JSX.Element {
               <Card title="">
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <ListTodo className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium text-slate-700">No actions yet</h3>
+                  <h3 className="text-lg font-medium text-slate-700">
+                    {statusFilter.length > 0 ? 'No matching actions' : 'No actions yet'}
+                  </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Actions are created when commands are classified.
+                    {statusFilter.length > 0
+                      ? 'Try adjusting your filters or clear them to see all actions.'
+                      : 'Actions are created when commands are classified.'}
                   </p>
                 </div>
               </Card>

@@ -243,6 +243,23 @@ module "static_assets" {
 }
 
 # -----------------------------------------------------------------------------
+# Shared Content Bucket (publicly shared research HTML files)
+# -----------------------------------------------------------------------------
+
+module "shared_content" {
+  source = "../../modules/shared-content"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  labels      = local.common_labels
+
+  llm_orchestrator_service_account = module.iam.service_accounts["llm_orchestrator"]
+
+  depends_on = [google_project_service.apis, module.iam]
+}
+
+# -----------------------------------------------------------------------------
 # Web App Bucket (SPA hosting with Load Balancer)
 # -----------------------------------------------------------------------------
 
@@ -260,7 +277,9 @@ module "web_app" {
   ssl_certificate_path      = "${path.module}/../../certs/intexuraos.cloud/fullchain.pem"
   ssl_private_key_secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
 
-  depends_on = [google_project_service.apis, module.secret_manager]
+  shared_content_bucket_name = module.shared_content.bucket_name
+
+  depends_on = [google_project_service.apis, module.secret_manager, module.shared_content]
 }
 
 # -----------------------------------------------------------------------------
@@ -865,12 +884,16 @@ module "llm_orchestrator" {
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC    = "intexuraos-llm-analytics-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_PUBSUB_LLM_CALL_TOPIC         = "intexuraos-llm-call-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
+    INTEXURAOS_SHARED_CONTENT_BUCKET         = module.shared_content.bucket_name
+    INTEXURAOS_SHARE_BASE_URL                = "https://${var.web_app_domain}/share/research"
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.shared_content,
   ]
 }
 
@@ -936,7 +959,6 @@ module "actions_agent" {
 
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID                = var.project_id
-    INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL   = module.commands_router.service_url
     INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
     INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
     INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
@@ -948,7 +970,6 @@ module "actions_agent" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
-    module.commands_router,
     module.llm_orchestrator,
     module.user_service,
   ]

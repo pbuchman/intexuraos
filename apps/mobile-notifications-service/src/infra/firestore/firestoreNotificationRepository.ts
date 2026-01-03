@@ -128,12 +128,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       const db = getFirestore();
       let query = db.collection(COLLECTION_NAME).where('userId', '==', userId);
 
-      // Apply filters if provided
-      if (options.filter?.source !== undefined) {
-        query = query.where('source', '==', options.filter.source);
+      // Apply filters if provided (arrays use 'in' operator)
+      if (options.filter?.source !== undefined && options.filter.source.length > 0) {
+        query = query.where('source', 'in', options.filter.source);
       }
-      if (options.filter?.app !== undefined) {
-        query = query.where('app', '==', options.filter.app);
+      if (options.filter?.app !== undefined && options.filter.app.length > 0) {
+        query = query.where('app', 'in', options.filter.app);
       }
 
       query = query.orderBy('receivedAt', 'desc');

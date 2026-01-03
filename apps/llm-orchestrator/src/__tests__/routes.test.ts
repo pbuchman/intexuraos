@@ -59,6 +59,7 @@ describe('Research Routes - Unauthenticated', () => {
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
 
     fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
@@ -73,6 +74,8 @@ describe('Research Routes - Unauthenticated', () => {
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
+      shareStorage: null,
+      shareConfig: null,
       createLlmProviders: () => createFakeLlmProviders(),
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
@@ -256,6 +259,8 @@ describe('Research Routes - Authenticated', () => {
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
+      shareStorage: null,
+      shareConfig: null,
       createLlmProviders: () => createFakeLlmProviders(),
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
@@ -1009,6 +1014,87 @@ describe('Research Routes - Authenticated', () => {
     });
   });
 
+  describe('DELETE /research/:id/share', () => {
+    function createSharedResearch(overrides?: Partial<Research>): Research {
+      return createTestResearch({
+        status: 'completed',
+        shareInfo: {
+          shareToken: 'abc123',
+          slug: 'test-research',
+          shareUrl: 'https://example.com/share/test.html',
+          sharedAt: '2024-01-01T12:00:00Z',
+          gcsPath: 'research/abc123-test-research.html',
+        },
+        ...overrides,
+      });
+    }
+
+    it('removes share when owned by user', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createSharedResearch();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}/share`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 404 when research not found', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/research/nonexistent-id/share',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for other users research', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createSharedResearch({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}/share`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 409 when research is not shared', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'completed' });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/research/${research.id}/share`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+  });
+
   describe('POST /research/:id/confirm', () => {
     function createAwaitingConfirmationResearch(overrides?: Partial<Research>): Research {
       return createTestResearch({
@@ -1293,6 +1379,8 @@ describe('Research Routes - Authenticated', () => {
         llmCallPublisher: newFakeLlmCallPublisher,
         userServiceClient: newFakeUserServiceClient,
         notificationSender: newFakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
         createLlmProviders: () => createFakeLlmProviders(),
         createResearchProvider: () => createFakeLlmResearchProvider(),
         createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
@@ -1303,7 +1391,11 @@ describe('Research Routes - Authenticated', () => {
       const newApp = await buildServer();
       try {
         const token = await createToken(TEST_USER_ID);
-        const research = createAwaitingConfirmationResearch();
+        const research = createAwaitingConfirmationResearch({
+          externalReports: [
+            { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
+          ],
+        });
         newFakeRepo.addResearch(research);
         newFakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
 
@@ -1373,6 +1465,7 @@ describe('System Endpoints', () => {
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://test.auth0.com/.well-known/jwks.json';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
 
     const fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
@@ -1387,6 +1480,8 @@ describe('System Endpoints', () => {
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
+      shareStorage: null,
+      shareConfig: null,
       createLlmProviders: () => createFakeLlmProviders(),
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
@@ -1433,6 +1528,7 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
 
     fakeRepo = new FakeResearchRepository();
     const fakeUserServiceClient = new FakeUserServiceClient();
@@ -1447,6 +1543,8 @@ describe('Internal Routes', () => {
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       notificationSender: fakeNotificationSender,
+      shareStorage: null,
+      shareConfig: null,
       createLlmProviders: () => createFakeLlmProviders(),
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
@@ -1881,6 +1979,8 @@ describe('Internal Routes', () => {
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
         createLlmProviders: () => createFakeLlmProviders(),
         createResearchProvider: () => createFakeLlmResearchProvider(),
         createSynthesizer: () => createFakeSynthesizer(),
@@ -2174,6 +2274,9 @@ describe('Internal Routes', () => {
         selectedLlms: ['google'],
         synthesisLlm: 'google',
         llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'pending' }],
+        externalReports: [
+          { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2198,6 +2301,39 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('completed');
       expect(updatedResearch?.synthesizedResult).toBeDefined();
+    });
+
+    it('skips synthesis when single LLM completes without external reports', async () => {
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'pending' }],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('completed');
+      expect(updatedResearch?.synthesizedResult).toBeUndefined();
     });
 
     it('sends notification on successful synthesis', async () => {

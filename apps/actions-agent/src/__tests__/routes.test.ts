@@ -542,6 +542,150 @@ describe('Research Agent Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.actions).toHaveLength(1);
     });
+
+    it('filters by single status', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Pending Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeActionRepository.save({
+        id: 'action-2',
+        userId: 'user-123',
+        commandId: 'cmd-2',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Completed Action',
+        status: 'completed',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/router/actions?status=pending',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: { status: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(1);
+      expect(body.data.actions[0]?.status).toBe('pending');
+    });
+
+    it('filters by multiple statuses (comma-separated)', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Pending Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeActionRepository.save({
+        id: 'action-2',
+        userId: 'user-123',
+        commandId: 'cmd-2',
+        type: 'research',
+        confidence: 0.9,
+        title: 'Completed Action',
+        status: 'completed',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeActionRepository.save({
+        id: 'action-3',
+        userId: 'user-123',
+        commandId: 'cmd-3',
+        type: 'research',
+        confidence: 0.85,
+        title: 'Failed Action',
+        status: 'failed',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/router/actions?status=pending,completed',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: { status: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(2);
+      const statuses = body.data.actions.map((a) => a.status);
+      expect(statuses).toContain('pending');
+      expect(statuses).toContain('completed');
+      expect(statuses).not.toContain('failed');
+    });
+
+    it('ignores invalid status values in filter', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Pending Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/router/actions?status=invalid_status,pending',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actions: { status: string }[] };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(1);
+      expect(body.data.actions[0]?.status).toBe('pending');
+    });
   });
 
   describe('PATCH /router/actions/:actionId (update action status)', () => {

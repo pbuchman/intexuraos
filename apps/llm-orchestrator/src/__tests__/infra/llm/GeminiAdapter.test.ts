@@ -5,15 +5,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResearch = vi.fn();
-const mockSynthesize = vi.fn();
 const mockGenerate = vi.fn();
 
+const mockCreateGeminiClient = vi.fn().mockReturnValue({
+  research: mockResearch,
+  generate: mockGenerate,
+});
+
 vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockReturnValue({
-    research: mockResearch,
-    synthesize: mockSynthesize,
-    generate: mockGenerate,
-  }),
+  createGeminiClient: mockCreateGeminiClient,
 }));
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
@@ -24,6 +24,27 @@ describe('GeminiAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapter = new GeminiAdapter('test-key');
+  });
+
+  describe('constructor', () => {
+    it('passes researchModel to client when provided', () => {
+      mockCreateGeminiClient.mockClear();
+      new GeminiAdapter('test-key', 'gemini-1.5-flash');
+
+      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        researchModel: 'gemini-1.5-flash',
+      });
+    });
+
+    it('does not pass researchModel when not provided', () => {
+      mockCreateGeminiClient.mockClear();
+      new GeminiAdapter('test-key');
+
+      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+      });
+    });
   });
 
   describe('research', () => {
@@ -72,8 +93,8 @@ describe('GeminiAdapter', () => {
   });
 
   describe('synthesize', () => {
-    it('delegates to Gemini client', async () => {
-      mockSynthesize.mockResolvedValue({
+    it('builds synthesis prompt and calls generate', async () => {
+      mockGenerate.mockResolvedValue({
         ok: true,
         value: 'Synthesized result',
       });
@@ -84,10 +105,12 @@ describe('GeminiAdapter', () => {
       if (result.ok) {
         expect(result.value).toBe('Synthesized result');
       }
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
     });
 
-    it('passes input contexts when provided', async () => {
-      mockSynthesize.mockResolvedValue({ ok: true, value: 'Result' });
+    it('includes external reports in synthesis prompt', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
 
       await adapter.synthesize(
         'Prompt',
@@ -95,15 +118,11 @@ describe('GeminiAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockSynthesize).toHaveBeenCalledWith(
-        'Prompt',
-        [{ model: 'gpt', content: 'GPT' }],
-        [{ content: 'External context' }]
-      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
     });
 
     it('maps errors correctly', async () => {
-      mockSynthesize.mockResolvedValue({
+      mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'TIMEOUT', message: 'Request timed out' },
       });

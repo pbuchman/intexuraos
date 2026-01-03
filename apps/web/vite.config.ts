@@ -4,17 +4,19 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 
-// Get build metadata
-function getBuildMetadata(): { sha: string; date: string } {
+function getBuildVersion(): string {
+  const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')) as {
+    version: string;
+  };
   let sha = 'unknown';
   try {
     sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   } catch {
     // Git not available or not a git repo
   }
-  const date = new Date().toISOString();
-  return { sha, date };
+  return `${pkg.version}-${sha}`;
 }
 
 export default defineConfig(({ mode }) => {
@@ -32,21 +34,12 @@ export default defineConfig(({ mode }) => {
   // Merge: file env takes precedence over shell env
   const env = { ...shellEnv, ...fileEnv };
 
-  // Get build metadata for injection into HTML
-  const buildMeta = getBuildMetadata();
+  const buildVersion = getBuildVersion();
 
   return {
     plugins: [
       react(),
       tailwindcss(),
-      {
-        name: 'inject-build-metadata',
-        transformIndexHtml(html): string {
-          return html
-            .replaceAll('__BUILD_SHA__', buildMeta.sha)
-            .replaceAll('__BUILD_DATE__', buildMeta.date);
-        },
-      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.png', 'logo.png'],
@@ -78,6 +71,15 @@ export default defineConfig(({ mode }) => {
               purpose: 'maskable',
             },
           ],
+          share_target: {
+            action: '/',
+            method: 'GET',
+            params: {
+              title: 'title',
+              text: 'text',
+              url: 'url',
+            },
+          },
         },
         workbox: {
           // Skip waiting to activate new service worker immediately
@@ -124,7 +126,7 @@ export default defineConfig(({ mode }) => {
           ],
           // Don't cache API requests
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/],
+          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/, /^\/share\//],
         },
         devOptions: {
           enabled: false, // Disable in dev mode to avoid caching issues
@@ -138,6 +140,7 @@ export default defineConfig(({ mode }) => {
       ...Object.fromEntries(
         Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])
       ),
+      'import.meta.env.INTEXURAOS_BUILD_VERSION': JSON.stringify(buildVersion),
     },
     resolve: {
       alias: {

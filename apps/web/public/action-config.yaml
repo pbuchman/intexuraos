@@ -9,7 +9,7 @@ actions:
       baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Approve
-      variant: primary
+      variant: success
       icon: CheckCircle
       confirmationMessage: 'This will create a research draft. Continue?'
 

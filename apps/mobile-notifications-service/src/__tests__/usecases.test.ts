@@ -460,7 +460,7 @@ describe('listNotifications', () => {
     });
 
     const result = await listNotifications(
-      { userId: 'user-123', source: 'tasker' },
+      { userId: 'user-123', source: ['tasker'] },
       notificationRepo
     );
 
@@ -514,7 +514,7 @@ describe('listNotifications', () => {
     });
 
     const result = await listNotifications(
-      { userId: 'user-123', app: 'com.slack' },
+      { userId: 'user-123', app: ['com.slack'] },
       notificationRepo
     );
 
@@ -541,7 +541,7 @@ describe('listNotifications', () => {
     });
 
     const result = await listNotifications(
-      { userId: 'user-123', source: 'nonexistent' },
+      { userId: 'user-123', source: ['nonexistent'] },
       notificationRepo
     );
 
@@ -587,7 +587,7 @@ describe('listNotifications', () => {
 
     // First page with source filter
     const firstPage = await listNotifications(
-      { userId: 'user-123', source: 'tasker', limit: 2 },
+      { userId: 'user-123', source: ['tasker'], limit: 2 },
       notificationRepo
     );
     expect(firstPage.ok).toBe(true);
@@ -601,7 +601,7 @@ describe('listNotifications', () => {
     if (cursor === undefined) return;
 
     const secondPage = await listNotifications(
-      { userId: 'user-123', source: 'tasker', limit: 2, cursor },
+      { userId: 'user-123', source: ['tasker'], limit: 2, cursor },
       notificationRepo
     );
     expect(secondPage.ok).toBe(true);

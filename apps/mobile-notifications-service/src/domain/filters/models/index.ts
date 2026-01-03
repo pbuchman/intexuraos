@@ -13,13 +13,14 @@ export interface NotificationFilterOptions {
 
 /**
  * User-saved filter configuration.
+ * Filter fields are arrays for multi-select support.
  */
 export interface SavedNotificationFilter {
   id: string;
   name: string;
-  app?: string;
-  device?: string;
-  source?: string;
+  app?: string[];
+  device?: string[];
+  source?: string[];
   title?: string;
   createdAt: string;
 }

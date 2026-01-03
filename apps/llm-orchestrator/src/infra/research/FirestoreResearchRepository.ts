@@ -3,7 +3,7 @@
  * Handles persistence of Research documents.
  */
 
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LlmProvider,
@@ -132,6 +132,28 @@ export class FirestoreResearchRepository implements ResearchRepository {
       return err({
         code: 'FIRESTORE_ERROR',
         message: getErrorMessage(error, 'Failed to update LLM result'),
+      });
+    }
+  }
+
+  async clearShareInfo(id: string): Promise<Result<Research, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      await db.collection(this.collectionName).doc(id).update({
+        shareInfo: FieldValue.delete(),
+      });
+      const updated = await this.findById(id);
+      if (!updated.ok) {
+        return updated;
+      }
+      if (updated.value === null) {
+        return err({ code: 'NOT_FOUND', message: 'Research not found' });
+      }
+      return ok(updated.value);
+    } catch (error) {
+      return err({
+        code: 'FIRESTORE_ERROR',
+        message: getErrorMessage(error, 'Failed to clear share info'),
       });
     }
   }

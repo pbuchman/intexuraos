@@ -5,15 +5,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResearch = vi.fn();
-const mockSynthesize = vi.fn();
 const mockGenerate = vi.fn();
 
+const mockCreateClaudeClient = vi.fn().mockReturnValue({
+  research: mockResearch,
+  generate: mockGenerate,
+});
+
 vi.mock('@intexuraos/infra-claude', () => ({
-  createClaudeClient: vi.fn().mockReturnValue({
-    research: mockResearch,
-    synthesize: mockSynthesize,
-    generate: mockGenerate,
-  }),
+  createClaudeClient: mockCreateClaudeClient,
 }));
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
@@ -24,6 +24,27 @@ describe('ClaudeAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapter = new ClaudeAdapter('test-key');
+  });
+
+  describe('constructor', () => {
+    it('passes researchModel to client when provided', () => {
+      mockCreateClaudeClient.mockClear();
+      new ClaudeAdapter('test-key', 'claude-3-haiku-20240307');
+
+      expect(mockCreateClaudeClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        researchModel: 'claude-3-haiku-20240307',
+      });
+    });
+
+    it('does not pass researchModel when not provided', () => {
+      mockCreateClaudeClient.mockClear();
+      new ClaudeAdapter('test-key');
+
+      expect(mockCreateClaudeClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+      });
+    });
   });
 
   describe('research', () => {
@@ -72,8 +93,8 @@ describe('ClaudeAdapter', () => {
   });
 
   describe('synthesize', () => {
-    it('delegates to Claude client', async () => {
-      mockSynthesize.mockResolvedValue({
+    it('builds synthesis prompt and calls generate', async () => {
+      mockGenerate.mockResolvedValue({
         ok: true,
         value: 'Synthesized result',
       });
@@ -84,10 +105,12 @@ describe('ClaudeAdapter', () => {
       if (result.ok) {
         expect(result.value).toBe('Synthesized result');
       }
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
     });
 
-    it('passes input contexts when provided', async () => {
-      mockSynthesize.mockResolvedValue({ ok: true, value: 'Result' });
+    it('includes external reports in synthesis prompt', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
 
       await adapter.synthesize(
         'Prompt',
@@ -95,15 +118,11 @@ describe('ClaudeAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockSynthesize).toHaveBeenCalledWith(
-        'Prompt',
-        [{ model: 'gpt', content: 'GPT' }],
-        [{ content: 'External context' }]
-      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
     });
 
     it('maps errors correctly', async () => {
-      mockSynthesize.mockResolvedValue({
+      mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'TIMEOUT', message: 'Request timed out' },
       });

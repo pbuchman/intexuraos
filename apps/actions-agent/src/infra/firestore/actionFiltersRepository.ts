@@ -90,13 +90,12 @@ export function createFirestoreActionFiltersRepository(): ActionFiltersRepositor
       const docRef = db.collection(COLLECTION).doc(userId);
       const now = new Date().toISOString();
 
-      const updateData: Record<string, unknown> = { updatedAt: now };
-
+      const optionsData: Record<string, unknown> = {};
       for (const [field, value] of Object.entries(options)) {
-        updateData[`options.${field}`] = FieldValue.arrayUnion(value);
+        optionsData[field] = FieldValue.arrayUnion(value);
       }
 
-      await docRef.set(updateData, { merge: true });
+      await docRef.set({ options: optionsData, updatedAt: now }, { merge: true });
     },
 
     async addSavedFilter(

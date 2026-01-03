@@ -12,6 +12,7 @@ import {
   createTitleGenerator,
 } from './infra/llm/index.js';
 import { NoopNotificationSender, WhatsAppNotificationSender } from './infra/notification/index.js';
+import { createShareStorage } from './infra/gcs/index.js';
 import {
   createLlmCallPublisher,
   createResearchEventPublisher,
@@ -33,8 +34,17 @@ import {
   type PricingRepository,
   type ResearchRepository,
   type SearchMode,
+  type ShareStoragePort,
   type TitleGenerator,
 } from './domain/research/index.js';
+
+/**
+ * Configuration for sharing features.
+ */
+export interface ShareConfig {
+  shareBaseUrl: string;
+  staticAssetsUrl: string;
+}
 
 /**
  * Service container holding all adapter instances.
@@ -47,6 +57,8 @@ export interface ServiceContainer {
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
   notificationSender: NotificationSender;
+  shareStorage: ShareStoragePort | null;
+  shareConfig: ShareConfig | null;
   createLlmProviders: (
     apiKeys: InfraDecryptedApiKeys,
     searchMode?: SearchMode
@@ -112,6 +124,34 @@ function createNotificationSender(): NotificationSender {
 }
 
 /**
+ * Create share storage and config if environment variables are set.
+ */
+function createShareStorageAndConfig(): {
+  shareStorage: ShareStoragePort | null;
+  shareConfig: ShareConfig | null;
+} {
+  const bucketName = process.env['INTEXURAOS_SHARED_CONTENT_BUCKET'];
+  const shareBaseUrl = process.env['INTEXURAOS_SHARE_BASE_URL'];
+  const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
+
+  if (
+    bucketName !== undefined &&
+    bucketName !== '' &&
+    shareBaseUrl !== undefined &&
+    shareBaseUrl !== ''
+  ) {
+    const staticAssetsUrl = `https://storage.googleapis.com/intexuraos-static-assets-${gcpProjectId?.includes('dev') === true ? 'dev' : 'prod'}`;
+
+    return {
+      shareStorage: createShareStorage({ bucketName }),
+      shareConfig: { shareBaseUrl, staticAssetsUrl },
+    };
+  }
+
+  return { shareStorage: null, shareConfig: null };
+}
+
+/**
  * Initialize the service container with all dependencies.
  */
 export function initializeServices(): void {
@@ -135,6 +175,8 @@ export function initializeServices(): void {
     topicName: process.env['INTEXURAOS_PUBSUB_LLM_CALL_TOPIC'] ?? '',
   });
 
+  const { shareStorage, shareConfig } = createShareStorageAndConfig();
+
   container = {
     researchRepo,
     pricingRepo,
@@ -143,6 +185,8 @@ export function initializeServices(): void {
     llmCallPublisher,
     userServiceClient,
     notificationSender,
+    shareStorage,
+    shareConfig,
     createLlmProviders,
     createResearchProvider,
     createSynthesizer,

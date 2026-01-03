@@ -10,6 +10,7 @@ import {
   type RunSynthesisDeps,
 } from '../../../../domain/research/usecases/runSynthesis.js';
 import type { Research } from '../../../../domain/research/models/index.js';
+import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
 
 function createMockDeps(): RunSynthesisDeps & {
   mockRepo: {
@@ -32,6 +33,7 @@ function createMockDeps(): RunSynthesisDeps & {
     update: vi.fn().mockResolvedValue(ok(undefined)),
     updateLlmResult: vi.fn().mockResolvedValue(ok(undefined)),
     findByUserId: vi.fn(),
+    clearShareInfo: vi.fn().mockResolvedValue(ok(undefined)),
     delete: vi.fn(),
   };
 
@@ -51,6 +53,9 @@ function createMockDeps(): RunSynthesisDeps & {
     researchRepo: mockRepo,
     synthesizer: mockSynthesizer,
     notificationSender: mockNotificationSender,
+    shareStorage: null,
+    shareConfig: null,
+    webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
     mockRepo,
     mockSynthesizer,
@@ -156,6 +161,12 @@ describe('runSynthesis', () => {
           status: 'completed',
           result: 'Google Result',
         },
+        {
+          provider: 'anthropic',
+          model: 'claude-3',
+          status: 'completed',
+          result: 'Claude Result',
+        },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
       ],
     });
@@ -165,7 +176,10 @@ describe('runSynthesis', () => {
 
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
-      [{ model: 'gemini-2.0-flash', content: 'Google Result' }],
+      [
+        { model: 'gemini-2.0-flash', content: 'Google Result' },
+        { model: 'claude-3', content: 'Claude Result' },
+      ],
       undefined
     );
   });
@@ -222,6 +236,7 @@ describe('runSynthesis', () => {
       synthesizedResult: 'Synthesized result',
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
+      shareInfo: undefined,
     });
   });
 
@@ -234,7 +249,8 @@ describe('runSynthesis', () => {
     expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
       'user-1',
       'research-1',
-      'Test Research'
+      'Test Research',
+      'https://app.example.com/#/research/research-1'
     );
   });
 
@@ -255,6 +271,9 @@ describe('runSynthesis', () => {
       researchRepo: deps.researchRepo,
       synthesizer: deps.synthesizer,
       notificationSender: deps.notificationSender,
+      shareStorage: null,
+      shareConfig: null,
+      webAppUrl: 'https://app.example.com',
     };
 
     const result = await runSynthesis('research-1', minimalDeps);
@@ -264,7 +283,10 @@ describe('runSynthesis', () => {
 
   it('handles empty result string from LLM', async () => {
     const research = createTestResearch({
-      llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'completed' }],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed' },
+        { provider: 'openai', model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
+      ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -272,8 +294,284 @@ describe('runSynthesis', () => {
 
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
-      [{ model: 'gemini-2.0-flash', content: '' }],
+      [
+        { model: 'gemini-2.0-flash', content: '' },
+        { model: 'gpt-4', content: 'OpenAI Result' },
+      ],
       undefined
     );
+  });
+
+  describe('skip synthesis logic', () => {
+    it('skips synthesis when only 1 successful LLM and no external reports', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        status: 'completed',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+      });
+    });
+
+    it('skips synthesis when multiple LLMs selected but only 1 succeeds', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Only success',
+          },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Failed' },
+          { provider: 'anthropic', model: 'claude-opus', status: 'failed', error: 'Failed' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+    });
+
+    it('runs synthesis when 1 LLM succeeds with external reports', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+        ],
+        externalReports: [
+          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('runs synthesis when 2+ LLMs succeed without external reports', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'completed',
+            result: 'OpenAI result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('runs synthesis when no LLMs succeed but has external reports', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Failed' },
+        ],
+        externalReports: [
+          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('sends notification with app URL when synthesis skipped', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      await runSynthesis('research-1', deps);
+
+      expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
+        'user-1',
+        'research-1',
+        'Test Research',
+        'https://app.example.com/#/research/research-1'
+      );
+    });
+
+    it('does not report LLM success when synthesis skipped', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      await runSynthesis('research-1', deps);
+
+      expect(deps.mockReportSuccess).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('with share storage', () => {
+    const shareConfig = {
+      shareBaseUrl: 'https://example.com/share/research',
+      staticAssetsUrl: 'https://static.example.com',
+    };
+
+    it('generates and uploads shareable HTML when share storage is configured', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockUpload = vi
+        .fn()
+        .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' }));
+      const mockShareStorage: ShareStoragePort = {
+        upload: mockUpload,
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockUpload).toHaveBeenCalledWith(
+        expect.stringMatching(/^research\/resear-[a-zA-Z0-9]+-test-research\.html$/),
+        expect.stringContaining('<!DOCTYPE html>')
+      );
+    });
+
+    it('includes shareInfo when upload succeeds', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.objectContaining({
+          shareToken: expect.any(String),
+          slug: 'test-research',
+          shareUrl: expect.stringContaining('https://example.com/share/research/'),
+          sharedAt: '2024-01-01T12:00:00.000Z',
+          gcsPath: 'research/abc123-token-test-research.html',
+        }),
+      });
+    });
+
+    it('sends notification with share URL when share storage is configured', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(ok({ gcsPath: 'research/abc123-token-test-research.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
+        'user-1',
+        'research-1',
+        'Test Research',
+        expect.stringContaining('https://example.com/share/research/')
+      );
+    });
+
+    it('continues without shareInfo when upload fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'STORAGE_ERROR' as const, message: 'Upload failed' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+      });
+    });
   });
 });

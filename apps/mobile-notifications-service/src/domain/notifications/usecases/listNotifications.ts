@@ -14,13 +14,14 @@ const MAX_LIMIT = 100;
 
 /**
  * Input for listing notifications.
+ * Filter arrays support multi-select (OR within field).
  */
 export interface ListNotificationsInput {
   userId: string;
   limit?: number;
   cursor?: string;
-  source?: string;
-  app?: string;
+  source?: string[];
+  app?: string[];
   title?: string;
 }
 

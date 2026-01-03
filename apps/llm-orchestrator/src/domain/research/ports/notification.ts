@@ -15,7 +15,8 @@ export interface NotificationSender {
   sendResearchComplete(
     userId: string,
     researchId: string,
-    title: string
+    title: string,
+    shareUrl: string
   ): Promise<Result<void, NotificationError>>;
 
   sendLlmFailure(

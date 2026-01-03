@@ -3,7 +3,7 @@ import { ok, err } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
-import type { ActionRepository } from '../domain/ports/actionRepository.js';
+import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
 import type { Action } from '../domain/models/action.js';
 import type {
   ActionFilterOptionField,
@@ -183,12 +183,16 @@ export class FakeActionRepository implements ActionRepository {
     this.actions.delete(id);
   }
 
-  async listByUserId(userId: string): Promise<Action[]> {
+  async listByUserId(userId: string, options?: ListByUserIdOptions): Promise<Action[]> {
     if (this.failNext) {
       this.failNext = false;
       throw this.failError ?? new Error('Simulated failure');
     }
-    return Array.from(this.actions.values()).filter((a) => a.userId === userId);
+    let actions = Array.from(this.actions.values()).filter((a) => a.userId === userId);
+    if (options?.status !== undefined && options.status.length > 0) {
+      actions = actions.filter((a) => options.status?.includes(a.status));
+    }
+    return actions;
   }
 
   async listByStatus(status: Action['status'], limit = 100): Promise<Action[]> {

@@ -5,9 +5,11 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  Link2,
   Loader2,
   Play,
   RefreshCw,
+  Share2,
   XCircle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -20,8 +22,10 @@ import {
   approveResearch,
   confirmPartialFailure,
   deleteResearch,
+  unshareResearch,
 } from '@/services/llmOrchestratorApi';
 import type {
+  LlmProvider,
   LlmResult,
   PartialFailure,
   PartialFailureDecision,
@@ -195,6 +199,10 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [unsharing, setUnsharing] = useState(false);
+  const [unshareError, setUnshareError] = useState<string | null>(null);
+  const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -253,6 +261,57 @@ export function ResearchDetailPage(): React.JSX.Element {
       setConfirmError(err instanceof Error ? err.message : 'Failed to confirm action');
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const handleShare = async (): Promise<void> => {
+    if (research?.shareInfo?.shareUrl === undefined) return;
+
+    const shareUrl = research.shareInfo.shareUrl;
+    const shareData = {
+      title: research.title !== '' ? research.title : 'Research',
+      text: `Check out this research: ${research.title}`,
+      url: shareUrl,
+    };
+
+    const canShare =
+      typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+    if (canShare) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          await navigator.clipboard.writeText(shareUrl);
+          setShareToast('Link copied to clipboard');
+          setTimeout(() => {
+            setShareToast(null);
+          }, 2000);
+        }
+      }
+    } else {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareToast('Link copied to clipboard');
+      setTimeout(() => {
+        setShareToast(null);
+      }, 2000);
+    }
+  };
+
+  const handleUnshare = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setUnsharing(true);
+    setUnshareError(null);
+
+    try {
+      const token = await getAccessToken();
+      await unshareResearch(token, id);
+      setShowUnshareConfirm(false);
+      await refresh();
+    } catch (err) {
+      setUnshareError(err instanceof Error ? err.message : 'Failed to remove share');
+    } finally {
+      setUnsharing(false);
     }
   };
 
@@ -333,6 +392,62 @@ export function ResearchDetailPage(): React.JSX.Element {
                 : `Started ${formatElapsedTime(research.startedAt)}`}
           </span>
         </div>
+
+        {research.shareInfo !== undefined ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <Link2 className="h-4 w-4 text-slate-500" />
+            <span className="flex-1 truncate text-sm text-slate-600">
+              {research.shareInfo.shareUrl}
+            </span>
+            <Button
+              variant="secondary"
+              onClick={(): void => {
+                void handleShare();
+              }}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+            {showUnshareConfirm ? (
+              <>
+                <Button
+                  variant="danger"
+                  onClick={(): void => {
+                    void handleUnshare();
+                  }}
+                  disabled={unsharing}
+                  isLoading={unsharing}
+                >
+                  Confirm Remove
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    setShowUnshareConfirm(false);
+                  }}
+                  disabled={unsharing}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowUnshareConfirm(true);
+                }}
+              >
+                Remove Share
+              </Button>
+            )}
+          </div>
+        ) : null}
+
+        {unshareError !== null && unshareError !== '' ? (
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {unshareError}
+          </div>
+        ) : null}
 
         {research.status === 'draft' ? (
           <div className="mt-4 flex flex-wrap gap-3">
@@ -451,6 +566,9 @@ export function ResearchDetailPage(): React.JSX.Element {
       {showLlmStatus ? (
         <ProcessingStatus
           llmResults={research.llmResults}
+          selectedLlms={research.selectedLlms}
+          synthesisLlm={research.synthesisLlm}
+          researchStatus={research.status}
           title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
         />
       ) : null}
@@ -478,6 +596,17 @@ export function ResearchDetailPage(): React.JSX.Element {
           </div>
           <div className="rounded-lg bg-slate-50 p-4">
             <MarkdownContent content={research.synthesizedResult} />
+          </div>
+        </Card>
+      ) : research.status === 'completed' &&
+        research.llmResults.filter((r) => r.status === 'completed').length <= 1 &&
+        (research.inputContexts === undefined || research.inputContexts.length === 0) ? (
+        <Card title="Synthesis Report" className="mb-6">
+          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+            <p className="text-amber-800">
+              Synthesis not available — only one individual report was generated.
+            </p>
           </div>
         </Card>
       ) : null}
@@ -540,17 +669,37 @@ export function ResearchDetailPage(): React.JSX.Element {
           </div>
         </div>
       ) : null}
+
+      {shareToast !== null ? (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
+          {shareToast}
+        </div>
+      ) : null}
     </Layout>
   );
 }
 
 interface ProcessingStatusProps {
   llmResults: LlmResult[];
+  selectedLlms: LlmProvider[];
+  synthesisLlm: LlmProvider;
+  researchStatus: ResearchStatus;
   title?: string;
 }
 
+const ALL_PROVIDERS: LlmProvider[] = ['google', 'openai', 'anthropic'];
+
+const PROVIDER_DISPLAY_NAMES: Record<LlmProvider, string> = {
+  google: 'Google',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+};
+
 function ProcessingStatus({
   llmResults,
+  selectedLlms,
+  synthesisLlm,
+  researchStatus,
   title = 'Processing Status',
 }: ProcessingStatusProps): React.JSX.Element {
   const getStatusText = (result: LlmResult): string => {
@@ -569,21 +718,74 @@ function ProcessingStatus({
     return '';
   };
 
+  const getSynthesisStatus = (): { status: string; text: string } => {
+    if (researchStatus === 'synthesizing') {
+      return { status: 'processing', text: 'Synthesizing...' };
+    }
+    if (researchStatus === 'completed') {
+      return { status: 'completed', text: 'Complete' };
+    }
+    if (researchStatus === 'failed') {
+      const allLlmsFailed = llmResults.every((r) => r.status === 'failed');
+      if (allLlmsFailed) {
+        return { status: 'skipped', text: 'Skipped (all LLMs failed)' };
+      }
+      return { status: 'failed', text: 'Failed' };
+    }
+    return { status: 'pending', text: 'Pending' };
+  };
+
+  const synthesisStatus = getSynthesisStatus();
+
   return (
     <Card title={title} className="mb-6">
       <div className="space-y-3">
-        {llmResults.map((result) => (
-          <div key={result.provider} className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <StatusDot status={result.status} />
-              <span className="capitalize">{result.provider}</span>
-              <span className="text-sm text-slate-500">{getStatusText(result)}</span>
+        {ALL_PROVIDERS.map((provider) => {
+          const isSelected = selectedLlms.includes(provider);
+          const result = llmResults.find((r) => r.provider === provider);
+
+          if (!isSelected) {
+            return (
+              <div key={provider} className="flex items-center gap-3">
+                <StatusDot status="skipped" />
+                <span className="text-slate-400">{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                <span className="text-sm text-slate-400">Skipped</span>
+              </div>
+            );
+          }
+
+          if (result === undefined) {
+            return (
+              <div key={provider} className="flex items-center gap-3">
+                <StatusDot status="pending" />
+                <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                <span className="text-sm text-slate-500">Waiting...</span>
+              </div>
+            );
+          }
+
+          return (
+            <div key={provider} className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <StatusDot status={result.status} />
+                <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
+                <span className="text-sm text-slate-500">{getStatusText(result)}</span>
+              </div>
+              {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
+                <p className="ml-6 text-sm text-red-600">{result.error}</p>
+              ) : null}
             </div>
-            {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
-              <p className="ml-6 text-sm text-red-600">{result.error}</p>
-            ) : null}
+          );
+        })}
+
+        <div className="mt-4 border-t border-slate-200 pt-4">
+          <div className="flex items-center gap-3">
+            <StatusDot status={synthesisStatus.status} />
+            <span className="font-medium">Synthesis</span>
+            <span className="text-sm text-slate-500">({synthesisLlm})</span>
+            <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
           </div>
-        ))}
+        </div>
       </div>
     </Card>
   );
@@ -595,6 +797,7 @@ function StatusDot({ status }: { status: string }): React.JSX.Element {
     processing: 'bg-blue-500 animate-pulse',
     completed: 'bg-green-500',
     failed: 'bg-red-500',
+    skipped: 'bg-slate-200',
   };
 
   return <div className={`h-3 w-3 rounded-full ${colors[status] ?? 'bg-slate-300'}`} />;
@@ -637,7 +840,7 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
       >
         <div className="flex items-center gap-3">
           <StatusDot status={result.status} />
-          <span className="font-medium capitalize">{result.provider}</span>
+          <span className="font-medium">{PROVIDER_DISPLAY_NAMES[result.provider]}</span>
           <span className="text-sm text-slate-500">{result.model}</span>
           {hasTokenInfo ? (
             <span className="text-sm text-slate-400">

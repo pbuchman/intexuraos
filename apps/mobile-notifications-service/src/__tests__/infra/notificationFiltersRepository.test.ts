@@ -1,8 +1,5 @@
 /**
  * Tests for Firestore notification filters repository.
- * Note: Tests for addOption/addOptions are limited because FakeFirestore
- * doesn't fully support FieldValue.arrayUnion. These methods are tested
- * indirectly via integration tests.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -71,38 +68,83 @@ describe('FirestoreNotificationFiltersRepository', () => {
   });
 
   describe('addOption', () => {
-    it('calls without error for new user', async () => {
-      const result = await repository.addOption('user-123', 'app', 'com.whatsapp');
-      expect(result.ok).toBe(true);
+    it('adds option to empty user document', async () => {
+      const addResult = await repository.addOption('user-123', 'app', 'com.whatsapp');
+      expect(addResult.ok).toBe(true);
+
+      const getResult = await repository.getByUserId('user-123');
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok && getResult.value) {
+        expect(getResult.value.options.app).toContain('com.whatsapp');
+      }
     });
 
-    it('calls without error for device field', async () => {
-      const result = await repository.addOption('user-123', 'device', 'Pixel 7');
-      expect(result.ok).toBe(true);
+    it('adds device option and preserves it', async () => {
+      await repository.addOption('user-123', 'device', 'Pixel 7');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result.ok && result.value?.options.device).toContain('Pixel 7');
     });
 
-    it('calls without error for source field', async () => {
-      const result = await repository.addOption('user-123', 'source', 'tasker');
-      expect(result.ok).toBe(true);
+    it('adds source option and preserves it', async () => {
+      await repository.addOption('user-123', 'source', 'tasker');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result.ok && result.value?.options.source).toContain('tasker');
+    });
+
+    it('does not duplicate existing option value', async () => {
+      await repository.addOption('user-123', 'app', 'com.whatsapp');
+      await repository.addOption('user-123', 'app', 'com.whatsapp');
+
+      const result = await repository.getByUserId('user-123');
+      expect(result.ok && result.value?.options.app).toEqual(['com.whatsapp']);
     });
   });
 
   describe('addOptions', () => {
-    it('calls without error with multiple options', async () => {
-      const result = await repository.addOptions('user-123', {
+    it('adds multiple options and stores them in nested structure', async () => {
+      const addResult = await repository.addOptions('user-123', {
         app: 'com.whatsapp',
         device: 'Pixel 7',
       });
-      expect(result.ok).toBe(true);
+      expect(addResult.ok).toBe(true);
+
+      const getResult = await repository.getByUserId('user-123');
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok && getResult.value) {
+        expect(getResult.value.options.app).toContain('com.whatsapp');
+        expect(getResult.value.options.device).toContain('Pixel 7');
+      }
     });
 
-    it('calls without error with all option types', async () => {
-      const result = await repository.addOptions('user-123', {
+    it('adds all option types at once', async () => {
+      await repository.addOptions('user-123', {
         app: 'com.gmail',
         device: 'Samsung Galaxy',
         source: 'mail',
       });
+
+      const result = await repository.getByUserId('user-123');
       expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.options.app).toContain('com.gmail');
+        expect(result.value.options.device).toContain('Samsung Galaxy');
+        expect(result.value.options.source).toContain('mail');
+      }
+    });
+
+    it('merges with existing options', async () => {
+      await repository.addOption('user-123', 'app', 'com.whatsapp');
+      await repository.addOptions('user-123', { app: 'com.gmail', device: 'Pixel 7' });
+
+      const result = await repository.getByUserId('user-123');
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.options.app).toContain('com.whatsapp');
+        expect(result.value.options.app).toContain('com.gmail');
+        expect(result.value.options.device).toContain('Pixel 7');
+      }
     });
   });
 
@@ -121,37 +163,37 @@ describe('FirestoreNotificationFiltersRepository', () => {
     it('creates saved filter with app', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'WhatsApp Only',
-        app: 'com.whatsapp',
+        app: ['com.whatsapp'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.name).toBe('WhatsApp Only');
-        expect(result.value.app).toBe('com.whatsapp');
+        expect(result.value.app).toEqual(['com.whatsapp']);
       }
     });
 
     it('creates saved filter with device', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Pixel Only',
-        device: 'Pixel 7',
+        device: ['Pixel 7'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.device).toBe('Pixel 7');
+        expect(result.value.device).toEqual(['Pixel 7']);
       }
     });
 
     it('creates saved filter with source', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Mail Only',
-        source: 'mail',
+        source: ['mail'],
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.source).toBe('mail');
+        expect(result.value.source).toEqual(['mail']);
       }
     });
 
@@ -170,17 +212,17 @@ describe('FirestoreNotificationFiltersRepository', () => {
     it('creates saved filter with all optional fields', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Complex Filter',
-        app: 'com.gmail',
-        device: 'Pixel 7',
-        source: 'mail',
+        app: ['com.gmail'],
+        device: ['Pixel 7'],
+        source: ['mail'],
         title: 'meeting',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.app).toBe('com.gmail');
-        expect(result.value.device).toBe('Pixel 7');
-        expect(result.value.source).toBe('mail');
+        expect(result.value.app).toEqual(['com.gmail']);
+        expect(result.value.device).toEqual(['Pixel 7']);
+        expect(result.value.source).toEqual(['mail']);
         expect(result.value.title).toBe('meeting');
       }
     });

@@ -37,8 +37,14 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           properties: {
             limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
             cursor: { type: 'string' },
-            source: { type: 'string', description: 'Filter by notification source' },
-            app: { type: 'string', description: 'Filter by app package name' },
+            source: {
+              type: 'string',
+              description: 'Filter by notification source (comma-separated for multiple)',
+            },
+            app: {
+              type: 'string',
+              description: 'Filter by app package name (comma-separated for multiple)',
+            },
             title: {
               type: 'string',
               description: 'Filter by title (case-insensitive partial match)',
@@ -97,8 +103,8 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         userId: string;
         limit?: number;
         cursor?: string;
-        source?: string;
-        app?: string;
+        source?: string[];
+        app?: string[];
         title?: string;
       } = {
         userId: user.userId,
@@ -110,10 +116,10 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         listInput.cursor = cursor;
       }
       if (source !== undefined) {
-        listInput.source = source;
+        listInput.source = source.split(',').map((s) => s.trim());
       }
       if (app !== undefined) {
-        listInput.app = app;
+        listInput.app = app.split(',').map((s) => s.trim());
       }
       if (title !== undefined) {
         listInput.title = title;
