@@ -147,3 +147,43 @@ resource "google_cloudbuild_trigger" "manual_main" {
 
   service_account = google_service_account.cloud_build.id
 }
+
+# -----------------------------------------------------------------------------
+# Workload Identity Federation (GitHub Actions → GCP)
+# -----------------------------------------------------------------------------
+# Allows GitHub Actions to authenticate to GCP without service account keys.
+# See: https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = var.project_id
+  workload_identity_pool_id = "github-actions-${var.environment}"
+  display_name              = "GitHub Actions (${var.environment})"
+  description               = "Workload Identity Pool for GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-provider"
+  display_name                       = "GitHub Provider"
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.github_owner}/${var.github_repo}'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Allow GitHub Actions to impersonate the Cloud Build service account
+resource "google_service_account_iam_member" "github_actions_wif" {
+  service_account_id = google_service_account.cloud_build.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
+}
