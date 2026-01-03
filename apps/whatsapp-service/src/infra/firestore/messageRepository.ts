@@ -4,7 +4,7 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
-import type { InboxError } from './webhookEventRepository.js';
+import type { WhatsAppError } from './webhookEventRepository.js';
 import type {
   LinkPreviewState,
   TranscriptionState,
@@ -44,7 +44,7 @@ function encodeCursor(receivedAt: string, id: string): string {
  */
 export async function saveMessage(
   message: Omit<WhatsAppMessage, 'id'>
-): Promise<Result<WhatsAppMessage, InboxError>> {
+): Promise<Result<WhatsAppMessage, WhatsAppError>> {
   try {
     const db = getFirestore();
     const id = randomUUID();
@@ -67,7 +67,7 @@ export async function saveMessage(
 export async function getMessagesByUser(
   userId: string,
   options: { limit?: number; cursor?: string } = {}
-): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>> {
   const limit = options.limit ?? 50;
 
   try {
@@ -119,7 +119,7 @@ export async function getMessagesByUser(
  */
 export async function getMessage(
   messageId: string
-): Promise<Result<WhatsAppMessage | null, InboxError>> {
+): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
@@ -136,7 +136,7 @@ export async function getMessage(
 /**
  * Delete a message by ID.
  */
-export async function deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+export async function deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>> {
   try {
     const db = getFirestore();
     await db.collection(COLLECTION_NAME).doc(messageId).delete();
@@ -156,7 +156,7 @@ export async function deleteMessage(messageId: string): Promise<Result<void, Inb
 export async function findById(
   userId: string,
   messageId: string
-): Promise<Result<WhatsAppMessage | null, InboxError>> {
+): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
@@ -182,7 +182,7 @@ export async function updateTranscription(
   userId: string,
   messageId: string,
   transcription: TranscriptionState
-): Promise<Result<void, InboxError>> {
+): Promise<Result<void, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();
@@ -221,7 +221,7 @@ export async function updateLinkPreview(
   userId: string,
   messageId: string,
   linkPreview: LinkPreviewState
-): Promise<Result<void, InboxError>> {
+): Promise<Result<void, WhatsAppError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(messageId).get();

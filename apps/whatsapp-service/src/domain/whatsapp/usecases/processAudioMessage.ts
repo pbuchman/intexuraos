@@ -11,7 +11,7 @@
  * Note: Transcription is handled separately by TranscribeAudioUseCase.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/error.js';
+import type { WhatsAppError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
   WhatsAppMessageRepository,
@@ -100,7 +100,7 @@ export class ProcessAudioMessageUseCase {
   async execute(
     input: ProcessAudioMessageInput,
     logger: ProcessAudioMessageLogger
-  ): Promise<Result<ProcessAudioMessageResult, InboxError>> {
+  ): Promise<Result<ProcessAudioMessageResult, WhatsAppError>> {
     const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi } = this.deps;
 
     const {

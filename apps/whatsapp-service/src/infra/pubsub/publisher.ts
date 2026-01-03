@@ -8,7 +8,7 @@ import type {
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
-  InboxError,
+  WhatsAppError,
   MediaCleanupEvent,
   TranscribeAudioEvent,
   WebhookProcessEvent,
@@ -39,59 +39,59 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     this.transcriptionTopic = config.transcriptionTopic ?? null;
   }
 
-  async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
+  async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
       this.mediaCleanupTopic,
       event,
       { messageId: event.messageId },
       'media cleanup'
     );
-    return this.mapToInboxError(result);
+    return this.mapToWhatsAppError(result);
   }
 
-  async publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, InboxError>> {
+  async publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
       this.commandsIngestTopic,
       event,
       { externalId: event.externalId },
       'command ingest'
     );
-    return this.mapToInboxError(result);
+    return this.mapToWhatsAppError(result);
   }
 
-  async publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, InboxError>> {
+  async publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
       this.webhookProcessTopic,
       event,
       { eventId: event.eventId },
       'webhook process'
     );
-    return this.mapToInboxError(result);
+    return this.mapToWhatsAppError(result);
   }
 
-  async publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, InboxError>> {
+  async publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
       this.transcriptionTopic,
       event,
       { messageId: event.messageId },
       'transcribe audio'
     );
-    return this.mapToInboxError(result);
+    return this.mapToWhatsAppError(result);
   }
 
   async publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
-  ): Promise<Result<void, InboxError>> {
+  ): Promise<Result<void, WhatsAppError>> {
     const result = await this.publishToTopic(
       this.webhookProcessTopic,
       event,
       { messageId: event.messageId },
       'extract link previews'
     );
-    return this.mapToInboxError(result);
+    return this.mapToWhatsAppError(result);
   }
 
-  private mapToInboxError(result: Result<void, PublishError>): Result<void, InboxError> {
+  private mapToWhatsAppError(result: Result<void, PublishError>): Result<void, WhatsAppError> {
     if (result.ok) {
       return ok(undefined);
     }

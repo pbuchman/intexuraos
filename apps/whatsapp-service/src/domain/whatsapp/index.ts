@@ -4,7 +4,7 @@
  */
 
 // Models
-export type { InboxErrorCode, InboxError, InboxResult } from './models/error.js';
+export type { WhatsAppErrorCode, WhatsAppError, WhatsAppResult } from './models/error.js';
 
 export type {
   WhatsAppMessage,

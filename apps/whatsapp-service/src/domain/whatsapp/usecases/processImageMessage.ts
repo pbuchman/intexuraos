@@ -10,7 +10,7 @@
  * 6. Update webhook event status
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/error.js';
+import type { WhatsAppError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
   WhatsAppMessageRepository,
@@ -102,7 +102,7 @@ export class ProcessImageMessageUseCase {
   async execute(
     input: ProcessImageMessageInput,
     logger: ProcessImageMessageLogger
-  ): Promise<Result<ProcessImageMessageResult, InboxError>> {
+  ): Promise<Result<ProcessImageMessageResult, WhatsAppError>> {
     const {
       webhookEventRepository,
       messageRepository,

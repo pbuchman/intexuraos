@@ -3,12 +3,12 @@
  * These interfaces define what the domain needs from infrastructure.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/error.js';
+import type { WhatsAppError } from '../models/error.js';
 import type { TranscriptionState, WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type { LinkPreviewState } from '../models/LinkPreview.js';
 
-// Re-export InboxError for use in other ports
-export type { InboxError };
+// Re-export WhatsAppError for use in other ports
+export type { WhatsAppError };
 
 /**
  * Processing status for webhook events.
@@ -72,12 +72,12 @@ export interface WhatsAppUserMappingRepository {
   saveMapping(
     userId: string,
     phoneNumbers: string[]
-  ): Promise<Result<WhatsAppUserMappingPublic, InboxError>>;
-  getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>>;
-  findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>>;
-  findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>>;
-  disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>>;
-  isConnected(userId: string): Promise<Result<boolean, InboxError>>;
+  ): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>>;
+  getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>>;
+  findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, WhatsAppError>>;
+  findPhoneByUserId(userId: string): Promise<Result<string | null, WhatsAppError>>;
+  disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>>;
+  isConnected(userId: string): Promise<Result<boolean, WhatsAppError>>;
 }
 
 /**
@@ -86,7 +86,7 @@ export interface WhatsAppUserMappingRepository {
 export interface WhatsAppWebhookEventRepository {
   saveEvent(
     event: Omit<WhatsAppWebhookEvent, 'id'>
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>>;
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>>;
   updateEventStatus(
     eventId: string,
     status: WebhookProcessingStatus,
@@ -94,8 +94,8 @@ export interface WhatsAppWebhookEventRepository {
       ignoredReason?: IgnoredReason;
       failureDetails?: string;
     }
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>>;
-  getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>>;
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>>;
+  getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>>;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface WhatsAppMessageRepository {
   /**
    * Save a new message.
    */
-  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>>;
+  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, WhatsAppError>>;
 
   /**
    * Get messages for a user, ordered by receivedAt descending.
@@ -116,17 +116,17 @@ export interface WhatsAppMessageRepository {
   getMessagesByUser(
     userId: string,
     options?: { limit?: number; cursor?: string }
-  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>>;
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>>;
 
   /**
    * Get a single message by ID.
    */
-  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
 
   /**
    * Find a message by user ID and message ID.
    */
-  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>>;
+  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>>;
 
   /**
    * Update message transcription state.
@@ -135,7 +135,7 @@ export interface WhatsAppMessageRepository {
     userId: string,
     messageId: string,
     transcription: TranscriptionState
-  ): Promise<Result<void, InboxError>>;
+  ): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Update message link preview state.
@@ -144,10 +144,10 @@ export interface WhatsAppMessageRepository {
     userId: string,
     messageId: string,
     linkPreview: LinkPreviewState
-  ): Promise<Result<void, InboxError>>;
+  ): Promise<Result<void, WhatsAppError>>;
 
   /**
    * Delete a message.
    */
-  deleteMessage(messageId: string): Promise<Result<void, InboxError>>;
+  deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>>;
 }

@@ -6,7 +6,7 @@ import type { Result } from '@intexuraos/common-core';
 /**
  * Domain error codes for Inbox operations.
  */
-export type InboxErrorCode =
+export type WhatsAppErrorCode =
   | 'NOT_FOUND'
   | 'VALIDATION_ERROR'
   | 'PERSISTENCE_ERROR'
@@ -15,8 +15,8 @@ export type InboxErrorCode =
 /**
  * Domain error type.
  */
-export interface InboxError {
-  code: InboxErrorCode;
+export interface WhatsAppError {
+  code: WhatsAppErrorCode;
   message: string;
   details?: Record<string, unknown>;
 }
@@ -24,4 +24,4 @@ export interface InboxError {
 /**
  * Result type for Inbox operations.
  */
-export type InboxResult<T> = Result<T, InboxError>;
+export type WhatsAppResult<T> = Result<T, WhatsAppError>;

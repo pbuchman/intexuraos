@@ -4,7 +4,7 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type {
-  InboxError,
+  WhatsAppError,
   ThumbnailGeneratorPort,
   ThumbnailResult,
 } from '../../domain/whatsapp/index.js';
@@ -14,7 +14,7 @@ import { generateThumbnail } from './thumbnailGenerator.js';
  * Thumbnail generator adapter implementation.
  */
 export class ThumbnailGeneratorAdapter implements ThumbnailGeneratorPort {
-  async generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, InboxError>> {
+  async generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, WhatsAppError>> {
     const result = await generateThumbnail(imageBuffer);
 
     if (!result.ok) {

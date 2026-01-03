@@ -15,7 +15,7 @@ import type {
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IgnoredReason,
-  InboxError,
+  WhatsAppError,
   LinkPreview,
   LinkPreviewError,
   LinkPreviewFetcherPort,
@@ -64,7 +64,7 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
 
   saveEvent(
     event: Omit<WhatsAppWebhookEvent, 'id'>
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
     if (this.shouldFailSave) {
       this.shouldFailSave = false;
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
@@ -83,7 +83,7 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
       failureDetails?: string;
       inboxNoteId?: string;
     }
-  ): Promise<Result<WhatsAppWebhookEvent, InboxError>> {
+  ): Promise<Result<WhatsAppWebhookEvent, WhatsAppError>> {
     const event = this.events.get(eventId);
     if (event === undefined) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Event not found' }));
@@ -98,7 +98,7 @@ export class FakeWhatsAppWebhookEventRepository implements WhatsAppWebhookEventR
     return Promise.resolve(ok(updated));
   }
 
-  getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, InboxError>> {
+  getEvent(eventId: string): Promise<Result<WhatsAppWebhookEvent | null, WhatsAppError>> {
     return Promise.resolve(ok(this.events.get(eventId) ?? null));
   }
 
@@ -180,7 +180,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   saveMapping(
     userId: string,
     phoneNumbers: string[]
-  ): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+  ): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
     // Simulate downstream failure
     if (this.shouldFailSaveMapping) {
       return Promise.resolve(
@@ -223,7 +223,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(publicMapping));
   }
 
-  getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, InboxError>> {
+  getMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic | null, WhatsAppError>> {
     if (this.shouldThrowOnGetMapping) {
       throw new Error('Simulated unexpected error in getMapping');
     }
@@ -238,7 +238,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(publicMapping));
   }
 
-  findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, InboxError>> {
+  findUserByPhoneNumber(phoneNumber: string): Promise<Result<string | null, WhatsAppError>> {
     if (this.shouldFailFindUserByPhoneNumber) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated user lookup failure' })
@@ -249,7 +249,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(this.phoneIndex.get(normalizedPhone) ?? null));
   }
 
-  findPhoneByUserId(userId: string): Promise<Result<string | null, InboxError>> {
+  findPhoneByUserId(userId: string): Promise<Result<string | null, WhatsAppError>> {
     const mapping = this.mappings.get(userId);
     if (mapping === undefined) return Promise.resolve(ok(null));
     if (!mapping.connected) return Promise.resolve(ok(null));
@@ -258,7 +258,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(firstPhone));
   }
 
-  disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, InboxError>> {
+  disconnectMapping(userId: string): Promise<Result<WhatsAppUserMappingPublic, WhatsAppError>> {
     if (this.shouldFailDisconnect) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated disconnectMapping failure' })
@@ -274,7 +274,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(publicMapping));
   }
 
-  isConnected(userId: string): Promise<Result<boolean, InboxError>> {
+  isConnected(userId: string): Promise<Result<boolean, WhatsAppError>> {
     const mapping = this.mappings.get(userId);
     return Promise.resolve(ok(mapping?.connected === true));
   }
@@ -335,7 +335,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return this.messages.get(messageId);
   }
 
-  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, InboxError>> {
+  saveMessage(message: Omit<WhatsAppMessage, 'id'>): Promise<Result<WhatsAppMessage, WhatsAppError>> {
     if (this.shouldFailSave) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated message save failure' })
@@ -350,7 +350,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   getMessagesByUser(
     userId: string,
     options?: { limit?: number; cursor?: string }
-  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, InboxError>> {
+  ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>> {
     const limit = options?.limit ?? 50;
     const userMessages = Array.from(this.messages.values())
       .filter((m) => m.userId === userId)
@@ -363,7 +363,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(result));
   }
 
-  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+  getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     if (this.shouldFailGetMessage) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessage failure' })
@@ -372,7 +372,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(this.messages.get(messageId) ?? null));
   }
 
-  deleteMessage(messageId: string): Promise<Result<void, InboxError>> {
+  deleteMessage(messageId: string): Promise<Result<void, WhatsAppError>> {
     if (this.shouldFailDeleteMessage) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated deleteMessage failure' })
@@ -382,7 +382,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     return Promise.resolve(ok(undefined));
   }
 
-  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, InboxError>> {
+  findById(userId: string, messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(ok(null));
@@ -394,7 +394,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     userId: string,
     messageId: string,
     transcription: TranscriptionState
-  ): Promise<Result<void, InboxError>> {
+  ): Promise<Result<void, WhatsAppError>> {
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
@@ -407,7 +407,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     userId: string,
     messageId: string,
     linkPreview: LinkPreviewState
-  ): Promise<Result<void, InboxError>> {
+  ): Promise<Result<void, WhatsAppError>> {
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
@@ -468,7 +468,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>> {
+  ): Promise<Result<UploadResult, WhatsAppError>> {
     if (this.shouldFailUpload) {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated upload failure' }));
     }
@@ -484,7 +484,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     extension: string,
     buffer: Buffer,
     contentType: string
-  ): Promise<Result<UploadResult, InboxError>> {
+  ): Promise<Result<UploadResult, WhatsAppError>> {
     if (this.shouldFailThumbnailUpload) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail upload failure' })
@@ -495,7 +495,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     return Promise.resolve(ok({ gcsPath }));
   }
 
-  delete(gcsPath: string): Promise<Result<void, InboxError>> {
+  delete(gcsPath: string): Promise<Result<void, WhatsAppError>> {
     if (this.shouldFailDelete) {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
     }
@@ -504,7 +504,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     return Promise.resolve(ok(undefined));
   }
 
-  getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, InboxError>> {
+  getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, WhatsAppError>> {
     if (this.shouldFailGetSignedUrl) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated getSignedUrl failure' })
@@ -541,27 +541,27 @@ export class FakeEventPublisher implements EventPublisherPort {
   private transcribeAudioEvents: TranscribeAudioEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
 
-  publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, InboxError>> {
+  publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
-  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, InboxError>> {
+  publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>> {
     this.commandIngestEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
-  publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, InboxError>> {
+  publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
     this.webhookProcessEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
-  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, InboxError>> {
+  publishTranscribeAudio(event: TranscribeAudioEvent): Promise<Result<void, WhatsAppError>> {
     this.transcribeAudioEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
 
-  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, InboxError>> {
+  publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>> {
     this.extractLinkPreviewsEvents.push(event);
     return Promise.resolve(ok(undefined));
   }
@@ -602,9 +602,9 @@ export class FakeMessageSender implements WhatsAppMessageSender {
   private sentMessages: { phoneNumber: string; message: string }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
-  private failError: InboxError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
+  private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
 
-  setFail(fail: boolean, error?: InboxError): void {
+  setFail(fail: boolean, error?: WhatsAppError): void {
     this.shouldFail = fail;
     if (error !== undefined) {
       this.failError = error;
@@ -615,7 +615,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     this.shouldThrow = shouldThrow;
   }
 
-  sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, InboxError>> {
+  sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, WhatsAppError>> {
     if (this.shouldThrow) {
       throw new Error('Unexpected send error');
     }
@@ -913,7 +913,7 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     return this.sentMessages;
   }
 
-  getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>> {
+  getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
     if (this.shouldFailGetMediaUrl) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated getMediaUrl failure' })
@@ -928,7 +928,7 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     return Promise.resolve(ok(info));
   }
 
-  downloadMedia(url: string): Promise<Result<Buffer, InboxError>> {
+  downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>> {
     if (this.shouldFailDownload) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated download failure' })
@@ -948,7 +948,7 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     recipientPhone: string,
     message: string,
     replyToMessageId?: string
-  ): Promise<Result<SendMessageResult, InboxError>> {
+  ): Promise<Result<SendMessageResult, WhatsAppError>> {
     if (this.shouldFailSendMessage) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated sendMessage failure' })
@@ -998,7 +998,7 @@ export class FakeThumbnailGeneratorPort implements ThumbnailGeneratorPort {
     this.customResult = result;
   }
 
-  generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, InboxError>> {
+  generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, WhatsAppError>> {
     if (this.shouldFail) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated thumbnail generation failure' })
