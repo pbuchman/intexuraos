@@ -10,7 +10,7 @@
  * 6. Update webhook event status
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/InboxNote.js';
+import type { InboxError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
   WhatsAppMessageRepository,
