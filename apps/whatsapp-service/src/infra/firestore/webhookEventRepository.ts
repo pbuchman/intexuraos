@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 export type WebhookProcessingStatus =
   | 'pending'
-  | 'processed'
+  | 'completed'
   | 'ignored'
   | 'user_unmapped'
   | 'failed';

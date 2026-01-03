@@ -307,7 +307,7 @@ export class ProcessImageMessageUseCase {
     }
 
     // Update webhook event status to PROCESSED
-    await webhookEventRepository.updateEventStatus(eventId, 'processed', {});
+    await webhookEventRepository.updateEventStatus(eventId, 'completed', {});
 
     logger.info(
       {

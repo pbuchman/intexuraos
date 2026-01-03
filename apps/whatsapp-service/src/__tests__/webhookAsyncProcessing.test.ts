@@ -136,7 +136,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('processed');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored
       const messages = ctx.messageRepository.getAll();
@@ -263,7 +263,7 @@ describe('Webhook async processing', () => {
       // Verify event was processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('processed');
+      expect(events[0]?.status).toBe('completed');
 
       // Verify confirmation message was sent via whatsappCloudApi
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
@@ -301,7 +301,7 @@ describe('Webhook async processing', () => {
       // Event should still be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('processed');
+      expect(events[0]?.status).toBe('completed');
     });
   });
 
@@ -379,7 +379,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('processed');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored with media info
       const messages = ctx.messageRepository.getAll();
@@ -594,7 +594,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('processed');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored with audio media info
       const messages = ctx.messageRepository.getAll();
