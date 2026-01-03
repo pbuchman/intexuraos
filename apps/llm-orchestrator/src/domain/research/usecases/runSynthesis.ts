@@ -52,13 +52,38 @@ export async function runSynthesis(
   await researchRepo.update(researchId, { status: 'synthesizing' });
 
   const successfulResults = research.llmResults.filter((r) => r.status === 'completed');
-  if (successfulResults.length === 0) {
+  const externalReportsCount = research.externalReports?.length ?? 0;
+
+  if (successfulResults.length === 0 && externalReportsCount === 0) {
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: 'No successful LLM results to synthesize',
       completedAt: new Date().toISOString(),
     });
     return { ok: false, error: 'No successful LLM results' };
+  }
+
+  const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCount === 0;
+
+  if (shouldSkipSynthesis) {
+    const now = new Date();
+    const startedAt = new Date(research.startedAt);
+    const totalDurationMs = now.getTime() - startedAt.getTime();
+
+    await researchRepo.update(researchId, {
+      status: 'completed',
+      completedAt: now.toISOString(),
+      totalDurationMs,
+    });
+
+    void notificationSender.sendResearchComplete(
+      research.userId,
+      researchId,
+      research.title,
+      `${webAppUrl}/#/research/${researchId}`
+    );
+
+    return { ok: true };
   }
 
   const reports = successfulResults.map((r) => ({

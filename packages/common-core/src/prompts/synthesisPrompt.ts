@@ -69,10 +69,11 @@ ${conflictGuidelines}
 ## Your Task
 
 Create a unified synthesis that:
-1. Combines the best insights from all reports${hasExternal ? ' (both system and external)' : ''}
-2. Notes any conflicting information with clear attribution
-3. Provides a balanced conclusion
-4. Lists key sources from across all reports
+1. **Begin with source attribution**: Start your synthesis with "This synthesis is based on research by: ${reports.map((r) => r.model).join(', ')}${hasExternal ? ` and external sources: ${externalReports.map((r, i) => r.model ?? `External ${String(i + 1)}`).join(', ')}` : ''}."
+2. Combines the best insights from all reports${hasExternal ? ' (both system and external)' : ''}
+3. Notes any conflicting information with clear attribution
+4. Provides a balanced conclusion
+5. Lists key sources from across all reports
 
 Write in clear, professional prose.`;
 }

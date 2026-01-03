@@ -1391,7 +1391,11 @@ describe('Research Routes - Authenticated', () => {
       const newApp = await buildServer();
       try {
         const token = await createToken(TEST_USER_ID);
-        const research = createAwaitingConfirmationResearch();
+        const research = createAwaitingConfirmationResearch({
+          externalReports: [
+            { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
+          ],
+        });
         newFakeRepo.addResearch(research);
         newFakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
 
@@ -2270,6 +2274,9 @@ describe('Internal Routes', () => {
         selectedLlms: ['google'],
         synthesisLlm: 'google',
         llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'pending' }],
+        externalReports: [
+          { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2294,6 +2301,39 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('completed');
       expect(updatedResearch?.synthesizedResult).toBeDefined();
+    });
+
+    it('skips synthesis when single LLM completes without external reports', async () => {
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedLlms: ['google'],
+        synthesisLlm: 'google',
+        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'pending' }],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('completed');
+      expect(updatedResearch?.synthesizedResult).toBeUndefined();
     });
 
     it('sends notification on successful synthesis', async () => {

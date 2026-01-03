@@ -161,6 +161,12 @@ describe('runSynthesis', () => {
           status: 'completed',
           result: 'Google Result',
         },
+        {
+          provider: 'anthropic',
+          model: 'claude-3',
+          status: 'completed',
+          result: 'Claude Result',
+        },
         { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
       ],
     });
@@ -170,7 +176,10 @@ describe('runSynthesis', () => {
 
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
-      [{ model: 'gemini-2.0-flash', content: 'Google Result' }],
+      [
+        { model: 'gemini-2.0-flash', content: 'Google Result' },
+        { model: 'claude-3', content: 'Claude Result' },
+      ],
       undefined
     );
   });
@@ -274,7 +283,10 @@ describe('runSynthesis', () => {
 
   it('handles empty result string from LLM', async () => {
     const research = createTestResearch({
-      llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'completed' }],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed' },
+        { provider: 'openai', model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
+      ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -282,9 +294,170 @@ describe('runSynthesis', () => {
 
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
-      [{ model: 'gemini-2.0-flash', content: '' }],
+      [
+        { model: 'gemini-2.0-flash', content: '' },
+        { model: 'gpt-4', content: 'OpenAI Result' },
+      ],
       undefined
     );
+  });
+
+  describe('skip synthesis logic', () => {
+    it('skips synthesis when only 1 successful LLM and no external reports', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        status: 'completed',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+      });
+    });
+
+    it('skips synthesis when multiple LLMs selected but only 1 succeeds', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Only success',
+          },
+          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Failed' },
+          { provider: 'anthropic', model: 'claude-opus', status: 'failed', error: 'Failed' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+    });
+
+    it('runs synthesis when 1 LLM succeeds with external reports', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+        ],
+        externalReports: [
+          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('runs synthesis when 2+ LLMs succeed without external reports', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Google result',
+          },
+          {
+            provider: 'openai',
+            model: 'o4-mini-deep-research',
+            status: 'completed',
+            result: 'OpenAI result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('runs synthesis when no LLMs succeed but has external reports', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Failed' },
+        ],
+        externalReports: [
+          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', deps);
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
+    });
+
+    it('sends notification with app URL when synthesis skipped', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      await runSynthesis('research-1', deps);
+
+      expect(deps.mockNotificationSender.sendResearchComplete).toHaveBeenCalledWith(
+        'user-1',
+        'research-1',
+        'Test Research',
+        'https://app.example.com/#/research/research-1'
+      );
+    });
+
+    it('does not report LLM success when synthesis skipped', async () => {
+      const research = createTestResearch({
+        selectedLlms: ['google'],
+        llmResults: [
+          {
+            provider: 'google',
+            model: 'gemini-2.0-flash',
+            status: 'completed',
+            result: 'Single result',
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      await runSynthesis('research-1', deps);
+
+      expect(deps.mockReportSuccess).not.toHaveBeenCalled();
+    });
   });
 
   describe('with share storage', () => {

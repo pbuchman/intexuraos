@@ -598,6 +598,17 @@ export function ResearchDetailPage(): React.JSX.Element {
             <MarkdownContent content={research.synthesizedResult} />
           </div>
         </Card>
+      ) : research.status === 'completed' &&
+        research.llmResults.filter((r) => r.status === 'completed').length <= 1 &&
+        (research.inputContexts === undefined || research.inputContexts.length === 0) ? (
+        <Card title="Synthesis Report" className="mb-6">
+          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+            <p className="text-amber-800">
+              Synthesis not available — only one individual report was generated.
+            </p>
+          </div>
+        </Card>
       ) : null}
 
       {research.synthesisError !== undefined && research.synthesisError !== '' ? (

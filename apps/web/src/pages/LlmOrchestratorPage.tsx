@@ -41,6 +41,8 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showSingleProviderConfirm, setShowSingleProviderConfirm] = useState(false);
+  const [pendingResearchId, setPendingResearchId] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
@@ -231,7 +233,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const hasValidContexts = validContexts.length > 0;
   const isSingleProviderNoContext = selectedLlms.length === 1 && !hasValidContexts;
 
-  const executeSubmit = async (skipSynthesis: boolean): Promise<void> => {
+  const executeSubmit = async (showConfirmation: boolean): Promise<void> => {
     setSubmitting(true);
     setError(null);
 
@@ -270,15 +272,18 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         if (contextObjects.length > 0) {
           request.inputContexts = contextObjects;
         }
-        if (skipSynthesis) {
-          request.skipSynthesis = true;
-        }
         const research = await createResearch(token, request);
-        void navigate(`/research/${research.id}`);
+
+        if (showConfirmation) {
+          setPendingResearchId(research.id);
+          setShowSingleProviderConfirm(true);
+          setSubmitting(false);
+        } else {
+          void navigate(`/research/${research.id}`);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create research');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -297,17 +302,29 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       return;
     }
 
-    if (isSingleProviderNoContext) {
-      setShowSingleProviderConfirm(true);
-      return;
-    }
-
-    await executeSubmit(false);
+    await executeSubmit(isSingleProviderNoContext);
   };
 
-  const handleConfirmSingleProvider = async (): Promise<void> => {
-    setShowSingleProviderConfirm(false);
-    await executeSubmit(true);
+  const handleConfirmProceed = (): void => {
+    if (pendingResearchId !== null) {
+      setShowSingleProviderConfirm(false);
+      void navigate(`/research/${pendingResearchId}`);
+    }
+  };
+
+  const handleConfirmDiscard = async (): Promise<void> => {
+    if (pendingResearchId === null) return;
+
+    setDiscarding(true);
+    try {
+      const token = await getAccessToken();
+      const { deleteResearch } = await import('@/services/llmOrchestratorApi');
+      await deleteResearch(token, pendingResearchId);
+      window.location.reload();
+    } catch {
+      setError('Failed to discard research');
+      setDiscarding(false);
+    }
   };
 
   const handleSaveDraft = async (): Promise<void> => {
@@ -580,13 +597,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Single Provider Research</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  You&apos;re about to run research with only one provider (
+                  Research started with only one provider (
                   {PROVIDERS.find((p) => p.id === selectedLlms[0])?.shortName ?? selectedLlms[0]})
-                  and no input context.
+                  and no additional context.
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Synthesis will be skipped since there&apos;s only one source. You&apos;ll see the
-                  raw LLM result without a synthesized report.
+                  The result will show the individual report without synthesis.
                 </p>
               </div>
             </div>
@@ -594,17 +610,15 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               <Button
                 variant="secondary"
                 onClick={(): void => {
-                  setShowSingleProviderConfirm(false);
+                  void handleConfirmDiscard();
                 }}
+                disabled={discarding}
+                isLoading={discarding}
               >
-                Cancel
+                Discard
               </Button>
-              <Button
-                onClick={(): void => {
-                  void handleConfirmSingleProvider();
-                }}
-              >
-                Continue Anyway
+              <Button onClick={handleConfirmProceed} disabled={discarding}>
+                Proceed
               </Button>
             </div>
           </div>
