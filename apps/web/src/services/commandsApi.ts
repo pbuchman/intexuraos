@@ -3,6 +3,7 @@ import { apiRequest } from './apiClient.js';
 import type {
   Action,
   ActionsResponse,
+  ActionStatus,
   Command,
   CommandSourceType,
   CommandsResponse,
@@ -27,7 +28,7 @@ export async function getCommands(
 
 export async function getActions(
   accessToken: string,
-  options?: { limit?: number; cursor?: string }
+  options?: { limit?: number; cursor?: string; status?: ActionStatus[] }
 ): Promise<ActionsResponse> {
   const params = new URLSearchParams();
   if (options?.limit !== undefined) {
@@ -35,6 +36,9 @@ export async function getActions(
   }
   if (options?.cursor !== undefined) {
     params.set('cursor', options.cursor);
+  }
+  if (options?.status !== undefined && options.status.length > 0) {
+    params.set('status', options.status.join(','));
   }
   const queryString = params.toString();
   const path = queryString !== '' ? `/router/actions?${queryString}` : '/router/actions';
