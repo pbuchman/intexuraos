@@ -1,4 +1,5 @@
 export {
+  type EnhanceResearchParams,
   type ExternalReport,
   type LlmProvider,
   type LlmResult,
@@ -10,6 +11,7 @@ export {
   type SearchMode,
   type ShareInfo,
   createDraftResearch,
+  createEnhancedResearch,
   createLlmResults,
   createResearch,
 } from './Research.js';

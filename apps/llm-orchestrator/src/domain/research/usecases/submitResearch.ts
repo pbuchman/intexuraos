@@ -4,7 +4,12 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { createResearch, type LlmProvider, type Research, type SearchMode } from '../models/index.js';
+import {
+  createResearch,
+  type LlmProvider,
+  type Research,
+  type SearchMode,
+} from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {

@@ -119,6 +119,7 @@ export const researchSchema = {
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },
     sourceActionId: { type: 'string', nullable: true },
+    sourceResearchId: { type: 'string', nullable: true },
   },
   required: [
     'id',

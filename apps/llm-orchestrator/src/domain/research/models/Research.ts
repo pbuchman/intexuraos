@@ -89,6 +89,7 @@ export interface Research {
   sourceActionId?: string;
   skipSynthesis?: boolean;
   shareInfo?: ShareInfo;
+  sourceResearchId?: string;
 }
 
 export function getModelForMode(provider: LlmProvider, searchMode: SearchMode): string {
@@ -189,6 +190,69 @@ export function createDraftResearch(params: {
 
   if (params.externalReports !== undefined) {
     research.externalReports = params.externalReports;
+  }
+
+  return research;
+}
+
+export interface EnhanceResearchParams {
+  id: string;
+  userId: string;
+  sourceResearch: Research;
+  additionalLlms?: LlmProvider[];
+  additionalContexts?: { content: string; model?: string }[];
+  synthesisLlm?: LlmProvider;
+  removeContextIds?: string[];
+  searchMode?: SearchMode;
+}
+
+export function createEnhancedResearch(params: EnhanceResearchParams): Research {
+  const now = new Date().toISOString();
+  const resolvedSearchMode = params.searchMode ?? 'deep';
+  const source = params.sourceResearch;
+
+  const completedResults = source.llmResults
+    .filter((r) => r.status === 'completed')
+    .map((r) => ({ ...r }));
+
+  const existingProviders = new Set(completedResults.map((r) => r.provider));
+  const newProviders = (params.additionalLlms ?? []).filter((p) => !existingProviders.has(p));
+  const newResults = createLlmResults(newProviders, resolvedSearchMode);
+
+  const allProviders = [...new Set([...completedResults.map((r) => r.provider), ...newProviders])];
+
+  const removeSet = new Set(params.removeContextIds ?? []);
+  const existingContexts = (source.externalReports ?? []).filter((r) => !removeSet.has(r.id));
+
+  const additionalContexts: ExternalReport[] = (params.additionalContexts ?? []).map((ctx, idx) => {
+    const report: ExternalReport = {
+      id: `${params.id}-ext-${String(idx)}`,
+      content: ctx.content,
+      addedAt: now,
+    };
+    if (ctx.model !== undefined) {
+      report.model = ctx.model;
+    }
+    return report;
+  });
+
+  const allContexts = [...existingContexts, ...additionalContexts];
+
+  const research: Research = {
+    id: params.id,
+    userId: params.userId,
+    title: source.title,
+    prompt: source.prompt,
+    selectedLlms: allProviders,
+    synthesisLlm: params.synthesisLlm ?? source.synthesisLlm,
+    status: 'pending',
+    llmResults: [...completedResults, ...newResults],
+    startedAt: now,
+    sourceResearchId: source.id,
+  };
+
+  if (allContexts.length > 0) {
+    research.externalReports = allContexts;
   }
 
   return research;

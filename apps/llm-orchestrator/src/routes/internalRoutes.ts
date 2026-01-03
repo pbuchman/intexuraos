@@ -313,7 +313,26 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           deps.titleGenerator = services.createTitleGenerator(apiKeys.google);
         }
 
-        await processResearch(event.researchId, deps);
+        const processResult = await processResearch(event.researchId, deps);
+
+        // For enhanced researches where all LLM results are already completed,
+        // trigger synthesis immediately
+        if (processResult.triggerSynthesis) {
+          request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
+
+          const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+          await runSynthesis(event.researchId, {
+            researchRepo,
+            synthesizer,
+            notificationSender: services.notificationSender,
+            shareStorage: services.shareStorage,
+            shareConfig: services.shareConfig,
+            webAppUrl,
+            reportLlmSuccess: (): void => {
+              void userServiceClient.reportLlmSuccess(research.userId, research.synthesisLlm);
+            },
+          });
+        }
 
         request.log.info({ researchId: event.researchId }, 'Research processed successfully');
         return { success: true };
