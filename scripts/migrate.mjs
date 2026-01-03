@@ -19,7 +19,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -60,11 +60,7 @@ function getProjectId(options) {
 function initFirestore(projectId) {
   if (getApps().length === 0) {
     initializeApp({
-      credential: cert({
-        projectId,
-        clientEmail: `firebase-adminsdk@${projectId}.iam.gserviceaccount.com`,
-        privateKey: 'dummy-key-for-adc',
-      }),
+      credential: applicationDefault(),
       projectId,
     });
   }
