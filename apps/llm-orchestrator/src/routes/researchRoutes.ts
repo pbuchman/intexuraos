@@ -229,7 +229,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as { id: string };
       const body = request.body as SaveDraftBody;
-      const { researchRepo, userServiceClient, createTitleGenerator } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
 
       // Get existing research
       const existingResult = await researchRepo.findById(id);
@@ -280,7 +280,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const now = new Date().toISOString();
         updates.externalReports = body.externalReports.map((report) => {
           const externalReport: ExternalReport = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             content: report.content,
             addedAt: now,
           };
