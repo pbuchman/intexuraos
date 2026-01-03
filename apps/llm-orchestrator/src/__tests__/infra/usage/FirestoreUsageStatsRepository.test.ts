@@ -27,7 +27,7 @@ const mockModelDocRef = {
 
 const mockModelDoc = vi.fn().mockReturnValue(mockModelDocRef);
 
-const mockModelsSnapshot = { docs: [] as Array<{ ref: typeof mockModelDocRef }> };
+const mockModelsSnapshot = { docs: [] as { ref: typeof mockModelDocRef }[] };
 const mockModelsGet = vi.fn().mockResolvedValue(mockModelsSnapshot);
 
 const mockCollection = vi.fn().mockReturnValue({

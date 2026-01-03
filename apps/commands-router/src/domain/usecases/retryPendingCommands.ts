@@ -1,6 +1,5 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import type { CommandClassification } from '../models/command.js';
 import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
@@ -146,13 +145,12 @@ export function createRetryPendingCommandsUseCase(deps: {
             );
           }
 
-          const commandClassification: CommandClassification = {
+          command.classification = {
             type: classification.type,
             confidence: classification.confidence,
             reasoning: classification.reasoning,
             classifiedAt: new Date().toISOString(),
           };
-          command.classification = commandClassification;
           command.status = 'classified';
 
           await commandRepository.update(command);

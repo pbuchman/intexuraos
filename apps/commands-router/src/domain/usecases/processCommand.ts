@@ -168,7 +168,10 @@ export function createProcessCommandUseCase(deps: {
               },
               'Failed to create action via actions-agent'
             );
-            throw actionResult.error;
+            command.status = 'failed';
+            command.failureReason = actionResult.error.message;
+            await commandRepository.update(command);
+            return { command, isNew: true };
           }
 
           const action = actionResult.value;
