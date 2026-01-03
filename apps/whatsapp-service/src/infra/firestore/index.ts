@@ -5,7 +5,7 @@ export {
   type WebhookProcessingStatus,
   type IgnoredReason,
   type WhatsAppWebhookEvent,
-  type InboxError,
+  type WhatsAppError,
   saveWebhookEvent,
   updateWebhookEventStatus,
   getWebhookEvent,

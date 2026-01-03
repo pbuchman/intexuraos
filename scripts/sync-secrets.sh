@@ -32,7 +32,8 @@ export REGISTRY=${REGISTRY}
 EOF
 
 # Get all INTEXURAOS secrets and append to .envrc
-for secret in $(gcloud secrets list --project="${PROJECT_ID}" --format="value(name)" | grep "^INTEXURAOS_"); do
+# Skip SSL_PRIVATE_KEY - not needed locally and causes issues with multiline values
+for secret in $(gcloud secrets list --project="${PROJECT_ID}" --format="value(name)" | grep "^INTEXURAOS_" | grep -v "SSL_PRIVATE_KEY"); do
   value=$(gcloud secrets versions access latest --secret="${secret}" --project="${PROJECT_ID}" 2>/dev/null || echo "")
   if [[ -n "$value" ]]; then
     echo "export ${secret}=${value}" >> "${ENVRC_FILE}"

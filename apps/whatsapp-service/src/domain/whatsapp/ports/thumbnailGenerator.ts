@@ -3,7 +3,7 @@
  * Abstracts image processing from the domain layer.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxError } from './repositories.js';
+import type { WhatsAppError } from './repositories.js';
 
 /**
  * Result of thumbnail generation.
@@ -24,5 +24,5 @@ export interface ThumbnailGeneratorPort {
    * @param imageBuffer - Original image content
    * @returns Thumbnail buffer and metadata
    */
-  generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, InboxError>>;
+  generate(imageBuffer: Buffer): Promise<Result<ThumbnailResult, WhatsAppError>>;
 }

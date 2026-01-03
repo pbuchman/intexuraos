@@ -4,7 +4,7 @@
  */
 import sharp from 'sharp';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../../domain/inbox/index.js';
+import type { WhatsAppError } from '../../domain/whatsapp/index.js';
 
 const MAX_THUMBNAIL_EDGE = 256;
 const JPEG_QUALITY = 80;
@@ -34,7 +34,7 @@ export interface ThumbnailResult {
  */
 export async function generateThumbnail(
   imageBuffer: Buffer
-): Promise<Result<ThumbnailResult, InboxError>> {
+): Promise<Result<ThumbnailResult, WhatsAppError>> {
   try {
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();

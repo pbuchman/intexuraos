@@ -11,7 +11,7 @@
  * Note: Transcription is handled separately by TranscribeAudioUseCase.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { InboxError } from '../models/InboxNote.js';
+import type { WhatsAppError } from '../models/error.js';
 import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import type {
   WhatsAppMessageRepository,
@@ -19,6 +19,8 @@ import type {
 } from '../ports/repositories.js';
 import type { MediaStoragePort } from '../ports/mediaStorage.js';
 import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
+import type { Logger } from '../utils/logger.js';
+import { getExtensionFromMimeType } from '../utils/mimeType.js';
 
 /**
  * Audio media information from webhook payload.
@@ -54,12 +56,9 @@ export interface ProcessAudioMessageResult {
 }
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface ProcessAudioMessageLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type ProcessAudioMessageLogger = Logger;
 
 /**
  * Dependencies for ProcessAudioMessageUseCase.
@@ -69,19 +68,6 @@ export interface ProcessAudioMessageDeps {
   messageRepository: WhatsAppMessageRepository;
   mediaStorage: MediaStoragePort;
   whatsappCloudApi: WhatsAppCloudApiPort;
-}
-
-/**
- * Get file extension from MIME type.
- */
-function getExtensionFromMimeType(mimeType: string): string {
-  const mimeToExt: Record<string, string> = {
-    'audio/ogg': 'ogg',
-    'audio/mpeg': 'mp3',
-    'audio/mp4': 'm4a',
-    'audio/aac': 'aac',
-  };
-  return mimeToExt[mimeType] ?? 'bin';
 }
 
 /**
@@ -100,7 +86,7 @@ export class ProcessAudioMessageUseCase {
   async execute(
     input: ProcessAudioMessageInput,
     logger: ProcessAudioMessageLogger
-  ): Promise<Result<ProcessAudioMessageResult, InboxError>> {
+  ): Promise<Result<ProcessAudioMessageResult, WhatsAppError>> {
     const { webhookEventRepository, messageRepository, mediaStorage, whatsappCloudApi } = this.deps;
 
     const {
@@ -133,7 +119,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(mediaUrlResult.error);
     }
 
@@ -155,7 +141,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(downloadResult.error);
     }
 
@@ -188,7 +174,7 @@ export class ProcessAudioMessageUseCase {
         },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(uploadResult.error);
     }
 
@@ -236,12 +222,12 @@ export class ProcessAudioMessageUseCase {
         { event: 'audio_save_failed', error: saveResult.error, eventId },
         failureDetails
       );
-      await webhookEventRepository.updateEventStatus(eventId, 'FAILED', { failureDetails });
+      await webhookEventRepository.updateEventStatus(eventId, 'failed', { failureDetails });
       return err(saveResult.error);
     }
 
     // Update webhook event status to PROCESSED
-    await webhookEventRepository.updateEventStatus(eventId, 'PROCESSED', {});
+    await webhookEventRepository.updateEventStatus(eventId, 'completed', {});
 
     logger.info(
       {

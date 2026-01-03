@@ -13,6 +13,7 @@ import type { LinkPreview, LinkPreviewState } from '../models/LinkPreview.js';
 import type { WhatsAppMessageRepository } from '../ports/repositories.js';
 import type { LinkPreviewFetcherPort } from '../ports/linkPreviewFetcher.js';
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { Logger } from '../utils/logger.js';
 
 /**
  * Maximum number of URLs to process per message.
@@ -34,12 +35,9 @@ export interface ExtractLinkPreviewsInput {
 }
 
 /**
- * Logger interface for the use case.
+ * Logger for the use case.
  */
-export interface ExtractLinkPreviewsLogger {
-  info(data: Record<string, unknown>, message: string): void;
-  error(data: Record<string, unknown>, message: string): void;
-}
+export type ExtractLinkPreviewsLogger = Logger;
 
 /**
  * Dependencies for ExtractLinkPreviewsUseCase.

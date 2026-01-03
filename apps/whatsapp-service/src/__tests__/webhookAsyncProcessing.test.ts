@@ -103,7 +103,7 @@ describe('Webhook async processing', () => {
       // Event should be persisted with USER_UNMAPPED status (no mapping for sender)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('USER_UNMAPPED');
+      expect(events[0]?.status).toBe('user_unmapped');
     });
 
     it('processes webhook and stores message when user mapping exists', async () => {
@@ -136,7 +136,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('PROCESSED');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored
       const messages = ctx.messageRepository.getAll();
@@ -197,7 +197,7 @@ describe('Webhook async processing', () => {
       // Event should be persisted with IGNORED status (no sender)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
     });
 
     it('processes webhook when user mapping is disconnected', async () => {
@@ -229,7 +229,7 @@ describe('Webhook async processing', () => {
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       // User is found but mapping is disconnected, so USER_UNMAPPED
-      expect(events[0]?.status).toBe('USER_UNMAPPED');
+      expect(events[0]?.status).toBe('user_unmapped');
     });
   });
 
@@ -263,7 +263,7 @@ describe('Webhook async processing', () => {
       // Verify event was processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('PROCESSED');
+      expect(events[0]?.status).toBe('completed');
 
       // Verify confirmation message was sent via whatsappCloudApi
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
@@ -301,7 +301,7 @@ describe('Webhook async processing', () => {
       // Event should still be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('PROCESSED');
+      expect(events[0]?.status).toBe('completed');
     });
   });
 
@@ -379,7 +379,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('PROCESSED');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored with media info
       const messages = ctx.messageRepository.getAll();
@@ -470,7 +470,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
 
       // No message should be stored
       const messages = ctx.messageRepository.getAll();
@@ -512,7 +512,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('sends confirmation message after successful image processing', async () => {
@@ -594,7 +594,7 @@ describe('Webhook async processing', () => {
       // Event should be processed
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('PROCESSED');
+      expect(events[0]?.status).toBe('completed');
 
       // Message should be stored with audio media info
       const messages = ctx.messageRepository.getAll();
@@ -643,7 +643,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
 
       // No message should be stored
       const messages = ctx.messageRepository.getAll();
@@ -685,7 +685,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('sends confirmation message after successful audio processing', async () => {
@@ -759,7 +759,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
       expect(events[0]?.failureDetails).toContain('Failed to save message');
 
       // No message should be stored
@@ -803,7 +803,7 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       // Status remains PENDING because the error occurs before status update
       // The catch block just logs the error
-      expect(events[0]?.status).toBe('PENDING');
+      expect(events[0]?.status).toBe('pending');
     });
   });
 
@@ -834,7 +834,7 @@ describe('Webhook async processing', () => {
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
       expect(events[0]?.failureDetails).toContain('Simulated user lookup failure');
     });
   });
@@ -901,7 +901,7 @@ describe('Webhook async processing', () => {
       // Event should be IGNORED because audio message has no media info
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
     });
   });
 
@@ -966,7 +966,7 @@ describe('Webhook async processing', () => {
       // Event should be IGNORED because text message has no body
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
     });
   });
 
@@ -1031,7 +1031,7 @@ describe('Webhook async processing', () => {
       // Event should be IGNORED because image message has no media info
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
     });
   });
 
@@ -1099,7 +1099,7 @@ describe('Webhook async processing', () => {
       // Event should be IGNORED because sticker is not a supported message type
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
     });
   });
 
@@ -1453,7 +1453,7 @@ describe('Webhook async processing', () => {
       // Event should be IGNORED with 'unknown' in message
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('IGNORED');
+      expect(events[0]?.status).toBe('ignored');
       expect(events[0]?.ignoredReason?.message).toContain('unknown');
     });
 

@@ -19,6 +19,12 @@ export {
 export { runSynthesis, type RunSynthesisDeps } from './runSynthesis.js';
 export { retryFailedLlms, type RetryFailedLlmsDeps, type RetryResult } from './retryFailedLlms.js';
 export {
+  retryFromFailed,
+  type RetryFromFailedDeps,
+  type RetryFromFailedResult,
+  type RetryAction,
+} from './retryFromFailed.js';
+export {
   unshareResearch,
   type UnshareResearchDeps,
   type UnshareResearchResult,

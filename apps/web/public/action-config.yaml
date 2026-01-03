@@ -4,9 +4,9 @@
 actions:
   approve:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /router/actions/{actionId}/execute
       method: POST
-      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Approve
       variant: success
@@ -15,9 +15,9 @@ actions:
 
   retry:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /router/actions/{actionId}/execute
       method: POST
-      baseUrl: ${VITE_INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Retry
       variant: primary
@@ -28,6 +28,7 @@ actions:
     endpoint:
       path: /router/actions/{actionId}
       method: PATCH
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
       body:
         status: rejected
     ui:
@@ -39,6 +40,7 @@ actions:
     endpoint:
       path: /router/actions/{actionId}
       method: PATCH
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
       body:
         status: archived
     ui:
@@ -50,6 +52,7 @@ actions:
     endpoint:
       path: /router/actions/{actionId}
       method: DELETE
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
       label: Delete
       variant: secondary

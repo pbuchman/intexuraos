@@ -507,6 +507,7 @@ module "pubsub_actions_research" {
 
   publisher_service_accounts = {
     commands_router = module.iam.service_accounts["commands_router"]
+    actions_agent   = module.iam.service_accounts["actions_agent"]
   }
 
   depends_on = [

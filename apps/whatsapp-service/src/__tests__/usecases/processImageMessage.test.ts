@@ -8,7 +8,7 @@ import {
   type ProcessImageMessageLogger,
   ProcessImageMessageUseCase,
   type WhatsAppWebhookEvent,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 import {
   FakeMediaStorage,
   FakeThumbnailGeneratorPort,
@@ -55,7 +55,7 @@ function createTestWebhookEvent(eventId = 'test-event-id'): WhatsAppWebhookEvent
     signatureValid: true,
     receivedAt: new Date().toISOString(),
     phoneNumberId: '123456789012345',
-    status: 'PENDING',
+    status: 'pending',
   };
 }
 
@@ -136,7 +136,7 @@ describe('ProcessImageMessageUseCase', () => {
       }
 
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('returns error when downloadMedia fails', async () => {
@@ -152,7 +152,7 @@ describe('ProcessImageMessageUseCase', () => {
       }
 
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('returns error when thumbnail generation fails', async () => {
@@ -164,7 +164,7 @@ describe('ProcessImageMessageUseCase', () => {
 
       expect(result.ok).toBe(false);
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('returns error when image upload fails', async () => {
@@ -180,7 +180,7 @@ describe('ProcessImageMessageUseCase', () => {
       }
 
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('returns error when thumbnail upload fails', async () => {
@@ -196,7 +196,7 @@ describe('ProcessImageMessageUseCase', () => {
       }
 
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
 
     it('returns error when message save fails', async () => {
@@ -212,7 +212,7 @@ describe('ProcessImageMessageUseCase', () => {
       }
 
       const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('FAILED');
+      expect(events[0]?.status).toBe('failed');
     });
   });
 

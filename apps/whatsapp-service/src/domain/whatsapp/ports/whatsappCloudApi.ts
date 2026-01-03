@@ -3,7 +3,7 @@
  * Abstracts media downloading and URL fetching from the domain.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { InboxError } from './repositories.js';
+import type { WhatsAppError } from './repositories.js';
 
 /**
  * Media URL information from WhatsApp.
@@ -31,14 +31,14 @@ export interface WhatsAppCloudApiPort {
    * @param mediaId - WhatsApp media ID
    * @returns Media URL information
    */
-  getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>>;
+  getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>>;
 
   /**
    * Download media content from a URL.
    * @param url - Media URL from getMediaUrl
    * @returns Media content as Buffer
    */
-  downloadMedia(url: string): Promise<Result<Buffer, InboxError>>;
+  downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>>;
 
   /**
    * Send a text message via WhatsApp.
@@ -53,5 +53,5 @@ export interface WhatsAppCloudApiPort {
     recipientPhone: string,
     message: string,
     replyToMessageId?: string
-  ): Promise<Result<SendMessageResult, InboxError>>;
+  ): Promise<Result<SendMessageResult, WhatsAppError>>;
 }

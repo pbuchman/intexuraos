@@ -120,40 +120,14 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
 }
 
 # -----------------------------------------------------------------------------
-# Automatic Trigger (fires on push to development branch)
+# Cloud Build Trigger (invoked by GitHub Actions)
 # -----------------------------------------------------------------------------
-
-resource "google_cloudbuild_trigger" "push_main" {
-  name        = "intexuraos-${var.environment}-push"
-  description = "Automatic trigger - builds and deploys affected services on push to ${var.github_branch}"
-  location    = var.region
-
-  repository_event_config {
-    repository = google_cloudbuildv2_repository.intexuraos.id
-    push {
-      branch = "^${var.github_branch}$"
-    }
-  }
-
-  filename = "cloudbuild/cloudbuild.yaml"
-
-  substitutions = {
-    _REGION                = var.region
-    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
-    _ENVIRONMENT           = var.environment
-    _FORCE_DEPLOY          = "false"
-  }
-
-  service_account = google_service_account.cloud_build.id
-}
-
-# -----------------------------------------------------------------------------
-# Manual Trigger (for force deploying all services)
-# -----------------------------------------------------------------------------
+# Note: No automatic push trigger - deployments are controlled via GitHub Actions
+# workflow (.github/workflows/deploy.yml) which calls this trigger.
 
 resource "google_cloudbuild_trigger" "manual_main" {
-  name        = "intexuraos-${var.environment}-manual"
-  description = "Manual trigger - force deploys all services from ${var.github_branch}"
+  name        = "intexuraos-${var.environment}-deploy"
+  description = "Deploy trigger - invoked by GitHub Actions for any branch"
   location    = var.region
 
   source_to_build {
@@ -172,4 +146,44 @@ resource "google_cloudbuild_trigger" "manual_main" {
   }
 
   service_account = google_service_account.cloud_build.id
+}
+
+# -----------------------------------------------------------------------------
+# Workload Identity Federation (GitHub Actions → GCP)
+# -----------------------------------------------------------------------------
+# Allows GitHub Actions to authenticate to GCP without service account keys.
+# See: https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = var.project_id
+  workload_identity_pool_id = "github-actions-${var.environment}"
+  display_name              = "GitHub Actions (${var.environment})"
+  description               = "Workload Identity Pool for GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-provider"
+  display_name                       = "GitHub Provider"
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.github_owner}/${var.github_repo}'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Allow GitHub Actions to impersonate the Cloud Build service account
+resource "google_service_account_iam_member" "github_actions_wif" {
+  service_account_id = google_service_account.cloud_build.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
 }

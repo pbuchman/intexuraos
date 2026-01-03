@@ -4,23 +4,7 @@
  */
 
 // Models
-export type {
-  InboxNote,
-  InboxAction,
-  InboxNoteSource,
-  InboxMessageType,
-  InboxContentType,
-  InboxNoteStatus,
-  InboxProcessor,
-  InboxTopic,
-  InboxActionStatus,
-  InboxActionType,
-  InboxActionAgent,
-  InboxActionPriority,
-  InboxErrorCode,
-  InboxError,
-  InboxResult,
-} from './models/InboxNote.js';
+export type { WhatsAppErrorCode, WhatsAppError, WhatsAppResult } from './models/error.js';
 
 export type {
   WhatsAppMessage,
@@ -43,8 +27,6 @@ export type {
 
 // Ports
 export type {
-  InboxNotesRepository,
-  InboxActionsRepository,
   WhatsAppUserMapping,
   WhatsAppUserMappingPublic,
   WhatsAppUserMappingRepository,
@@ -95,13 +77,6 @@ export type {
 } from './events/index.js';
 
 // Use cases
-export {
-  ProcessWhatsAppWebhookUseCase,
-  type WhatsAppWebhookPayload,
-  type WebhookProcessingConfig,
-  type WebhookProcessingResult,
-} from './usecases/processWhatsAppWebhook.js';
-
 export {
   ProcessImageMessageUseCase,
   type ProcessImageMessageInput,

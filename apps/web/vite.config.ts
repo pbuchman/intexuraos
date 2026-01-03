@@ -11,11 +11,19 @@ function getBuildVersion(): string {
     version: string;
   };
   let sha = 'unknown';
-  try {
-    sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
-  } catch {
-    // Git not available or not a git repo
+
+  // First try COMMIT_SHA from Cloud Build environment
+  if (process.env['COMMIT_SHA'] !== undefined && process.env['COMMIT_SHA'] !== '') {
+    sha = process.env['COMMIT_SHA'].slice(0, 7);
+  } else {
+    // Fallback to git for local development
+    try {
+      sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    } catch {
+      // Git not available or not a git repo
+    }
   }
+
   return `${pkg.version}-${sha}`;
 }
 

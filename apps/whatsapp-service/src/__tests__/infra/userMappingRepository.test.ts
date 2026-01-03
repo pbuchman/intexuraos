@@ -217,6 +217,24 @@ describe('userMappingRepository', () => {
         expect(result.value).toBe('15551234567');
       }
     });
+
+    it('returns null for connected user with empty phoneNumbers array', async () => {
+      const db = fakeFirestore;
+      await db.collection('whatsapp_user_mappings').doc('user-empty').set({
+        userId: 'user-empty',
+        phoneNumbers: [],
+        connected: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await findPhoneByUserId('user-empty');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
   });
 
   describe('error handling', () => {

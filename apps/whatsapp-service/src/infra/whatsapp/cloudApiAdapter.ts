@@ -5,11 +5,11 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
 import type {
-  InboxError,
+  WhatsAppError,
   MediaUrlInfo,
   SendMessageResult,
   WhatsAppCloudApiPort,
-} from '../../domain/inbox/index.js';
+} from '../../domain/whatsapp/index.js';
 
 /**
  * WhatsApp Cloud API adapter implementation.
@@ -25,7 +25,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     });
   }
 
-  async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, InboxError>> {
+  async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
     const result = await this.mediaClient.getMediaUrl(mediaId);
 
     if (!result.ok) {
@@ -38,7 +38,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     return ok(result.value);
   }
 
-  async downloadMedia(url: string): Promise<Result<Buffer, InboxError>> {
+  async downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>> {
     const result = await this.mediaClient.downloadMedia(url);
 
     if (!result.ok) {
@@ -56,7 +56,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     recipientPhone: string,
     message: string,
     replyToMessageId?: string
-  ): Promise<Result<SendMessageResult, InboxError>> {
+  ): Promise<Result<SendMessageResult, WhatsAppError>> {
     const client = createWhatsAppClient({
       accessToken: this.accessToken,
       phoneNumberId,

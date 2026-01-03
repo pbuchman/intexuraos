@@ -98,3 +98,10 @@ export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
 
 # export USER_SERVICE_PORT=9110
 # export PROMPTVAULT_SERVICE_PORT=9111
+
+# =============================================================================
+# PERSONAL IDENTIFIERS
+# =============================================================================
+# Used by Claude Code for sending WhatsApp messages and other personal actions
+export INTEXURAOS_MY_PHONE_NUMBER=
+export INTEXURAOS_USER_ID="google-oauth2|99999999999999999999"
