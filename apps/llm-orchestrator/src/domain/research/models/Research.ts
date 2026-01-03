@@ -91,7 +91,7 @@ export interface Research {
   shareInfo?: ShareInfo;
 }
 
-function getDefaultModel(provider: LlmProvider): string {
+export function getDefaultModel(provider: LlmProvider): string {
   switch (provider) {
     case 'google':
       return GEMINI_DEFAULTS.researchModel;
@@ -100,6 +100,14 @@ function getDefaultModel(provider: LlmProvider): string {
     case 'anthropic':
       return CLAUDE_DEFAULTS.researchModel;
   }
+}
+
+export function createLlmResults(selectedLlms: LlmProvider[]): LlmResult[] {
+  return selectedLlms.map((provider) => ({
+    provider,
+    model: getDefaultModel(provider),
+    status: 'pending' as const,
+  }));
 }
 
 export function createResearch(params: {

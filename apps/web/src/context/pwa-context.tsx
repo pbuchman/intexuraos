@@ -19,10 +19,14 @@ interface PWAContextValue {
   isIOS: boolean;
   /** Whether to show iOS install instructions */
   showIOSInstallPrompt: boolean;
+  /** Whether to show Android install prompt */
+  showAndroidInstallPrompt: boolean;
   /** Whether a new service worker update is available */
   updateAvailable: boolean;
   /** Dismiss the iOS install prompt */
   dismissIOSInstallPrompt: () => void;
+  /** Dismiss the Android install prompt */
+  dismissAndroidInstallPrompt: () => void;
   /** Trigger the install prompt (Android) */
   installApp: () => Promise<void>;
   /** Apply the service worker update and reload */
@@ -31,12 +35,26 @@ interface PWAContextValue {
 
 const PWAContext = createContext<PWAContextValue | null>(null);
 
-const IOS_INSTALL_DISMISSED_KEY = 'intexuraos_ios_install_dismissed';
+const INSTALL_DISMISSED_KEY = 'intexuraos_install_dismissed_version';
+
+function getCurrentVersion(): string {
+  return import.meta.env.INTEXURAOS_BUILD_VERSION;
+}
+
+function isDismissedForCurrentVersion(): boolean {
+  const dismissedVersion = localStorage.getItem(INSTALL_DISMISSED_KEY);
+  return dismissedVersion === getCurrentVersion();
+}
+
+function dismissForCurrentVersion(): void {
+  localStorage.setItem(INSTALL_DISMISSED_KEY, getCurrentVersion());
+}
 
 export function PWAProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showIOSInstallPrompt, setShowIOSInstallPrompt] = useState(false);
+  const [showAndroidInstallPrompt, setShowAndroidInstallPrompt] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
 
@@ -54,12 +72,9 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
     const isStandalone = standaloneMediaQuery || navigatorStandalone;
     setIsInstalled(isStandalone);
 
-    // Show iOS install prompt if not installed and not dismissed
-    if (isIOS && !isStandalone) {
-      const dismissed = localStorage.getItem(IOS_INSTALL_DISMISSED_KEY);
-      if (dismissed === null) {
-        setShowIOSInstallPrompt(true);
-      }
+    // Show iOS install prompt if not installed and not dismissed for current version
+    if (isIOS && !isStandalone && !isDismissedForCurrentVersion()) {
+      setShowIOSInstallPrompt(true);
     }
   }, [isIOS]);
 
@@ -68,11 +83,15 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
     const handleBeforeInstallPrompt = (e: Event): void => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
+      if (!isDismissedForCurrentVersion()) {
+        setShowAndroidInstallPrompt(true);
+      }
     };
 
     const handleAppInstalled = (): void => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      setShowAndroidInstallPrompt(false);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -112,8 +131,13 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
   }, []);
 
   const dismissIOSInstallPrompt = useCallback((): void => {
-    localStorage.setItem(IOS_INSTALL_DISMISSED_KEY, 'true');
+    dismissForCurrentVersion();
     setShowIOSInstallPrompt(false);
+  }, []);
+
+  const dismissAndroidInstallPrompt = useCallback((): void => {
+    dismissForCurrentVersion();
+    setShowAndroidInstallPrompt(false);
   }, []);
 
   const installApp = useCallback(async (): Promise<void> => {
@@ -143,8 +167,10 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
     isInstalled,
     isIOS,
     showIOSInstallPrompt,
+    showAndroidInstallPrompt,
     updateAvailable,
     dismissIOSInstallPrompt,
+    dismissAndroidInstallPrompt,
     installApp,
     applyUpdate,
   };

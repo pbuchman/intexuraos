@@ -429,7 +429,7 @@ export function createFakeExecuteResearchActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/research/test-123/edit',
+        resource_url: '/#/research/test-123',
       }
     );
   };

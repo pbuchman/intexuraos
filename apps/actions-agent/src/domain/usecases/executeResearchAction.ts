@@ -80,7 +80,7 @@ export function createExecuteResearchActionUseCase(
     }
 
     const researchId = result.value.id;
-    const resourceUrl = `/#/research/${researchId}/edit`;
+    const resourceUrl = `/#/research/${researchId}`;
 
     const completedAction: Action = {
       ...action,
