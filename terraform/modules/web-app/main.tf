@@ -184,15 +184,15 @@ resource "google_compute_url_map" "web_app" {
     }
 
     # Generated images path rule
-    # Maps /assets/images/xxx.png -> bucket/images/xxx.png
+    # Maps /images/xxx.png -> bucket/images/xxx.png
     dynamic "path_rule" {
       for_each = var.images_bucket_name != "" ? [1] : []
       content {
-        paths = ["/assets/*"]
+        paths = ["/images/*"]
 
         route_action {
           url_rewrite {
-            path_prefix_rewrite = "/"
+            path_prefix_rewrite = "/images/"
           }
         }
 

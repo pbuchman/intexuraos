@@ -1068,7 +1068,7 @@ module "image_service" {
     INTEXURAOS_GCP_PROJECT_ID        = var.project_id
     INTEXURAOS_USER_SERVICE_URL      = module.user_service.service_url
     INTEXURAOS_IMAGE_BUCKET          = module.generated_images_bucket.bucket_name
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL = "https://${var.web_app_domain}/assets"
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL = "https://${var.web_app_domain}"
   }
 
   depends_on = [
