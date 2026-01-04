@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ok, type Result } from '@intexuraos/common-core';
 import type {
   GeneratedImageData,
@@ -19,7 +20,7 @@ export class FakeImageGenerator implements ImageGenerator {
   constructor(config: FakeImageGeneratorConfig) {
     this.bucketName = config.bucketName;
     this.model = config.model;
-    this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
+    this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
   async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {

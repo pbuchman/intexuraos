@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- Direct API needed for thumbnail prompt generation
 import { GoogleGenAI } from '@google/genai';
 import { err, getErrorMessage, type Result } from '@intexuraos/common-core';
@@ -35,7 +36,7 @@ export class GeminiPromptAdapter implements PromptGenerator {
     text: string
   ): Promise<Result<ThumbnailPrompt, PromptGenerationError>> {
     const fullPrompt = `${THUMBNAIL_PROMPT_SYSTEM}\n\nTEXT:\n${text}`;
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const startTime = new Date();
 
     const auditContext = createAuditContext({

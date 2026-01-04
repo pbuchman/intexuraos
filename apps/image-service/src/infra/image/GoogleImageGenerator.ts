@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- Imagen API not available in infra-gemini
 import { GoogleGenAI } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
@@ -28,7 +29,7 @@ export class GoogleImageGenerator implements ImageGenerator {
     this.ai = new GoogleGenAI({ apiKey: config.apiKey });
     this.model = config.model;
     this.storage = config.storage;
-    this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
+    this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
   async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {

@@ -5,6 +5,7 @@
  * Controlled by INTEXURAOS_AUDIT_LLMS environment variable (defaults to true).
  */
 
+import { randomUUID } from 'node:crypto';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
@@ -48,7 +49,7 @@ export class AuditContext {
   private completed = false;
 
   constructor(params: CreateAuditLogParams) {
-    this.id = crypto.randomUUID();
+    this.id = randomUUID();
     this.params = params;
   }
 

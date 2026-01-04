@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   GeneratedImageRepository,
   PromptGenerator,
@@ -81,7 +82,7 @@ export function initializeServices(): void {
       }
       return createGoogleImageGenerator({ apiKey, model, storage });
     },
-    generateId: (): string => crypto.randomUUID(),
+    generateId: (): string => randomUUID(),
   };
 }
 

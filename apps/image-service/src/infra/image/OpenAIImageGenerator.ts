@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- Image generation API not available in infra-gpt
 import OpenAI from 'openai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
@@ -26,7 +27,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     this.client = new OpenAI({ apiKey: config.apiKey });
     this.model = config.model;
     this.storage = config.storage;
-    this.generateId = config.generateId ?? ((): string => crypto.randomUUID());
+    this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
   async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
