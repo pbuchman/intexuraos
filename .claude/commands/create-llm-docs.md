@@ -18,9 +18,10 @@ Generate a comprehensive document about LLM costs, pricing, and usage in the cod
 
 1. **Fetches current pricing** from official API documentation for all providers
 2. **Analyzes codebase** to find all places where LLM models are used
-3. **Documents pricing calculation logic** in the code
-4. **Describes token counting differences** between providers (especially for web search)
-5. **Maps model usage** to specific features (research, synthesis, title generation, etc.)
+3. **Compares pricing with database** and generates migration if prices changed
+4. **Documents pricing calculation logic** in the code
+5. **Describes token counting differences** between providers (especially for web search)
+6. **Maps model usage** to specific features (research, synthesis, title generation, etc.)
 
 ---
 
@@ -110,7 +111,94 @@ Search in:
 - apps/llm-orchestrator/src/infra/usage/
 ```
 
-### Step 3: Compile Documentation
+### Step 3: Compare Pricing with Database
+
+**Read current pricing from database:**
+
+Use Explore agent to find current pricing stored in Firestore:
+
+```
+Search for current LLM pricing data in the codebase.
+Look for:
+- The most recent migrations in migrations/*.mjs that set pricing
+- The pricing structure stored in app_settings/llm_pricing
+- Extract current inputPricePerMillion and outputPricePerMillion for each model
+
+Return a table with:
+| Provider | Model | Current Input Price | Current Output Price |
+```
+
+**Compare with fetched pricing from Step 1:**
+
+For each model, compare:
+- `fetchedInputPrice` vs `currentInputPrice`
+- `fetchedOutputPrice` vs `currentOutputPrice`
+
+**If ANY pricing has changed:**
+
+1. Find the next migration number by checking `migrations/` directory
+2. Generate a new migration file `migrations/{NNN}_llm-pricing-update.mjs`:
+
+```javascript
+/**
+ * Migration {NNN}: LLM Pricing Update
+ *
+ * Updates pricing based on official sources as of {YYYY-MM-DD}.
+ *
+ * Changes:
+ * - {model}: input {old} → {new}, output {old} → {new}
+ * - ...
+ */
+
+export const metadata = {
+  id: '{NNN}',
+  name: 'llm-pricing-update',
+  description: 'Update LLM pricing from official sources',
+  createdAt: '{YYYY-MM-DD}',
+};
+
+export async function up(context) {
+  console.log('  Updating LLM pricing...');
+
+  const pricingUpdate = {
+    // Only include models that changed:
+    'models.{provider}_{model}': {
+      provider: '{provider}',
+      model: '{model}',
+      inputPricePerMillion: {newInputPrice},
+      outputPricePerMillion: {newOutputPrice},
+    },
+    // ... more changed models
+    updatedAt: new Date().toISOString(),
+  };
+
+  await context.firestore.doc('app_settings/llm_pricing').update(pricingUpdate);
+
+  console.log('  LLM pricing updated for {N} models');
+}
+```
+
+3. Report the changes in chat:
+```
+## Pricing Changes Detected
+
+| Provider | Model | Field  | Old     | New     |
+|----------|-------|--------|---------|---------|
+| ...      | ...   | input  | $X.XX   | $Y.YY   |
+
+Migration created: migrations/{NNN}_llm-pricing-update.mjs
+```
+
+**If NO pricing has changed:**
+
+Report in chat:
+```
+## No Pricing Changes
+
+All model prices match current database values. No migration needed.
+```
+
+### Step 4: Compile Documentation
 
 Write the document following the template below.
 

@@ -563,6 +563,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
+        createContextInferrer,
         shareStorage,
         shareConfig,
       } = getServices();
@@ -619,6 +620,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
 
           const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+          const contextInferrer =
+            apiKeysResult.value.google !== undefined
+              ? createContextInferrer('gemini-2.5-flash', apiKeysResult.value.google, request.log)
+              : undefined;
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
@@ -626,6 +631,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             shareStorage,
             shareConfig,
             imageServiceClient,
+            ...(contextInferrer !== undefined && { contextInferrer }),
             userId: user.userId,
             webAppUrl,
             reportLlmSuccess: (): void => {

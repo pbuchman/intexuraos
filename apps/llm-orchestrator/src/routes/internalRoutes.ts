@@ -325,6 +325,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (apiKeys.google !== undefined) {
           deps.titleGenerator = services.createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+          deps.contextInferrer = services.createContextInferrer(
+            'gemini-2.5-flash',
+            apiKeys.google,
+            request.log
+          );
         }
 
         const processResult = await processResearch(event.researchId, deps);
@@ -342,6 +347,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             shareStorage: services.shareStorage,
             shareConfig: services.shareConfig,
             imageServiceClient: services.imageServiceClient,
+            ...(deps.contextInferrer !== undefined && { contextInferrer: deps.contextInferrer }),
             userId: research.userId,
             webAppUrl,
             reportLlmSuccess: (): void => {
@@ -828,6 +834,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
 
             const synthesizer = services.createSynthesizer(synthesisModel, synthesisKey);
+            const contextInferrer =
+              apiKeysResult.value.google !== undefined
+                ? services.createContextInferrer(
+                    'gemini-2.5-flash',
+                    apiKeysResult.value.google,
+                    request.log
+                  )
+                : undefined;
             const synthesisResult = await runSynthesis(event.researchId, {
               researchRepo,
               synthesizer,
@@ -835,6 +849,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               shareStorage,
               shareConfig,
               imageServiceClient: services.imageServiceClient,
+              ...(contextInferrer !== undefined && { contextInferrer }),
               userId: event.userId,
               webAppUrl,
               reportLlmSuccess: (): void => {
