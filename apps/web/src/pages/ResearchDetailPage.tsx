@@ -767,6 +767,35 @@ export function ResearchDetailPage(): React.JSX.Element {
         />
       ) : null}
 
+      {/* Show input contexts during processing (before LLM results are available) */}
+      {isProcessing && research.inputContexts !== undefined && research.inputContexts.length > 0 ? (
+        <Card title="Input Contexts" className="mb-6">
+          <p className="text-sm text-slate-500 mb-4">
+            {String(research.inputContexts.length)} context
+            {research.inputContexts.length > 1 ? 's' : ''} will be included in synthesis
+          </p>
+          <div className="space-y-3">
+            {research.inputContexts.map((ctx, idx) => (
+              <div key={ctx.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="h-4 w-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700">
+                    Context {String(idx + 1)}
+                  </span>
+                  <span className="ml-auto text-xs text-slate-400">
+                    {ctx.content.length.toLocaleString()} chars
+                  </span>
+                </div>
+                <p className="text-sm text-slate-600 line-clamp-3">
+                  {ctx.content.substring(0, 300)}
+                  {ctx.content.length > 300 ? '...' : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       {research.status === 'awaiting_confirmation' && research.partialFailure !== undefined ? (
         <PartialFailureConfirmation
           partialFailure={research.partialFailure}
