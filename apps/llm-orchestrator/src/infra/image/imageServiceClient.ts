@@ -40,6 +40,10 @@ export interface GeneratedImageData {
 export type PromptModel = 'gpt-4.1' | 'gemini-2.5-pro';
 export type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
+export interface GenerateImageOptions {
+  title?: string;
+}
+
 export interface ImageServiceClient {
   generatePrompt(
     text: string,
@@ -50,7 +54,8 @@ export interface ImageServiceClient {
   generateImage(
     prompt: string,
     model: ImageModel,
-    userId: string
+    userId: string,
+    options?: GenerateImageOptions
   ): Promise<Result<GeneratedImageData, ImageServiceError>>;
 
   deleteImage(id: string): Promise<Result<void, ImageServiceError>>;
@@ -94,7 +99,8 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
     async generateImage(
       prompt: string,
       model: ImageModel,
-      userId: string
+      userId: string,
+      options?: GenerateImageOptions
     ): Promise<Result<GeneratedImageData, ImageServiceError>> {
       try {
         const response = await fetch(`${config.baseUrl}/internal/images/generate`, {
@@ -103,7 +109,7 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             'Content-Type': 'application/json',
             'X-Internal-Auth': config.internalAuthToken,
           },
-          body: JSON.stringify({ prompt, model, userId }),
+          body: JSON.stringify({ prompt, model, userId, title: options?.title }),
         });
 
         if (!response.ok) {

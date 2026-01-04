@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ok, type Result } from '@intexuraos/common-core';
 import type {
   GeneratedImageData,
+  GenerateOptions,
   ImageGenerationError,
   ImageGenerator,
 } from '../../domain/ports/imageGenerator.js';
@@ -23,13 +24,23 @@ export class FakeImageGenerator implements ImageGenerator {
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
-  async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
+  async generate(
+    prompt: string,
+    options?: GenerateOptions
+  ): Promise<Result<GeneratedImageData, ImageGenerationError>> {
     const id = this.generateId();
     const now = new Date().toISOString();
+    const slug = options?.slug;
 
     const baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
-    const thumbnailUrl = `${baseUrl}/images/${id}/thumbnail.jpg`;
-    const fullSizeUrl = `${baseUrl}/images/${id}/full.png`;
+    const thumbnailUrl =
+      slug !== undefined
+        ? `${baseUrl}/images/${id}-${slug}-thumb.jpg`
+        : `${baseUrl}/images/${id}/thumbnail.jpg`;
+    const fullSizeUrl =
+      slug !== undefined
+        ? `${baseUrl}/images/${id}-${slug}.png`
+        : `${baseUrl}/images/${id}/full.png`;
 
     const image: GeneratedImageData = {
       id,
@@ -38,6 +49,7 @@ export class FakeImageGenerator implements ImageGenerator {
       fullSizeUrl,
       model: this.model,
       createdAt: now,
+      ...(slug !== undefined && { slug }),
     };
 
     return await Promise.resolve(ok(image));

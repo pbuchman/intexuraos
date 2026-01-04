@@ -34,6 +34,11 @@ export interface LlmAuditLog {
   providerCost?: number;
   costUsd?: number;
 
+  imageCount?: number;
+  imageModel?: string;
+  imageSize?: string;
+  imageCostUsd?: number;
+
   startedAt: string;
   completedAt: string;
   durationMs: number;
@@ -72,6 +77,10 @@ export interface CompleteAuditLogSuccessParams {
   groundingEnabled?: boolean;
   providerCost?: number;
   costUsd?: number;
+  imageCount?: number;
+  imageModel?: string;
+  imageSize?: string;
+  imageCostUsd?: number;
 }
 
 /**

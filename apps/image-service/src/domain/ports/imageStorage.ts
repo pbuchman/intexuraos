@@ -10,7 +10,11 @@ export interface StorageError {
   message: string;
 }
 
+export interface UploadOptions {
+  slug?: string | undefined;
+}
+
 export interface ImageStorage {
-  upload(id: string, imageData: Buffer): Promise<Result<ImageUrls, StorageError>>;
-  delete(id: string): Promise<Result<void, StorageError>>;
+  upload(id: string, imageData: Buffer, options?: UploadOptions): Promise<Result<ImageUrls, StorageError>>;
+  delete(id: string, slug?: string): Promise<Result<void, StorageError>>;
 }

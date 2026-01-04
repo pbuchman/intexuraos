@@ -6,4 +6,5 @@ export interface GeneratedImage {
   fullSizeUrl: string;
   model: string;
   createdAt: string;
+  slug?: string | undefined;
 }

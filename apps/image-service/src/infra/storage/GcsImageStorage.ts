@@ -1,7 +1,12 @@
 import { Storage } from '@google-cloud/storage';
 import sharp from 'sharp';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { ImageStorage, ImageUrls, StorageError } from '../../domain/ports/index.js';
+import type {
+  ImageStorage,
+  ImageUrls,
+  StorageError,
+  UploadOptions,
+} from '../../domain/ports/index.js';
 
 const THUMBNAIL_MAX_EDGE = 256;
 const JPEG_QUALITY = 80;
@@ -15,11 +20,15 @@ export class GcsImageStorage implements ImageStorage {
     this.bucketName = bucketName;
   }
 
-  async upload(id: string, imageData: Buffer): Promise<Result<ImageUrls, StorageError>> {
+  async upload(
+    id: string,
+    imageData: Buffer,
+    options?: UploadOptions
+  ): Promise<Result<ImageUrls, StorageError>> {
     try {
       const bucket = this.storage.bucket(this.bucketName);
+      const { fullPath, thumbPath } = this.buildPaths(id, options?.slug);
 
-      const fullPath = `images/${id}/full.png`;
       const fullFile = bucket.file(fullPath);
       await fullFile.save(imageData, {
         contentType: 'image/png',
@@ -31,7 +40,6 @@ export class GcsImageStorage implements ImageStorage {
 
       const thumbnailBuffer = await this.createThumbnail(imageData);
 
-      const thumbPath = `images/${id}/thumbnail.jpg`;
       const thumbFile = bucket.file(thumbPath);
       await thumbFile.save(thumbnailBuffer, {
         contentType: 'image/jpeg',
@@ -55,12 +63,13 @@ export class GcsImageStorage implements ImageStorage {
     }
   }
 
-  async delete(id: string): Promise<Result<void, StorageError>> {
+  async delete(id: string, slug?: string): Promise<Result<void, StorageError>> {
     try {
       const bucket = this.storage.bucket(this.bucketName);
+      const { fullPath, thumbPath } = this.buildPaths(id, slug);
       await Promise.all([
-        bucket.file(`images/${id}/full.png`).delete({ ignoreNotFound: true }),
-        bucket.file(`images/${id}/thumbnail.jpg`).delete({ ignoreNotFound: true }),
+        bucket.file(fullPath).delete({ ignoreNotFound: true }),
+        bucket.file(thumbPath).delete({ ignoreNotFound: true }),
       ]);
       return ok(undefined);
     } catch (error) {
@@ -69,6 +78,19 @@ export class GcsImageStorage implements ImageStorage {
         message: `Failed to delete image: ${getErrorMessage(error, 'Unknown GCS error')}`,
       });
     }
+  }
+
+  private buildPaths(id: string, slug?: string): { fullPath: string; thumbPath: string } {
+    if (slug !== undefined) {
+      return {
+        fullPath: `images/${id}-${slug}.png`,
+        thumbPath: `images/${id}-${slug}-thumb.jpg`,
+      };
+    }
+    return {
+      fullPath: `images/${id}/full.png`,
+      thumbPath: `images/${id}/thumbnail.jpg`,
+    };
   }
 
   private async createThumbnail(imageData: Buffer): Promise<Buffer> {

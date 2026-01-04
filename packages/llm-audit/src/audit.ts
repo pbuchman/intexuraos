@@ -121,6 +121,18 @@ export class AuditContext {
     if (result.costUsd !== undefined) {
       log.costUsd = result.costUsd;
     }
+    if (result.imageCount !== undefined) {
+      log.imageCount = result.imageCount;
+    }
+    if (result.imageModel !== undefined) {
+      log.imageModel = result.imageModel;
+    }
+    if (result.imageSize !== undefined) {
+      log.imageSize = result.imageSize;
+    }
+    if (result.imageCostUsd !== undefined) {
+      log.imageCostUsd = result.imageCostUsd;
+    }
 
     await saveAuditLog(log);
   }

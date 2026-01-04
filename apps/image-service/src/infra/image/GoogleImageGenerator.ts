@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- Gemini image API not available in infra-gemini
 import { GoogleGenAI } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { createAuditContext } from '@intexuraos/llm-audit';
 import type { ImageGenerationModel } from '../../domain/index.js';
 import type {
   GeneratedImageData,
+  GenerateOptions,
   ImageGenerationError,
   ImageGenerator,
 } from '../../domain/ports/imageGenerator.js';
@@ -32,8 +34,20 @@ export class GoogleImageGenerator implements ImageGenerator {
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
-  async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
+  async generate(
+    prompt: string,
+    options?: GenerateOptions
+  ): Promise<Result<GeneratedImageData, ImageGenerationError>> {
     const id = this.generateId();
+    const startTime = new Date();
+
+    const auditContext = createAuditContext({
+      provider: 'google',
+      model: this.model,
+      method: 'image-generation',
+      prompt,
+      startedAt: startTime,
+    });
 
     try {
       const response = await this.ai.models.generateContent({
@@ -43,18 +57,23 @@ export class GoogleImageGenerator implements ImageGenerator {
 
       const parts = response.candidates?.[0]?.content?.parts;
       if (parts === undefined || parts.length === 0) {
-        return err({ code: 'API_ERROR', message: 'No content in response' });
+        const errorMsg = 'No content in response';
+        await auditContext.error({ error: errorMsg });
+        return err({ code: 'API_ERROR', message: errorMsg });
       }
 
       const imagePart = parts.find((part) => part.inlineData !== undefined);
       if (imagePart?.inlineData?.data === undefined) {
-        return err({ code: 'API_ERROR', message: 'No image data in response' });
+        const errorMsg = 'No image data in response';
+        await auditContext.error({ error: errorMsg });
+        return err({ code: 'API_ERROR', message: errorMsg });
       }
 
       const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
 
-      const uploadResult = await this.storage.upload(id, imageBuffer);
+      const uploadResult = await this.storage.upload(id, imageBuffer, { slug: options?.slug });
       if (!uploadResult.ok) {
+        await auditContext.error({ error: uploadResult.error.message });
         return err({ code: 'STORAGE_ERROR', message: uploadResult.error.message });
       }
 
@@ -65,11 +84,21 @@ export class GoogleImageGenerator implements ImageGenerator {
         fullSizeUrl: uploadResult.value.fullSizeUrl,
         model: this.model,
         createdAt: new Date().toISOString(),
+        ...(options?.slug !== undefined && { slug: options.slug }),
       };
+
+      await auditContext.success({
+        response: '[image-generated]',
+        imageCount: 1,
+        imageModel: this.model,
+        imageSize: '1024x1024',
+        imageCostUsd: 0.03,
+      });
 
       return ok(image);
     } catch (error) {
       const message = getErrorMessage(error);
+      await auditContext.error({ error: message });
       return err(mapGoogleError(message));
     }
   }

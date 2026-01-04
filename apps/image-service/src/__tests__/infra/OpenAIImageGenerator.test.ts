@@ -8,6 +8,20 @@ import {
 import type { ImageStorage, ImageUrls, StorageError } from '../../domain/ports/imageStorage.js';
 import type { Result } from '@intexuraos/common-core';
 
+const { mockAuditSuccess, mockAuditError, mockCreateAuditContext } = vi.hoisted(() => {
+  const mockAuditSuccess = vi.fn().mockResolvedValue(undefined);
+  const mockAuditError = vi.fn().mockResolvedValue(undefined);
+  const mockCreateAuditContext = vi.fn(() => ({
+    success: mockAuditSuccess,
+    error: mockAuditError,
+  }));
+  return { mockAuditSuccess, mockAuditError, mockCreateAuditContext };
+});
+
+vi.mock('@intexuraos/llm-audit', () => ({
+  createAuditContext: mockCreateAuditContext,
+}));
+
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
@@ -37,6 +51,9 @@ describe('OpenAIImageGenerator', () => {
   beforeEach(() => {
     nock.cleanAll();
     mockStorage = createMockStorage();
+    mockAuditSuccess.mockClear();
+    mockAuditError.mockClear();
+    mockCreateAuditContext.mockClear();
   });
 
   afterEach(() => {
@@ -175,7 +192,40 @@ describe('OpenAIImageGenerator', () => {
 
       await generator.generate(testPrompt);
 
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData));
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+        slug: undefined,
+      });
+    });
+
+    it('passes slug option to storage when provided', async () => {
+      const fakeImageData = 'fake image data';
+      const b64Image = Buffer.from(fakeImageData).toString('base64');
+
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .reply(200, {
+          created: 1234567890,
+          data: [{ b64_json: b64Image }],
+        });
+
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.slug).toBe('my-cool-image');
+      }
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+        slug: 'my-cool-image',
+      });
     });
 
     it('returns API_ERROR when no image data in response', async () => {
@@ -388,6 +438,125 @@ describe('OpenAIImageGenerator', () => {
       });
 
       expect(generator).toBeInstanceOf(OpenAIImageGenerator);
+    });
+  });
+
+  describe('audit logging', () => {
+    it('creates audit context with correct params', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .reply(200, { data: [{ b64_json: b64Image }] });
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      await generator.generate(testPrompt);
+
+      expect(mockCreateAuditContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'openai',
+          model: 'gpt-image-1',
+          method: 'image-generation',
+          prompt: testPrompt,
+        })
+      );
+    });
+
+    it('logs success with image fields on successful generation', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .reply(200, { data: [{ b64_json: b64Image }] });
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(true);
+      expect(mockAuditSuccess).toHaveBeenCalledWith({
+        response: '[image-generated]',
+        imageCount: 1,
+        imageModel: 'gpt-image-1',
+        imageSize: '1024x1024',
+        imageCostUsd: 0.04,
+      });
+      expect(mockAuditError).not.toHaveBeenCalled();
+    });
+
+    it('logs error on API failure', async () => {
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .times(3)
+        .reply(401, { error: { message: 'Invalid API key' } });
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: 'bad-key',
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: expect.stringContaining('Invalid API key'),
+      });
+      expect(mockAuditSuccess).not.toHaveBeenCalled();
+    });
+
+    it('logs error when no image data in response', async () => {
+      nock('https://api.openai.com').post('/v1/images/generations').reply(200, { data: [] });
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: 'No image data in response',
+      });
+    });
+
+    it('logs error when storage upload fails', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .reply(200, { data: [{ b64_json: b64Image }] });
+      mockStorage.uploadMock.mockResolvedValue(
+        err({ code: 'STORAGE_ERROR', message: 'GCS upload failed' })
+      );
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: 'GCS upload failed',
+      });
     });
   });
 });

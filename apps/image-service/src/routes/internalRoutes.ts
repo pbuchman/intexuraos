@@ -15,6 +15,18 @@ import {
   type DeleteImageParams,
 } from './schemas/index.js';
 
+function slugify(title: string, maxLength = 50): string {
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, maxLength)
+    .replace(/-$/, '');
+}
+
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: GeneratePromptBody }>(
     '/internal/images/prompts/generate',
@@ -133,9 +145,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Unauthorized' };
       }
 
-      const { prompt, model, userId } = request.body;
+      const { prompt, model, userId, title } = request.body;
+      const slug = title !== undefined ? slugify(title) : undefined;
       request.log.info(
-        { model, userId, promptLength: prompt.length },
+        { model, userId, promptLength: prompt.length, slug },
         'Processing image generation request'
       );
 
@@ -170,7 +183,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info({ model, provider: modelConfig.provider }, 'Starting image generation');
       const imageGenerator = createImageGenerator(model as ImageGenerationModel, apiKey);
-      const result = await imageGenerator.generate(prompt);
+      const result = await imageGenerator.generate(prompt, { slug });
 
       if (!result.ok) {
         request.log.error(
@@ -182,7 +195,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info({ model, imageId: result.value.id }, 'Image generated, saving to database');
-      const generatedImage = { ...result.value, userId };
+      const generatedImage = {
+        ...result.value,
+        userId,
+        ...(slug !== undefined && { slug }),
+      };
       const saveResult = await generatedImageRepository.save(generatedImage);
       if (!saveResult.ok) {
         request.log.error(
@@ -245,7 +262,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { imageStorage, generatedImageRepository } = getServices();
 
-      const storageResult = await imageStorage.delete(id);
+      const imageResult = await generatedImageRepository.findById(id);
+      const slug = imageResult.ok ? imageResult.value.slug : undefined;
+
+      const storageResult = await imageStorage.delete(id, slug);
       if (!storageResult.ok) {
         request.log.error(
           { error: storageResult.error, imageId: id },
@@ -261,7 +281,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      request.log.info({ imageId: id }, 'Image deleted via internal endpoint');
+      request.log.info({ imageId: id, slug }, 'Image deleted via internal endpoint');
 
       return await reply.ok({ deleted: true });
     }

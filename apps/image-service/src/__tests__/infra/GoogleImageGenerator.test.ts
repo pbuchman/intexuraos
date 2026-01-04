@@ -11,7 +11,17 @@ import type {
   ImageGenerationError,
 } from '../../domain/ports/imageGenerator.js';
 
-const mockGenerateContent = vi.fn();
+const { mockGenerateContent, mockAuditSuccess, mockAuditError, mockCreateAuditContext } =
+  vi.hoisted(() => {
+    const mockGenerateContent = vi.fn();
+    const mockAuditSuccess = vi.fn().mockResolvedValue(undefined);
+    const mockAuditError = vi.fn().mockResolvedValue(undefined);
+    const mockCreateAuditContext = vi.fn(() => ({
+      success: mockAuditSuccess,
+      error: mockAuditError,
+    }));
+    return { mockGenerateContent, mockAuditSuccess, mockAuditError, mockCreateAuditContext };
+  });
 
 vi.mock('@google/genai', () => {
   return {
@@ -22,6 +32,10 @@ vi.mock('@google/genai', () => {
     },
   };
 });
+
+vi.mock('@intexuraos/llm-audit', () => ({
+  createAuditContext: mockCreateAuditContext,
+}));
 
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
@@ -63,6 +77,9 @@ describe('GoogleImageGenerator', () => {
   beforeEach(() => {
     mockStorage = createMockStorage();
     vi.clearAllMocks();
+    mockAuditSuccess.mockClear();
+    mockAuditError.mockClear();
+    mockCreateAuditContext.mockClear();
   });
 
   describe('generate', () => {
@@ -139,7 +156,35 @@ describe('GoogleImageGenerator', () => {
 
       await generator.generate(testPrompt);
 
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData));
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+        slug: undefined,
+      });
+    });
+
+    it('passes slug option to storage when provided', async () => {
+      const fakeImageData = 'fake image data';
+      const b64Image = Buffer.from(fakeImageData).toString('base64');
+
+      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.slug).toBe('my-cool-image');
+      }
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+        slug: 'my-cool-image',
+      });
     });
 
     it('returns API_ERROR when no candidates in response', async () => {
@@ -320,6 +365,116 @@ describe('GoogleImageGenerator', () => {
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);
+    });
+  });
+
+  describe('audit logging', () => {
+    it('creates audit context with correct params', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      await generator.generate(testPrompt);
+
+      expect(mockCreateAuditContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          model: 'gemini-2.5-flash-image',
+          method: 'image-generation',
+          prompt: testPrompt,
+        })
+      );
+    });
+
+    it('logs success with image fields on successful generation', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(true);
+      expect(mockAuditSuccess).toHaveBeenCalledWith({
+        response: '[image-generated]',
+        imageCount: 1,
+        imageModel: 'gemini-2.5-flash-image',
+        imageSize: '1024x1024',
+        imageCostUsd: 0.03,
+      });
+      expect(mockAuditError).not.toHaveBeenCalled();
+    });
+
+    it('logs error on API failure', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API_KEY invalid'));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: 'bad-key',
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: 'API_KEY invalid',
+      });
+      expect(mockAuditSuccess).not.toHaveBeenCalled();
+    });
+
+    it('logs error when no content in response', async () => {
+      mockGenerateContent.mockResolvedValue({ candidates: [] });
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: 'No content in response',
+      });
+    });
+
+    it('logs error when storage upload fails', async () => {
+      const b64Image = Buffer.from('fake image').toString('base64');
+      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockStorage.uploadMock.mockResolvedValue(
+        err({ code: 'STORAGE_ERROR', message: 'GCS upload failed' })
+      );
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      expect(mockAuditError).toHaveBeenCalledWith({
+        error: 'GCS upload failed',
+      });
     });
   });
 });

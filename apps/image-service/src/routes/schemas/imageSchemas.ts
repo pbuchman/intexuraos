@@ -17,6 +17,11 @@ export const generateImageBodySchema = {
       type: 'string',
       description: 'User ID for API key lookup and image ownership',
     },
+    title: {
+      type: 'string',
+      maxLength: 100,
+      description: 'Optional title for slug-based filename (from prompt generation)',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -56,6 +61,7 @@ export interface GenerateImageBody {
   prompt: string;
   model: 'gpt-image-1' | 'gemini-2.5-flash-image';
   userId: string;
+  title?: string;
 }
 
 export const deleteImageParamsSchema = {
