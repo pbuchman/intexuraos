@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-// eslint-disable-next-line no-restricted-imports -- Imagen API not available in infra-gemini
+// eslint-disable-next-line no-restricted-imports -- Gemini image API not available in infra-gemini
 import { GoogleGenAI } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { ImageGenerationModel } from '../../domain/index.js';
@@ -17,7 +17,7 @@ export interface GoogleImageGeneratorConfig {
   generateId?: () => string;
 }
 
-const GOOGLE_MODEL_ID = 'imagen-3.0-generate-002';
+const GOOGLE_MODEL_ID = 'gemini-2.5-flash-image';
 
 export class GoogleImageGenerator implements ImageGenerator {
   private readonly ai: GoogleGenAI;
@@ -36,21 +36,22 @@ export class GoogleImageGenerator implements ImageGenerator {
     const id = this.generateId();
 
     try {
-      const response = await this.ai.models.generateImages({
+      const response = await this.ai.models.generateContent({
         model: GOOGLE_MODEL_ID,
-        prompt,
-        config: {
-          numberOfImages: 1,
-          aspectRatio: '1:1',
-        },
+        contents: prompt,
       });
 
-      const imageData = response.generatedImages?.[0]?.image?.imageBytes;
-      if (imageData === undefined) {
+      const parts = response.candidates?.[0]?.content?.parts;
+      if (parts === undefined || parts.length === 0) {
+        return err({ code: 'API_ERROR', message: 'No content in response' });
+      }
+
+      const imagePart = parts.find((part) => part.inlineData !== undefined);
+      if (imagePart?.inlineData?.data === undefined) {
         return err({ code: 'API_ERROR', message: 'No image data in response' });
       }
 
-      const imageBuffer = Buffer.from(imageData, 'base64');
+      const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
 
       const uploadResult = await this.storage.upload(id, imageBuffer);
       if (!uploadResult.ok) {
