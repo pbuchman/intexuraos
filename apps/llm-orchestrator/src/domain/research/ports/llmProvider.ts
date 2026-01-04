@@ -35,4 +35,5 @@ export interface LlmSynthesisProvider {
 
 export interface TitleGenerator {
   generateTitle(prompt: string): Promise<Result<string, LlmError>>;
+  generateContextLabel(content: string): Promise<Result<string, LlmError>>;
 }

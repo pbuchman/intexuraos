@@ -27,6 +27,7 @@ function createMockDeps(): ProcessResearchDeps & {
   };
   mockTitleGenerator: {
     generateTitle: ReturnType<typeof vi.fn>;
+    generateContextLabel: ReturnType<typeof vi.fn>;
   };
   mockReportSuccess: ReturnType<typeof vi.fn>;
 } {
@@ -46,6 +47,7 @@ function createMockDeps(): ProcessResearchDeps & {
 
   const mockTitleGenerator = {
     generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    generateContextLabel: vi.fn().mockResolvedValue(ok('Generated Label')),
   };
 
   const mockReportSuccess = vi.fn();
@@ -320,6 +322,7 @@ describe('processResearch', () => {
       logger: mockLogger,
       titleGenerator: {
         generateTitle: vi.fn().mockResolvedValue(ok('Title Without Callback')),
+        generateContextLabel: vi.fn().mockResolvedValue(ok('Label Without Callback')),
       },
     };
 

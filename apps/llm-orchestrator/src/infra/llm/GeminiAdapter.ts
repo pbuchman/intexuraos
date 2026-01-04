@@ -83,6 +83,45 @@ Generate title:`;
 
     return { ok: true, value: result.value.trim() };
   }
+
+  async generateContextLabel(content: string): Promise<Result<string, LlmError>> {
+    const contentPreview = content.length > 2000 ? content.slice(0, 2000) + '...' : content;
+
+    const labelPrompt = `Generate a very short label (3-6 words) summarizing the following content.
+
+CRITICAL REQUIREMENTS:
+- Label must be 3-6 words maximum
+- Label must be in the SAME LANGUAGE as the content
+- Return ONLY the label - no explanations, no quotes
+- Describe WHAT the content is about, not its format
+
+GOOD EXAMPLES:
+- "Gran Canaria trip itinerary"
+- "Wymagania techniczne projektu"
+- "Customer feedback survey results"
+- "Analiza konkurencji rynkowej"
+
+BAD EXAMPLES:
+- "Document about travel plans for vacation" (too long)
+- "Here is a label: Trip Planning" (includes extra text)
+- "A PDF file" (describes format, not content)
+
+Content:
+${contentPreview}
+
+Generate label:`;
+
+    const result = await this.client.generate(labelPrompt);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: mapToLlmError(result.error),
+      };
+    }
+
+    return { ok: true, value: result.value.trim() };
+  }
 }
 
 function mapToLlmError(error: { code: string; message: string }): LlmError {

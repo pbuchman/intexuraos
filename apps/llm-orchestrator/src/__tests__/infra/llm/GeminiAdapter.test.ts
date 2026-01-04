@@ -161,4 +161,53 @@ describe('GeminiAdapter', () => {
       }
     });
   });
+
+  describe('generateContextLabel', () => {
+    it('generates label for short content', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: '  Context label  ',
+      });
+
+      const result = await adapter.generateContextLabel('Short context content');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('Context label');
+      }
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Generate a very short label')
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Short context content'));
+    });
+
+    it('truncates long content to 2000 characters', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: 'Long content label',
+      });
+
+      const longContent = 'x'.repeat(3000);
+      await adapter.generateContextLabel(longContent);
+
+      const calledArg = mockGenerate.mock.calls[0]?.[0] as string;
+      expect(calledArg).toContain('x'.repeat(2000));
+      expect(calledArg).toContain('...');
+      expect(calledArg).not.toContain('x'.repeat(2001));
+    });
+
+    it('maps errors correctly', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
+
+      const result = await adapter.generateContextLabel('Content');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+  });
 });

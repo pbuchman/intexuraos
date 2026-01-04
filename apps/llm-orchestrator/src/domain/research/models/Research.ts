@@ -107,7 +107,7 @@ export function createResearch(params: {
   prompt: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
-  inputContexts?: { content: string; label?: string }[];
+  inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }): Research {
   const now = new Date().toISOString();
@@ -183,7 +183,7 @@ export interface EnhanceResearchParams {
   userId: string;
   sourceResearch: Research;
   additionalModels?: SupportedModel[];
-  additionalContexts?: { content: string; label?: string }[];
+  additionalContexts?: { content: string; label?: string | undefined }[];
   synthesisModel?: SupportedModel;
   removeContextIds?: string[];
 }

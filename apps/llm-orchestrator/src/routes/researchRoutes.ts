@@ -89,6 +89,39 @@ interface EnhanceResearchBody {
   removeContextIds?: string[];
 }
 
+interface ContextWithLabel {
+  content: string;
+  label?: string | undefined;
+}
+
+async function generateContextLabels(
+  contexts: ContextWithLabel[],
+  googleApiKey: string | undefined,
+  createTitleGenerator: (
+    model: string,
+    apiKey: string
+  ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> }
+): Promise<ContextWithLabel[]> {
+  if (googleApiKey === undefined) {
+    return contexts;
+  }
+
+  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey);
+
+  return await Promise.all(
+    contexts.map(async (ctx) => {
+      if (ctx.label !== undefined && ctx.label !== '') {
+        return ctx;
+      }
+      const labelResult = await generator.generateContextLabel(ctx.content);
+      return {
+        content: ctx.content,
+        label: labelResult.ok && labelResult.value !== undefined ? labelResult.value : undefined,
+      };
+    })
+  );
+}
+
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /research
   fastify.post(
@@ -112,7 +145,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, researchEventPublisher } = getServices();
+      const {
+        researchRepo,
+        generateId,
+        researchEventPublisher,
+        userServiceClient,
+        createTitleGenerator,
+      } = getServices();
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
@@ -121,7 +163,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
       };
       if (body.inputContexts !== undefined) {
-        submitParams.inputContexts = body.inputContexts;
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
+        submitParams.inputContexts = contextsWithLabels;
       }
       if (body.skipSynthesis === true) {
         submitParams.skipSynthesis = true;
@@ -199,8 +246,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
       };
       if (body.inputContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
         const now = new Date().toISOString();
-        draftParams.inputContexts = body.inputContexts.map((ctx) => {
+        draftParams.inputContexts = contextsWithLabels.map((ctx) => {
           const inputContext: InputContext = {
             id: generateId(),
             content: ctx.content,
@@ -298,8 +350,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
 
       if (body.inputContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
         const now = new Date().toISOString();
-        updates.inputContexts = body.inputContexts.map((ctx) => {
+        updates.inputContexts = contextsWithLabels.map((ctx) => {
           const inputContext: InputContext = {
             id: generateId(),
             content: ctx.content,
@@ -754,7 +811,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as ResearchIdParams;
       const body = request.body as EnhanceResearchBody;
-      const { researchRepo, generateId, researchEventPublisher } = getServices();
+      const {
+        researchRepo,
+        generateId,
+        researchEventPublisher,
+        userServiceClient,
+        createTitleGenerator,
+      } = getServices();
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
       const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
         sourceResearchId: id,
@@ -764,7 +830,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         enhanceInput.additionalModels = body.additionalModels;
       }
       if (body.additionalContexts !== undefined) {
-        enhanceInput.additionalContexts = body.additionalContexts;
+        const contextsWithLabels = await generateContextLabels(
+          body.additionalContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
+        enhanceInput.additionalContexts = contextsWithLabels;
       }
       if (body.synthesisModel !== undefined) {
         enhanceInput.synthesisModel = body.synthesisModel;

@@ -68,6 +68,7 @@ export interface LlmResult {
 export interface InputContext {
   id: string;
   content: string;
+  label?: string;
   addedAt: string;
 }
 

@@ -362,10 +362,16 @@ export function createFailingSynthesizer(
 /**
  * Create a fake TitleGenerator for testing.
  */
-export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenerator {
+export function createFakeTitleGenerator(
+  title = 'Generated Title',
+  contextLabel = 'Generated Label'
+): TitleGenerator {
   return {
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
       return ok(title);
+    },
+    async generateContextLabel(_content: string): Promise<Result<string, LlmError>> {
+      return ok(contextLabel);
     },
   };
 }

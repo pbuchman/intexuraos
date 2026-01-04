@@ -12,7 +12,7 @@ export interface SubmitResearchParams {
   prompt: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
-  inputContexts?: { content: string; label?: string }[];
+  inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle,
+  ChevronDown,
   Clock,
   Copy,
   FileText,
@@ -39,6 +40,7 @@ import {
 } from '@/services/llmOrchestratorApi';
 import {
   getProviderForModel,
+  type InputContext,
   type LlmProvider,
   type LlmResult,
   type PartialFailure,
@@ -776,21 +778,7 @@ export function ResearchDetailPage(): React.JSX.Element {
           </p>
           <div className="space-y-3">
             {research.inputContexts.map((ctx, idx) => (
-              <div key={ctx.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText className="h-4 w-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700">
-                    Context {String(idx + 1)}
-                  </span>
-                  <span className="ml-auto text-xs text-slate-400">
-                    {ctx.content.length.toLocaleString()} chars
-                  </span>
-                </div>
-                <p className="text-sm text-slate-600 line-clamp-3">
-                  {ctx.content.substring(0, 300)}
-                  {ctx.content.length > 300 ? '...' : ''}
-                </p>
-              </div>
+              <CollapsibleInputContext key={ctx.id} ctx={ctx} index={idx} />
             ))}
           </div>
         </Card>
@@ -852,23 +840,7 @@ export function ResearchDetailPage(): React.JSX.Element {
             {/* Input Contexts */}
             {research.inputContexts !== undefined && research.inputContexts.length > 0
               ? research.inputContexts.map((ctx, idx) => (
-                  <div
-                    key={`ctx-${ctx.id}`}
-                    className="rounded-lg border border-slate-200 bg-slate-50"
-                  >
-                    <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-                      <FileText className="h-4 w-4 text-slate-500" />
-                      <span className="font-medium text-slate-700">
-                        Input Context {String(idx + 1)}
-                      </span>
-                      <span className="ml-auto text-xs text-slate-400">
-                        Added {new Date(ctx.addedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="p-4">
-                      <MarkdownContent content={ctx.content} />
-                    </div>
-                  </div>
+                  <CollapsibleInputContext key={`ctx-${ctx.id}`} ctx={ctx} index={idx} showFull />
                 ))
               : null}
 
@@ -1005,8 +977,9 @@ export function ResearchDetailPage(): React.JSX.Element {
                             isRemoved ? 'text-red-600 line-through' : 'text-slate-700'
                           }`}
                         >
-                          Context {String(idx + 1)}: {ctx.content.substring(0, 100)}
-                          {ctx.content.length > 100 ? '...' : ''}
+                          {ctx.label !== undefined && ctx.label !== ''
+                            ? ctx.label
+                            : `Context ${String(idx + 1)}: ${ctx.content.substring(0, 100)}${ctx.content.length > 100 ? '...' : ''}`}
                         </span>
                       </div>
                     );
@@ -1440,5 +1413,55 @@ function PartialFailureConfirmation({
         </div>
       </div>
     </Card>
+  );
+}
+
+interface CollapsibleInputContextProps {
+  ctx: InputContext;
+  index: number;
+  showFull?: boolean;
+}
+
+function CollapsibleInputContext({
+  ctx,
+  index,
+  showFull = false,
+}: CollapsibleInputContextProps): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+
+  const title =
+    ctx.label !== undefined && ctx.label !== '' ? ctx.label : `Context ${String(index + 1)}`;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50">
+      <button
+        type="button"
+        onClick={(): void => {
+          setExpanded(!expanded);
+        }}
+        className="flex w-full cursor-pointer items-center justify-between p-3 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-slate-500" />
+          <span className="text-sm font-medium text-slate-700">{title}</span>
+          <span className="text-xs text-slate-400">
+            {ctx.content.length.toLocaleString()} chars
+          </span>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {expanded ? (
+        <div className="border-t border-slate-200 p-4">
+          {showFull ? (
+            <MarkdownContent content={ctx.content} />
+          ) : (
+            <p className="text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
