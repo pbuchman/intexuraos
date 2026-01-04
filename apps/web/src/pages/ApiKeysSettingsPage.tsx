@@ -159,6 +159,7 @@ function ApiKeyRow({
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const isConfigured = currentValue !== null;
 
@@ -175,6 +176,10 @@ function ApiKeyRow({
       await onSave(inputValue);
       setInputValue('');
       setIsEditing(false);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 5000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save API key';
       setValidationError(errorMessage);
@@ -269,7 +274,13 @@ function ApiKeyRow({
         ) : null}
       </div>
 
-      {testError !== null ? (
+      {saveSuccess ? (
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
+          <p className="text-sm font-medium text-green-800">
+            ✓ API key validated and saved successfully
+          </p>
+        </div>
+      ) : testError !== null ? (
         <FormattedErrorDisplay error={testError} />
       ) : savedTestResult !== null ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
