@@ -3,6 +3,7 @@
  * Provides dependency injection for domain adapters.
  */
 
+import pino from 'pino';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
 import { FirestoreUsageStatsRepository } from './infra/usage/index.js';
@@ -163,6 +164,7 @@ function createShareStorageAndConfig(): {
  * Initialize the service container with all dependencies.
  */
 export function initializeServices(): void {
+  const logger = pino({ name: 'llm-orchestrator' });
   const researchRepo = new FirestoreResearchRepository();
   const pricingRepo = new FirestorePricingRepository();
   const usageStatsRepo = new FirestoreUsageStatsRepository();
@@ -170,6 +172,7 @@ export function initializeServices(): void {
   const llmUsageTracker = createLlmUsageTracker({
     usageStatsRepo,
     pricingRepo,
+    logger,
   });
 
   const userServiceClient = createUserServiceClient({

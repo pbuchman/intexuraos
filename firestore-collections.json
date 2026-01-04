@@ -58,6 +58,10 @@
       "owner": "llm-orchestrator",
       "description": "LLM API call audit logs with token usage and cost tracking"
     },
+    "llm_usage_stats": {
+      "owner": "llm-orchestrator",
+      "description": "Aggregated LLM usage statistics by provider, model, and call type"
+    },
     "commands": {
       "owner": "commands-router",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
