@@ -8,4 +8,9 @@ export {
 
 export { type RepositoryError, type GeneratedImageRepository } from './generatedImageRepository.js';
 
-export { type ImageStorage, type ImageUrls, type StorageError } from './imageStorage.js';
+export {
+  type ImageStorage,
+  type ImageUrls,
+  type StorageError,
+  type UploadOptions,
+} from './imageStorage.js';

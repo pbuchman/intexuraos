@@ -310,10 +310,12 @@ async function generateCoverImage(
     }
 
     logger?.info(
-      `[4.4.3] Prompt generated, calling image-service /internal/images/generate (model: ${imageModel})`
+      `[4.4.3] Prompt generated (title: ${promptResult.value.title}), calling image-service /internal/images/generate (model: ${imageModel})`
     );
 
-    const imageResult = await client.generateImage(promptResult.value.prompt, imageModel, userId);
+    const imageResult = await client.generateImage(promptResult.value.prompt, imageModel, userId, {
+      title: promptResult.value.title,
+    });
     if (!imageResult.ok) {
       logger?.error(
         {

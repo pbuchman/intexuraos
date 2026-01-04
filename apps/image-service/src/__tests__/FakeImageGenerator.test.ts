@@ -56,4 +56,40 @@ describe('FakeImageGenerator', () => {
       expect(result.value.model).toBe('gemini-2.5-flash-image');
     }
   });
+
+  it('uses slug-based URLs when slug option is provided', async () => {
+    const generator = createFakeImageGenerator({
+      bucketName: 'test-bucket',
+      model: 'gpt-image-1',
+      generateId: () => 'test-id-123',
+    });
+
+    const result = await generator.generate('A sunset over the ocean', { slug: 'my-cool-image' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.slug).toBe('my-cool-image');
+      expect(result.value.thumbnailUrl).toBe(
+        'https://storage.googleapis.com/test-bucket/images/test-id-123-my-cool-image-thumb.jpg'
+      );
+      expect(result.value.fullSizeUrl).toBe(
+        'https://storage.googleapis.com/test-bucket/images/test-id-123-my-cool-image.png'
+      );
+    }
+  });
+
+  it('does not include slug in result when not provided', async () => {
+    const generator = createFakeImageGenerator({
+      bucketName: 'test-bucket',
+      model: 'gpt-image-1',
+      generateId: () => 'test-id-123',
+    });
+
+    const result = await generator.generate('A sunset');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.slug).toBeUndefined();
+    }
+  });
 });
