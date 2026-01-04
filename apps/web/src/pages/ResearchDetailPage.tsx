@@ -28,6 +28,7 @@ import {
   PROVIDER_MODELS,
   getSelectedModelsList,
 } from '@/components';
+import { formatLlmError } from '@/utils';
 import { useAuth } from '@/context';
 import { useLlmKeys, useResearch } from '@/hooks';
 import {
@@ -1194,7 +1195,7 @@ function ProcessingStatus({
                 <span className="text-sm text-slate-500">{getStatusText(result)}</span>
               </div>
               {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
-                <p className="ml-6 text-sm text-red-600">{result.error}</p>
+                <ErrorDisplay error={result.error} className="ml-6" />
               ) : null}
             </div>
           );
@@ -1223,6 +1224,28 @@ function StatusDot({ status }: { status: string }): React.JSX.Element {
   };
 
   return <div className={`h-3 w-3 rounded-full ${colors[status] ?? 'bg-slate-300'}`} />;
+}
+
+function ErrorDisplay({
+  error,
+  className,
+}: {
+  error: string;
+  className?: string;
+}): React.JSX.Element {
+  const formatted = formatLlmError(error);
+
+  return (
+    <div className={className}>
+      <p className="text-sm font-medium text-red-700">{formatted.title}</p>
+      {formatted.detail !== undefined ? (
+        <p className="text-sm text-red-600">{formatted.detail}</p>
+      ) : null}
+      {formatted.retryIn !== undefined ? (
+        <p className="text-xs text-red-500">{formatted.retryIn}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function formatTokenCount(count: number): string {
@@ -1338,7 +1361,7 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
 
       {expanded && result.error !== undefined && result.error !== '' ? (
         <div className="border-t border-slate-200 bg-red-50 p-4">
-          <p className="text-sm text-red-700">{result.error}</p>
+          <ErrorDisplay error={result.error} />
         </div>
       ) : null}
     </div>
