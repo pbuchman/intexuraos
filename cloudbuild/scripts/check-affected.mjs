@@ -16,7 +16,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WORKSPACE = process.env.WORKSPACE || '/workspace';
@@ -207,17 +207,84 @@ function isAffected(target, changedFiles, watchPaths) {
   return false;
 }
 
-/**
- * Main entry point.
- */
-function main() {
-  const target = process.argv[2];
+const ALL_SERVICES = [
+  'user-service',
+  'promptvault-service',
+  'notion-service',
+  'whatsapp-service',
+  'api-docs-hub',
+  'mobile-notifications-service',
+  'llm-orchestrator',
+  'commands-router',
+  'actions-agent',
+  'data-insights-service',
+  'image-service',
+  'web',
+  'firestore',
+];
 
-  if (!target) {
-    console.error('Usage: check-affected.mjs <target-name>');
-    process.exit(1);
+/**
+ * Check all services and create marker files for affected ones.
+ * Much more efficient than calling the script 13 times.
+ */
+function checkAllAndCreateMarkers() {
+  const markerDir = join(WORKSPACE, '.affected');
+
+  try {
+    mkdirSync(markerDir, { recursive: true });
+  } catch {
+    // Already exists
   }
 
+  console.log('=== Checking all services ===');
+
+  const diffRange = getDiffRange();
+  const isFullRebuild = diffRange === null;
+
+  let changedFiles = [];
+  if (!isFullRebuild) {
+    console.log(`Diff range: ${diffRange}`);
+    changedFiles = getChangedFiles(diffRange);
+    console.log(`Changed files: ${changedFiles.length}`);
+    for (const f of changedFiles.slice(0, 20)) {
+      console.log(`  ${f}`);
+    }
+    if (changedFiles.length > 20) {
+      console.log(`  ... and ${changedFiles.length - 20} more`);
+    }
+  }
+
+  const affected = [];
+  const notAffected = [];
+
+  for (const target of ALL_SERVICES) {
+    if (isFullRebuild) {
+      affected.push(target);
+      writeFileSync(join(markerDir, target), '');
+    } else {
+      const watchPaths = getWatchPaths(target);
+      if (isAffected(target, changedFiles, watchPaths)) {
+        affected.push(target);
+        writeFileSync(join(markerDir, target), '');
+      } else {
+        notAffected.push(target);
+      }
+    }
+  }
+
+  console.log('\n=== Results ===');
+  if (isFullRebuild) {
+    console.log('Full rebuild triggered - all services affected');
+  }
+  console.log(`Affected (${affected.length}): ${affected.join(', ') || '(none)'}`);
+  console.log(`Not affected (${notAffected.length}): ${notAffected.join(', ') || '(none)'}`);
+  console.log(`\nMarker files created in ${markerDir}/`);
+}
+
+/**
+ * Check single target (legacy mode).
+ */
+function checkSingleTarget(target) {
   console.log(`=== Checking if '${target}' is affected ===`);
 
   const watchPaths = getWatchPaths(target);
@@ -246,6 +313,25 @@ function main() {
   } else {
     console.log(`✗ ${target} is NOT affected`);
     process.exit(1);
+  }
+}
+
+/**
+ * Main entry point.
+ */
+async function main() {
+  const arg = process.argv[2];
+
+  if (!arg) {
+    console.error('Usage: check-affected.mjs <target-name>');
+    console.error('       check-affected.mjs --all');
+    process.exit(1);
+  }
+
+  if (arg === '--all') {
+    await checkAllAndCreateMarkers();
+  } else {
+    checkSingleTarget(arg);
   }
 }
 
