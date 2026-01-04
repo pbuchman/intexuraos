@@ -1358,7 +1358,9 @@ function PartialFailureConfirmation({
   confirming,
   error,
 }: PartialFailureConfirmationProps): React.JSX.Element {
-  const failedProviders = partialFailure.failedProviders
+  // Defensive: API may return undefined failedProviders despite type definition
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  const failedProviders = (partialFailure.failedProviders ?? [])
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(', ');
 
