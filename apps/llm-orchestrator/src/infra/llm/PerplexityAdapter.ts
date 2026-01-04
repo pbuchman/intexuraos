@@ -41,6 +41,7 @@ export class PerplexityAdapter implements LlmResearchProvider {
       };
     }
 
+    const providerCost = result.value.usage?.providerCost;
     this.tracker?.track({
       provider: 'perplexity',
       model: this.model,
@@ -48,6 +49,7 @@ export class PerplexityAdapter implements LlmResearchProvider {
       success: true,
       inputTokens: result.value.usage?.inputTokens ?? 0,
       outputTokens: result.value.usage?.outputTokens ?? 0,
+      ...(providerCost !== undefined && { providerCost }),
     });
 
     return result;

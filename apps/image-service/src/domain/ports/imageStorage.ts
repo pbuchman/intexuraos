@@ -15,6 +15,10 @@ export interface UploadOptions {
 }
 
 export interface ImageStorage {
-  upload(id: string, imageData: Buffer, options?: UploadOptions): Promise<Result<ImageUrls, StorageError>>;
+  upload(
+    id: string,
+    imageData: Buffer,
+    options?: UploadOptions
+  ): Promise<Result<ImageUrls, StorageError>>;
   delete(id: string, slug?: string): Promise<Result<void, StorageError>>;
 }

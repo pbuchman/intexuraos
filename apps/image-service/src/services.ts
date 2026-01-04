@@ -54,7 +54,8 @@ export function resetServices(): void {
 
 export function initializeServices(): void {
   const bucketName = process.env['INTEXURAOS_IMAGE_BUCKET'] ?? '';
-  const storage = createGcsImageStorage(bucketName);
+  const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
+  const storage = createGcsImageStorage(bucketName, publicBaseUrl);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',

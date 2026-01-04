@@ -23,17 +23,17 @@ Pricing data verified as of: **2026-01-04**
 
 ### Token Pricing (per million tokens)
 
-| Provider   | Model                      | Input  | Output  | Web Search  | Notes                    |
-| ---------- | -------------------------- | ------ | ------- | ----------- | ------------------------ |
-| Anthropic  | claude-opus-4-5-20251101   | $5.00  | $25.00  | $0.01/call  | Research model           |
-| Anthropic  | claude-sonnet-4-5-20250929 | $3.00  | $15.00  | $0.01/call  | Quick model              |
-| Google     | gemini-2.5-pro             | $2.00  | $12.00  | $0.035/req  | Research model           |
-| Google     | gemini-2.5-flash           | $0.50  | $3.00   | $0.035/req  | Quick model, context     |
-| OpenAI     | o4-mini-deep-research      | $1.10  | $4.40   | included    | Research model           |
-| OpenAI     | gpt-5.2                    | $1.75  | $14.00  | $0.01/call  | Quick model              |
-| Perplexity | sonar                      | $1.00  | $1.00   | $0.005/req  | Validation, low context  |
-| Perplexity | sonar-pro                  | $3.00  | $15.00  | $0.005/req  | Research, medium context |
-| Perplexity | sonar-deep-research        | $2.00  | $8.00   | included    | Deep research, high ctx  |
+| Provider   | Model                      | Input | Output | Web Search | Notes                    |
+| ---------- | -------------------------- | ----- | ------ | ---------- | ------------------------ |
+| Anthropic  | claude-opus-4-5-20251101   | $5.00 | $25.00 | $0.01/call | Research model           |
+| Anthropic  | claude-sonnet-4-5-20250929 | $3.00 | $15.00 | $0.01/call | Quick model              |
+| Google     | gemini-2.5-pro             | $2.00 | $12.00 | $0.035/req | Research model           |
+| Google     | gemini-2.5-flash           | $0.50 | $3.00  | $0.035/req | Quick model, context     |
+| OpenAI     | o4-mini-deep-research      | $1.10 | $4.40  | included   | Research model           |
+| OpenAI     | gpt-5.2                    | $1.25 | $10.00 | $0.01/call | Quick model              |
+| Perplexity | sonar                      | $1.00 | $1.00  | $0.005/req | Validation, low context  |
+| Perplexity | sonar-pro                  | $3.00 | $15.00 | $0.005/req | Research, medium context |
+| Perplexity | sonar-deep-research        | $2.00 | $8.00  | included   | Deep research, high ctx  |
 
 ### Image Generation Pricing
 
@@ -146,17 +146,17 @@ Pricing data verified as of: **2026-01-04**
 
 **Location:** `packages/llm-contract/src/supportedModels.ts`
 
-| Model ID                   | Provider   | Display Name               | Use Case |
-| -------------------------- | ---------- | -------------------------- | -------- |
-| gemini-2.5-pro             | google     | Gemini Pro (research)      | Research |
-| gemini-2.5-flash           | google     | Gemini Flash (quick)       | Quick    |
-| claude-opus-4-5-20251101   | anthropic  | Claude Opus (research)     | Research |
-| claude-sonnet-4-5-20250929 | anthropic  | Claude Sonnet (quick)      | Quick    |
-| o4-mini-deep-research      | openai     | O4 Mini (research)         | Research |
-| gpt-5.2                    | openai     | GPT-5.2 (quick)            | Quick    |
-| sonar                      | perplexity | Perplexity Sonar           | Basic    |
-| sonar-pro                  | perplexity | Perplexity Sonar Pro       | Research |
-| sonar-deep-research        | perplexity | Perplexity Deep Research   | Deep     |
+| Model ID                   | Provider   | Display Name             | Use Case |
+| -------------------------- | ---------- | ------------------------ | -------- |
+| gemini-2.5-pro             | google     | Gemini Pro (research)    | Research |
+| gemini-2.5-flash           | google     | Gemini Flash (quick)     | Quick    |
+| claude-opus-4-5-20251101   | anthropic  | Claude Opus (research)   | Research |
+| claude-sonnet-4-5-20250929 | anthropic  | Claude Sonnet (quick)    | Quick    |
+| o4-mini-deep-research      | openai     | O4 Mini (research)       | Research |
+| gpt-5.2                    | openai     | GPT-5.2 (quick)          | Quick    |
+| sonar                      | perplexity | Perplexity Sonar         | Basic    |
+| sonar-pro                  | perplexity | Perplexity Sonar Pro     | Research |
+| sonar-deep-research        | perplexity | Perplexity Deep Research | Deep     |
 
 **System Default Models:** gemini-2.5-pro, claude-opus-4-5-20251101, gpt-5.2, sonar-pro
 
@@ -164,37 +164,37 @@ Pricing data verified as of: **2026-01-04**
 
 ### By Feature
 
-| Feature            | Provider    | Model           | Method            | File                      |
-| ------------------ | ----------- | --------------- | ----------------- | ------------------------- |
-| Research (deep)    | Multiple    | `researchModel` | `research()`      | `processLlmCall.ts`       |
-| Research (quick)   | Multiple    | `defaultModel`  | `research()`      | `processLlmCall.ts`       |
+| Feature            | Provider    | Model            | Method            | File                      |
+| ------------------ | ----------- | ---------------- | ----------------- | ------------------------- |
+| Research (deep)    | Multiple    | `researchModel`  | `research()`      | `processLlmCall.ts`       |
+| Research (quick)   | Multiple    | `defaultModel`   | `research()`      | `processLlmCall.ts`       |
 | Title generation   | Google      | gemini-2.5-flash | `generateTitle()` | `processResearch.ts`      |
-| Synthesis          | User choice | Any             | `synthesize()`    | `runSynthesis.ts`         |
+| Synthesis          | User choice | Any              | `synthesize()`    | `runSynthesis.ts`         |
 | Context inference  | Google      | gemini-2.5-flash | `generate()`      | `ContextInferenceAdapter` |
-| API key validation | Each        | Provider basic  | `evaluate()`      | `LlmValidatorImpl.ts`     |
-| Image prompt       | Google      | gemini-2.5-pro  | `generate()`      | `GptPromptAdapter.ts`     |
-| Image generation   | OpenAI      | dall-e-3        | `generateImage()` | `OpenAIImageGenerator.ts` |
+| API key validation | Each        | Provider basic   | `evaluate()`      | `LlmValidatorImpl.ts`     |
+| Image prompt       | Google      | gemini-2.5-pro   | `generate()`      | `GptPromptAdapter.ts`     |
+| Image generation   | OpenAI      | dall-e-3         | `generateImage()` | `OpenAIImageGenerator.ts` |
 
 ### Execution Points
 
-| Service          | File                                    | Function              | Purpose                |
-| ---------------- | --------------------------------------- | --------------------- | ---------------------- |
-| llm-orchestrator | `infra/llm/GptAdapter.ts`               | `research()`          | GPT research calls     |
-| llm-orchestrator | `infra/llm/GptAdapter.ts`               | `synthesize()`        | GPT synthesis          |
-| llm-orchestrator | `infra/llm/GptAdapter.ts`               | `generateTitle()`     | Title generation       |
-| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`            | `research()`          | Claude research calls  |
-| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`            | `synthesize()`        | Claude synthesis       |
-| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`            | `generateTitle()`     | Title generation       |
-| llm-orchestrator | `infra/llm/GeminiAdapter.ts`            | `research()`          | Gemini research calls  |
-| llm-orchestrator | `infra/llm/GeminiAdapter.ts`            | `synthesize()`        | Gemini synthesis       |
-| llm-orchestrator | `infra/llm/GeminiAdapter.ts`            | `generateTitle()`     | Title generation       |
-| llm-orchestrator | `infra/llm/GeminiAdapter.ts`            | `generateContextLabel()` | Context labels      |
-| llm-orchestrator | `infra/llm/PerplexityAdapter.ts`        | `research()`          | Perplexity research    |
-| llm-orchestrator | `infra/llm/ContextInferenceAdapter.ts`  | `inferResearchContext()` | Context inference   |
-| llm-orchestrator | `infra/llm/ContextInferenceAdapter.ts`  | `inferSynthesisContext()` | Synthesis context  |
-| user-service     | `infra/llm/LlmValidatorImpl.ts`         | `validateKey()`       | API key validation     |
-| image-service    | `infra/GptPromptAdapter.ts`             | `generatePrompt()`    | Image prompt creation  |
-| image-service    | `infra/OpenAIImageGenerator.ts`         | `generateImage()`     | DALL-E image gen       |
+| Service          | File                                   | Function                  | Purpose               |
+| ---------------- | -------------------------------------- | ------------------------- | --------------------- |
+| llm-orchestrator | `infra/llm/GptAdapter.ts`              | `research()`              | GPT research calls    |
+| llm-orchestrator | `infra/llm/GptAdapter.ts`              | `synthesize()`            | GPT synthesis         |
+| llm-orchestrator | `infra/llm/GptAdapter.ts`              | `generateTitle()`         | Title generation      |
+| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`           | `research()`              | Claude research calls |
+| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`           | `synthesize()`            | Claude synthesis      |
+| llm-orchestrator | `infra/llm/ClaudeAdapter.ts`           | `generateTitle()`         | Title generation      |
+| llm-orchestrator | `infra/llm/GeminiAdapter.ts`           | `research()`              | Gemini research calls |
+| llm-orchestrator | `infra/llm/GeminiAdapter.ts`           | `synthesize()`            | Gemini synthesis      |
+| llm-orchestrator | `infra/llm/GeminiAdapter.ts`           | `generateTitle()`         | Title generation      |
+| llm-orchestrator | `infra/llm/GeminiAdapter.ts`           | `generateContextLabel()`  | Context labels        |
+| llm-orchestrator | `infra/llm/PerplexityAdapter.ts`       | `research()`              | Perplexity research   |
+| llm-orchestrator | `infra/llm/ContextInferenceAdapter.ts` | `inferResearchContext()`  | Context inference     |
+| llm-orchestrator | `infra/llm/ContextInferenceAdapter.ts` | `inferSynthesisContext()` | Synthesis context     |
+| user-service     | `infra/llm/LlmValidatorImpl.ts`        | `validateKey()`           | API key validation    |
+| image-service    | `infra/GptPromptAdapter.ts`            | `generatePrompt()`        | Image prompt creation |
+| image-service    | `infra/OpenAIImageGenerator.ts`        | `generateImage()`         | DALL-E image gen      |
 
 ## Cost Calculation in Code
 
@@ -213,25 +213,25 @@ cost =
 
 | Provider   | Field                       | We Extract |   Available    | Impact                    |
 | ---------- | --------------------------- | :--------: | :------------: | ------------------------- |
-| Anthropic  | input_tokens                |     Yes    |       Yes      | -                         |
-| Anthropic  | output_tokens               |     Yes    |       Yes      | -                         |
-| Anthropic  | cache_creation_input_tokens |     No     |       Yes      | Underestimate cache costs |
-| Anthropic  | cache_read_input_tokens     |     No     |       Yes      | Overestimate costs        |
+| Anthropic  | input_tokens                |    Yes     |      Yes       | -                         |
+| Anthropic  | output_tokens               |    Yes     |      Yes       | -                         |
+| Anthropic  | cache_creation_input_tokens |     No     |      Yes       | Underestimate cache costs |
+| Anthropic  | cache_read_input_tokens     |     No     |      Yes       | Overestimate costs        |
 | Anthropic  | web_search_calls            |     No     | Count manually | Missing $0.01/call        |
-| Google     | promptTokenCount            |     Yes    |       Yes      | -                         |
-| Google     | candidatesTokenCount        |     Yes    |       Yes      | -                         |
+| Google     | promptTokenCount            |    Yes     |      Yes       | -                         |
+| Google     | candidatesTokenCount        |    Yes     |      Yes       | -                         |
 | Google     | grounding fee               |     No     |      N/A       | Missing flat fee          |
-| OpenAI     | input_tokens                |     Yes    |       Yes      | -                         |
-| OpenAI     | output_tokens               |     Yes    |       Yes      | -                         |
-| OpenAI     | cached_tokens               |     No     |       Yes      | Overestimate costs        |
-| OpenAI     | reasoning_tokens            |     No     |       Yes      | Informational             |
+| OpenAI     | input_tokens                |    Yes     |      Yes       | -                         |
+| OpenAI     | output_tokens               |    Yes     |      Yes       | -                         |
+| OpenAI     | cached_tokens               |     No     |      Yes       | Overestimate costs        |
+| OpenAI     | reasoning_tokens            |     No     |      Yes       | Informational             |
 | OpenAI     | web_search_calls            |     No     | Count manually | Missing $0.01/call        |
-| Perplexity | prompt_tokens               |     Yes    |       Yes      | -                         |
-| Perplexity | completion_tokens           |     Yes    |       Yes      | -                         |
-| Perplexity | cost.total_cost             |     No     |       Yes      | **Could use exact cost!** |
-| OpenAI     | image_size                  |     No     |       Yes      | Affects pricing           |
-| OpenAI     | image_quality               |     No     |       Yes      | hd vs standard            |
-| OpenAI     | images_generated            |     No     |       Yes      | Count of images           |
+| Perplexity | prompt_tokens               |    Yes     |      Yes       | -                         |
+| Perplexity | completion_tokens           |    Yes     |      Yes       | -                         |
+| Perplexity | cost.total_cost             |     No     |      Yes       | **Could use exact cost!** |
+| OpenAI     | image_size                  |     No     |      Yes       | Affects pricing           |
+| OpenAI     | image_quality               |     No     |      Yes       | hd vs standard            |
+| OpenAI     | images_generated            |     No     |      Yes       | Count of images           |
 
 ### Pricing Data Storage
 
@@ -241,8 +241,10 @@ cost =
 
 - `002_initial-llm-pricing.mjs` - Base pricing for Claude, Gemini, GPT
 - `003_perplexity-pricing.mjs` - Added Perplexity models
-- `004_openai-pricing-jan-2025.mjs` - OpenAI pricing update
-- `005_llm-pricing-update-jan-2026.mjs` - Latest pricing update (2026-01-04)
+- `004_llm-pricing-extended-fields.mjs` - Web search, grounding, cache pricing
+- `005_llm-pricing-update-jan-2026.mjs` - Pricing update (2026-01-04)
+- `006_image-generation-pricing.mjs` - Image generation pricing
+- `007_gpt-5.2-pricing-fix.mjs` - GPT-5.2 pricing correction
 
 **Current Schema:**
 
@@ -252,16 +254,16 @@ interface LlmPricing {
   model: string;
   inputPricePerMillion: number;
   outputPricePerMillion: number;
+  // Extended fields (migration 004)
+  webSearchCostPerCall?: number; // $0.01 for Claude/OpenAI
+  groundingCostPerRequest?: number; // $0.035 for Gemini
+  cacheWriteMultiplier?: number; // 1.25 for Anthropic
+  cacheReadMultiplier?: number; // 0.1 for Anthropic, 0.25 for OpenAI
+  // Image pricing (migration 006)
+  imagePricePerUnit?: number; // Per-image cost
   updatedAt: string;
 }
 ```
-
-**Missing from schema:**
-
-- Web search cost per call
-- Cache pricing multipliers
-- Flat request fees (Gemini grounding, Perplexity)
-- Image generation pricing
 
 ## Audit System
 
@@ -269,29 +271,66 @@ interface LlmPricing {
 
 ### What's Captured
 
-| Field        | Description                                   | Used For         |
-| ------------ | --------------------------------------------- | ---------------- |
-| provider     | `google`, `openai`, `anthropic`, `perplexity` | Grouping         |
-| model        | Model identifier                              | Pricing lookup   |
-| method       | `research`, `generate`, `evaluate`            | Usage analysis   |
-| inputTokens  | Tokens in prompt                              | Cost calculation |
-| outputTokens | Tokens in response                            | Cost calculation |
-| durationMs   | Call duration                                 | Performance      |
-| status       | `success` or `error`                          | Reliability      |
+| Field               | Description                                   | Used For         |
+| ------------------- | --------------------------------------------- | ---------------- |
+| provider            | `google`, `openai`, `anthropic`, `perplexity` | Grouping         |
+| model               | Model identifier                              | Pricing lookup   |
+| method              | `research`, `generate`, `evaluate`            | Usage analysis   |
+| prompt              | Full prompt text sent                         | Debugging        |
+| response            | Full LLM response                             | Debugging        |
+| inputTokens         | Tokens in prompt                              | Cost calculation |
+| outputTokens        | Tokens in response                            | Cost calculation |
+| cacheCreationTokens | Cache creation tokens (Anthropic)             | Cost calculation |
+| cacheReadTokens     | Cache read tokens (Anthropic)                 | Cost calculation |
+| cachedTokens        | Cached tokens (OpenAI)                        | Cost calculation |
+| reasoningTokens     | Reasoning tokens (OpenAI o1)                  | Analytics        |
+| webSearchCalls      | Count of web search operations                | Cost calculation |
+| groundingEnabled    | Whether grounding was active (Google)         | Cost calculation |
+| imageCount          | Number of images generated                    | Cost calculation |
+| imageModel          | Image generation model used                   | Analytics        |
+| imageSize           | Generated image dimensions                    | Cost calculation |
+| imageCostUsd        | Image generation cost                         | Cost calculation |
+| durationMs          | Call duration                                 | Performance      |
+| status              | `success` or `error`                          | Reliability      |
+| costUsd             | Calculated USD cost                           | Billing          |
+| providerCost        | Raw provider cost (if available)              | Verification     |
+| userId              | Associated user identifier                    | Attribution      |
+| researchId          | Associated research identifier                | Attribution      |
 
 ### What's NOT Captured
 
-- Web search call count
-- Cache token breakdown
-- Actual cost from provider (for Perplexity)
-- Request fees
-- Image generation calls
+- Model temperature/parameters
+- Completion stop reason
+- Rate limit information
+- Retry count
 
 ### Storage
 
-**Collection:** `llm_api_logs` — Detailed per-call logging
+**Collection:** `llm_api_logs` — Detailed per-call logging (high cardinality)
 
-**Usage Statistics:** `llm_usage_stats` — Aggregated by provider, model, and time period
+**Collection:** `llm_usage_stats` — Aggregated statistics
+
+Document structure: `{provider}_{model}_{callType}` with subcollection `periods`:
+
+- `'total'` — All-time cumulative
+- `'YYYY-MM'` — Monthly aggregate
+- `'YYYY-MM-DD'` — Daily aggregate
+
+**Call Types:**
+
+| callType            | Description                    |
+| ------------------- | ------------------------------ |
+| `research`          | Primary research queries       |
+| `synthesis`         | Result synthesis/summarization |
+| `title`             | Title/summary generation       |
+| `context_inference` | Contextual analysis            |
+| `context_label`     | Context labeling               |
+| `image_prompt`      | Prompt engineering for images  |
+| `image_generation`  | Image generation calls         |
+| `validation`        | API key validation             |
+| `other`             | Uncategorized calls            |
+
+**Control:** `INTEXURAOS_AUDIT_LLMS` env var (default: `true`)
 
 ## True Cost Formulas
 
@@ -345,23 +384,32 @@ where price_per_image depends on:
 
 **Location:** `apps/image-service/src/`
 
+**Two-Stage Pipeline:**
+
+| Stage                | Provider         | Model                                | File                                                  | Cost                    |
+| -------------------- | ---------------- | ------------------------------------ | ----------------------------------------------------- | ----------------------- |
+| 1. Prompt Generation | OpenAI or Google | gpt-4.1 / gemini-2.5-pro             | `GptPromptAdapter.ts` / `GeminiPromptAdapter.ts`      | Token-based             |
+| 2. Image Generation  | OpenAI or Google | gpt-image-1 / gemini-2.5-flash-image | `OpenAIImageGenerator.ts` / `GoogleImageGenerator.ts` | $0.04 / $0.03 per image |
+
 **Flow:**
 
 1. User requests cover image for research
-2. `GptPromptAdapter` uses Gemini to generate image prompt from research content
-3. `OpenAIImageGenerator` generates image using DALL-E 3
+2. Prompt adapter generates image description from research content
+3. Image generator creates image using DALL-E or Gemini Image
 4. Image stored in Cloud Storage
+5. Audit logged with `image_prompt` and `image_generation` call types
 
-**Cost Components:**
+**Fixed Settings:**
 
-1. LLM call to generate prompt (Gemini tokens)
-2. Image generation call (DALL-E per-image pricing)
+- Image size: 1024x1024 (all generators)
+- Response format: base64 or URL
 
-**What's NOT Tracked:**
+**Cost Tracking (via audit):**
 
-- Image generation costs
-- Prompt generation token costs (separate from research)
-- Image size/quality metadata
+- `imageCount` — Number of images generated
+- `imageModel` — Model used (gpt-image-1, gemini-2.5-flash-image)
+- `imageSize` — Image dimensions
+- `imageCostUsd` — Per-image cost
 
 ## Sources
 

@@ -14,10 +14,12 @@ const JPEG_QUALITY = 80;
 export class GcsImageStorage implements ImageStorage {
   private readonly storage: Storage;
   private readonly bucketName: string;
+  private readonly publicBaseUrl: string;
 
-  constructor(bucketName: string) {
+  constructor(bucketName: string, publicBaseUrl?: string) {
     this.storage = new Storage();
     this.bucketName = bucketName;
+    this.publicBaseUrl = publicBaseUrl ?? `https://storage.googleapis.com/${bucketName}`;
   }
 
   async upload(
@@ -49,11 +51,9 @@ export class GcsImageStorage implements ImageStorage {
         },
       });
 
-      const baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
-
       return ok({
-        thumbnailUrl: `${baseUrl}/${thumbPath}`,
-        fullSizeUrl: `${baseUrl}/${fullPath}`,
+        thumbnailUrl: `${this.publicBaseUrl}/${thumbPath}`,
+        fullSizeUrl: `${this.publicBaseUrl}/${fullPath}`,
       });
     } catch (error) {
       return err({
@@ -107,6 +107,6 @@ export class GcsImageStorage implements ImageStorage {
   }
 }
 
-export function createGcsImageStorage(bucketName: string): ImageStorage {
-  return new GcsImageStorage(bucketName);
+export function createGcsImageStorage(bucketName: string, publicBaseUrl?: string): ImageStorage {
+  return new GcsImageStorage(bucketName, publicBaseUrl);
 }

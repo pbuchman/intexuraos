@@ -285,8 +285,9 @@ module "web_app" {
   ssl_private_key_secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
 
   shared_content_bucket_name = module.shared_content.bucket_name
+  images_bucket_name         = module.generated_images_bucket.bucket_name
 
-  depends_on = [google_project_service.apis, module.secret_manager, module.shared_content]
+  depends_on = [google_project_service.apis, module.secret_manager, module.shared_content, module.generated_images_bucket]
 }
 
 # -----------------------------------------------------------------------------
@@ -1064,9 +1065,10 @@ module "image_service" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
-    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
-    INTEXURAOS_IMAGE_BUCKET     = module.generated_images_bucket.bucket_name
+    INTEXURAOS_GCP_PROJECT_ID        = var.project_id
+    INTEXURAOS_USER_SERVICE_URL      = module.user_service.service_url
+    INTEXURAOS_IMAGE_BUCKET          = module.generated_images_bucket.bucket_name
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL = "https://${var.web_app_domain}/assets"
   }
 
   depends_on = [

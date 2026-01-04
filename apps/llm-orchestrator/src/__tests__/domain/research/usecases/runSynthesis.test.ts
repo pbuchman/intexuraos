@@ -724,7 +724,9 @@ describe('runSynthesis', () => {
       };
 
       const mockImageServiceClient = {
-        generatePrompt: vi.fn().mockResolvedValue(ok({ prompt: 'generated prompt' })),
+        generatePrompt: vi
+          .fn()
+          .mockResolvedValue(ok({ title: 'Test Cover Title', prompt: 'generated prompt' })),
         generateImage: vi.fn().mockResolvedValue(
           ok({
             id: 'img-123',
@@ -752,7 +754,8 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
         'gemini-2.5-flash-image',
-        'user-1'
+        'user-1',
+        { title: 'Test Cover Title' }
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
@@ -775,7 +778,9 @@ describe('runSynthesis', () => {
       };
 
       const mockImageServiceClient = {
-        generatePrompt: vi.fn().mockResolvedValue(ok({ prompt: 'generated prompt' })),
+        generatePrompt: vi
+          .fn()
+          .mockResolvedValue(ok({ title: 'OpenAI Cover Title', prompt: 'generated prompt' })),
         generateImage: vi.fn().mockResolvedValue(
           ok({
             id: 'img-456',
@@ -798,7 +803,8 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
         'gpt-image-1',
-        'user-1'
+        'user-1',
+        { title: 'OpenAI Cover Title' }
       );
     });
 

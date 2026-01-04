@@ -2,7 +2,7 @@ import type { LlmProvider } from '../models/Research.js';
 import type { LlmCallType } from '../models/LlmUsageStats.js';
 import type { UsageStatsRepository } from '../ports/usageStatsRepository.js';
 import type { PricingRepository } from '../ports/pricingRepository.js';
-import { calculateCost } from '../utils/costCalculator.js';
+import { calculateAccurateCost } from '../utils/costCalculator.js';
 
 export interface TrackLlmCallParams {
   provider: LlmProvider;
@@ -11,6 +11,7 @@ export interface TrackLlmCallParams {
   success: boolean;
   inputTokens: number;
   outputTokens: number;
+  providerCost?: number;
 }
 
 export interface LlmUsageTracker {
@@ -35,7 +36,16 @@ export function createLlmUsageTracker(deps: {
           const pricing = await pricingRepo.findByProviderAndModel(params.provider, params.model);
 
           const costUsd =
-            pricing !== null ? calculateCost(params.inputTokens, params.outputTokens, pricing) : 0;
+            pricing !== null
+              ? calculateAccurateCost(
+                  {
+                    inputTokens: params.inputTokens,
+                    outputTokens: params.outputTokens,
+                    ...(params.providerCost !== undefined && { providerCost: params.providerCost }),
+                  },
+                  pricing
+                )
+              : 0;
 
           await usageStatsRepo.increment({
             provider: params.provider,

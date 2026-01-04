@@ -6,12 +6,17 @@ export interface ImageGenerationError {
   message: string;
 }
 
-export type GeneratedImageData = Omit<GeneratedImage, 'userId' | 'slug'> & { slug?: string | undefined };
+export type GeneratedImageData = Omit<GeneratedImage, 'userId' | 'slug'> & {
+  slug?: string | undefined;
+};
 
 export interface GenerateOptions {
   slug?: string | undefined;
 }
 
 export interface ImageGenerator {
-  generate(prompt: string, options?: GenerateOptions): Promise<Result<GeneratedImageData, ImageGenerationError>>;
+  generate(
+    prompt: string,
+    options?: GenerateOptions
+  ): Promise<Result<GeneratedImageData, ImageGenerationError>>;
 }

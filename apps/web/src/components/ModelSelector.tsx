@@ -45,6 +45,7 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     id: 'perplexity',
     displayName: 'Perplexity',
     models: [
+      { id: 'sonar', name: 'Sonar' },
       { id: 'sonar-pro', name: 'Sonar Pro' },
       { id: 'sonar-deep-research', name: 'Deep Research' },
     ],

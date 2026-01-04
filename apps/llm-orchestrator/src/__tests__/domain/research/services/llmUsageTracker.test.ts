@@ -187,4 +187,36 @@ describe('LlmUsageTracker', () => {
 
     expect(usageStatsRepo.getIncrements()).toHaveLength(0);
   });
+
+  it('uses providerCost when available (Perplexity)', async () => {
+    pricingRepo.setPricing({
+      provider: 'perplexity',
+      model: 'sonar-pro',
+      inputPricePerMillion: 3.0,
+      outputPricePerMillion: 15.0,
+      updatedAt: '2024-01-01T00:00:00Z',
+    });
+
+    const tracker = createLlmUsageTracker({
+      usageStatsRepo,
+      pricingRepo,
+    });
+
+    tracker.track({
+      provider: 'perplexity',
+      model: 'sonar-pro',
+      callType: 'research',
+      success: true,
+      inputTokens: 100,
+      outputTokens: 200,
+      providerCost: 0.05178,
+    });
+
+    await vi.waitFor(() => {
+      expect(usageStatsRepo.getIncrements()).toHaveLength(1);
+    });
+
+    const increment = usageStatsRepo.getIncrements()[0];
+    expect(increment?.costUsd).toBe(0.05178);
+  });
 });

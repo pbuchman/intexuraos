@@ -138,6 +138,41 @@ describe('GcsImageStorage', () => {
     });
   });
 
+  describe('upload with custom publicBaseUrl', () => {
+    it('uses custom publicBaseUrl for returned URLs', async () => {
+      const customStorage = new GcsImageStorage(testBucketName, 'https://intexuraos.cloud/assets');
+      mockSave.mockResolvedValue(undefined);
+
+      const buffer = Buffer.from('fake image data');
+      const result = await customStorage.upload('img-123', buffer, { slug: 'my-image' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.fullSizeUrl).toBe(
+          'https://intexuraos.cloud/assets/images/img-123-my-image.png'
+        );
+        expect(result.value.thumbnailUrl).toBe(
+          'https://intexuraos.cloud/assets/images/img-123-my-image-thumb.jpg'
+        );
+      }
+    });
+
+    it('falls back to GCS URL when publicBaseUrl not provided', async () => {
+      const defaultStorage = new GcsImageStorage(testBucketName);
+      mockSave.mockResolvedValue(undefined);
+
+      const buffer = Buffer.from('fake image data');
+      const result = await defaultStorage.upload('img-456', buffer);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.fullSizeUrl).toBe(
+          'https://storage.googleapis.com/test-image-bucket/images/img-456/full.png'
+        );
+      }
+    });
+  });
+
   describe('delete', () => {
     it('deletes files with legacy paths when no slug provided', async () => {
       mockDelete.mockResolvedValue(undefined);

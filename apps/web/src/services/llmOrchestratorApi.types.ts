@@ -11,6 +11,7 @@ export type SupportedModel =
   | 'claude-sonnet-4-5-20250929'
   | 'o4-mini-deep-research'
   | 'gpt-5.2'
+  | 'sonar'
   | 'sonar-pro'
   | 'sonar-deep-research';
 
@@ -21,6 +22,7 @@ const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
   'claude-sonnet-4-5-20250929': 'anthropic',
   'o4-mini-deep-research': 'openai',
   'gpt-5.2': 'openai',
+  sonar: 'perplexity',
   'sonar-pro': 'perplexity',
   'sonar-deep-research': 'perplexity',
 };
