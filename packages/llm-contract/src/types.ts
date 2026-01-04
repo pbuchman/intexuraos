@@ -14,6 +14,13 @@ export interface LLMConfig {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  webSearchCalls?: number;
+  groundingEnabled?: boolean;
+  providerCost?: number;
 }
 
 export interface ResearchResult {

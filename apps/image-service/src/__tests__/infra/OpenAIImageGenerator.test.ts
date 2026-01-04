@@ -30,6 +30,7 @@ describe('OpenAIImageGenerator', () => {
   const testModel = 'gpt-image-1' as const;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
+  const testImageUrl = 'https://oaidalleapiprodscus.blob.core.windows.net/test-image.png';
 
   let mockStorage: ReturnType<typeof createMockStorage>;
 
@@ -45,14 +46,18 @@ describe('OpenAIImageGenerator', () => {
 
   describe('generate', () => {
     it('returns GeneratedImage on successful generation', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = 'fake image data';
 
       nock('https://api.openai.com')
         .post('/v1/images/generations')
         .reply(200, {
           created: 1234567890,
-          data: [{ b64_json: b64Image }],
+          data: [{ url: testImageUrl }],
         });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net')
+        .get('/test-image.png')
+        .reply(200, fakeImageData);
 
       mockStorage.uploadMock.mockResolvedValue(
         ok({
@@ -82,7 +87,7 @@ describe('OpenAIImageGenerator', () => {
     });
 
     it('calls OpenAI API with correct parameters', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = 'fake image data';
 
       const scope = nock('https://api.openai.com')
         .post('/v1/images/generations', (body) => {
@@ -90,13 +95,17 @@ describe('OpenAIImageGenerator', () => {
           expect(body.prompt).toBe(testPrompt);
           expect(body.n).toBe(1);
           expect(body.size).toBe('1024x1024');
-          expect(body.response_format).toBe('b64_json');
+          expect(body.response_format).toBeUndefined();
           return true;
         })
         .reply(200, {
           created: 1234567890,
-          data: [{ b64_json: b64Image }],
+          data: [{ url: testImageUrl }],
         });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net')
+        .get('/test-image.png')
+        .reply(200, fakeImageData);
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
@@ -112,16 +121,19 @@ describe('OpenAIImageGenerator', () => {
       expect(scope.isDone()).toBe(true);
     });
 
-    it('uploads image buffer to storage', async () => {
+    it('fetches image from URL and uploads to storage', async () => {
       const fakeImageData = 'fake image data';
-      const b64Image = Buffer.from(fakeImageData).toString('base64');
 
       nock('https://api.openai.com')
         .post('/v1/images/generations')
         .reply(200, {
           created: 1234567890,
-          data: [{ b64_json: b64Image }],
+          data: [{ url: testImageUrl }],
         });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net')
+        .get('/test-image.png')
+        .reply(200, fakeImageData);
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
@@ -137,7 +149,7 @@ describe('OpenAIImageGenerator', () => {
       expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData));
     });
 
-    it('returns API_ERROR when no image data in response', async () => {
+    it('returns API_ERROR when no image URL in response', async () => {
       nock('https://api.openai.com').post('/v1/images/generations').reply(200, {
         created: 1234567890,
         data: [],
@@ -155,19 +167,49 @@ describe('OpenAIImageGenerator', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('No image data in response');
+        expect(result.error.message).toBe('No image URL in response');
+      }
+    });
+
+    it('returns API_ERROR when image fetch fails', async () => {
+      nock('https://api.openai.com')
+        .post('/v1/images/generations')
+        .reply(200, {
+          created: 1234567890,
+          data: [{ url: testImageUrl }],
+        });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net').get('/test-image.png').reply(500);
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+      });
+
+      const result = await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('Failed to fetch image');
       }
     });
 
     it('returns STORAGE_ERROR when upload fails', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = 'fake image data';
 
       nock('https://api.openai.com')
         .post('/v1/images/generations')
         .reply(200, {
           created: 1234567890,
-          data: [{ b64_json: b64Image }],
+          data: [{ url: testImageUrl }],
         });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net')
+        .get('/test-image.png')
+        .reply(200, fakeImageData);
 
       mockStorage.uploadMock.mockResolvedValue(
         err({ code: 'STORAGE_ERROR', message: 'GCS upload failed' })
@@ -258,14 +300,18 @@ describe('OpenAIImageGenerator', () => {
     });
 
     it('uses default generateId when not provided', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = 'fake image data';
 
       nock('https://api.openai.com')
         .post('/v1/images/generations')
         .reply(200, {
           created: 1234567890,
-          data: [{ b64_json: b64Image }],
+          data: [{ url: testImageUrl }],
         });
+
+      nock('https://oaidalleapiprodscus.blob.core.windows.net')
+        .get('/test-image.png')
+        .reply(200, fakeImageData);
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 

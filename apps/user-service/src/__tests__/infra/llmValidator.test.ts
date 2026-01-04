@@ -19,10 +19,15 @@ vi.mock('@intexuraos/infra-claude', () => ({
   createClaudeClient: vi.fn(),
 }));
 
+vi.mock('@intexuraos/infra-perplexity', () => ({
+  createPerplexityClient: vi.fn(),
+}));
+
 // Import mocked modules after vi.mock
 const { createGeminiClient } = await import('@intexuraos/infra-gemini');
 const { createGptClient } = await import('@intexuraos/infra-gpt');
 const { createClaudeClient } = await import('@intexuraos/infra-claude');
+const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
@@ -178,6 +183,53 @@ describe('LlmValidatorImpl', () => {
         }
       });
     });
+
+    describe('perplexity provider', () => {
+      it('returns ok when validation succeeds', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(ok('validated')),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'pplx-test-key');
+
+        expect(result.ok).toBe(true);
+        expect(createPerplexityClient).toHaveBeenCalledWith({
+          apiKey: 'pplx-test-key',
+          model: 'sonar-pro',
+        });
+      });
+
+      it('returns INVALID_KEY error when key is invalid', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'bad-key');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('INVALID_KEY');
+          expect(result.error.message).toBe('Invalid Perplexity API key');
+        }
+      });
+
+      it('returns API_ERROR when other errors occur', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'test-key');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toContain('Perplexity API error');
+        }
+      });
+    });
   });
 
   describe('testRequest', () => {
@@ -273,6 +325,38 @@ describe('LlmValidatorImpl', () => {
         if (!result.ok) {
           expect(result.error.code).toBe('API_ERROR');
           expect(result.error.message).toBe('Service down');
+        }
+      });
+    });
+
+    describe('perplexity provider', () => {
+      it('returns content when test succeeds', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(ok('Hello from Perplexity!')),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('Hello from Perplexity!');
+        }
+        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+      });
+
+      it('returns API_ERROR when test fails', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Search failed' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toBe('Search failed');
         }
       });
     });

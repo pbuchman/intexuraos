@@ -48,7 +48,11 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    groundingEnabled?: boolean;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -60,6 +64,7 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      groundingEnabled: usage?.groundingEnabled,
     })
   );
 
@@ -67,6 +72,9 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.groundingEnabled !== undefined) {
+      auditParams.groundingEnabled = usage.groundingEnabled;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -117,6 +125,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
         const text = response.text ?? '';
         const sources = extractSourcesFromResponse(response);
+        const groundingEnabled = hasGroundingMetadata(response);
         const result: ResearchResult = { content: text, sources };
         const usageMetadata = response.usageMetadata;
         if (usageMetadata !== undefined) {
@@ -124,6 +133,9 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
             inputTokens: usageMetadata.promptTokenCount ?? 0,
             outputTokens: usageMetadata.candidatesTokenCount ?? 0,
           };
+          if (groundingEnabled) {
+            result.usage.groundingEnabled = groundingEnabled;
+          }
         }
 
         await logSuccess('research', requestId, startTime, text, auditContext, result.usage);
@@ -191,4 +203,9 @@ function extractSourcesFromResponse(response: GenerateContentResponse): string[]
   }
 
   return [...new Set(sources)];
+}
+
+function hasGroundingMetadata(response: GenerateContentResponse): boolean {
+  const candidate = response.candidates?.[0];
+  return candidate?.groundingMetadata !== undefined;
 }

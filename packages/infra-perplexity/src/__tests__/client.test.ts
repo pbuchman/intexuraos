@@ -304,6 +304,42 @@ describe('createPerplexityClient', () => {
       );
     });
 
+    it('includes providerCost when cost.total_cost is present', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            cost: {
+              total_cost: 0.0123,
+            },
+          },
+        });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.providerCost).toBe(0.0123);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 100,
+          outputTokens: 50,
+          providerCost: 0.0123,
+        })
+      );
+    });
+
     it('calls audit context on error', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'API error');
 

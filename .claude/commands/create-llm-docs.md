@@ -131,6 +131,7 @@ Return a table with:
 **Compare with fetched pricing from Step 1:**
 
 For each model, compare:
+
 - `fetchedInputPrice` vs `currentInputPrice`
 - `fetchedOutputPrice` vs `currentOutputPrice`
 
@@ -165,8 +166,8 @@ export async function up(context) {
     'models.{provider}_{model}': {
       provider: '{provider}',
       model: '{model}',
-      inputPricePerMillion: {newInputPrice},
-      outputPricePerMillion: {newOutputPrice},
+      inputPricePerMillion: { newInputPrice },
+      outputPricePerMillion: { newOutputPrice },
     },
     // ... more changed models
     updatedAt: new Date().toISOString(),
@@ -179,6 +180,7 @@ export async function up(context) {
 ```
 
 3. Report the changes in chat:
+
 ```
 ## Pricing Changes Detected
 
@@ -192,6 +194,7 @@ Migration created: migrations/{NNN}_llm-pricing-update.mjs
 **If NO pricing has changed:**
 
 Report in chat:
+
 ```
 ## No Pricing Changes
 

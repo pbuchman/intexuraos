@@ -39,15 +39,22 @@ export class OpenAIImageGenerator implements ImageGenerator {
         prompt,
         n: 1,
         size: '1024x1024',
-        response_format: 'b64_json',
       });
 
-      const b64Data = response.data?.[0]?.b64_json;
-      if (b64Data === undefined) {
-        return err({ code: 'API_ERROR', message: 'No image data in response' });
+      const imageUrl = response.data?.[0]?.url;
+      if (imageUrl === undefined) {
+        return err({ code: 'API_ERROR', message: 'No image URL in response' });
       }
 
-      const imageBuffer = Buffer.from(b64Data, 'base64');
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        return err({
+          code: 'API_ERROR',
+          message: `Failed to fetch image: ${String(imageResponse.status)}`,
+        });
+      }
+
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
 
       const uploadResult = await this.storage.upload(id, imageBuffer);
       if (!uploadResult.ok) {

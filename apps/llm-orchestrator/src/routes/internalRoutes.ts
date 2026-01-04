@@ -16,7 +16,7 @@ import {
   createDraftResearch,
   processResearch,
   runSynthesis,
-  calculateCost,
+  calculateAccurateCost,
   type SupportedModel,
 } from '../domain/research/index.js';
 import { getProviderForModel, type LlmProvider } from '@intexuraos/llm-contract';
@@ -751,7 +751,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             event.model
           );
           if (pricing !== null) {
-            updateData.costUsd = calculateCost(usage.inputTokens, usage.outputTokens, pricing);
+            updateData.costUsd = calculateAccurateCost(usage, pricing);
           } else {
             request.log.warn(
               { model: event.model },

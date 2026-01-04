@@ -97,6 +97,27 @@ export class AuditContext {
     if (result.outputTokens !== undefined) {
       log.outputTokens = result.outputTokens;
     }
+    if (result.cacheCreationTokens !== undefined) {
+      log.cacheCreationTokens = result.cacheCreationTokens;
+    }
+    if (result.cacheReadTokens !== undefined) {
+      log.cacheReadTokens = result.cacheReadTokens;
+    }
+    if (result.cachedTokens !== undefined) {
+      log.cachedTokens = result.cachedTokens;
+    }
+    if (result.reasoningTokens !== undefined) {
+      log.reasoningTokens = result.reasoningTokens;
+    }
+    if (result.webSearchCalls !== undefined) {
+      log.webSearchCalls = result.webSearchCalls;
+    }
+    if (result.groundingEnabled !== undefined) {
+      log.groundingEnabled = result.groundingEnabled;
+    }
+    if (result.providerCost !== undefined) {
+      log.providerCost = result.providerCost;
+    }
     if (result.costUsd !== undefined) {
       log.costUsd = result.costUsd;
     }

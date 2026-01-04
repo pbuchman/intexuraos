@@ -50,7 +50,13 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens?: number;
+    reasoningTokens?: number;
+    webSearchCalls?: number;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -62,6 +68,9 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      cachedTokens: usage?.cachedTokens,
+      reasoningTokens: usage?.reasoningTokens,
+      webSearchCalls: usage?.webSearchCalls,
     })
   );
 
@@ -69,6 +78,15 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.cachedTokens !== undefined) {
+      auditParams.cachedTokens = usage.cachedTokens;
+    }
+    if (usage.reasoningTokens !== undefined) {
+      auditParams.reasoningTokens = usage.reasoningTokens;
+    }
+    if (usage.webSearchCalls !== undefined) {
+      auditParams.webSearchCalls = usage.webSearchCalls;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -124,12 +142,28 @@ export function createGptClient(config: GptConfig): GptClient {
 
         const content = response.output_text;
         const sources = extractSourcesFromResponse(response);
+        const webSearchCalls = countWebSearchCalls(response);
         const result: ResearchResult = { content, sources };
         if (response.usage !== undefined) {
+          const cachedTokens = (
+            response.usage as { input_tokens_details?: { cached_tokens?: number } }
+          ).input_tokens_details?.cached_tokens;
+          const reasoningTokens = (
+            response.usage as { output_tokens_details?: { reasoning_tokens?: number } }
+          ).output_tokens_details?.reasoning_tokens;
           result.usage = {
             inputTokens: response.usage.input_tokens,
             outputTokens: response.usage.output_tokens,
           };
+          if (cachedTokens !== undefined) {
+            result.usage.cachedTokens = cachedTokens;
+          }
+          if (reasoningTokens !== undefined) {
+            result.usage.reasoningTokens = reasoningTokens;
+          }
+          if (webSearchCalls > 0) {
+            result.usage.webSearchCalls = webSearchCalls;
+          }
         }
 
         await logSuccess('research', requestId, startTime, content, auditContext, result.usage);
@@ -206,4 +240,14 @@ function extractSourcesFromResponse(response: OpenAI.Responses.Response): string
   }
 
   return [...new Set(sources)];
+}
+
+function countWebSearchCalls(response: OpenAI.Responses.Response): number {
+  let count = 0;
+  for (const item of response.output) {
+    if (item.type === 'web_search_call') {
+      count++;
+    }
+  }
+  return count;
 }

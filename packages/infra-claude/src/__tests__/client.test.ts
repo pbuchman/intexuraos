@@ -274,6 +274,96 @@ describe('createClaudeClient', () => {
       expect(mockSuccess).toHaveBeenCalled();
     });
 
+    it('includes cache creation tokens when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_creation_input_tokens: 500,
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.cacheCreationTokens).toBe(500);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheCreationTokens: 500,
+        })
+      );
+    });
+
+    it('includes cache read tokens when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 200,
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.cacheReadTokens).toBe(200);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheReadTokens: 200,
+        })
+      );
+    });
+
+    it('includes web search calls count when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Response' },
+          { type: 'tool_use', name: 'web_search', id: 'id1', input: {} },
+          { type: 'tool_use', name: 'web_search', id: 'id2', input: {} },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.webSearchCalls).toBe(2);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchCalls: 2,
+        })
+      );
+    });
+
     it('calls audit context on error', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('API error'));
 

@@ -67,7 +67,11 @@ async function logSuccess(
   response: string,
   auditContext: AuditContext,
   logger?: LoggerLike,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    providerCost?: number;
+  }
 ): Promise<void> {
   logger?.info(
     {
@@ -77,6 +81,7 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      providerCost: usage?.providerCost,
     },
     `[Perplexity:${method}] Response`
   );
@@ -85,6 +90,9 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.providerCost !== undefined) {
+      auditParams.providerCost = usage.providerCost;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -166,6 +174,9 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             inputTokens: data.usage.prompt_tokens,
             outputTokens: data.usage.completion_tokens,
           };
+          if (data.usage.cost?.total_cost !== undefined) {
+            result.usage.providerCost = data.usage.cost.total_cost;
+          }
         }
 
         await logSuccess(

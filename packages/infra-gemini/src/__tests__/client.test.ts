@@ -313,6 +313,42 @@ describe('createGeminiClient', () => {
       );
     });
 
+    it('includes groundingEnabled when grounding metadata is present', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Response',
+        candidates: [
+          {
+            groundingMetadata: {
+              groundingChunks: [{ web: { uri: 'https://example.com' } }],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 150,
+          candidatesTokenCount: 75,
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createGeminiClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.groundingEnabled).toBe(true);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groundingEnabled: true,
+        })
+      );
+    });
+
     it('calls audit context on error', async () => {
       mockGenerateContent.mockRejectedValue(new Error('API error'));
 

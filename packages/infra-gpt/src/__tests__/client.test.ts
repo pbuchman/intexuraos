@@ -339,6 +339,99 @@ describe('createGptClient', () => {
       );
     });
 
+    it('includes cached tokens when present', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+          input_tokens_details: { cached_tokens: 100 },
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.cachedTokens).toBe(100);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cachedTokens: 100,
+        })
+      );
+    });
+
+    it('includes reasoning tokens when present', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+          output_tokens_details: { reasoning_tokens: 500 },
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.reasoningTokens).toBe(500);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reasoningTokens: 500,
+        })
+      );
+    });
+
+    it('includes web search calls count when present', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [
+          { type: 'web_search_call', results: [] },
+          { type: 'web_search_call', results: [] },
+          { type: 'message', content: 'text' },
+        ],
+        usage: { input_tokens: 150, output_tokens: 75 },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.webSearchCalls).toBe(2);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchCalls: 2,
+        })
+      );
+    });
+
     it('calls audit context on error', async () => {
       mockResponsesCreate.mockRejectedValue(new Error('API error'));
 

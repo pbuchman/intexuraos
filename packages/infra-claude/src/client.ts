@@ -50,7 +50,13 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens?: number;
+    cacheReadTokens?: number;
+    webSearchCalls?: number;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -62,6 +68,9 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      cacheCreationTokens: usage?.cacheCreationTokens,
+      cacheReadTokens: usage?.cacheReadTokens,
+      webSearchCalls: usage?.webSearchCalls,
     })
   );
 
@@ -69,6 +78,15 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.cacheCreationTokens !== undefined) {
+      auditParams.cacheCreationTokens = usage.cacheCreationTokens;
+    }
+    if (usage.cacheReadTokens !== undefined) {
+      auditParams.cacheReadTokens = usage.cacheReadTokens;
+    }
+    if (usage.webSearchCalls !== undefined) {
+      auditParams.webSearchCalls = usage.webSearchCalls;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -127,10 +145,25 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
         const sources = extractSourcesFromClaudeResponse(response);
-        const usage = {
+        const webSearchCalls = countWebSearchCalls(response);
+        const cacheCreationTokens = (response.usage as { cache_creation_input_tokens?: number })
+          .cache_creation_input_tokens;
+        const cacheReadTokens = (response.usage as { cache_read_input_tokens?: number })
+          .cache_read_input_tokens;
+
+        const usage: Parameters<typeof logSuccess>[5] = {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
         };
+        if (cacheCreationTokens !== undefined) {
+          usage.cacheCreationTokens = cacheCreationTokens;
+        }
+        if (cacheReadTokens !== undefined) {
+          usage.cacheReadTokens = cacheReadTokens;
+        }
+        if (webSearchCalls > 0) {
+          usage.webSearchCalls = webSearchCalls;
+        }
 
         await logSuccess('research', requestId, startTime, content, auditContext, usage);
         return ok({ content, sources, usage });
@@ -214,4 +247,14 @@ function extractSourcesFromClaudeResponse(response: Anthropic.Message): string[]
   }
 
   return [...new Set(sources)];
+}
+
+function countWebSearchCalls(response: Anthropic.Message): number {
+  let count = 0;
+  for (const block of response.content) {
+    if (block.type === 'tool_use' && block.name === 'web_search') {
+      count++;
+    }
+  }
+  return count;
 }
