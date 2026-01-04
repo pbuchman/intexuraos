@@ -24,6 +24,7 @@ export interface DecryptedApiKeys {
   google?: string;
   openai?: string;
   anthropic?: string;
+  perplexity?: string;
 }
 
 /**
@@ -75,6 +76,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           google?: string | null;
           openai?: string | null;
           anthropic?: string | null;
+          perplexity?: string | null;
         };
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
@@ -87,6 +89,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         }
         if (data.anthropic !== null && data.anthropic !== undefined) {
           result.anthropic = data.anthropic;
+        }
+        if (data.perplexity !== null && data.perplexity !== undefined) {
+          result.perplexity = data.perplexity;
         }
 
         return ok(result);

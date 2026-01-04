@@ -41,6 +41,15 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     ],
     default: 'gpt-5.2',
   },
+  {
+    id: 'perplexity',
+    displayName: 'Perplexity',
+    models: [
+      { id: 'sonar-pro', name: 'Sonar Pro' },
+      { id: 'sonar-deep-research', name: 'Deep Research' },
+    ],
+    default: 'sonar-pro',
+  },
 ];
 
 export interface ModelSelectorProps {

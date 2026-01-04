@@ -16,7 +16,7 @@ import {
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
-import type { ResolvedActionButton } from '../types/actionConfig';
+import type { ResolvedActionButton, ActionExecutionResult } from '../types/actionConfig';
 import { executeAction } from '../services/actionExecutor';
 import { useApiClient } from '../hooks/useApiClient';
 import { config } from '../config';
@@ -25,6 +25,8 @@ interface ConfigurableActionButtonProps {
   button: ResolvedActionButton;
   onSuccess?: () => void;
   onError?: (error: Error) => void;
+  /** Called with execution result when action completes (may include resource_url) */
+  onResult?: (result: ActionExecutionResult) => void;
 }
 
 // Icon mapping for dynamic icon rendering
@@ -79,6 +81,7 @@ export function ConfigurableActionButton({
   button,
   onSuccess,
   onError,
+  onResult,
 }: ConfigurableActionButtonProps): React.JSX.Element {
   const [isExecuting, setIsExecuting] = useState(false);
   const { request } = useApiClient();
@@ -89,7 +92,12 @@ export function ConfigurableActionButton({
     try {
       const baseUrl = button.endpoint.baseUrl ?? config.commandsRouterServiceUrl;
 
-      await executeAction(button.endpoint, button.action, request, baseUrl);
+      const result = await executeAction(button.endpoint, button.action, request, baseUrl);
+
+      // Call result callback if available (may include resource_url)
+      if (result !== null) {
+        onResult?.(result);
+      }
 
       // Call success callback
       onSuccess?.();

@@ -2,7 +2,7 @@
  * LLM Orchestrator types for research management.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 export type SupportedModel =
   | 'gemini-2.5-pro'
@@ -10,7 +10,9 @@ export type SupportedModel =
   | 'claude-opus-4-5-20251101'
   | 'claude-sonnet-4-5-20250929'
   | 'o4-mini-deep-research'
-  | 'gpt-5.2';
+  | 'gpt-5.2'
+  | 'sonar-pro'
+  | 'sonar-deep-research';
 
 const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
   'gemini-2.5-pro': 'google',
@@ -19,6 +21,8 @@ const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
   'claude-sonnet-4-5-20250929': 'anthropic',
   'o4-mini-deep-research': 'openai',
   'gpt-5.2': 'openai',
+  'sonar-pro': 'perplexity',
+  'sonar-deep-research': 'perplexity',
 };
 
 export function getProviderForModel(model: SupportedModel): LlmProvider {

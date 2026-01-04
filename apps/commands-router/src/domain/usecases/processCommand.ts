@@ -157,7 +157,7 @@ export function createProcessCommandUseCase(deps: {
             type: classification.type,
             confidence: classification.confidence,
             title: classification.title,
-            payload: {},
+            payload: { prompt: input.text },
           });
 
           if (!actionResult.ok) {

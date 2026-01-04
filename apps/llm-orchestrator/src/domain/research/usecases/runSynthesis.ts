@@ -53,19 +53,23 @@ export async function runSynthesis(
     logger,
   } = deps;
 
+  logger?.info('[4.1] Loading research from database');
   const researchResult = await researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
+    logger?.error({}, '[4.1] Research not found');
     return { ok: false, error: 'Research not found' };
   }
 
   const research = researchResult.value;
 
+  logger?.info('[4.1.1] Updating status to synthesizing');
   await researchRepo.update(researchId, { status: 'synthesizing' });
 
   const successfulResults = research.llmResults.filter((r) => r.status === 'completed');
   const inputContextsCount = research.inputContexts?.length ?? 0;
 
   if (successfulResults.length === 0 && inputContextsCount === 0) {
+    logger?.error({}, '[4.1.2] No successful LLM results to synthesize');
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: 'No successful LLM results to synthesize',
@@ -77,6 +81,7 @@ export async function runSynthesis(
   const shouldSkipSynthesis = successfulResults.length <= 1 && inputContextsCount === 0;
 
   if (shouldSkipSynthesis) {
+    logger?.info('[4.1.2] Single result, skipping synthesis');
     const now = new Date();
     const startedAt = new Date(research.startedAt);
     const totalDurationMs = now.getTime() - startedAt.getTime();
@@ -112,6 +117,7 @@ export async function runSynthesis(
 
   let synthesisContext = undefined;
   if (contextInferrer !== undefined) {
+    logger?.info('[4.2.1] Starting synthesis context inference');
     const contextResult = await contextInferrer.inferSynthesisContext({
       originalPrompt: research.prompt,
       reports: reports.map((r) => ({ model: r.model, content: r.content })),
@@ -119,15 +125,16 @@ export async function runSynthesis(
     });
     if (contextResult.ok) {
       synthesisContext = contextResult.value;
-      logger?.info('Synthesis context inferred successfully');
+      logger?.info('[4.2.2] Synthesis context inferred successfully');
     } else {
       logger?.error(
         { error: contextResult.error },
-        'Synthesis context inference failed, proceeding without context'
+        '[4.2.2] Synthesis context inference failed, proceeding without context'
       );
     }
   }
 
+  logger?.info(`[4.3.1] Starting synthesis LLM call (${String(reports.length)} reports)`);
   const synthesisResult = await synthesizer.synthesize(
     research.prompt,
     reports,
@@ -136,6 +143,7 @@ export async function runSynthesis(
   );
 
   if (!synthesisResult.ok) {
+    logger?.error({ error: synthesisResult.error.message }, '[4.3.2] Synthesis LLM call failed');
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: synthesisResult.error.message,
@@ -143,6 +151,10 @@ export async function runSynthesis(
     });
     return { ok: false, error: synthesisResult.error.message };
   }
+
+  logger?.info(
+    `[4.3.2] Synthesis LLM call succeeded (${String(synthesisResult.value.length)} chars)`
+  );
 
   const now = new Date();
   const startedAt = new Date(research.startedAt);
@@ -152,6 +164,7 @@ export async function runSynthesis(
   let coverImageId: string | undefined;
 
   if (imageServiceClient !== null) {
+    logger?.info('[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
       synthesisResult.value,
@@ -165,13 +178,19 @@ export async function runSynthesis(
         alt: research.title,
       };
       coverImageId = imageResult.id;
+      logger?.info(`[4.4.4] Cover image generation completed (id: ${imageResult.id})`);
+    } else {
+      logger?.info('[4.4.4] Cover image generation returned null (see previous errors)');
     }
+  } else {
+    logger?.info('[4.4] Skipping cover image generation (imageServiceClient is null)');
   }
 
   let shareInfo: ShareInfo | undefined;
   let shareUrl = `${webAppUrl}/#/research/${researchId}`;
 
   if (shareStorage !== null && shareConfig !== null) {
+    logger?.info('[4.5.1] Generating shareable HTML');
     const shareToken = generateShareToken();
     const slug = slugify(research.title);
     const idPrefix = researchId.slice(0, 6);
@@ -189,6 +208,7 @@ export async function runSynthesis(
       ...(coverImage !== undefined && { coverImage }),
     });
 
+    logger?.info('[4.5.2] Uploading HTML to GCS');
     const uploadResult = await shareStorage.upload(fileName, html);
     if (uploadResult.ok) {
       shareInfo = {
@@ -199,9 +219,13 @@ export async function runSynthesis(
         gcsPath: uploadResult.value.gcsPath,
         ...(coverImageId !== undefined && { coverImageId }),
       };
+      logger?.info(`[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
+    } else {
+      logger?.error({}, '[4.5.3] HTML upload failed');
     }
   }
 
+  logger?.info('[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
     synthesizedResult: synthesisResult.value,
@@ -214,6 +238,7 @@ export async function runSynthesis(
     reportLlmSuccess();
   }
 
+  logger?.info('[4.7] Sending completion notification');
   void notificationSender.sendResearchComplete(
     research.userId,
     researchId,
@@ -230,31 +255,49 @@ async function generateCoverImage(
   userId: string,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
+  const promptModel = 'gemini-2.5-pro';
+  const imageModel = 'gpt-image-1';
+
   try {
-    logger?.info('Generating cover image prompt');
-
-    const promptResult = await client.generatePrompt(synthesizedResult, 'gemini-2.5-pro', userId);
-    if (!promptResult.ok) {
-      logger?.error({ error: promptResult.error }, 'Failed to generate cover image prompt');
-      return null;
-    }
-
-    logger?.info('Generating cover image');
-
-    const imageResult = await client.generateImage(
-      promptResult.value.prompt,
-      'gpt-image-1',
-      userId
+    logger?.info(
+      `[4.4.2] Calling image-service /internal/images/prompts/generate (model: ${promptModel})`
     );
-    if (!imageResult.ok) {
-      logger?.error({ error: imageResult.error }, 'Failed to generate cover image');
+
+    const promptResult = await client.generatePrompt(synthesizedResult, promptModel, userId);
+    if (!promptResult.ok) {
+      logger?.error(
+        {
+          errorCode: promptResult.error.code,
+          errorMessage: promptResult.error.message,
+          model: promptModel,
+          userId,
+        },
+        '[4.4.2] Failed to generate cover image prompt from image-service'
+      );
       return null;
     }
 
-    logger?.info('Cover image generated successfully');
+    logger?.info(
+      `[4.4.3] Prompt generated, calling image-service /internal/images/generate (model: ${imageModel})`
+    );
+
+    const imageResult = await client.generateImage(promptResult.value.prompt, imageModel, userId);
+    if (!imageResult.ok) {
+      logger?.error(
+        {
+          errorCode: imageResult.error.code,
+          errorMessage: imageResult.error.message,
+          model: imageModel,
+          userId,
+        },
+        '[4.4.3] Failed to generate cover image from image-service'
+      );
+      return null;
+    }
+
     return imageResult.value;
   } catch (error) {
-    logger?.error({ error }, 'Unexpected error during cover image generation');
+    logger?.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
     return null;
   }
 }

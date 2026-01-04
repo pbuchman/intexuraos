@@ -522,7 +522,9 @@ describe('runSynthesis', () => {
         ],
         additionalSources: undefined,
       });
-      expect(mockLogger.info).toHaveBeenCalledWith('Synthesis context inferred successfully');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        '[4.2.2] Synthesis context inferred successfully'
+      );
     });
 
     it('passes synthesis context to synthesizer', async () => {
@@ -567,7 +569,7 @@ describe('runSynthesis', () => {
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Object) }),
-        'Synthesis context inference failed, proceeding without context'
+        '[4.2.2] Synthesis context inference failed, proceeding without context'
       );
     });
 

@@ -3,7 +3,7 @@
  * Single source of truth for model names and their providers.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 interface ModelConfig {
   provider: LlmProvider;
@@ -20,6 +20,9 @@ export const SUPPORTED_MODELS = {
   // OpenAI
   'o4-mini-deep-research': { provider: 'openai', displayName: 'O4 Mini (research)' },
   'gpt-5.2': { provider: 'openai', displayName: 'GPT-5.2 (quick)' },
+  // Perplexity
+  'sonar-pro': { provider: 'perplexity', displayName: 'Perplexity Sonar Pro' },
+  'sonar-deep-research': { provider: 'perplexity', displayName: 'Perplexity Deep Research' },
 } as const satisfies Record<string, ModelConfig>;
 
 export type SupportedModel = keyof typeof SUPPORTED_MODELS;

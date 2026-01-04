@@ -18,12 +18,16 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
+const mockTracker = {
+  track: vi.fn(),
+};
+
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro');
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', mockTracker);
   });
 
   describe('constructor', () => {
@@ -35,6 +39,18 @@ describe('GeminiAdapter', () => {
         apiKey: 'test-key',
         model: 'gemini-2.5-pro',
       });
+    });
+
+    it('works without tracker', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Result', sources: [] },
+      });
+
+      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro');
+      const result = await adapterNoTracker.research('Test');
+
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -110,6 +126,30 @@ describe('GeminiAdapter', () => {
       );
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+    });
+
+    it('uses synthesis context when provided', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+
+      await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
+        language: 'en',
+        domain: 'general',
+        mode: 'standard',
+        synthesis_goals: ['merge'],
+        missing_sections: [],
+        detected_conflicts: [],
+        source_preference: {
+          prefer_official_over_aggregators: true,
+          prefer_recent_when_time_sensitive: true,
+        },
+        defaults_applied: [],
+        assumptions: [],
+        output_format: { wants_table: false, wants_actionable_summary: true },
+        safety: { high_stakes: false, required_disclaimers: [] },
+        red_flags: [],
+      });
+
+      expect(mockGenerate).toHaveBeenCalled();
     });
 
     it('maps errors correctly', async () => {

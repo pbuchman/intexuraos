@@ -3,13 +3,14 @@ import type { UsageStatsRepository } from '../../domain/research/ports/usageStat
 import type {
   LlmUsageStats,
   LlmUsageIncrement,
+  LlmCallType,
 } from '../../domain/research/models/LlmUsageStats.js';
 import type { LlmProvider } from '../../domain/research/models/Research.js';
 
 const COLLECTION_NAME = 'llm_usage_stats';
 
-function getModelKey(provider: string, model: string): string {
-  return `${provider}_${model}`;
+function getDocKey(provider: string, model: string, callType: string): string {
+  return `${provider}_${model}_${callType}`;
 }
 
 function getTodayPeriod(): string {
@@ -23,7 +24,7 @@ function getMonthPeriod(): string {
 export class FirestoreUsageStatsRepository implements UsageStatsRepository {
   async increment(data: LlmUsageIncrement): Promise<void> {
     const db = getFirestore();
-    const modelKey = getModelKey(data.provider, data.model);
+    const docKey = getDocKey(data.provider, data.model, data.callType);
     const today = getTodayPeriod();
     const month = getMonthPeriod();
 
@@ -32,11 +33,12 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
     const periods = ['total', month, today];
 
     for (const period of periods) {
-      const docRef = db.collection(COLLECTION_NAME).doc(modelKey).collection('periods').doc(period);
+      const docRef = db.collection(COLLECTION_NAME).doc(docKey).collection('periods').doc(period);
 
       const baseUpdate = {
         provider: data.provider,
         model: data.model,
+        callType: data.callType,
         period,
         calls: FieldValue.increment(1),
         inputTokens: FieldValue.increment(data.inputTokens),
@@ -75,6 +77,7 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
           stats.push({
             provider: data['provider'] as LlmProvider,
             model: data['model'] as string,
+            callType: (data['callType'] as LlmCallType | undefined) ?? 'other',
             period: 'total',
             calls: (data['calls'] as number | undefined) ?? 0,
             successfulCalls: (data['successfulCalls'] as number | undefined) ?? 0,
@@ -107,6 +110,7 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
           stats.push({
             provider: data['provider'] as LlmProvider,
             model: data['model'] as string,
+            callType: (data['callType'] as LlmCallType | undefined) ?? 'other',
             period,
             calls: (data['calls'] as number | undefined) ?? 0,
             successfulCalls: (data['successfulCalls'] as number | undefined) ?? 0,

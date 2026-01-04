@@ -2,7 +2,7 @@
  * LLM Audit Logging Types.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 export type LlmAuditStatus = 'success' | 'error';
 

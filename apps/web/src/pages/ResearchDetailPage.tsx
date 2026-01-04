@@ -753,10 +753,18 @@ export function ResearchDetailPage(): React.JSX.Element {
               </div>
             ) : null}
             <div>
-              <p className="text-sm text-slate-500">Total Tokens</p>
+              <p className="text-sm text-slate-500">Input Tokens</p>
               <p className="text-lg font-semibold">
                 {research.llmResults
-                  .reduce((sum, r) => sum + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0)
+                  .reduce((sum, r) => sum + (r.inputTokens ?? 0), 0)
+                  .toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Output Tokens</p>
+              <p className="text-lg font-semibold">
+                {research.llmResults
+                  .reduce((sum, r) => sum + (r.outputTokens ?? 0), 0)
                   .toLocaleString()}
               </p>
             </div>
@@ -776,6 +784,9 @@ export function ResearchDetailPage(): React.JSX.Element {
           selectedProviders={[...new Set(research.selectedModels.map(getProviderForModel))]}
           synthesisProvider={getProviderForModel(research.synthesisModel)}
           researchStatus={research.status}
+          hasInputContexts={
+            research.inputContexts !== undefined && research.inputContexts.length > 0
+          }
           title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
         />
       ) : null}
@@ -804,37 +815,103 @@ export function ResearchDetailPage(): React.JSX.Element {
         />
       ) : null}
 
-      {research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
-        <Card title="Synthesis Report" className="mb-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-slate-500">
-              Synthesized by {getModelDisplayName(research.synthesisModel)}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void copyToClipboard(research.synthesizedResult ?? '', 'synthesis');
-              }}
-            >
-              {copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
-            </Button>
-          </div>
-          <div className="rounded-lg bg-slate-50 p-4">
-            <MarkdownContent content={research.synthesizedResult} />
-          </div>
-        </Card>
-      ) : research.status === 'completed' &&
-        research.llmResults.filter((r) => r.status === 'completed').length <= 1 &&
-        (research.inputContexts === undefined || research.inputContexts.length === 0) ? (
-        <Card title="Synthesis Report" className="mb-6">
-          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
-            <p className="text-amber-800">
-              Synthesis not available — only one individual report was generated.
-            </p>
-          </div>
-        </Card>
-      ) : null}
+      {/* Main Report Section */}
+      {((): React.JSX.Element | null => {
+        const completedResults = research.llmResults.filter((r) => r.status === 'completed');
+        const hasInputContexts =
+          research.inputContexts !== undefined && research.inputContexts.length > 0;
+        const isSingleModelResearch = completedResults.length === 1 && !hasInputContexts;
+        const singleResult = isSingleModelResearch ? completedResults[0] : undefined;
+
+        if (research.synthesizedResult !== undefined && research.synthesizedResult !== '') {
+          return (
+            <Card title="Synthesis Report" className="mb-6">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm text-slate-500">
+                  Synthesized by {getModelDisplayName(research.synthesisModel)}
+                </span>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    void copyToClipboard(research.synthesizedResult ?? '', 'synthesis');
+                  }}
+                >
+                  {copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4">
+                <MarkdownContent content={research.synthesizedResult} />
+              </div>
+            </Card>
+          );
+        }
+
+        if (
+          research.status === 'completed' &&
+          singleResult?.result !== undefined &&
+          singleResult.result !== ''
+        ) {
+          const hasTokenInfo =
+            singleResult.inputTokens !== undefined && singleResult.outputTokens !== undefined;
+          const hasCost = singleResult.costUsd !== undefined;
+
+          return (
+            <Card title="Research Report" className="mb-6">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                  <span>
+                    Generated by {PROVIDER_DISPLAY_NAMES[singleResult.provider]} (
+                    {singleResult.model})
+                  </span>
+                  {hasTokenInfo ? (
+                    <span className="text-slate-400">
+                      in: {formatTokenCount(singleResult.inputTokens ?? 0)} / out:{' '}
+                      {formatTokenCount(singleResult.outputTokens ?? 0)}
+                    </span>
+                  ) : null}
+                  {hasCost ? (
+                    <span className="font-medium text-green-600">
+                      {formatCost(singleResult.costUsd ?? 0)}
+                    </span>
+                  ) : null}
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={(): void => {
+                    void copyToClipboard(singleResult.result ?? '', 'main-report');
+                  }}
+                >
+                  {copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4">
+                <MarkdownContent content={singleResult.result} />
+              </div>
+              {singleResult.sources !== undefined && singleResult.sources.length > 0 ? (
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                  <h4 className="mb-2 text-sm font-medium">Sources</h4>
+                  <ul className="text-sm text-blue-600">
+                    {singleResult.sources.map((source, i) => (
+                      <li key={i}>
+                        <a
+                          href={source}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:underline"
+                        >
+                          {source}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </Card>
+          );
+        }
+
+        return null;
+      })()}
 
       {research.synthesisError !== undefined && research.synthesisError !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
@@ -843,41 +920,53 @@ export function ResearchDetailPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {/* Only show Individual LLM Results when at least one result has content */}
-      {research.llmResults.some(
-        (r) =>
-          (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
-      ) ? (
-        <div>
-          <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
-          <div className="space-y-4">
-            {/* Input Contexts */}
-            {research.inputContexts !== undefined && research.inputContexts.length > 0
-              ? research.inputContexts.map((ctx, idx) => (
-                  <CollapsibleInputContext key={`ctx-${ctx.id}`} ctx={ctx} index={idx} showFull />
-                ))
-              : null}
+      {/* Individual LLM Results - only show when multiple results or synthesis exists */}
+      {((): React.JSX.Element | null => {
+        const completedResults = research.llmResults.filter((r) => r.status === 'completed');
+        const hasInputContexts =
+          research.inputContexts !== undefined && research.inputContexts.length > 0;
+        const isSingleModelResearch = completedResults.length === 1 && !hasInputContexts;
+        const hasResults = research.llmResults.some(
+          (r) =>
+            (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
+        );
 
-            {/* LLM Results - only show cards with content */}
-            {research.llmResults
-              .filter(
-                (r) =>
-                  (r.result !== undefined && r.result !== '') ||
-                  (r.error !== undefined && r.error !== '')
-              )
-              .map((result) => (
-                <LlmResultCard
-                  key={result.provider}
-                  result={result}
-                  onCopy={(text): void => {
-                    void copyToClipboard(text, result.provider);
-                  }}
-                  copied={copiedSection === result.provider}
-                />
-              ))}
+        if (isSingleModelResearch || !hasResults) {
+          return null;
+        }
+
+        return (
+          <div>
+            <h3 className="mb-4 text-xl font-bold text-slate-900">Individual LLM Results</h3>
+            <div className="space-y-4">
+              {/* Input Contexts */}
+              {research.inputContexts !== undefined && research.inputContexts.length > 0
+                ? research.inputContexts.map((ctx, idx) => (
+                    <CollapsibleInputContext key={`ctx-${ctx.id}`} ctx={ctx} index={idx} showFull />
+                  ))
+                : null}
+
+              {/* LLM Results - only show cards with content */}
+              {research.llmResults
+                .filter(
+                  (r) =>
+                    (r.result !== undefined && r.result !== '') ||
+                    (r.error !== undefined && r.error !== '')
+                )
+                .map((result) => (
+                  <LlmResultCard
+                    key={result.provider}
+                    result={result}
+                    onCopy={(text): void => {
+                      void copyToClipboard(text, result.provider);
+                    }}
+                    copied={copiedSection === result.provider}
+                  />
+                ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })()}
 
       {showEnhanceModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
@@ -1107,15 +1196,17 @@ interface ProcessingStatusProps {
   selectedProviders: LlmProvider[];
   synthesisProvider: LlmProvider;
   researchStatus: ResearchStatus;
+  hasInputContexts: boolean;
   title?: string;
 }
 
-const ALL_PROVIDERS: LlmProvider[] = ['google', 'openai', 'anthropic'];
+const ALL_PROVIDERS: LlmProvider[] = ['google', 'openai', 'anthropic', 'perplexity'];
 
 const PROVIDER_DISPLAY_NAMES: Record<LlmProvider, string> = {
   google: 'Google',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  perplexity: 'Perplexity',
 };
 
 function ProcessingStatus({
@@ -1123,8 +1214,10 @@ function ProcessingStatus({
   selectedProviders,
   synthesisProvider,
   researchStatus,
+  hasInputContexts,
   title = 'Processing Status',
 }: ProcessingStatusProps): React.JSX.Element {
+  const willSynthesize = selectedProviders.length > 1 || hasInputContexts;
   const getStatusText = (result: LlmResult): string => {
     if (result.status === 'completed' && result.durationMs !== undefined) {
       return `(${(result.durationMs / 1000).toFixed(1)}s)`;
@@ -1201,14 +1294,16 @@ function ProcessingStatus({
           );
         })}
 
-        <div className="mt-4 border-t border-slate-200 pt-4">
-          <div className="flex items-center gap-3">
-            <StatusDot status={synthesisStatus.status} />
-            <span className="font-medium">Synthesis</span>
-            <span className="text-sm text-slate-500">({synthesisProvider})</span>
-            <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
+        {willSynthesize ? (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <div className="flex items-center gap-3">
+              <StatusDot status={synthesisStatus.status} />
+              <span className="font-medium">Synthesis</span>
+              <span className="text-sm text-slate-500">({synthesisProvider})</span>
+              <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </Card>
   );
@@ -1289,8 +1384,8 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
           <span className="text-sm text-slate-500">{result.model}</span>
           {hasTokenInfo ? (
             <span className="text-sm text-slate-400">
-              {formatTokenCount(result.inputTokens ?? 0)} /{' '}
-              {formatTokenCount(result.outputTokens ?? 0)} tokens
+              in: {formatTokenCount(result.inputTokens ?? 0)} / out:{' '}
+              {formatTokenCount(result.outputTokens ?? 0)}
             </span>
           ) : null}
           {hasCost ? (
@@ -1383,7 +1478,8 @@ function PartialFailureConfirmation({
 }: PartialFailureConfirmationProps): React.JSX.Element {
   // Defensive: API may return undefined failedProviders despite type definition
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  const failedProviders = (partialFailure.failedProviders ?? [])
+  const failedProvidersArr = partialFailure.failedProviders ?? [];
+  const failedProvidersText = failedProvidersArr
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(', ');
 
@@ -1396,8 +1492,10 @@ function PartialFailureConfirmation({
         <div className="flex-1">
           <h3 className="font-semibold text-orange-800">Partial Failure Detected</h3>
           <p className="mt-1 text-sm text-orange-700">
-            {failedProviders} failed during research. You can proceed with available results, retry
-            the failed providers, or cancel.
+            {failedProvidersText !== ''
+              ? `${failedProvidersText} failed during research.`
+              : 'Some providers failed during research.'}{' '}
+            You can proceed with available results, retry the failed providers, or cancel.
           </p>
 
           {partialFailure.retryCount > 0 ? (
@@ -1427,7 +1525,9 @@ function PartialFailureConfirmation({
                 disabled={confirming}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Retry Failed ({failedProviders})
+                {failedProvidersText !== ''
+                  ? `Retry Failed (${failedProvidersText})`
+                  : 'Retry Failed'}
               </Button>
             ) : null}
 

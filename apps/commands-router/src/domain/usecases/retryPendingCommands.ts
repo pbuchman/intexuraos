@@ -99,7 +99,7 @@ export function createRetryPendingCommandsUseCase(deps: {
               type: classification.type,
               confidence: classification.confidence,
               title: classification.title,
-              payload: {},
+              payload: { prompt: command.text },
             });
 
             if (!actionResult.ok) {

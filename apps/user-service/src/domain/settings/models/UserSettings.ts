@@ -9,7 +9,7 @@ import type { SupportedModel } from '@intexuraos/llm-contract';
 /**
  * LLM provider identifiers.
  */
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 /**
  * Result of testing an LLM API key.
@@ -27,6 +27,7 @@ export interface LlmApiKeys {
   google?: EncryptedValue; // Gemini API key
   openai?: EncryptedValue; // OpenAI API key
   anthropic?: EncryptedValue; // Anthropic API key
+  perplexity?: EncryptedValue; // Perplexity API key
 }
 
 /**
@@ -36,6 +37,7 @@ export interface LlmTestResults {
   google?: LlmTestResult;
   openai?: LlmTestResult;
   anthropic?: LlmTestResult;
+  perplexity?: LlmTestResult;
 }
 
 /**

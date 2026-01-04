@@ -38,6 +38,13 @@ import {
   type UsageStatsRepository,
 } from './domain/research/index.js';
 import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
+import {
+  createLlmUsageTracker,
+  type LlmUsageTracker,
+  type TrackLlmCallParams,
+} from './domain/research/services/index.js';
+
+export type { LlmUsageTracker, TrackLlmCallParams };
 
 /**
  * Configuration for sharing features.
@@ -54,6 +61,7 @@ export interface ServiceContainer {
   researchRepo: ResearchRepository;
   pricingRepo: PricingRepository;
   usageStatsRepo: UsageStatsRepository;
+  llmUsageTracker: LlmUsageTracker;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
@@ -159,6 +167,11 @@ export function initializeServices(): void {
   const pricingRepo = new FirestorePricingRepository();
   const usageStatsRepo = new FirestoreUsageStatsRepository();
 
+  const llmUsageTracker = createLlmUsageTracker({
+    usageStatsRepo,
+    pricingRepo,
+  });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
@@ -191,6 +204,7 @@ export function initializeServices(): void {
     researchRepo,
     pricingRepo,
     usageStatsRepo,
+    llmUsageTracker,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
@@ -199,9 +213,13 @@ export function initializeServices(): void {
     notificationSender,
     shareStorage,
     shareConfig,
-    createResearchProvider,
-    createSynthesizer,
-    createTitleGenerator,
-    createContextInferrer,
+    createResearchProvider: (model, apiKey): LlmResearchProvider =>
+      createResearchProvider(model, apiKey, llmUsageTracker),
+    createSynthesizer: (model, apiKey): LlmSynthesisProvider =>
+      createSynthesizer(model, apiKey, llmUsageTracker),
+    createTitleGenerator: (model, apiKey): TitleGenerator =>
+      createTitleGenerator(model, apiKey, llmUsageTracker),
+    createContextInferrer: (model, apiKey, logger): ContextInferenceProvider =>
+      createContextInferrer(model, apiKey, logger, llmUsageTracker),
   };
 }

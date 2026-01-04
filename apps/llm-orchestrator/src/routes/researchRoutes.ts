@@ -631,6 +631,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
             },
+            logger: {
+              info: (msg: string): void => {
+                request.log.info({ researchId: id }, msg);
+              },
+              error: (obj: object, msg: string): void => {
+                request.log.error({ researchId: id, ...obj }, msg);
+              },
+            },
           });
 
           if (synthesisResult.ok) {

@@ -30,6 +30,7 @@ import type {
   UsageStatsRepository,
 } from '../domain/research/index.js';
 import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
+import type { LlmUsageTracker, TrackLlmCallParams } from '../services.js';
 import type {
   DecryptedApiKeys,
   ResearchSettings,
@@ -324,6 +325,7 @@ export function createFakeLlmProviders(): Record<LlmProvider, LlmResearchProvide
     google: createFakeLlmResearchProvider('Google research result'),
     openai: createFakeLlmResearchProvider('OpenAI research result'),
     anthropic: createFakeLlmResearchProvider('Anthropic research result'),
+    perplexity: createFakeLlmResearchProvider('Perplexity research result'),
   };
 }
 
@@ -467,7 +469,7 @@ export class FakeUsageStatsRepository implements UsageStatsRepository {
   private stats = new Map<string, LlmUsageStats>();
 
   async increment(data: LlmUsageIncrement): Promise<void> {
-    const key = `${data.provider}_${data.model}_total`;
+    const key = `${data.provider}_${data.model}_${data.callType}_total`;
     const existing = this.stats.get(key);
 
     if (existing !== undefined) {
@@ -486,6 +488,7 @@ export class FakeUsageStatsRepository implements UsageStatsRepository {
       this.stats.set(key, {
         provider: data.provider,
         model: data.model,
+        callType: data.callType,
         period: 'total',
         calls: 1,
         successfulCalls: data.success ? 1 : 0,
@@ -615,4 +618,20 @@ export function createFailingContextInferrer(
       return err({ code: 'API_ERROR', message: errorMessage });
     },
   };
+}
+
+export class FakeLlmUsageTracker implements LlmUsageTracker {
+  private trackedCalls: TrackLlmCallParams[] = [];
+
+  track(params: TrackLlmCallParams): void {
+    this.trackedCalls.push(params);
+  }
+
+  getTrackedCalls(): TrackLlmCallParams[] {
+    return [...this.trackedCalls];
+  }
+
+  clear(): void {
+    this.trackedCalls = [];
+  }
 }

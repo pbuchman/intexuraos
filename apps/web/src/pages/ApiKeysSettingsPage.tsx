@@ -26,6 +26,7 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'google', name: 'Google (Gemini)' },
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
+  { id: 'perplexity', name: 'Perplexity (Sonar)' },
 ];
 
 /**
@@ -54,6 +55,11 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
     case 'anthropic':
       if (!key.startsWith('sk-ant-')) {
         return 'Anthropic API key should start with "sk-ant-"';
+      }
+      break;
+    case 'perplexity':
+      if (!key.startsWith('pplx-')) {
+        return 'Perplexity API key should start with "pplx-"';
       }
       break;
   }

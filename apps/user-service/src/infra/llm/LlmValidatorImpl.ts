@@ -6,6 +6,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
+import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -19,6 +20,7 @@ const VALIDATION_MODELS = {
   google: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-haiku-20241022',
+  perplexity: 'sonar-pro',
 } as const;
 
 /**
@@ -73,6 +75,20 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
+      case 'perplexity': {
+        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
+        const result = await client.generate(VALIDATION_PROMPT);
+        if (!result.ok) {
+          return err({
+            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
+            message:
+              result.error.code === 'INVALID_KEY'
+                ? 'Invalid Perplexity API key'
+                : `Perplexity API error: ${result.error.message}`,
+          });
+        }
+        return ok(undefined);
+      }
     }
   }
 
@@ -106,6 +122,17 @@ export class LlmValidatorImpl implements LlmValidator {
       }
       case 'anthropic': {
         const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
+        const result = await client.generate(prompt);
+        if (!result.ok) {
+          return err({
+            code: 'API_ERROR',
+            message: result.error.message,
+          });
+        }
+        return ok({ content: result.value });
+      }
+      case 'perplexity': {
+        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
         const result = await client.generate(prompt);
         if (!result.ok) {
           return err({

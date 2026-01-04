@@ -434,7 +434,7 @@ describe('processResearch', () => {
       expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ researchId: 'research-1' }),
-        'Context inference failed, proceeding without context'
+        '[2.4.2] Context inference failed, proceeding without context'
       );
     });
 

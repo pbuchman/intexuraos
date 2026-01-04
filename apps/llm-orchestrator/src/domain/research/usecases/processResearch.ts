@@ -43,49 +43,51 @@ export async function processResearch(
   researchId: string,
   deps: ProcessResearchDeps
 ): Promise<ProcessResearchResult> {
+  deps.logger.info({ researchId }, '[2.1] Loading research from database');
   const researchResult = await deps.researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
+    deps.logger.warn({ researchId }, '[2.1] Research not found');
     return { triggerSynthesis: false };
   }
 
   const research = researchResult.value;
 
-  // Update status to processing and reset startedAt to now
+  deps.logger.info({ researchId }, '[2.2] Updating status to processing');
   await deps.researchRepo.update(researchId, {
     status: 'processing',
     startedAt: new Date().toISOString(),
   });
 
-  // Generate title (use dedicated titleGenerator if available, else fall back to synthesizer)
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
   const titleModel: SupportedModel =
     deps.titleGenerator !== undefined ? 'gemini-2.5-flash' : research.synthesisModel;
   if (titleGen !== undefined) {
+    deps.logger.info({ researchId, model: titleModel }, '[2.3.1] Starting title generation');
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
       await deps.researchRepo.update(researchId, { title: titleResult.value });
-      deps.logger.info({ researchId, model: titleModel }, 'Title generated successfully');
+      deps.logger.info({ researchId, model: titleModel }, '[2.3.2] Title generated successfully');
       if (deps.reportLlmSuccess !== undefined) {
         deps.reportLlmSuccess(titleModel);
       }
     } else {
       deps.logger.warn(
         { researchId, model: titleModel, error: titleResult.error },
-        'Title generation failed, using default title'
+        '[2.3.2] Title generation failed, using default title'
       );
     }
   } else {
-    deps.logger.debug({ researchId }, 'Title generation skipped, no generator available');
+    deps.logger.debug({ researchId }, '[2.3] Title generation skipped (no generator available)');
   }
 
-  // Infer research context if context inferrer is available
   if (deps.contextInferrer !== undefined) {
+    deps.logger.info({ researchId }, '[2.4.1] Starting research context inference');
     const contextResult = await deps.contextInferrer.inferResearchContext(research.prompt);
     if (contextResult.ok) {
       await deps.researchRepo.update(researchId, { researchContext: contextResult.value });
       deps.logger.info(
         { researchId, domain: contextResult.value.domain },
-        'Research context inferred'
+        '[2.4.2] Research context inferred successfully'
       );
       if (deps.reportLlmSuccess !== undefined) {
         deps.reportLlmSuccess('gemini-2.5-flash');
@@ -93,13 +95,11 @@ export async function processResearch(
     } else {
       deps.logger.warn(
         { researchId, error: contextResult.error },
-        'Context inference failed, proceeding without context'
+        '[2.4.2] Context inference failed, proceeding without context'
       );
     }
   }
 
-  // Dispatch LLM calls to Pub/Sub (runs in separate Cloud Run instances)
-  // Skip models that already have completed results (for enhanced researches)
   const pendingModels = research.llmResults
     .filter((r) => r.status === 'pending')
     .map((r) => r.model as SupportedModel);
@@ -110,25 +110,37 @@ export async function processResearch(
       totalModels: research.selectedModels.length,
       pendingModels: pendingModels.length,
     },
-    'Dispatching LLM calls'
+    '[2.5.1] Preparing to dispatch LLM calls'
   );
 
-  for (const model of pendingModels) {
-    await deps.llmCallPublisher.publishLlmCall({
-      type: 'llm.call',
-      researchId,
-      userId: research.userId,
-      model,
-      prompt: research.prompt,
-    });
+  for (let i = 0; i < pendingModels.length; i++) {
+    const model = pendingModels[i];
+    if (model !== undefined) {
+      deps.logger.info(
+        { researchId, model, index: i + 1, total: pendingModels.length },
+        `[2.5.2] Publishing LLM call to Pub/Sub`
+      );
+      await deps.llmCallPublisher.publishLlmCall({
+        type: 'llm.call',
+        researchId,
+        userId: research.userId,
+        model,
+        prompt: research.prompt,
+      });
+    }
   }
 
-  // If no pending models (enhanced research with all pre-completed results),
-  // trigger synthesis immediately
   if (pendingModels.length === 0) {
-    deps.logger.info({ researchId }, 'All LLM results already completed, triggering synthesis');
+    deps.logger.info(
+      { researchId },
+      '[2.5.3] All LLM results already completed, triggering synthesis'
+    );
     return { triggerSynthesis: true };
   }
 
+  deps.logger.info(
+    { researchId, dispatchedCount: pendingModels.length },
+    '[2.5.3] LLM calls dispatched, awaiting results'
+  );
   return { triggerSynthesis: false };
 }

@@ -25,6 +25,7 @@
     "@intexuraos/infra-firestore": "*",
     "@intexuraos/infra-gemini": "*",
     "@intexuraos/infra-gpt": "*",
+    "@intexuraos/infra-perplexity": "*",
     "@intexuraos/infra-pubsub": "*",
     "@intexuraos/llm-contract": "*",
     "fastify": "^5.1.0",

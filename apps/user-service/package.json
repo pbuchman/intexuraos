@@ -23,6 +23,7 @@
     "@intexuraos/infra-gemini": "*",
     "@intexuraos/infra-gpt": "*",
     "@intexuraos/infra-claude": "*",
+    "@intexuraos/infra-perplexity": "*",
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@intexuraos/llm-contract": "*",

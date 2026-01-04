@@ -37,6 +37,17 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
   },
 }));
 
+vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
+  PerplexityAdapter: class MockPerplexityAdapter {
+    apiKey: string;
+    model: string;
+    constructor(apiKey: string, model: string) {
+      this.apiKey = apiKey;
+      this.model = model;
+    }
+  },
+}));
+
 const { createSynthesizer, createTitleGenerator, createResearchProvider } =
   await import('../../../infra/llm/LlmAdapterFactory.js');
 
@@ -62,6 +73,13 @@ describe('LlmAdapterFactory', () => {
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
       expect((provider as unknown as { model: string }).model).toBe('o4-mini-deep-research');
     });
+
+    it('creates PerplexityAdapter for perplexity model', () => {
+      const provider = createResearchProvider('sonar-pro', 'perplexity-key');
+
+      expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
+      expect((provider as unknown as { model: string }).model).toBe('sonar-pro');
+    });
   });
 
   describe('createSynthesizer', () => {
@@ -84,6 +102,12 @@ describe('LlmAdapterFactory', () => {
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
       expect((synthesizer as unknown as { model: string }).model).toBe('o4-mini-deep-research');
+    });
+
+    it('throws error for perplexity model (synthesis not supported)', () => {
+      expect(() => createSynthesizer('sonar-pro', 'perplexity-key')).toThrow(
+        'Perplexity does not support synthesis'
+      );
     });
   });
 

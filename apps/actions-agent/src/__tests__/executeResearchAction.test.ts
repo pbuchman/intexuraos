@@ -203,4 +203,46 @@ describe('executeResearchAction usecase', () => {
       expect(result.value.status).toBe('completed');
     }
   });
+
+  it('uses payload.prompt as research prompt when available', async () => {
+    const originalMessage = 'This is the full original message from WhatsApp';
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { prompt: originalMessage },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe(originalMessage);
+    expect(params?.title).toBe('Test Research');
+  });
+
+  it('falls back to title when payload.prompt is missing', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {},
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe('Test Research');
+  });
 });

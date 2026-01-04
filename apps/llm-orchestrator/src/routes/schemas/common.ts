@@ -11,7 +11,7 @@ export const supportedModelSchema = {
 
 export const llmProviderSchema = {
   type: 'string',
-  enum: ['google', 'openai', 'anthropic'],
+  enum: ['google', 'openai', 'anthropic', 'perplexity'],
 } as const;
 
 export const researchStatusSchema = {

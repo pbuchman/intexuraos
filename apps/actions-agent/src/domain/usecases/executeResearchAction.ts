@@ -54,10 +54,12 @@ export function createExecuteResearchActionUseCase(
     await actionRepository.update(updatedAction);
 
     const selectedModels: SupportedModel[] = ['claude-opus-4-5-20251101'];
+    const prompt =
+      typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
     const result = await researchServiceClient.createDraft({
       userId: action.userId,
       title: action.title,
-      prompt: action.title,
+      prompt,
       selectedModels,
       sourceActionId: action.id,
     });

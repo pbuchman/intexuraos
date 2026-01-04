@@ -68,6 +68,7 @@ describe('FirestoreUsageStatsRepository', () => {
       await repository.increment({
         provider: 'google',
         model: 'gemini-2.5-pro',
+        callType: 'research',
         success: true,
         inputTokens: 100,
         outputTokens: 200,
@@ -79,7 +80,7 @@ describe('FirestoreUsageStatsRepository', () => {
       expect(mockBatchCommit).toHaveBeenCalled();
 
       expect(mockCollection).toHaveBeenCalledWith('llm_usage_stats');
-      expect(mockModelDoc).toHaveBeenCalledWith('google_gemini-2.5-pro');
+      expect(mockModelDoc).toHaveBeenCalledWith('google_gemini-2.5-pro_research');
     });
 
     it('increments successfulCalls for successful calls', async () => {
@@ -88,6 +89,7 @@ describe('FirestoreUsageStatsRepository', () => {
       await repository.increment({
         provider: 'anthropic',
         model: 'claude-opus-4-5-20251101',
+        callType: 'synthesis',
         success: true,
         inputTokens: 500,
         outputTokens: 1000,
@@ -106,6 +108,7 @@ describe('FirestoreUsageStatsRepository', () => {
       await repository.increment({
         provider: 'openai',
         model: 'o4-mini-deep-research',
+        callType: 'title',
         success: false,
         inputTokens: 0,
         outputTokens: 0,
@@ -154,6 +157,7 @@ describe('FirestoreUsageStatsRepository', () => {
       expect(result[0]).toEqual({
         provider: 'google',
         model: 'gemini-2.5-pro',
+        callType: 'other',
         period: 'total',
         calls: 10,
         successfulCalls: 9,
@@ -203,6 +207,7 @@ describe('FirestoreUsageStatsRepository', () => {
       expect(result[0]).toEqual({
         provider: 'google',
         model: 'gemini-2.5-pro',
+        callType: 'other',
         period: 'total',
         calls: 0,
         successfulCalls: 0,
@@ -280,6 +285,7 @@ describe('FirestoreUsageStatsRepository', () => {
       expect(result[0]).toEqual({
         provider: 'openai',
         model: 'gpt-4',
+        callType: 'other',
         period: '2024-02',
         calls: 0,
         successfulCalls: 0,

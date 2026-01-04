@@ -10,23 +10,45 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
 } from '../../domain/research/index.js';
+import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
+  private readonly model: string;
+  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model: string, tracker?: LlmUsageTracker) {
     this.client = createGptClient({ apiKey, model });
+    this.model = model;
+    this.tracker = tracker;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'openai',
+        model: this.model,
+        callType: 'research',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'openai',
+      model: this.model,
+      callType: 'research',
+      success: true,
+      inputTokens: result.value.usage?.inputTokens ?? 0,
+      outputTokens: result.value.usage?.outputTokens ?? 0,
+    });
 
     return result;
   }
@@ -44,11 +66,28 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'openai',
+        model: this.model,
+        callType: 'synthesis',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'openai',
+      model: this.model,
+      callType: 'synthesis',
+      success: true,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
 
     return result;
   }
@@ -68,11 +107,28 @@ Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'openai',
+        model: this.model,
+        callType: 'title',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'openai',
+      model: this.model,
+      callType: 'title',
+      success: true,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
 
     return { ok: true, value: result.value.trim() };
   }
