@@ -19,9 +19,16 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Button, Card, Layout, PROVIDER_MODELS } from '@/components';
+import {
+  Button,
+  Card,
+  Layout,
+  ModelSelector,
+  PROVIDER_MODELS,
+  getSelectedModelsList,
+} from '@/components';
 import { useAuth } from '@/context';
-import { useResearch } from '@/hooks';
+import { useLlmKeys, useResearch } from '@/hooks';
 import {
   approveResearch,
   confirmPartialFailure,
@@ -37,6 +44,7 @@ import {
   type PartialFailure,
   type PartialFailureDecision,
   type ResearchStatus,
+  type SupportedModel,
 } from '@/services/llmOrchestratorApi.types';
 
 /**
@@ -193,10 +201,13 @@ function renderPromptWithLinks(text: string): React.JSX.Element {
   );
 }
 
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
+
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { research, loading, error, refresh } = useResearch(id ?? '');
   const { getAccessToken } = useAuth();
+  const { keys, loading: keysLoading } = useLlmKeys();
   const navigate = useNavigate();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -215,8 +226,17 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
-  const [selectedEnhanceLlms, setSelectedEnhanceLlms] = useState<LlmProvider[]>([]);
+  const [enhanceModelSelections, setEnhanceModelSelections] = useState<
+    Map<LlmProvider, SupportedModel | null>
+  >(() => new Map());
   const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
+  const [removeContextIds, setRemoveContextIds] = useState<Set<string>>(() => new Set());
+  const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
+
+  const configuredProviders: LlmProvider[] =
+    keysLoading || keys === null
+      ? []
+      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -351,7 +371,17 @@ export function ResearchDetailPage(): React.JSX.Element {
     if (id === undefined || id === '') return;
 
     const validContexts = enhanceContexts.filter((ctx) => ctx.trim().length > 0);
-    const hasChanges = selectedEnhanceLlms.length > 0 || validContexts.length > 0;
+    const additionalModels = getSelectedModelsList(enhanceModelSelections);
+    const removeIds = Array.from(removeContextIds);
+    const hasSynthesisChange =
+      enhanceSynthesisModel !== null && enhanceSynthesisModel !== research?.synthesisModel;
+
+    const hasChanges =
+      additionalModels.length > 0 ||
+      validContexts.length > 0 ||
+      removeIds.length > 0 ||
+      hasSynthesisChange;
+
     if (!hasChanges) return;
 
     setEnhancing(true);
@@ -359,18 +389,15 @@ export function ResearchDetailPage(): React.JSX.Element {
 
     try {
       const token = await getAccessToken();
-      const additionalModels = selectedEnhanceLlms
-        .map((provider) => PROVIDER_MODELS.find((p) => p.id === provider)?.default)
-        .filter((m): m is NonNullable<typeof m> => m !== undefined);
       const enhanced = await enhanceResearch(token, id, {
         ...(additionalModels.length > 0 && { additionalModels }),
         ...(validContexts.length > 0 && {
           additionalContexts: validContexts.map((content) => ({ content })),
         }),
+        ...(removeIds.length > 0 && { removeContextIds: removeIds }),
+        ...(hasSynthesisChange && { synthesisModel: enhanceSynthesisModel }),
       });
-      setShowEnhanceModal(false);
-      setSelectedEnhanceLlms([]);
-      setEnhanceContexts([]);
+      resetEnhanceModal();
       void navigate(`/research/${enhanced.id}`);
     } catch (err) {
       setEnhanceError(err instanceof Error ? err.message : 'Failed to enhance research');
@@ -379,16 +406,38 @@ export function ResearchDetailPage(): React.JSX.Element {
     }
   };
 
-  const toggleEnhanceLlm = (provider: LlmProvider): void => {
-    setSelectedEnhanceLlms((prev) =>
-      prev.includes(provider) ? prev.filter((p) => p !== provider) : [...prev, provider]
-    );
+  const handleEnhanceModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
+    setEnhanceModelSelections((prev) => {
+      const next = new Map(prev);
+      next.set(provider, model);
+      return next;
+    });
   };
 
-  const getAvailableEnhanceLlms = (): LlmProvider[] => {
-    if (research === null) return [];
-    const existingProviders = new Set(research.selectedModels.map(getProviderForModel));
-    return ALL_PROVIDERS.filter((p) => !existingProviders.has(p));
+  const toggleRemoveContext = (contextId: string): void => {
+    setRemoveContextIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(contextId)) {
+        next.delete(contextId);
+      } else {
+        next.add(contextId);
+      }
+      return next;
+    });
+  };
+
+  const resetEnhanceModal = (): void => {
+    setShowEnhanceModal(false);
+    setEnhanceModelSelections(new Map());
+    setEnhanceContexts([]);
+    setRemoveContextIds(new Set());
+    setEnhanceSynthesisModel(null);
+    setEnhanceError(null);
+  };
+
+  const getExistingProviders = (): Set<LlmProvider> => {
+    if (research === null) return new Set();
+    return new Set(research.selectedModels.map(getProviderForModel));
   };
 
   useEffect(() => {
@@ -604,8 +653,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 Retry Research
               </Button>
             ) : null}
-            {research.status === 'completed' &&
-            (getAvailableEnhanceLlms().length > 0 || (research.inputContexts?.length ?? 0) < 5) ? (
+            {research.status === 'completed' ? (
               <Button
                 onClick={(): void => {
                   setShowEnhanceModal(true);
@@ -817,49 +865,141 @@ export function ResearchDetailPage(): React.JSX.Element {
       ) : null}
 
       {showEnhanceModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
+          <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
             <p className="mb-4 text-sm text-slate-600">
-              Add more AI models or additional context to get new perspectives.
+              Add more AI models, change synthesis model, or modify context.
             </p>
 
-            {getAvailableEnhanceLlms().length > 0 ? (
-              <div className="mb-4 space-y-2">
-                <p className="text-sm font-medium text-slate-700">Select additional models:</p>
-                {getAvailableEnhanceLlms().map((provider) => (
-                  <label
-                    key={provider}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedEnhanceLlms.includes(provider)}
-                      onChange={(): void => {
-                        toggleEnhanceLlm(provider);
+            {/* Additional Models */}
+            <div className="mb-6">
+              <p className="text-sm font-medium text-slate-700 mb-3">
+                Add models from new providers:
+              </p>
+              <ModelSelector
+                selectedModels={enhanceModelSelections}
+                onChange={handleEnhanceModelChange}
+                configuredProviders={configuredProviders}
+                disabledProviders={getExistingProviders()}
+                disabled={enhancing}
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Providers already in research are disabled. Select models from other providers.
+              </p>
+            </div>
+
+            {/* Synthesis Model */}
+            <div className="mb-6">
+              <p className="text-sm font-medium text-slate-700 mb-3">
+                Synthesis Model{' '}
+                <span className="font-normal text-slate-500">
+                  (current:{' '}
+                  {PROVIDER_MODELS.flatMap((p) => p.models).find(
+                    (m) => m.id === research.synthesisModel
+                  )?.name ?? research.synthesisModel}
+                  )
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SYNTHESIS_CAPABLE_MODELS.map((model) => {
+                  const isSelected = enhanceSynthesisModel === model;
+                  const isCurrent = research.synthesisModel === model;
+                  const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
+                    (m) => m.id === model
+                  );
+                  const provider = getProviderForModel(model);
+                  const hasKey = configuredProviders.includes(provider);
+                  const isDisabled = !hasKey || enhancing;
+
+                  return (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={(): void => {
+                        setEnhanceSynthesisModel(isSelected ? null : model);
                       }}
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>{PROVIDER_DISPLAY_NAMES[provider]}</span>
-                  </label>
-                ))}
+                      disabled={isDisabled}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                        isSelected
+                          ? 'bg-green-600 text-white'
+                          : isCurrent
+                            ? 'bg-slate-200 text-slate-600'
+                            : hasKey
+                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={
+                        !hasKey ? 'API key not configured' : isCurrent ? 'Current model' : undefined
+                      }
+                    >
+                      {modelConfig?.name ?? model}
+                      {!hasKey ? ' (no key)' : ''}
+                      {isCurrent && !isSelected ? ' ✓' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Existing Contexts */}
+            {(research.inputContexts?.length ?? 0) > 0 ? (
+              <div className="mb-4">
+                <p className="text-sm font-medium text-slate-700 mb-2">
+                  Existing contexts{' '}
+                  <span className="font-normal text-slate-500">
+                    ({String((research.inputContexts?.length ?? 0) - removeContextIds.size)} will be
+                    kept)
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  {research.inputContexts?.map((ctx, idx) => {
+                    const isRemoved = removeContextIds.has(ctx.id);
+                    return (
+                      <div
+                        key={ctx.id}
+                        className={`flex items-center gap-3 rounded-lg border p-3 ${
+                          isRemoved ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!isRemoved}
+                          onChange={(): void => {
+                            toggleRemoveContext(ctx.id);
+                          }}
+                          disabled={enhancing}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span
+                          className={`flex-1 text-sm truncate ${
+                            isRemoved ? 'text-red-600 line-through' : 'text-slate-700'
+                          }`}
+                        >
+                          Context {String(idx + 1)}: {ctx.content.substring(0, 100)}
+                          {ctx.content.length > 100 ? '...' : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
+            {/* New Contexts */}
             <div className="mb-4 space-y-2">
               <p className="text-sm font-medium text-slate-700">
-                Additional context{' '}
+                Add new context{' '}
                 <span className="font-normal text-slate-500">
-                  ({String((research.inputContexts?.length ?? 0) + enhanceContexts.length)}/5)
+                  (
+                  {String(
+                    (research.inputContexts?.length ?? 0) -
+                      removeContextIds.size +
+                      enhanceContexts.length
+                  )}
+                  /5 total)
                 </span>
               </p>
-
-              {(research.inputContexts?.length ?? 0) > 0 ? (
-                <p className="text-xs text-slate-500">
-                  {String(research.inputContexts?.length ?? 0)} existing context
-                  {(research.inputContexts?.length ?? 0) > 1 ? 's' : ''} will be included
-                </p>
-              ) : null}
 
               {enhanceContexts.map((ctx, idx) => (
                 <div key={idx} className="flex gap-2">
@@ -888,7 +1028,10 @@ export function ResearchDetailPage(): React.JSX.Element {
                 </div>
               ))}
 
-              {(research.inputContexts?.length ?? 0) + enhanceContexts.length < 5 ? (
+              {(research.inputContexts?.length ?? 0) -
+                removeContextIds.size +
+                enhanceContexts.length <
+              5 ? (
                 <button
                   type="button"
                   onClick={(): void => {
@@ -909,16 +1052,7 @@ export function ResearchDetailPage(): React.JSX.Element {
             ) : null}
 
             <div className="flex justify-end gap-3">
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowEnhanceModal(false);
-                  setSelectedEnhanceLlms([]);
-                  setEnhanceContexts([]);
-                  setEnhanceError(null);
-                }}
-                disabled={enhancing}
-              >
+              <Button variant="secondary" onClick={resetEnhanceModal} disabled={enhancing}>
                 Cancel
               </Button>
               <Button
@@ -927,8 +1061,11 @@ export function ResearchDetailPage(): React.JSX.Element {
                 }}
                 disabled={
                   enhancing ||
-                  (selectedEnhanceLlms.length === 0 &&
-                    enhanceContexts.filter((c) => c.trim().length > 0).length === 0)
+                  (getSelectedModelsList(enhanceModelSelections).length === 0 &&
+                    enhanceContexts.filter((c) => c.trim().length > 0).length === 0 &&
+                    removeContextIds.size === 0 &&
+                    (enhanceSynthesisModel === null ||
+                      enhanceSynthesisModel === research.synthesisModel))
                 }
                 isLoading={enhancing}
               >

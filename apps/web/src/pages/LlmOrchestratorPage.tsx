@@ -23,6 +23,8 @@ import {
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
 
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
+
 export function LlmOrchestratorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -93,8 +95,14 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         }
         setModelSelections(selections);
 
-        // Load synthesis model from draft
-        setSynthesisModel(draft.synthesisModel);
+        // Load synthesis model from draft (validate it's synthesis-capable)
+        const draftSynthesisValid = SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel);
+        if (draftSynthesisValid) {
+          setSynthesisModel(draft.synthesisModel);
+        } else {
+          // Draft had invalid synthesis model - will be auto-selected when keys load
+          setSynthesisModel(null);
+        }
 
         lastSavedPromptRef.current = draft.prompt;
 
@@ -128,13 +136,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       const selections = getDefaultModelSelections(configured);
       setModelSelections(selections);
 
-      // Set first configured model as synthesis model
-      const selectedModels = getSelectedModelsList(selections);
-      if (selectedModels.length > 0) {
-        const firstModel = selectedModels[0];
-        if (firstModel !== undefined) {
-          setSynthesisModel(firstModel);
-        }
+      // Set first available synthesis-capable model based on API keys (independent of research selection)
+      const availableSynthesis = SYNTHESIS_CAPABLE_MODELS.find((m) =>
+        configured.includes(getProviderForModel(m))
+      );
+      if (availableSynthesis !== undefined) {
+        setSynthesisModel(availableSynthesis);
       }
     }
   }, [keysLoading, keys, isEditMode]);
@@ -398,13 +405,15 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
   const hasAnyProvider = configuredProviders.length > 0;
   const hasModelOrContext = selectedModels.length > 0 || hasValidContexts;
-  const canSubmit = prompt.length >= 10 && hasModelOrContext && synthesisModel !== null;
+  const hasSynthesisModel =
+    synthesisModel !== null && SYNTHESIS_CAPABLE_MODELS.includes(synthesisModel);
+  const canSubmit = prompt.length >= 10 && hasModelOrContext && hasSynthesisModel;
 
   const getDisabledReason = (): string | undefined => {
     if (canSubmit) return undefined;
     if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
     if (!hasModelOrContext) return 'Select at least one model or provide input context';
-    if (synthesisModel === null) return 'Select a synthesis model';
+    if (!hasSynthesisModel) return 'Select Gemini Pro or GPT-5.2 for synthesis';
     return undefined;
   };
 
@@ -476,33 +485,37 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         <Card title="Synthesis Model">
           <p className="text-sm text-slate-500 mb-4">Select which model synthesizes the results</p>
           <div className="flex flex-wrap gap-2">
-            {selectedModels.length === 0 ? (
-              <p className="text-slate-400 text-sm">Select at least one research model first</p>
-            ) : (
-              selectedModels.map((model) => {
-                const isSelected = synthesisModel === model;
-                const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
-                  (m) => m.id === model
-                );
-                return (
-                  <button
-                    key={model}
-                    type="button"
-                    onClick={(): void => {
-                      setSynthesisModel(model);
-                    }}
-                    disabled={submitting || savingDraft}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-green-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {modelConfig?.name ?? model}
-                  </button>
-                );
-              })
-            )}
+            {SYNTHESIS_CAPABLE_MODELS.map((model) => {
+              const isSelected = synthesisModel === model;
+              const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
+                (m) => m.id === model
+              );
+              const provider = getProviderForModel(model);
+              const hasKey = configuredProviders.includes(provider);
+              const isDisabled = !hasKey || submitting || savingDraft;
+
+              return (
+                <button
+                  key={model}
+                  type="button"
+                  onClick={(): void => {
+                    setSynthesisModel(model);
+                  }}
+                  disabled={isDisabled}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-green-600 text-white'
+                      : hasKey
+                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={!hasKey ? 'API key not configured' : undefined}
+                >
+                  {modelConfig?.name ?? model}
+                  {!hasKey ? ' (no key)' : ''}
+                </button>
+              );
+            })}
           </div>
         </Card>
 
