@@ -1,7 +1,7 @@
 import { createGeminiClient } from '@intexuraos/infra-gemini';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 import type { CommandType } from '../../domain/models/command.js';
 import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
-import type { LlmProvider } from '../../domain/events/actionCreatedEvent.js';
 
 const VALID_TYPES: readonly CommandType[] = [
   'todo',
@@ -42,14 +42,29 @@ The confidence should reflect how certain you are about the classification:
 - 0.5-0.7: Somewhat uncertain
 - Below 0.5: Use "unclassified" instead
 
+CRITICAL: The title MUST be in the SAME LANGUAGE as the user's message (Polish message → Polish title, Spanish message → Spanish title, etc.)
+
 The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").
 The reasoning should briefly explain what keywords or patterns led to this classification.`;
 
-const LLM_KEYWORDS: Record<LlmProvider, string[]> = {
-  google: ['gemini', 'google'],
-  openai: ['gpt', 'openai', 'chatgpt'],
-  anthropic: ['claude', 'anthropic'],
+const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
+  'gemini-2.5-pro': ['gemini pro', 'gemini-pro'],
+  'gemini-2.5-flash': ['gemini flash', 'gemini-flash', 'gemini', 'google'],
+  'claude-opus-4-5-20251101': ['claude opus', 'opus'],
+  'claude-sonnet-4-5-20250929': ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
+  'o4-mini-deep-research': ['o4', 'o4-mini', 'deep research'],
+  'gpt-5.2': ['gpt', 'gpt-5', 'openai', 'chatgpt'],
+  sonar: ['sonar basic'],
+  'sonar-pro': ['sonar', 'sonar pro', 'pplx', 'perplexity'],
+  'sonar-deep-research': ['sonar deep', 'perplexity deep', 'deep sonar'],
 };
+
+const DEFAULT_MODELS: SupportedModel[] = [
+  'gemini-2.5-pro',
+  'claude-opus-4-5-20251101',
+  'gpt-5.2',
+  'sonar-pro',
+];
 
 const ALL_LLMS_PATTERNS = [
   /\ball\s+(llms?|models?|ais?)\b/i,
@@ -62,20 +77,20 @@ export interface GeminiClassifierConfig {
   apiKey: string;
 }
 
-export function extractSelectedLlms(text: string): LlmProvider[] | undefined {
+export function extractSelectedModels(text: string): SupportedModel[] | undefined {
   const lowerText = text.toLowerCase();
 
   for (const pattern of ALL_LLMS_PATTERNS) {
     if (pattern.test(text)) {
-      return ['google', 'openai', 'anthropic'];
+      return DEFAULT_MODELS;
     }
   }
 
-  const found: LlmProvider[] = [];
-  for (const [provider, keywords] of Object.entries(LLM_KEYWORDS) as [LlmProvider, string[]][]) {
+  const found: SupportedModel[] = [];
+  for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [SupportedModel, string[]][]) {
     for (const keyword of keywords) {
       if (lowerText.includes(keyword)) {
-        found.push(provider);
+        found.push(model);
         break;
       }
     }
@@ -84,8 +99,10 @@ export function extractSelectedLlms(text: string): LlmProvider[] | undefined {
   return found.length > 0 ? found : undefined;
 }
 
+const CLASSIFIER_MODEL = 'gemini-2.5-flash';
+
 export function createGeminiClassifier(config: GeminiClassifierConfig): Classifier {
-  const client = createGeminiClient({ apiKey: config.apiKey });
+  const client = createGeminiClient({ apiKey: config.apiKey, model: CLASSIFIER_MODEL });
 
   return {
     async classify(text: string): Promise<ClassificationResult> {
@@ -98,7 +115,7 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
       }
 
       const parsed = parseClassifyResponse(result.value, VALID_TYPES);
-      const selectedLlms = extractSelectedLlms(text);
+      const selectedModels = extractSelectedModels(text);
 
       const classificationResult: ClassificationResult = {
         type: parsed.type,
@@ -106,8 +123,8 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
         title: parsed.title,
         reasoning: parsed.reasoning,
       };
-      if (selectedLlms !== undefined) {
-        classificationResult.selectedLlms = selectedLlms;
+      if (selectedModels !== undefined) {
+        classificationResult.selectedModels = selectedModels;
       }
 
       return classificationResult;

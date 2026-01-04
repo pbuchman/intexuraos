@@ -52,7 +52,7 @@ describe('executeResearchAction usecase', () => {
   it('returns completed status for already completed action', async () => {
     const action = createAction({
       status: 'completed',
-      payload: { resource_url: '/#/research/existing/edit' },
+      payload: { resource_url: '/#/research/existing' },
     });
     await fakeActionRepo.save(action);
 
@@ -68,7 +68,7 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/existing/edit');
+      expect(result.value.resource_url).toBe('/#/research/existing');
     }
   });
 
@@ -108,7 +108,7 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/research-new-123/edit');
+      expect(result.value.resource_url).toBe('/#/research/research-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -178,9 +178,7 @@ describe('executeResearchAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('research draft is ready');
-    expect(messages[0]?.message).toContain(
-      'https://app.test.com/#/research/notified-research-123/edit'
-    );
+    expect(messages[0]?.message).toContain('https://app.test.com/#/research/notified-research-123');
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -204,5 +202,47 @@ describe('executeResearchAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
     }
+  });
+
+  it('uses payload.prompt as research prompt when available', async () => {
+    const originalMessage = 'This is the full original message from WhatsApp';
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { prompt: originalMessage },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe(originalMessage);
+    expect(params?.title).toBe('Test Research');
+  });
+
+  it('falls back to title when payload.prompt is missing', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {},
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe('Test Research');
   });
 });

@@ -1,0 +1,23 @@
+{
+  "name": "@intexuraos/infra-perplexity",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*",
+    "@intexuraos/llm-audit": "*",
+    "@intexuraos/llm-contract": "*"
+  },
+  "devDependencies": {
+    "nock": "^14.0.0"
+  }
+}

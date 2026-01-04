@@ -9,7 +9,6 @@ import {
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient } from '@intexuraos/llm-contract';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
-import { GPT_DEFAULTS } from './types.js';
 
 export type GptClient = LLMClient;
 
@@ -51,7 +50,13 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens?: number;
+    reasoningTokens?: number;
+    webSearchCalls?: number;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -63,6 +68,9 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      cachedTokens: usage?.cachedTokens,
+      reasoningTokens: usage?.reasoningTokens,
+      webSearchCalls: usage?.webSearchCalls,
     })
   );
 
@@ -70,6 +78,15 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.cachedTokens !== undefined) {
+      auditParams.cachedTokens = usage.cachedTokens;
+    }
+    if (usage.reasoningTokens !== undefined) {
+      auditParams.reasoningTokens = usage.reasoningTokens;
+    }
+    if (usage.webSearchCalls !== undefined) {
+      auditParams.webSearchCalls = usage.webSearchCalls;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -98,22 +115,20 @@ async function logError(
 
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const researchModel = config.researchModel ?? GPT_DEFAULTS.researchModel;
-  const defaultModel = config.defaultModel ?? GPT_DEFAULTS.defaultModel;
-  const evaluateModel = config.evaluateModel ?? GPT_DEFAULTS.evaluateModel;
+  const { model } = config;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        researchModel,
+        model,
         researchPrompt
       );
 
       try {
         const response = await client.responses.create({
-          model: researchModel,
+          model,
           instructions:
             'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
           input: researchPrompt,
@@ -127,12 +142,28 @@ export function createGptClient(config: GptConfig): GptClient {
 
         const content = response.output_text;
         const sources = extractSourcesFromResponse(response);
+        const webSearchCalls = countWebSearchCalls(response);
         const result: ResearchResult = { content, sources };
         if (response.usage !== undefined) {
+          const cachedTokens = (
+            response.usage as { input_tokens_details?: { cached_tokens?: number } }
+          ).input_tokens_details?.cached_tokens;
+          const reasoningTokens = (
+            response.usage as { output_tokens_details?: { reasoning_tokens?: number } }
+          ).output_tokens_details?.reasoning_tokens;
           result.usage = {
             inputTokens: response.usage.input_tokens,
             outputTokens: response.usage.output_tokens,
           };
+          if (cachedTokens !== undefined) {
+            result.usage.cachedTokens = cachedTokens;
+          }
+          if (reasoningTokens !== undefined) {
+            result.usage.reasoningTokens = reasoningTokens;
+          }
+          if (webSearchCalls > 0) {
+            result.usage.webSearchCalls = webSearchCalls;
+          }
         }
 
         await logSuccess('research', requestId, startTime, content, auditContext, result.usage);
@@ -146,13 +177,13 @@ export function createGptClient(config: GptConfig): GptClient {
     async generate(prompt: string): Promise<Result<string, GptError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
         'generate',
-        defaultModel,
+        model,
         prompt
       );
 
       try {
         const response = await client.chat.completions.create({
-          model: defaultModel,
+          model,
           max_completion_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         });
@@ -162,29 +193,6 @@ export function createGptClient(config: GptConfig): GptClient {
         return ok(text);
       } catch (error) {
         await logError('generate', requestId, startTime, error, auditContext);
-        return err(mapGptError(error));
-      }
-    },
-
-    async evaluate(prompt: string): Promise<Result<string, GptError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'evaluate',
-        evaluateModel,
-        prompt
-      );
-
-      try {
-        const response = await client.chat.completions.create({
-          model: evaluateModel,
-          max_completion_tokens: 500,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const text = response.choices[0]?.message.content ?? '';
-        await logSuccess('evaluate', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('evaluate', requestId, startTime, error, auditContext);
         return err(mapGptError(error));
       }
     },
@@ -232,4 +240,14 @@ function extractSourcesFromResponse(response: OpenAI.Responses.Response): string
   }
 
   return [...new Set(sources)];
+}
+
+function countWebSearchCalls(response: OpenAI.Responses.Response): number {
+  let count = 0;
+  for (const item of response.output) {
+    if (item.type === 'web_search_call') {
+      count++;
+    }
+  }
+  return count;
 }

@@ -9,11 +9,3 @@ export {
   type GetUserSettingsDeps,
   getUserSettings,
 } from './getUserSettings.js';
-
-export {
-  type UpdateUserSettingsInput,
-  type UpdateUserSettingsError,
-  type UpdateUserSettingsErrorCode,
-  type UpdateUserSettingsDeps,
-  updateUserSettings,
-} from './updateUserSettings.js';

@@ -3,7 +3,7 @@
  */
 
 import type { Action } from '../types';
-import type { ActionConfigEndpoint } from '../types/actionConfig';
+import type { ActionConfigEndpoint, ActionExecutionResult } from '../types/actionConfig';
 import { interpolateVariables } from './variableInterpolator';
 
 /**
@@ -22,6 +22,14 @@ interface RequestOptions {
 }
 
 /**
+ * API response wrapper from backend.
+ */
+interface ApiResponse {
+  success: boolean;
+  data?: ActionExecutionResult;
+}
+
+/**
  * Executes an action using the configured endpoint.
  *
  * Steps:
@@ -33,14 +41,14 @@ interface RequestOptions {
  * @param action - Action to execute
  * @param request - Request function from useApiClient
  * @param baseUrl - Base URL for the API (e.g., import.meta.env.INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
- * @returns Promise resolving to API response
+ * @returns Promise resolving to execution result (may include resource_url)
  */
 export async function executeAction(
   endpoint: ActionConfigEndpoint,
   action: Action,
   request: RequestFunction,
   baseUrl: string
-): Promise<unknown> {
+): Promise<ActionExecutionResult | null> {
   // Replace {actionId} placeholder with actual ID
   const path = endpoint.path.replace('{actionId}', action.id);
 
@@ -56,10 +64,13 @@ export async function executeAction(
   }
 
   // Execute request
-  return await request(baseUrl, path, {
+  const response = await request<ApiResponse>(baseUrl, path, {
     method: endpoint.method,
     body,
   });
+
+  // Extract execution result from response if available
+  return response.data ?? null;
 }
 
 /**

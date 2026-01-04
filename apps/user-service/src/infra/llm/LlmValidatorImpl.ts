@@ -1,11 +1,12 @@
 /**
  * Implementation of LlmValidator port using @intexuraos/infra-* packages.
- * Uses evaluate() method for fast key validation and testing.
+ * Uses generate() method with cheap models for fast key validation and testing.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
+import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -15,9 +16,16 @@ import type {
 
 const VALIDATION_PROMPT = 'Say "API key validated" in exactly 3 words.';
 
+const VALIDATION_MODELS = {
+  google: 'gemini-2.0-flash',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-3-5-haiku-20241022',
+  perplexity: 'sonar',
+} as const;
+
 /**
  * Implementation of LlmValidator that delegates to infra packages.
- * All validation and testing uses the fast evaluate() method.
+ * Uses cheap/fast models for validation to minimize costs.
  */
 export class LlmValidatorImpl implements LlmValidator {
   async validateKey(
@@ -26,8 +34,8 @@ export class LlmValidatorImpl implements LlmValidator {
   ): Promise<Result<void, LlmValidationError>> {
     switch (provider) {
       case 'google': {
-        const client = createGeminiClient({ apiKey });
-        const result = await client.evaluate(VALIDATION_PROMPT);
+        const client = createGeminiClient({ apiKey, model: VALIDATION_MODELS.google });
+        const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -40,8 +48,8 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case 'openai': {
-        const client = createGptClient({ apiKey });
-        const result = await client.evaluate(VALIDATION_PROMPT);
+        const client = createGptClient({ apiKey, model: VALIDATION_MODELS.openai });
+        const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -54,8 +62,8 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case 'anthropic': {
-        const client = createClaudeClient({ apiKey });
-        const result = await client.evaluate(VALIDATION_PROMPT);
+        const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
+        const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -63,6 +71,20 @@ export class LlmValidatorImpl implements LlmValidator {
               result.error.code === 'INVALID_KEY'
                 ? 'Invalid Anthropic API key'
                 : `Anthropic API error: ${result.error.message}`,
+          });
+        }
+        return ok(undefined);
+      }
+      case 'perplexity': {
+        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
+        const result = await client.generate(VALIDATION_PROMPT);
+        if (!result.ok) {
+          return err({
+            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
+            message:
+              result.error.code === 'INVALID_KEY'
+                ? 'Invalid Perplexity API key'
+                : `Perplexity API error: ${result.error.message}`,
           });
         }
         return ok(undefined);
@@ -77,8 +99,8 @@ export class LlmValidatorImpl implements LlmValidator {
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {
     switch (provider) {
       case 'google': {
-        const client = createGeminiClient({ apiKey });
-        const result = await client.evaluate(prompt);
+        const client = createGeminiClient({ apiKey, model: VALIDATION_MODELS.google });
+        const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -88,8 +110,8 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok({ content: result.value });
       }
       case 'openai': {
-        const client = createGptClient({ apiKey });
-        const result = await client.evaluate(prompt);
+        const client = createGptClient({ apiKey, model: VALIDATION_MODELS.openai });
+        const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -99,8 +121,19 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok({ content: result.value });
       }
       case 'anthropic': {
-        const client = createClaudeClient({ apiKey });
-        const result = await client.evaluate(prompt);
+        const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
+        const result = await client.generate(prompt);
+        if (!result.ok) {
+          return err({
+            code: 'API_ERROR',
+            message: result.error.message,
+          });
+        }
+        return ok({ content: result.value });
+      }
+      case 'perplexity': {
+        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
+        const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
             code: 'API_ERROR',

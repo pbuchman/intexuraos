@@ -3,34 +3,52 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
-import { buildSynthesisPrompt, type Result } from '@intexuraos/common-core';
+import { buildSynthesisPrompt, type Result, type SynthesisContext } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
   LlmResearchResult,
   LlmSynthesisProvider,
 } from '../../domain/research/index.js';
+import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GeminiClient;
+  private readonly model: string;
+  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, researchModel?: string) {
-    const config: Parameters<typeof createGeminiClient>[0] = { apiKey };
-    if (researchModel !== undefined) {
-      config.researchModel = researchModel;
-    }
-    this.client = createGeminiClient(config);
+  constructor(apiKey: string, model: string, tracker?: LlmUsageTracker) {
+    this.client = createGeminiClient({ apiKey, model });
+    this.model = model;
+    this.tracker = tracker;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'google',
+        model: this.model,
+        callType: 'research',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'google',
+      model: this.model,
+      callType: 'research',
+      success: true,
+      inputTokens: result.value.usage?.inputTokens ?? 0,
+      outputTokens: result.value.usage?.outputTokens ?? 0,
+    });
 
     return result;
   }
@@ -38,17 +56,38 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async synthesize(
     originalPrompt: string,
     reports: { model: string; content: string }[],
-    inputContexts?: { content: string }[]
+    additionalSources?: { content: string; label?: string }[],
+    synthesisContext?: SynthesisContext
   ): Promise<Result<string, LlmError>> {
-    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, inputContexts);
+    const synthesisPrompt =
+      synthesisContext !== undefined
+        ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
+        : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'google',
+        model: this.model,
+        callType: 'synthesis',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'google',
+      model: this.model,
+      callType: 'synthesis',
+      success: true,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
 
     return result;
   }
@@ -79,11 +118,84 @@ Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {
+      this.tracker?.track({
+        provider: 'google',
+        model: this.model,
+        callType: 'title',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
       return {
         ok: false,
         error: mapToLlmError(result.error),
       };
     }
+
+    this.tracker?.track({
+      provider: 'google',
+      model: this.model,
+      callType: 'title',
+      success: true,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+
+    return { ok: true, value: result.value.trim() };
+  }
+
+  async generateContextLabel(content: string): Promise<Result<string, LlmError>> {
+    const contentPreview = content.length > 2000 ? content.slice(0, 2000) + '...' : content;
+
+    const labelPrompt = `Generate a very short label (3-6 words) summarizing the following content.
+
+CRITICAL REQUIREMENTS:
+- Label must be 3-6 words maximum
+- Label must be in the SAME LANGUAGE as the content
+- Return ONLY the label - no explanations, no quotes
+- Describe WHAT the content is about, not its format
+
+GOOD EXAMPLES:
+- "Gran Canaria trip itinerary"
+- "Wymagania techniczne projektu"
+- "Customer feedback survey results"
+- "Analiza konkurencji rynkowej"
+
+BAD EXAMPLES:
+- "Document about travel plans for vacation" (too long)
+- "Here is a label: Trip Planning" (includes extra text)
+- "A PDF file" (describes format, not content)
+
+Content:
+${contentPreview}
+
+Generate label:`;
+
+    const result = await this.client.generate(labelPrompt);
+
+    if (!result.ok) {
+      this.tracker?.track({
+        provider: 'google',
+        model: this.model,
+        callType: 'context_label',
+        success: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      return {
+        ok: false,
+        error: mapToLlmError(result.error),
+      };
+    }
+
+    this.tracker?.track({
+      provider: 'google',
+      model: this.model,
+      callType: 'context_label',
+      success: true,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
 
     return { ok: true, value: result.value.trim() };
   }

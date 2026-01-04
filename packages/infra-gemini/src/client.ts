@@ -9,7 +9,6 @@ import {
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient } from '@intexuraos/llm-contract';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
-import { GEMINI_DEFAULTS } from './types.js';
 
 export type GeminiClient = LLMClient;
 
@@ -49,7 +48,11 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    groundingEnabled?: boolean;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -61,6 +64,7 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      groundingEnabled: usage?.groundingEnabled,
     })
   );
 
@@ -68,6 +72,9 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.groundingEnabled !== undefined) {
+      auditParams.groundingEnabled = usage.groundingEnabled;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -96,22 +103,20 @@ async function logError(
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const defaultModel = config.defaultModel ?? GEMINI_DEFAULTS.defaultModel;
-  const evaluateModel = config.evaluateModel ?? GEMINI_DEFAULTS.evaluateModel;
-  const researchModel = config.researchModel ?? GEMINI_DEFAULTS.researchModel;
+  const { model } = config;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        researchModel,
+        model,
         researchPrompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: researchModel,
+          model,
           contents: researchPrompt,
           config: {
             tools: [{ googleSearch: {} }],
@@ -120,6 +125,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
         const text = response.text ?? '';
         const sources = extractSourcesFromResponse(response);
+        const groundingEnabled = hasGroundingMetadata(response);
         const result: ResearchResult = { content: text, sources };
         const usageMetadata = response.usageMetadata;
         if (usageMetadata !== undefined) {
@@ -127,6 +133,9 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
             inputTokens: usageMetadata.promptTokenCount ?? 0,
             outputTokens: usageMetadata.candidatesTokenCount ?? 0,
           };
+          if (groundingEnabled) {
+            result.usage.groundingEnabled = groundingEnabled;
+          }
         }
 
         await logSuccess('research', requestId, startTime, text, auditContext, result.usage);
@@ -140,13 +149,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     async generate(prompt: string): Promise<Result<string, GeminiError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
         'generate',
-        defaultModel,
+        model,
         prompt
       );
 
       try {
         const response = await ai.models.generateContent({
-          model: defaultModel,
+          model,
           contents: prompt,
         });
 
@@ -156,29 +165,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         return ok(text);
       } catch (error) {
         await logError('generate', requestId, startTime, error, auditContext);
-        return err(mapGeminiError(error));
-      }
-    },
-
-    async evaluate(prompt: string): Promise<Result<string, GeminiError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'evaluate',
-        evaluateModel,
-        prompt
-      );
-
-      try {
-        const response = await ai.models.generateContent({
-          model: evaluateModel,
-          contents: prompt,
-        });
-
-        const text = response.text ?? '';
-
-        await logSuccess('evaluate', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('evaluate', requestId, startTime, error, auditContext);
         return err(mapGeminiError(error));
       }
     },
@@ -217,4 +203,9 @@ function extractSourcesFromResponse(response: GenerateContentResponse): string[]
   }
 
   return [...new Set(sources)];
+}
+
+function hasGroundingMetadata(response: GenerateContentResponse): boolean {
+  const candidate = response.candidates?.[0];
+  return candidate?.groundingMetadata !== undefined;
 }

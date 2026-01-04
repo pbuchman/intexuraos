@@ -2,7 +2,7 @@
  * LLM Audit Logging Types.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 export type LlmAuditStatus = 'success' | 'error';
 
@@ -25,7 +25,19 @@ export interface LlmAuditLog {
 
   inputTokens?: number;
   outputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  webSearchCalls?: number;
+  groundingEnabled?: boolean;
+  providerCost?: number;
   costUsd?: number;
+
+  imageCount?: number;
+  imageModel?: string;
+  imageSize?: string;
+  imageCostUsd?: number;
 
   startedAt: string;
   completedAt: string;
@@ -57,7 +69,18 @@ export interface CompleteAuditLogSuccessParams {
   response: string;
   inputTokens?: number;
   outputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  webSearchCalls?: number;
+  groundingEnabled?: boolean;
+  providerCost?: number;
   costUsd?: number;
+  imageCount?: number;
+  imageModel?: string;
+  imageSize?: string;
+  imageCostUsd?: number;
 }
 
 /**

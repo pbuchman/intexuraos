@@ -3,7 +3,11 @@ export {
   type SubmitResearchParams,
   type SubmitResearchDeps,
 } from './submitResearch.js';
-export { processResearch, type ProcessResearchDeps } from './processResearch.js';
+export {
+  processResearch,
+  type ProcessResearchDeps,
+  type ProcessResearchResult,
+} from './processResearch.js';
 export { getResearch } from './getResearch.js';
 export {
   listResearches,
@@ -29,3 +33,9 @@ export {
   type UnshareResearchDeps,
   type UnshareResearchResult,
 } from './unshareResearch.js';
+export {
+  enhanceResearch,
+  type EnhanceResearchInput,
+  type EnhanceResearchDeps,
+  type EnhanceResearchError,
+} from './enhanceResearch.js';

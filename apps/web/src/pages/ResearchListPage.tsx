@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Layout } from '@/components';
 import { useResearches } from '@/hooks';
-import type { Research, ResearchStatus } from '@/services/llmOrchestratorApi.types';
+import {
+  getProviderForModel,
+  type Research,
+  type ResearchStatus,
+} from '@/services/llmOrchestratorApi.types';
 
 /**
  * Strip markdown formatting from text for clean display.
@@ -168,9 +172,9 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
           ) : null}
         </div>
         <div className="flex gap-2">
-          {research.selectedLlms.map((llm) => (
-            <span key={llm} className="rounded bg-slate-100 px-2 py-0.5 text-xs">
-              {llm}
+          {[...new Set(research.selectedModels.map(getProviderForModel))].map((provider) => (
+            <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs">
+              {provider}
             </span>
           ))}
         </div>

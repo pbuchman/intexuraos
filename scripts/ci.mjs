@@ -31,6 +31,7 @@ const phases = [
       'verify:pubsub',
       'verify:workspace-deps',
       'verify:migrations',
+      'verify:no-console',
     ],
   },
   {

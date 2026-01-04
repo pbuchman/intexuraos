@@ -2,9 +2,16 @@
  * Common JSON schema components for research endpoints.
  */
 
+import { SUPPORTED_MODELS } from '@intexuraos/llm-contract';
+
+export const supportedModelSchema = {
+  type: 'string',
+  enum: Object.keys(SUPPORTED_MODELS),
+} as const;
+
 export const llmProviderSchema = {
   type: 'string',
-  enum: ['google', 'openai', 'anthropic'],
+  enum: ['google', 'openai', 'anthropic', 'perplexity'],
 } as const;
 
 export const researchStatusSchema = {
@@ -42,17 +49,7 @@ export const inputContextSchema = {
   properties: {
     id: { type: 'string' },
     content: { type: 'string' },
-    addedAt: { type: 'string' },
-  },
-  required: ['id', 'content', 'addedAt'],
-} as const;
-
-export const externalReportSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    content: { type: 'string' },
-    model: { type: 'string', nullable: true },
+    label: { type: 'string', nullable: true },
     addedAt: { type: 'string' },
   },
   required: ['id', 'content', 'addedAt'],
@@ -61,15 +58,15 @@ export const externalReportSchema = {
 export const partialFailureSchema = {
   type: 'object',
   properties: {
-    failedProviders: {
+    failedModels: {
       type: 'array',
-      items: llmProviderSchema,
+      items: supportedModelSchema,
     },
     userDecision: { type: 'string', enum: ['proceed', 'retry', 'cancel'], nullable: true },
     detectedAt: { type: 'string' },
     retryCount: { type: 'number' },
   },
-  required: ['failedProviders', 'detectedAt', 'retryCount'],
+  required: ['failedModels', 'detectedAt', 'retryCount'],
 } as const;
 
 export const shareInfoSchema = {
@@ -91,11 +88,11 @@ export const researchSchema = {
     userId: { type: 'string' },
     title: { type: 'string' },
     prompt: { type: 'string' },
-    selectedLlms: {
+    selectedModels: {
       type: 'array',
-      items: llmProviderSchema,
+      items: supportedModelSchema,
     },
-    synthesisLlm: llmProviderSchema,
+    synthesisModel: supportedModelSchema,
     status: researchStatusSchema,
     llmResults: {
       type: 'array',
@@ -106,11 +103,6 @@ export const researchSchema = {
       items: inputContextSchema,
       nullable: true,
     },
-    externalReports: {
-      type: 'array',
-      items: externalReportSchema,
-      nullable: true,
-    },
     synthesizedResult: { type: 'string', nullable: true },
     synthesisError: { type: 'string', nullable: true },
     partialFailure: { ...partialFailureSchema, nullable: true },
@@ -119,14 +111,15 @@ export const researchSchema = {
     completedAt: { type: 'string', nullable: true },
     totalDurationMs: { type: 'number', nullable: true },
     sourceActionId: { type: 'string', nullable: true },
+    sourceResearchId: { type: 'string', nullable: true },
   },
   required: [
     'id',
     'userId',
     'title',
     'prompt',
-    'selectedLlms',
-    'synthesisLlm',
+    'selectedModels',
+    'synthesisModel',
     'status',
     'llmResults',
     'startedAt',

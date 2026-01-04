@@ -1,12 +1,12 @@
 import type { CommandType } from '../models/command.js';
-import type { LlmProvider } from '../events/actionCreatedEvent.js';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 
 export interface ClassificationResult {
   type: CommandType;
   confidence: number;
   title: string;
   reasoning: string;
-  selectedLlms?: LlmProvider[];
+  selectedModels?: SupportedModel[];
 }
 
 export interface Classifier {

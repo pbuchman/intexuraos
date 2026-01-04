@@ -151,6 +151,7 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 | Manual header redaction    | Inline `[REDACTED]`            | `logIncomingRequest()`    |
 | Redundant variable         | `const r = f(); return r`      | `return f()`              |
 | Redundant check            | Check after type guard         | Trust narrowing           |
+| Console logging            | `console.info()` in infra      | Accept `logger?` param    |
 
 **Known debt:** OpenAPI schemas duplicated per server.ts (Fastify types limitation).
 

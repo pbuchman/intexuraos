@@ -2,72 +2,72 @@
  * Factory functions for creating LLM adapters from API keys.
  */
 
-import { CLAUDE_DEFAULTS } from '@intexuraos/infra-claude';
-import { GEMINI_DEFAULTS } from '@intexuraos/infra-gemini';
-import { GPT_DEFAULTS } from '@intexuraos/infra-gpt';
+import type { Logger } from '@intexuraos/common-core';
+import { getProviderForModel, type SupportedModel } from '@intexuraos/llm-contract';
 import type {
-  LlmProvider,
   LlmResearchProvider,
   LlmSynthesisProvider,
-  SearchMode,
   TitleGenerator,
 } from '../../domain/research/index.js';
-import type { DecryptedApiKeys } from '../user/index.js';
+import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
+import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
-
-export function createLlmProviders(
-  keys: DecryptedApiKeys,
-  searchMode: SearchMode = 'deep'
-): Record<LlmProvider, LlmResearchProvider> {
-  const providers: Partial<Record<LlmProvider, LlmResearchProvider>> = {};
-
-  const geminiModel = searchMode === 'quick' ? GEMINI_DEFAULTS.defaultModel : undefined;
-  const claudeModel = searchMode === 'quick' ? CLAUDE_DEFAULTS.defaultModel : undefined;
-  const gptModel = searchMode === 'quick' ? GPT_DEFAULTS.defaultModel : undefined;
-
-  if (keys.google !== undefined) {
-    providers.google = new GeminiAdapter(keys.google, geminiModel);
-  }
-  if (keys.anthropic !== undefined) {
-    providers.anthropic = new ClaudeAdapter(keys.anthropic, claudeModel);
-  }
-  if (keys.openai !== undefined) {
-    providers.openai = new GptAdapter(keys.openai, gptModel);
-  }
-
-  return providers as Record<LlmProvider, LlmResearchProvider>;
-}
-
-export function createSynthesizer(provider: LlmProvider, apiKey: string): LlmSynthesisProvider {
-  switch (provider) {
-    case 'google':
-      return new GeminiAdapter(apiKey);
-    case 'anthropic':
-      return new ClaudeAdapter(apiKey);
-    case 'openai':
-      return new GptAdapter(apiKey);
-  }
-}
-
-export function createTitleGenerator(googleApiKey: string): TitleGenerator {
-  return new GeminiAdapter(googleApiKey);
-}
+import { PerplexityAdapter } from './PerplexityAdapter.js';
+import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 
 export function createResearchProvider(
-  provider: LlmProvider,
+  model: SupportedModel,
   apiKey: string,
-  searchMode: SearchMode = 'deep'
+  tracker?: LlmUsageTracker
 ): LlmResearchProvider {
-  const useDefaultModel = searchMode === 'quick';
+  const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, useDefaultModel ? GEMINI_DEFAULTS.defaultModel : undefined);
+      return new GeminiAdapter(apiKey, model, tracker);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, useDefaultModel ? CLAUDE_DEFAULTS.defaultModel : undefined);
+      return new ClaudeAdapter(apiKey, model, tracker);
     case 'openai':
-      return new GptAdapter(apiKey, useDefaultModel ? GPT_DEFAULTS.defaultModel : undefined);
+      return new GptAdapter(apiKey, model, tracker);
+    case 'perplexity':
+      return new PerplexityAdapter(apiKey, model, tracker);
   }
+}
+
+export function createSynthesizer(
+  model: SupportedModel,
+  apiKey: string,
+  tracker?: LlmUsageTracker
+): LlmSynthesisProvider {
+  const provider = getProviderForModel(model);
+
+  switch (provider) {
+    case 'google':
+      return new GeminiAdapter(apiKey, model, tracker);
+    case 'anthropic':
+      return new ClaudeAdapter(apiKey, model, tracker);
+    case 'openai':
+      return new GptAdapter(apiKey, model, tracker);
+    case 'perplexity':
+      throw new Error('Perplexity does not support synthesis');
+  }
+}
+
+export function createTitleGenerator(
+  model: string,
+  apiKey: string,
+  tracker?: LlmUsageTracker
+): TitleGenerator {
+  return new GeminiAdapter(apiKey, model, tracker);
+}
+
+export function createContextInferrer(
+  model: string,
+  apiKey: string,
+  logger?: Logger,
+  tracker?: LlmUsageTracker
+): ContextInferenceProvider {
+  return new ContextInferenceAdapter(apiKey, model, logger, tracker);
 }

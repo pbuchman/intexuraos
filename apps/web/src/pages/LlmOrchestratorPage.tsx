@@ -1,26 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
+import {
+  Button,
+  Card,
+  Layout,
+  ModelSelector,
+  getSelectedModelsList,
+  PROVIDER_MODELS,
+} from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
 import { getResearch, saveDraft, updateDraft } from '@/services/llmOrchestratorApi';
-import type { LlmProvider, SaveDraftRequest } from '@/services/llmOrchestratorApi.types';
+import {
+  getProviderForModel,
+  type LlmProvider,
+  type SupportedModel,
+  type SaveDraftRequest,
+} from '@/services/llmOrchestratorApi.types';
 
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
 
-interface ProviderOption {
-  id: LlmProvider;
-  name: string;
-  shortName: string;
-}
-
-const PROVIDERS: ProviderOption[] = [
-  { id: 'anthropic', name: 'Claude Opus 4.5', shortName: 'Claude' },
-  { id: 'google', name: 'Gemini 2.0 Flash', shortName: 'Gemini' },
-  { id: 'openai', name: 'GPT-4.1', shortName: 'GPT' },
-];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
 
 export function LlmOrchestratorPage(): React.JSX.Element {
   const navigate = useNavigate();
@@ -32,8 +34,10 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const isEditMode = draftId !== null && draftId !== '';
 
   const [prompt, setPrompt] = useState('');
-  const [selectedLlms, setSelectedLlms] = useState<LlmProvider[]>([]);
-  const [synthesisLlm, setSynthesisLlm] = useState<LlmProvider | null>(null);
+  const [modelSelections, setModelSelections] = useState<Map<LlmProvider, SupportedModel | null>>(
+    () => new Map()
+  );
+  const [synthesisModel, setSynthesisModel] = useState<SupportedModel | null>(null);
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -64,7 +68,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
       ? []
-      : PROVIDERS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+      : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
 
   // Load draft if in edit mode
   useEffect(() => {
@@ -79,8 +83,26 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         const draft = await getResearch(token, draftId);
 
         setPrompt(draft.prompt);
-        setSelectedLlms(draft.selectedLlms);
-        setSynthesisLlm(draft.synthesisLlm);
+
+        // Load model selections from draft
+        const selections = new Map<LlmProvider, SupportedModel | null>();
+        for (const provider of PROVIDER_MODELS) {
+          const selectedModel = draft.selectedModels.find(
+            (m) => getProviderForModel(m) === provider.id
+          );
+          selections.set(provider.id, selectedModel ?? null);
+        }
+        setModelSelections(selections);
+
+        // Load synthesis model from draft (validate it's synthesis-capable)
+        const draftSynthesisValid = SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel);
+        if (draftSynthesisValid) {
+          setSynthesisModel(draft.synthesisModel);
+        } else {
+          // Draft had invalid synthesis model - will be auto-selected when keys load
+          setSynthesisModel(null);
+        }
+
         lastSavedPromptRef.current = draft.prompt;
 
         // Load input contexts if exists
@@ -92,8 +114,8 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
         // Track initial saved state for change detection
         lastSavedStateRef.current = {
-          selectedLlms: draft.selectedLlms,
-          synthesisLlm: draft.synthesisLlm,
+          modelSelections: selections,
+          synthesisModel: draft.synthesisModel,
           inputContexts: loadedContexts,
         };
       } catch (err) {
@@ -104,16 +126,26 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     })();
   }, [isEditMode, draftId, getAccessToken]);
 
-  // Auto-select all configured LLMs and set first configured as synthesis LLM (only for new research)
+  // Initialize model selections when keys load (only for new research)
   useEffect(() => {
-    if (isEditMode) return; // Skip auto-select when editing draft
+    if (isEditMode) return;
 
     if (!keysLoading && keys !== null) {
-      const configured = PROVIDERS.filter((p) => keys[p.id] !== null).map((p) => p.id);
-      setSelectedLlms(configured);
-      const firstConfigured = configured[0];
-      if (firstConfigured !== undefined) {
-        setSynthesisLlm(firstConfigured);
+      const configured = PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+
+      // Initialize all providers to null (no defaults)
+      const selections = new Map<LlmProvider, SupportedModel | null>();
+      for (const provider of PROVIDER_MODELS) {
+        selections.set(provider.id, null);
+      }
+      setModelSelections(selections);
+
+      // Set first available synthesis-capable model based on API keys
+      const availableSynthesis = SYNTHESIS_CAPABLE_MODELS.find((m) =>
+        configured.includes(getProviderForModel(m))
+      );
+      if (availableSynthesis !== undefined) {
+        setSynthesisModel(availableSynthesis);
       }
     }
   }, [keysLoading, keys, isEditMode]);
@@ -127,13 +159,14 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     try {
       const token = await getAccessToken();
       const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
+      const selectedModels = getSelectedModelsList(modelSelections);
 
       const request: SaveDraftRequest = { prompt };
-      if (selectedLlms.length > 0) {
-        request.selectedLlms = selectedLlms;
+      if (selectedModels.length > 0) {
+        request.selectedModels = selectedModels;
       }
-      if (synthesisLlm !== null) {
-        request.synthesisLlm = synthesisLlm;
+      if (synthesisModel !== null) {
+        request.synthesisModel = synthesisModel;
       }
       if (validContexts.length > 0) {
         request.inputContexts = validContexts.map((content) => ({ content }));
@@ -143,8 +176,8 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
       lastSavedPromptRef.current = prompt;
       lastSavedStateRef.current = {
-        selectedLlms,
-        synthesisLlm,
+        modelSelections,
+        synthesisModel,
         inputContexts: validContexts,
       };
       setHasUnsavedChanges(false);
@@ -156,33 +189,36 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     draftId,
     hasUnsavedChanges,
     prompt,
-    selectedLlms,
-    synthesisLlm,
+    modelSelections,
+    synthesisModel,
     inputContexts,
     getAccessToken,
   ]);
 
   // Track changes - any form field change should trigger autosave
   const lastSavedStateRef = useRef<{
-    selectedLlms: LlmProvider[];
-    synthesisLlm: LlmProvider | null;
+    modelSelections: Map<LlmProvider, SupportedModel | null>;
+    synthesisModel: SupportedModel | null;
     inputContexts: string[];
-  }>({ selectedLlms: [], synthesisLlm: null, inputContexts: [] });
+  }>({ modelSelections: new Map(), synthesisModel: null, inputContexts: [] });
 
   useEffect(() => {
     if (!isEditMode) return;
 
     const promptChanged = prompt !== lastSavedPromptRef.current;
-    const llmsChanged =
-      JSON.stringify(selectedLlms) !== JSON.stringify(lastSavedStateRef.current.selectedLlms);
-    const synthesisChanged = synthesisLlm !== lastSavedStateRef.current.synthesisLlm;
+
+    const currentModels = getSelectedModelsList(modelSelections);
+    const savedModels = getSelectedModelsList(lastSavedStateRef.current.modelSelections);
+    const modelsChanged = JSON.stringify(currentModels) !== JSON.stringify(savedModels);
+
+    const synthesisChanged = synthesisModel !== lastSavedStateRef.current.synthesisModel;
     const contextsChanged =
       JSON.stringify(inputContexts) !== JSON.stringify(lastSavedStateRef.current.inputContexts);
 
-    if (promptChanged || llmsChanged || synthesisChanged || contextsChanged) {
+    if (promptChanged || modelsChanged || synthesisChanged || contextsChanged) {
       setHasUnsavedChanges(true);
     }
-  }, [prompt, selectedLlms, synthesisLlm, inputContexts, isEditMode]);
+  }, [prompt, modelSelections, synthesisModel, inputContexts, isEditMode]);
 
   // 1-minute autosave interval
   useEffect(() => {
@@ -218,20 +254,18 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     }
   };
 
-  const isProviderAvailable = (provider: LlmProvider): boolean => {
-    if (keysLoading || keys === null) return false;
-    return keys[provider] !== null;
-  };
-
-  const handleProviderToggle = (provider: LlmProvider): void => {
-    setSelectedLlms((prev) =>
-      prev.includes(provider) ? prev.filter((p) => p !== provider) : [...prev, provider]
-    );
+  const handleModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
+    setModelSelections((prev) => {
+      const next = new Map(prev);
+      next.set(provider, model);
+      return next;
+    });
   };
 
   const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
   const hasValidContexts = validContexts.length > 0;
-  const isSingleProviderNoContext = selectedLlms.length === 1 && !hasValidContexts;
+  const selectedModels = getSelectedModelsList(modelSelections);
+  const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
   const executeSubmit = async (showConfirmation: boolean): Promise<void> => {
     setSubmitting(true);
@@ -246,11 +280,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
           await import('@/services/llmOrchestratorApi');
 
         const draftRequest: SaveDraftRequest = { prompt };
-        if (selectedLlms.length > 0) {
-          draftRequest.selectedLlms = selectedLlms;
+        if (selectedModels.length > 0) {
+          draftRequest.selectedModels = selectedModels;
         }
-        if (synthesisLlm !== null) {
-          draftRequest.synthesisLlm = synthesisLlm;
+        if (synthesisModel !== null) {
+          draftRequest.synthesisModel = synthesisModel;
         }
         if (contextObjects.length > 0) {
           draftRequest.inputContexts = contextObjects;
@@ -260,14 +294,14 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         const research = await approveResearch(token, draftId);
         void navigate(`/research/${research.id}`);
       } else {
-        if (synthesisLlm === null) {
-          throw new Error('Synthesis LLM is required');
+        if (synthesisModel === null) {
+          throw new Error('Synthesis model is required');
         }
         const { createResearch } = await import('@/services/llmOrchestratorApi');
         const request: Parameters<typeof createResearch>[1] = {
           prompt,
-          selectedLlms,
-          synthesisLlm,
+          selectedModels,
+          synthesisModel,
         };
         if (contextObjects.length > 0) {
           request.inputContexts = contextObjects;
@@ -293,16 +327,16 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       setError('Prompt must be at least 10 characters');
       return;
     }
-    if (selectedLlms.length === 0 && !hasValidContexts) {
-      setError('Select at least one LLM or provide input context');
+    if (selectedModels.length === 0 && !hasValidContexts) {
+      setError('Select at least one model or provide input context');
       return;
     }
-    if (synthesisLlm === null) {
-      setError('Select a synthesis LLM');
+    if (synthesisModel === null) {
+      setError('Select a synthesis model');
       return;
     }
 
-    await executeSubmit(isSingleProviderNoContext);
+    await executeSubmit(isSingleModelNoContext);
   };
 
   const handleConfirmProceed = (): void => {
@@ -343,11 +377,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       let resultId: string;
 
       const request: SaveDraftRequest = { prompt };
-      if (selectedLlms.length > 0) {
-        request.selectedLlms = selectedLlms;
+      if (selectedModels.length > 0) {
+        request.selectedModels = selectedModels;
       }
-      if (synthesisLlm !== null) {
-        request.synthesisLlm = synthesisLlm;
+      if (synthesisModel !== null) {
+        request.synthesisModel = synthesisModel;
       }
       if (contextObjects.length > 0) {
         request.inputContexts = contextObjects;
@@ -373,15 +407,17 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     }
   };
 
-  const hasAnyLlm = configuredProviders.length > 0;
-  const hasLlmOrContext = selectedLlms.length > 0 || hasValidContexts;
-  const canSubmit = prompt.length >= 10 && hasLlmOrContext && synthesisLlm !== null;
+  const hasAnyProvider = configuredProviders.length > 0;
+  const hasModelOrContext = selectedModels.length > 0 || hasValidContexts;
+  const hasSynthesisModel =
+    synthesisModel !== null && SYNTHESIS_CAPABLE_MODELS.includes(synthesisModel);
+  const canSubmit = prompt.length >= 10 && hasModelOrContext && hasSynthesisModel;
 
   const getDisabledReason = (): string | undefined => {
     if (canSubmit) return undefined;
     if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
-    if (!hasLlmOrContext) return 'Select at least one LLM or provide input context';
-    if (synthesisLlm === null) return 'Select a synthesis LLM';
+    if (!hasModelOrContext) return 'Select at least one model or provide input context';
+    if (!hasSynthesisModel) return 'Select Gemini Pro or GPT-5.2 for synthesis';
     return undefined;
   };
 
@@ -402,7 +438,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {!hasAnyLlm && !keysLoading ? (
+      {!hasAnyProvider && !keysLoading ? (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="text-amber-800">
             <strong>No API keys configured.</strong> Configure at least one API key to start
@@ -438,73 +474,54 @@ export function LlmOrchestratorPage(): React.JSX.Element {
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card title="Research LLMs">
-            <p className="text-sm text-slate-500 mb-3">Select which LLMs to query for research</p>
-            <div className="flex flex-wrap gap-2">
-              {PROVIDERS.map((provider) => {
-                const available = isProviderAvailable(provider.id);
-                const isSelected = selectedLlms.includes(provider.id);
+        <Card title="Research Models">
+          <p className="text-sm text-slate-500 mb-4">
+            Select which models to query for research (one per provider)
+          </p>
+          <ModelSelector
+            selectedModels={modelSelections}
+            onChange={handleModelChange}
+            configuredProviders={configuredProviders}
+            disabled={submitting || savingDraft}
+          />
+        </Card>
 
-                return (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    onClick={(): void => {
-                      if (available) {
-                        handleProviderToggle(provider.id);
-                      }
-                    }}
-                    disabled={!available || submitting || savingDraft}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      !available
-                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        : isSelected
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {provider.shortName}
-                    {!available ? ' (no key)' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+        <Card title="Synthesis Model">
+          <p className="text-sm text-slate-500 mb-4">Select which model synthesizes the results</p>
+          <div className="flex flex-wrap gap-2">
+            {SYNTHESIS_CAPABLE_MODELS.map((model) => {
+              const isSelected = synthesisModel === model;
+              const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
+                (m) => m.id === model
+              );
+              const provider = getProviderForModel(model);
+              const hasKey = configuredProviders.includes(provider);
+              const isDisabled = !hasKey || submitting || savingDraft;
 
-          <Card title="Synthesis LLM">
-            <p className="text-sm text-slate-500 mb-3">Select which LLM synthesizes the results</p>
-            <div className="flex flex-wrap gap-2">
-              {PROVIDERS.map((provider) => {
-                const available = isProviderAvailable(provider.id);
-                const isSelected = synthesisLlm === provider.id;
-
-                return (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    onClick={(): void => {
-                      if (available) {
-                        setSynthesisLlm(provider.id);
-                      }
-                    }}
-                    disabled={!available || submitting || savingDraft}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      !available
-                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        : isSelected
-                          ? 'bg-green-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {provider.shortName}
-                    {!available ? ' (no key)' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
+              return (
+                <button
+                  key={model}
+                  type="button"
+                  onClick={(): void => {
+                    setSynthesisModel(model);
+                  }}
+                  disabled={isDisabled}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-green-600 text-white'
+                      : hasKey
+                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={!hasKey ? 'API key not configured' : undefined}
+                >
+                  {modelConfig?.name ?? model}
+                  {!hasKey ? ' (no key)' : ''}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
 
         <Card title="Input Context (Optional)">
           <p className="text-sm text-slate-500 mb-4">
@@ -595,11 +612,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             <div className="mb-4 flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Single Provider Research</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Single Model Research</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Research started with only one provider (
-                  {PROVIDERS.find((p) => p.id === selectedLlms[0])?.shortName ?? selectedLlms[0]})
-                  and no additional context.
+                  Research started with only one model (
+                  {PROVIDER_MODELS.flatMap((p) => p.models).find((m) => m.id === selectedModels[0])
+                    ?.name ?? selectedModels[0]}
+                  ) and no additional context.
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
                   The result will show the individual report without synthesis.

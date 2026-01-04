@@ -42,6 +42,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   google: { type: 'string', nullable: true },
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
+                  perplexity: { type: 'string', nullable: true },
                   testResults: {
                     type: 'object',
                     properties: {
@@ -62,6 +63,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         },
                       },
                       anthropic: {
+                        type: 'object',
+                        nullable: true,
+                        properties: {
+                          response: { type: 'string' },
+                          testedAt: { type: 'string' },
+                        },
+                      },
+                      perplexity: {
                         type: 'object',
                         nullable: true,
                         properties: {
@@ -136,10 +145,12 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         google: getMaskedKey(llmApiKeys?.google),
         openai: getMaskedKey(llmApiKeys?.openai),
         anthropic: getMaskedKey(llmApiKeys?.anthropic),
+        perplexity: getMaskedKey(llmApiKeys?.perplexity),
         testResults: {
           google: llmTestResults?.google ?? null,
           openai: llmTestResults?.openai ?? null,
           anthropic: llmTestResults?.anthropic ?? null,
+          perplexity: llmTestResults?.perplexity ?? null,
         },
       });
     }
@@ -167,7 +178,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic'],
+              enum: ['google', 'openai', 'anthropic', 'perplexity'],
               description: 'LLM provider name',
             },
             apiKey: {
@@ -301,7 +312,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic'],
+              enum: ['google', 'openai', 'anthropic', 'perplexity'],
               description: 'LLM provider name',
             },
           },
@@ -386,8 +397,13 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to decrypt API key');
       }
 
-      const providerName =
-        params.provider === 'google' ? 'Gemini' : params.provider === 'openai' ? 'GPT' : 'Claude';
+      const providerNameMap: Record<LlmProvider, string> = {
+        google: 'Gemini',
+        openai: 'GPT',
+        anthropic: 'Claude',
+        perplexity: 'Perplexity',
+      };
+      const providerName = providerNameMap[params.provider];
       const testPrompt = `Introduce yourself as ${providerName} and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm ${providerName}."`;
       const testResult = await llmValidator.testRequest(
         params.provider,
@@ -428,7 +444,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic'],
+              enum: ['google', 'openai', 'anthropic', 'perplexity'],
               description: 'LLM provider name',
             },
           },

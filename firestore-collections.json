@@ -58,6 +58,10 @@
       "owner": "llm-orchestrator",
       "description": "LLM API call audit logs with token usage and cost tracking"
     },
+    "llm_usage_stats": {
+      "owner": "llm-orchestrator",
+      "description": "Aggregated LLM usage statistics by provider, model, and call type"
+    },
     "commands": {
       "owner": "commands-router",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
@@ -66,13 +70,13 @@
       "owner": "actions-agent",
       "description": "Action items and their execution lifecycle"
     },
-    "actions_filters": {
-      "owner": "actions-agent",
-      "description": "User filter options and saved filters for actions"
-    },
     "custom_data_sources": {
       "owner": "data-insights-service",
       "description": "User-created custom data sources for analysis"
+    },
+    "generated_images": {
+      "owner": "image-service",
+      "description": "Generated thumbnail images and their metadata"
     }
   }
 }

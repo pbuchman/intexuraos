@@ -5,6 +5,7 @@
  * Controlled by INTEXURAOS_AUDIT_LLMS environment variable (defaults to true).
  */
 
+import { randomUUID } from 'node:crypto';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
@@ -48,7 +49,7 @@ export class AuditContext {
   private completed = false;
 
   constructor(params: CreateAuditLogParams) {
-    this.id = crypto.randomUUID();
+    this.id = randomUUID();
     this.params = params;
   }
 
@@ -96,8 +97,41 @@ export class AuditContext {
     if (result.outputTokens !== undefined) {
       log.outputTokens = result.outputTokens;
     }
+    if (result.cacheCreationTokens !== undefined) {
+      log.cacheCreationTokens = result.cacheCreationTokens;
+    }
+    if (result.cacheReadTokens !== undefined) {
+      log.cacheReadTokens = result.cacheReadTokens;
+    }
+    if (result.cachedTokens !== undefined) {
+      log.cachedTokens = result.cachedTokens;
+    }
+    if (result.reasoningTokens !== undefined) {
+      log.reasoningTokens = result.reasoningTokens;
+    }
+    if (result.webSearchCalls !== undefined) {
+      log.webSearchCalls = result.webSearchCalls;
+    }
+    if (result.groundingEnabled !== undefined) {
+      log.groundingEnabled = result.groundingEnabled;
+    }
+    if (result.providerCost !== undefined) {
+      log.providerCost = result.providerCost;
+    }
     if (result.costUsd !== undefined) {
       log.costUsd = result.costUsd;
+    }
+    if (result.imageCount !== undefined) {
+      log.imageCount = result.imageCount;
+    }
+    if (result.imageModel !== undefined) {
+      log.imageModel = result.imageModel;
+    }
+    if (result.imageSize !== undefined) {
+      log.imageSize = result.imageSize;
+    }
+    if (result.imageCostUsd !== undefined) {
+      log.imageCostUsd = result.imageCostUsd;
     }
 
     await saveAuditLog(log);

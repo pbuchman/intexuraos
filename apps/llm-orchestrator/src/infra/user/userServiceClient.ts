@@ -5,6 +5,9 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import type { LlmProvider } from '@intexuraos/llm-contract';
+
+export type { LlmProvider };
 
 /**
  * Configuration for the user service client.
@@ -21,6 +24,7 @@ export interface DecryptedApiKeys {
   google?: string;
   openai?: string;
   anthropic?: string;
+  perplexity?: string;
 }
 
 /**
@@ -32,28 +36,10 @@ export interface UserServiceError {
 }
 
 /**
- * LLM provider type.
- */
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
-
-/**
- * Search mode for research operations.
- */
-export type SearchMode = 'deep' | 'quick';
-
-/**
- * Research settings from user-service.
- */
-export interface ResearchSettings {
-  searchMode: SearchMode;
-}
-
-/**
  * Client interface for user-service internal API.
  */
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
-  getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
 }
 
@@ -81,6 +67,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           google?: string | null;
           openai?: string | null;
           anthropic?: string | null;
+          perplexity?: string | null;
         };
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
@@ -94,6 +81,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         if (data.anthropic !== null && data.anthropic !== undefined) {
           result.anthropic = data.anthropic;
         }
+        if (data.perplexity !== null && data.perplexity !== undefined) {
+          result.perplexity = data.perplexity;
+        }
 
         return ok(result);
       } catch (error) {
@@ -102,28 +92,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           code: 'NETWORK_ERROR',
           message,
         });
-      }
-    },
-
-    async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
-      try {
-        const response = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/research-settings`,
-          {
-            headers: {
-              'X-Internal-Auth': config.internalAuthToken,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          return ok({ searchMode: 'deep' });
-        }
-
-        const data = (await response.json()) as { searchMode?: 'deep' | 'quick' };
-        return ok({ searchMode: data.searchMode ?? 'deep' });
-      } catch {
-        return ok({ searchMode: 'deep' });
       }
     },
 

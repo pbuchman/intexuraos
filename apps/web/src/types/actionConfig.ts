@@ -152,3 +152,18 @@ export interface UseActionConfigResult {
   /** Error message if config failed to load */
   error: string | null;
 }
+
+/**
+ * Result from executing an action.
+ * Generic structure that supports any action type returning a resource URL.
+ */
+export interface ActionExecutionResult {
+  /** Action ID that was executed */
+  actionId: string;
+  /** Execution status */
+  status: 'completed' | 'failed';
+  /** URL to the created/affected resource (e.g., research, todo, note) */
+  resource_url?: string;
+  /** Error message if status is 'failed' */
+  error?: string;
+}

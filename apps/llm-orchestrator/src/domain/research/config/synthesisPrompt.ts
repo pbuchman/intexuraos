@@ -51,14 +51,19 @@ OUTPUT STRUCTURE (Markdown)
 (Consolidated list of URLs/citations from all reports)
 
 RULES
+- CRITICAL: Write the ENTIRE synthesis in the SAME LANGUAGE as the ORIGINAL PROMPT (Polish prompt → Polish synthesis, Spanish prompt → Spanish synthesis, etc.)
 - Never shorten or truncate input reports
 - Always cite which model(s) support each claim
 - If only one report, structure output the same way but skip comparative sections
-- Preserve all URLs and citations from source reports
+- Preserve all URLs and citations from source reports as clickable markdown links: [descriptive text](URL)
 - Write in clear, professional prose
 `;
 
-export const TITLE_GENERATION_PROMPT = `Generate a concise, descriptive title (5-10 words maximum) for this research prompt. The title should capture the main topic or question being researched. Return only the title, no quotes or extra formatting.
+export const TITLE_GENERATION_PROMPT = `Generate a concise, descriptive title (5-10 words maximum) for this research prompt. The title should capture the main topic or question being researched.
+
+CRITICAL: Generate the title in the SAME LANGUAGE as the research prompt (Polish prompt → Polish title, Spanish prompt → Spanish title, etc.)
+
+Return only the title, no quotes or extra formatting.
 
 Research prompt:
 `;

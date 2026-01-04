@@ -4,15 +4,15 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { createResearch, type LlmProvider, type Research } from '../models/index.js';
+import { createResearch, type Research, type SupportedModel } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {
   userId: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
-  externalReports?: { content: string; model?: string }[];
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
+  inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }
 
@@ -29,11 +29,11 @@ export async function submitResearch(
     id: deps.generateId(),
     userId: params.userId,
     prompt: params.prompt,
-    selectedLlms: params.selectedLlms,
-    synthesisLlm: params.synthesisLlm,
+    selectedModels: params.selectedModels,
+    synthesisModel: params.synthesisModel,
   };
-  if (params.externalReports !== undefined) {
-    createParams.externalReports = params.externalReports;
+  if (params.inputContexts !== undefined) {
+    createParams.inputContexts = params.inputContexts;
   }
   if (params.skipSynthesis === true) {
     createParams.skipSynthesis = true;

@@ -18,31 +18,26 @@ vi.mock('@intexuraos/infra-gpt', () => ({
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 
+const mockTracker = {
+  track: vi.fn(),
+};
+
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key');
+    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', mockTracker);
   });
 
   describe('constructor', () => {
-    it('passes researchModel to client when provided', () => {
+    it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', 'gpt-4o-mini');
+      new GptAdapter('test-key', 'o4-mini-deep-research');
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        researchModel: 'gpt-4o-mini',
-      });
-    });
-
-    it('does not pass researchModel when not provided', () => {
-      mockCreateGptClient.mockClear();
-      new GptAdapter('test-key');
-
-      expect(mockCreateGptClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
+        model: 'o4-mini-deep-research',
       });
     });
   });
@@ -121,6 +116,30 @@ describe('GptAdapter', () => {
       );
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+    });
+
+    it('uses synthesis context when provided', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+
+      await adapter.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }], undefined, {
+        language: 'en',
+        domain: 'general',
+        mode: 'standard',
+        synthesis_goals: ['merge'],
+        missing_sections: [],
+        detected_conflicts: [],
+        source_preference: {
+          prefer_official_over_aggregators: true,
+          prefer_recent_when_time_sensitive: true,
+        },
+        defaults_applied: [],
+        assumptions: [],
+        output_format: { wants_table: false, wants_actionable_summary: true },
+        safety: { high_stakes: false, required_disclaimers: [] },
+        red_flags: [],
+      });
+
+      expect(mockGenerate).toHaveBeenCalled();
     });
 
     it('maps errors correctly', async () => {

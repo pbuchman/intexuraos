@@ -290,6 +290,231 @@ describe('createAuditContext', () => {
         })
       );
     });
+
+    it('includes cacheCreationTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'anthropic',
+        model: 'claude-3',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', cacheCreationTokens: 500 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheCreationTokens: 500,
+        })
+      );
+    });
+
+    it('includes cacheReadTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'anthropic',
+        model: 'claude-3',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', cacheReadTokens: 200 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheReadTokens: 200,
+        })
+      );
+    });
+
+    it('includes cachedTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-4',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', cachedTokens: 300 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cachedTokens: 300,
+        })
+      );
+    });
+
+    it('includes reasoningTokens when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-4',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', reasoningTokens: 1500 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reasoningTokens: 1500,
+        })
+      );
+    });
+
+    it('includes webSearchCalls when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'anthropic',
+        model: 'claude-3',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', webSearchCalls: 3 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchCalls: 3,
+        })
+      );
+    });
+
+    it('includes groundingEnabled when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'google',
+        model: 'gemini',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', groundingEnabled: true });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groundingEnabled: true,
+        })
+      );
+    });
+
+    it('includes providerCost when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        method: 'research',
+        prompt: 'Test',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: 'Response', providerCost: 0.05178 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerCost: 0.05178,
+        })
+      );
+    });
+
+    it('includes imageCount when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-image-1',
+        method: 'image-generation',
+        prompt: 'A cat',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: '[image]', imageCount: 1 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageCount: 1,
+        })
+      );
+    });
+
+    it('includes imageModel when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-image-1',
+        method: 'image-generation',
+        prompt: 'A dog',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: '[image]', imageModel: 'gpt-image-1' });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageModel: 'gpt-image-1',
+        })
+      );
+    });
+
+    it('includes imageSize when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'google',
+        model: 'gemini-2.5-flash-image',
+        method: 'image-generation',
+        prompt: 'A bird',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: '[image]', imageSize: '1024x1024' });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageSize: '1024x1024',
+        })
+      );
+    });
+
+    it('includes imageCostUsd when provided', async () => {
+      const ctx = createAuditContext({
+        provider: 'openai',
+        model: 'gpt-image-1',
+        method: 'image-generation',
+        prompt: 'A fish',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({ response: '[image]', imageCostUsd: 0.04 });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageCostUsd: 0.04,
+        })
+      );
+    });
+
+    it('includes all image fields when provided together', async () => {
+      const ctx = createAuditContext({
+        provider: 'google',
+        model: 'gemini-2.5-flash-image',
+        method: 'image-generation',
+        prompt: 'A landscape',
+        startedAt: new Date(),
+      });
+
+      await ctx.success({
+        response: '[image-generated]',
+        imageCount: 1,
+        imageModel: 'gemini-2.5-flash-image',
+        imageSize: '1024x1024',
+        imageCostUsd: 0.03,
+      });
+
+      expect(mockDocSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageCount: 1,
+          imageModel: 'gemini-2.5-flash-image',
+          imageSize: '1024x1024',
+          imageCostUsd: 0.03,
+        })
+      );
+    });
   });
 
   describe('error', () => {

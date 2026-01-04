@@ -30,7 +30,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-456',
         title: 'AI Research',
         prompt: 'Research about artificial intelligence',
-        selectedLlms: ['google', 'openai'],
+        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(true);
@@ -45,7 +45,7 @@ describe('createLlmOrchestratorClient', () => {
           userId: 'user-789',
           title: 'Test Research',
           prompt: 'Research prompt',
-          selectedLlms: ['google', 'anthropic'],
+          selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
           sourceActionId: 'action-111',
         })
         .reply(200, { success: true, data: { id: 'draft-456' } });
@@ -55,7 +55,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-789',
         title: 'Test Research',
         prompt: 'Research prompt',
-        selectedLlms: ['google', 'anthropic'],
+        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
         sourceActionId: 'action-111',
       });
 
@@ -70,7 +70,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedLlms: ['openai'],
+        selectedModels: ['o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(false);
@@ -92,7 +92,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedLlms: ['openai'],
+        selectedModels: ['o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(false);
@@ -111,7 +111,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedLlms: ['openai'],
+        selectedModels: ['o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(false);
@@ -130,7 +130,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedLlms: ['openai'],
+        selectedModels: ['o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(false);
@@ -147,7 +147,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedLlms: ['openai'],
+        selectedModels: ['o4-mini-deep-research'],
       });
 
       expect(result.ok).toBe(false);

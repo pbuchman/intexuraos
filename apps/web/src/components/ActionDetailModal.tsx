@@ -1,10 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import type { Action, Command, CommandType } from '@/types';
-import type { ResolvedActionButton } from '@/types/actionConfig';
+import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
 import {
   Bell,
   Calendar,
+  CheckCircle2,
   Clock,
+  ExternalLink,
   FileText,
   HelpCircle,
   Link,
@@ -14,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useActionConfig } from '@/hooks/useActionConfig';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
+import { Button } from './ui/Button';
 
 interface ActionDetailModalProps {
   action: Action;
@@ -64,6 +68,7 @@ export function ActionDetailModal({
   onActionSuccess,
 }: ActionDetailModalProps): React.JSX.Element {
   const { buttons, isLoading } = useActionConfig(action);
+  const [executionResult, setExecutionResult] = useState<ActionExecutionResult | null>(null);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent): void => {
@@ -76,6 +81,12 @@ export function ActionDetailModal({
       window.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
+
+  const handleResult = (result: ActionExecutionResult): void => {
+    if (result.resource_url !== undefined) {
+      setExecutionResult(result);
+    }
+  };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.target === e.currentTarget) {
@@ -172,22 +183,51 @@ export function ActionDetailModal({
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
-          {isLoading ? (
-            <div className="text-sm text-slate-500">Loading actions...</div>
-          ) : (
-            buttons.map((button) => (
-              <ConfigurableActionButton
-                key={button.id}
-                button={button}
-                onSuccess={(): void => {
-                  onActionSuccess(button);
-                }}
-              />
-            ))
-          )}
-        </div>
+        {/* Actions or Success View */}
+        {executionResult !== null ? (
+          <div className="border-t border-slate-200 p-4">
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-green-800">Action completed successfully</h4>
+                  <p className="mt-1 text-sm text-green-700">
+                    Your {action.type} has been created and is ready.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <RouterLink
+                      to={executionResult.resource_url ?? '#'}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open {action.type}
+                    </RouterLink>
+                    <Button variant="secondary" onClick={onClose}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading actions...</div>
+            ) : (
+              buttons.map((button) => (
+                <ConfigurableActionButton
+                  key={button.id}
+                  button={button}
+                  onSuccess={(): void => {
+                    onActionSuccess(button);
+                  }}
+                  onResult={handleResult}
+                />
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

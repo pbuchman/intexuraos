@@ -4,8 +4,8 @@
 #
 # Optimizations applied:
 # - Docker BuildKit with layer caching (--cache-from)
-# - Parallel builds for all services (waitFor: ['detect-affected'])
-# - Single detection pass (affected.json written once)
+# - Parallel builds for all services (waitFor: ['check-all-affected'])
+# - Per-service affected detection from package.json deps
 # - CLOUD_LOGGING_ONLY for cost savings
 #
 # Substitutions are provided by the Cloud Build trigger (Terraform):
@@ -20,32 +20,41 @@ steps:
     entrypoint: 'npm'
     args: ['ci']
 
-  # Step 2: Detect affected services (single pass - result in /workspace/affected.json)
-  # Compares with last SUCCESSFUL build to avoid skipping changes from failed builds
-  - name: 'node:22'
-    id: 'detect-affected'
+  # Step 2: Check which services are affected and create marker files
+  # Single call checks all services - much more efficient than 13 separate calls
+  - name: 'node:22-slim'
+    id: 'check-all-affected'
     waitFor: ['npm-ci']
-    entrypoint: 'node'
-    args: ['cloudbuild/scripts/detect-affected.mjs']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'PROJECT_ID=$PROJECT_ID'
-      - 'REGION=${_REGION}'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ "${_FORCE_DEPLOY}" == "true" ]]; then
+          echo "Force deploy - marking all services as affected"
+          mkdir -p /workspace/.affected
+          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service web firestore; do
+            touch "/workspace/.affected/$svc"
+          done
+        else
+          node cloudbuild/scripts/check-affected.mjs --all
+        fi
+        echo "=== Marker files ==="
+        ls -la /workspace/.affected/ 2>/dev/null || echo "(none)"
 
   # ===== PARALLEL SERVICE PIPELINES =====
-  # All build steps wait only for detect-affected, enabling parallel execution
+  # Each service independently checks if affected via check-affected.mjs
+  # Dependencies derived from package.json workspace deps
   # Build+Push use gcr.io/cloud-builders/docker, Deploy uses cloud-sdk
 
   # ===== user-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"user-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/user-service ]]; then
           echo "=== Building user-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
           docker build \
@@ -69,7 +78,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"user-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/user-service ]]; then
           bash cloudbuild/scripts/deploy-user-service.sh
         else
           echo "user-service not affected, skipping deploy."
@@ -83,12 +92,12 @@ steps:
   # ===== promptvault-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-promptvault-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/promptvault-service ]]; then
           echo "=== Building promptvault-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
           docker build \
@@ -112,7 +121,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"promptvault-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/promptvault-service ]]; then
           bash cloudbuild/scripts/deploy-promptvault-service.sh
         else
           echo "promptvault-service not affected, skipping deploy."
@@ -126,12 +135,12 @@ steps:
   # ===== notion-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notion-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/notion-service ]]; then
           echo "=== Building notion-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
           docker build \
@@ -155,7 +164,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"notion-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/notion-service ]]; then
           bash cloudbuild/scripts/deploy-notion-service.sh
         else
           echo "notion-service not affected, skipping deploy."
@@ -169,12 +178,12 @@ steps:
   # ===== whatsapp-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/whatsapp-service ]]; then
           echo "=== Building whatsapp-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
           docker build \
@@ -198,7 +207,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"whatsapp-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/whatsapp-service ]]; then
           bash cloudbuild/scripts/deploy-whatsapp-service.sh
         else
           echo "whatsapp-service not affected, skipping deploy."
@@ -212,12 +221,12 @@ steps:
   # ===== api-docs-hub =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-api-docs-hub'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/api-docs-hub ]]; then
           echo "=== Building api-docs-hub ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
           docker build \
@@ -241,7 +250,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"api-docs-hub"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/api-docs-hub ]]; then
           bash cloudbuild/scripts/deploy-api-docs-hub.sh
         else
           echo "api-docs-hub not affected, skipping deploy."
@@ -255,12 +264,12 @@ steps:
   # ===== mobile-notifications-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-mobile-notifications-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/mobile-notifications-service ]]; then
           echo "=== Building mobile-notifications-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
           docker build \
@@ -284,7 +293,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"mobile-notifications-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/mobile-notifications-service ]]; then
           bash cloudbuild/scripts/deploy-mobile-notifications-service.sh
         else
           echo "mobile-notifications-service not affected, skipping deploy."
@@ -298,12 +307,12 @@ steps:
   # ===== llm-orchestrator =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-llm-orchestrator'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/llm-orchestrator ]]; then
           echo "=== Building llm-orchestrator ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
           docker build \
@@ -327,7 +336,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"llm-orchestrator"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/llm-orchestrator ]]; then
           bash cloudbuild/scripts/deploy-llm-orchestrator.sh
         else
           echo "llm-orchestrator not affected, skipping deploy."
@@ -341,12 +350,12 @@ steps:
   # ===== commands-router =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-commands-router'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"commands-router"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/commands-router ]]; then
           echo "=== Building commands-router ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
           docker build \
@@ -370,7 +379,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"commands-router"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/commands-router ]]; then
           bash cloudbuild/scripts/deploy-commands-router.sh
         else
           echo "commands-router not affected, skipping deploy."
@@ -384,12 +393,12 @@ steps:
   # ===== actions-agent =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-actions-agent'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"actions-agent"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/actions-agent ]]; then
           echo "=== Building actions-agent ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
           docker build \
@@ -413,7 +422,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"actions-agent"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/actions-agent ]]; then
           bash cloudbuild/scripts/deploy-actions-agent.sh
         else
           echo "actions-agent not affected, skipping deploy."
@@ -427,12 +436,12 @@ steps:
   # ===== data-insights-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-data-insights-service'
-    waitFor: ['detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"data-insights-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/data-insights-service ]]; then
           echo "=== Building data-insights-service ==="
           docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
           docker build \
@@ -456,7 +465,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"data-insights-service"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/data-insights-service ]]; then
           bash cloudbuild/scripts/deploy-data-insights-service.sh
         else
           echo "data-insights-service not affected, skipping deploy."
@@ -467,15 +476,58 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== web (static frontend) =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'fetch-web-secrets'
-    waitFor: ['detect-affected']
+  # ===== image-service =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-image-service'
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/image-service ]]; then
+          echo "=== Building image-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/image-service:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+            -f apps/image-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/image-service:latest
+        else
+          echo "image-service not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-image-service'
+    waitFor: ['build-push-image-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/image-service ]]; then
+          bash cloudbuild/scripts/deploy-image-service.sh
+        else
+          echo "image-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== web (static frontend) =====
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'fetch-web-secrets'
+    waitFor: ['check-all-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/web ]]; then
           echo "=== Fetching secrets for web ==="
           cat > /workspace/apps/web/.env << EOF
         INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
@@ -506,7 +558,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/web ]]; then
           echo "=== Building web ==="
           npm run --workspace=@intexuraos/web build
         else
@@ -522,7 +574,7 @@ steps:
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"web"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/web ]]; then
           echo "=== Deploying web ==="
           bash cloudbuild/scripts/deploy-web.sh
         else
@@ -534,24 +586,15 @@ steps:
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
 
-  # ===== static assets sync =====
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'static-assets'
-    waitFor: ['npm-ci']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-static-assets.sh']
-    env:
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
   # ===== firestore (indexes and rules) =====
   - name: 'node:22-slim'
     id: 'deploy-firestore'
-    waitFor: ['npm-ci', 'detect-affected']
+    waitFor: ['check-all-affected']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]] || grep -q '"firestore"' /workspace/affected.json 2>/dev/null; then
+        if [[ -f /workspace/.affected/firestore ]]; then
           echo "=== Deploying Firestore indexes and rules ==="
           bash cloudbuild/scripts/deploy-firestore.sh
         else

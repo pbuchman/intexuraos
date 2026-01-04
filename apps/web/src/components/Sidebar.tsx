@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   BellRing,
@@ -23,8 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context';
-import { getUserSettings } from '@/services/authApi';
-import type { NotificationFilter } from '@/types';
+import { getNotificationFilters } from '@/services/mobileNotificationsApi';
+import type { SavedNotificationFilter } from '@/types';
 
 interface NavItem {
   to: string;
@@ -50,41 +50,53 @@ const dataInsightsItems: NavItem[] = [
 ];
 
 /**
- * Build URL search params from a notification filter.
+ * Build URL search params from a saved notification filter.
+ * Arrays are joined with commas for URL encoding.
+ * Includes filterId to track which filter was explicitly selected.
  */
-function buildFilterUrl(filter: NotificationFilter): string {
+function buildFilterUrl(filter: SavedNotificationFilter): string {
   const params = new URLSearchParams();
-  if (filter.app !== undefined) {
-    params.set('app', filter.app);
+  params.set('filterId', filter.id);
+  if (filter.app !== undefined && filter.app.length > 0) {
+    params.set('app', filter.app.join(','));
   }
-  if (filter.source !== undefined) {
-    params.set('source', filter.source);
+  if (filter.source !== undefined && filter.source.length > 0) {
+    params.set('source', filter.source.join(','));
   }
-  if (filter.title !== undefined) {
+  if (filter.title !== undefined && filter.title !== '') {
     params.set('title', filter.title);
   }
-  const queryString = params.toString();
-  return queryString !== '' ? `/notifications?${queryString}` : '/notifications';
+  return `/notifications?${params.toString()}`;
 }
 
 /**
- * Check if a filter matches current URL search params.
+ * Check if a saved filter matches current URL.
+ * Prioritizes filterId param for explicit selection, falls back to criteria match.
  */
-function filterMatchesUrl(filter: NotificationFilter, search: string): boolean {
+function filterMatchesUrl(filter: SavedNotificationFilter, search: string): boolean {
   const params = new URLSearchParams(search);
+  const urlFilterId = params.get('filterId');
+
+  // If filterId is in URL, only match by ID (explicit selection)
+  if (urlFilterId !== null) {
+    return filter.id === urlFilterId;
+  }
+
+  // Fallback: match by criteria (for manually-entered filter params)
   const urlApp = params.get('app') ?? '';
   const urlSource = params.get('source') ?? '';
   const urlTitle = params.get('title') ?? '';
 
-  return (
-    (filter.app ?? '') === urlApp &&
-    (filter.source ?? '') === urlSource &&
-    (filter.title ?? '') === urlTitle
-  );
+  const filterApp = filter.app !== undefined && filter.app.length > 0 ? filter.app.join(',') : '';
+  const filterSource =
+    filter.source !== undefined && filter.source.length > 0 ? filter.source.join(',') : '';
+  const filterTitle = filter.title ?? '';
+
+  return filterApp === urlApp && filterSource === urlSource && filterTitle === urlTitle;
 }
 
 export function Sidebar(): React.JSX.Element {
-  const { getAccessToken, user } = useAuth();
+  const { getAccessToken } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -95,8 +107,9 @@ export function Sidebar(): React.JSX.Element {
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
     window.location.hash.includes('/data-insights')
   );
-  const [savedFilters, setSavedFilters] = useState<NotificationFilter[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Auto-expand settings when on a settings page
   useEffect(() => {
@@ -126,20 +139,31 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Fetch saved filters
+  // Fetch saved filters from mobile-notifications-service
+  const fetchFilters = useCallback(async (): Promise<void> => {
+    try {
+      const token = await getAccessToken();
+      const data = await getNotificationFilters(token);
+      setSavedFilters(data.savedFilters);
+    } catch {
+      /* Best-effort fetch, ignore errors */
+    }
+  }, [getAccessToken]);
+
   useEffect(() => {
-    const fetchFilters = async (): Promise<void> => {
-      if (user?.sub === undefined) return;
-      try {
-        const token = await getAccessToken();
-        const settings = await getUserSettings(token, user.sub);
-        setSavedFilters(settings.notifications.filters);
-      } catch {
-        /* Best-effort fetch, ignore errors */
-      }
-    };
     void fetchFilters();
-  }, [getAccessToken, user?.sub]);
+  }, [fetchFilters]);
+
+  // Listen for custom event to refresh filters (dispatched by MobileNotificationsListPage)
+  useEffect(() => {
+    const handleRefresh = (): void => {
+      void fetchFilters();
+    };
+    window.addEventListener('notification-filters-changed', handleRefresh);
+    return (): void => {
+      window.removeEventListener('notification-filters-changed', handleRefresh);
+    };
+  }, [fetchFilters]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -329,7 +353,7 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Notes */}
+          {/* WhatsApp */}
           <NavLink
             to="/notes"
             end
@@ -342,7 +366,7 @@ export function Sidebar(): React.JSX.Element {
             }
           >
             <MessageSquare className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>Notes</span> : null}
+            {!isCollapsed ? <span>WhatsApp</span> : null}
           </NavLink>
 
           {/* Notifications section (collapsible with saved filters) */}
@@ -371,34 +395,42 @@ export function Sidebar(): React.JSX.Element {
               <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
                 <NavLink
                   to="/notifications"
-                  end
-                  className={({ isActive }): string =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive
+                  className={(): string => {
+                    const isAllActive =
+                      location.pathname === '/notifications' && location.search === '';
+                    return `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isAllActive
                         ? 'bg-blue-50 text-blue-700'
                         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`
-                  }
+                    }`;
+                  }}
                 >
                   <Bell className="h-4 w-4 shrink-0" />
                   <span>All</span>
                 </NavLink>
-                {savedFilters.map((filter) => (
-                  <NavLink
-                    key={filter.name}
-                    to={buildFilterUrl(filter)}
-                    className={(): string =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        filterMatchesUrl(filter, location.search)
+                {savedFilters.map((filter) => {
+                  const isFilterActive =
+                    location.pathname === '/notifications' &&
+                    filterMatchesUrl(filter, location.search);
+                  return (
+                    <button
+                      key={filter.id}
+                      onClick={(): void => {
+                        void navigate(buildFilterUrl(filter));
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isFilterActive
                           ? 'bg-blue-50 text-blue-700'
                           : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                      }`
-                    }
-                  >
-                    <Filter className="h-4 w-4 shrink-0 text-blue-600" />
-                    <span title={filter.name}>{filter.name}</span>
-                  </NavLink>
-                ))}
+                      }`}
+                    >
+                      <Filter className="h-4 w-4 shrink-0 text-blue-600" />
+                      <span className="truncate text-left" title={filter.name}>
+                        {filter.name}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>

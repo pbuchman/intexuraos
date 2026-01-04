@@ -3,10 +3,12 @@
  * Provides dependency injection for domain adapters.
  */
 
+import pino from 'pino';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
+import { FirestoreUsageStatsRepository } from './infra/usage/index.js';
 import {
-  createLlmProviders,
+  createContextInferrer,
   createResearchProvider,
   createSynthesizer,
   createTitleGenerator,
@@ -19,24 +21,31 @@ import {
   type LlmCallPublisher,
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
-import {
-  createUserServiceClient,
-  type DecryptedApiKeys as InfraDecryptedApiKeys,
-  type UserServiceClient,
-} from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 
 export type { DecryptedApiKeys } from './infra/user/index.js';
+export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
+import type { Logger } from '@intexuraos/common-core';
 import {
-  type LlmProvider,
   type LlmResearchProvider,
   type LlmSynthesisProvider,
   type NotificationSender,
   type PricingRepository,
   type ResearchRepository,
-  type SearchMode,
   type ShareStoragePort,
+  type SupportedModel,
   type TitleGenerator,
+  type UsageStatsRepository,
 } from './domain/research/index.js';
+import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
+import {
+  createLlmUsageTracker,
+  type LlmUsageTracker,
+  type TrackLlmCallParams,
+} from './domain/research/services/index.js';
+
+export type { LlmUsageTracker, TrackLlmCallParams };
 
 /**
  * Configuration for sharing features.
@@ -52,24 +61,24 @@ export interface ShareConfig {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   pricingRepo: PricingRepository;
+  usageStatsRepo: UsageStatsRepository;
+  llmUsageTracker: LlmUsageTracker;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
+  imageServiceClient: ImageServiceClient | null;
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
-  createLlmProviders: (
-    apiKeys: InfraDecryptedApiKeys,
-    searchMode?: SearchMode
-  ) => Record<LlmProvider, LlmResearchProvider>;
-  createResearchProvider: (
-    provider: LlmProvider,
+  createResearchProvider: (model: SupportedModel, apiKey: string) => LlmResearchProvider;
+  createSynthesizer: (model: SupportedModel, apiKey: string) => LlmSynthesisProvider;
+  createTitleGenerator: (model: string, apiKey: string) => TitleGenerator;
+  createContextInferrer: (
+    model: string,
     apiKey: string,
-    searchMode?: SearchMode
-  ) => LlmResearchProvider;
-  createSynthesizer: (provider: LlmProvider, apiKey: string) => LlmSynthesisProvider;
-  createTitleGenerator: (apiKey: string) => TitleGenerator;
+    logger?: Logger
+  ) => ContextInferenceProvider;
 }
 
 let container: ServiceContainer | null = null;
@@ -155,8 +164,16 @@ function createShareStorageAndConfig(): {
  * Initialize the service container with all dependencies.
  */
 export function initializeServices(): void {
+  const logger = pino({ name: 'llm-orchestrator' });
   const researchRepo = new FirestoreResearchRepository();
   const pricingRepo = new FirestorePricingRepository();
+  const usageStatsRepo = new FirestoreUsageStatsRepository();
+
+  const llmUsageTracker = createLlmUsageTracker({
+    usageStatsRepo,
+    pricingRepo,
+    logger,
+  });
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
@@ -177,19 +194,35 @@ export function initializeServices(): void {
 
   const { shareStorage, shareConfig } = createShareStorageAndConfig();
 
+  const imageServiceUrl = process.env['INTEXURAOS_IMAGE_SERVICE_URL'];
+  const imageServiceClient =
+    imageServiceUrl !== undefined && imageServiceUrl !== ''
+      ? createImageServiceClient({
+          baseUrl: imageServiceUrl,
+          internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+        })
+      : null;
+
   container = {
     researchRepo,
     pricingRepo,
+    usageStatsRepo,
+    llmUsageTracker,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
     userServiceClient,
+    imageServiceClient,
     notificationSender,
     shareStorage,
     shareConfig,
-    createLlmProviders,
-    createResearchProvider,
-    createSynthesizer,
-    createTitleGenerator,
+    createResearchProvider: (model, apiKey): LlmResearchProvider =>
+      createResearchProvider(model, apiKey, llmUsageTracker),
+    createSynthesizer: (model, apiKey): LlmSynthesisProvider =>
+      createSynthesizer(model, apiKey, llmUsageTracker),
+    createTitleGenerator: (model, apiKey): TitleGenerator =>
+      createTitleGenerator(model, apiKey, llmUsageTracker),
+    createContextInferrer: (model, apiKey, logger): ContextInferenceProvider =>
+      createContextInferrer(model, apiKey, logger, llmUsageTracker),
   };
 }

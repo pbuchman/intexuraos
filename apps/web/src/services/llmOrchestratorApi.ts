@@ -4,9 +4,11 @@ import type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
   ListResearchesResponse,
+  LlmUsageStats,
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
+  SupportedModel,
 } from './llmOrchestratorApi.types.js';
 
 /**
@@ -125,6 +127,18 @@ export async function confirmPartialFailure(
 }
 
 /**
+ * Retry a failed research by re-running failed LLMs or synthesis.
+ */
+export async function retryFromFailed(accessToken: string, id: string): Promise<Research> {
+  return await apiRequest<Research>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/retry`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
+/**
  * Remove public share access for a research.
  */
 export async function unshareResearch(accessToken: string, id: string): Promise<void> {
@@ -133,14 +147,53 @@ export async function unshareResearch(accessToken: string, id: string): Promise<
   });
 }
 
+export interface EnhanceResearchRequest {
+  additionalModels?: SupportedModel[];
+  additionalContexts?: { content: string; label?: string }[];
+  synthesisModel?: SupportedModel;
+  removeContextIds?: string[];
+}
+
+/**
+ * Create an enhanced research from a completed one.
+ */
+export async function enhanceResearch(
+  accessToken: string,
+  id: string,
+  request: EnhanceResearchRequest
+): Promise<Research> {
+  return await apiRequest<Research>(
+    config.llmOrchestratorUrl,
+    `/research/${id}/enhance`,
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
+}
+
+/**
+ * Get aggregated LLM usage statistics.
+ */
+export async function getLlmUsageStats(accessToken: string): Promise<LlmUsageStats[]> {
+  return await apiRequest<LlmUsageStats[]>(
+    config.llmOrchestratorUrl,
+    '/llm/usage-stats',
+    accessToken
+  );
+}
+
 export type {
   ConfirmPartialFailureResponse,
   LlmProvider,
   LlmResult,
+  LlmUsageStats,
   PartialFailure,
   PartialFailureDecision,
   Research,
   ResearchStatus,
+  SupportedModel,
   CreateResearchRequest,
   SaveDraftRequest,
   ListResearchesResponse,

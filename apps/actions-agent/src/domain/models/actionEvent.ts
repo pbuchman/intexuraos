@@ -1,6 +1,5 @@
 import type { ActionType } from './action.js';
-
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 
 export interface ActionCreatedEvent {
   type: 'action.created';
@@ -12,7 +11,7 @@ export interface ActionCreatedEvent {
   payload: {
     prompt: string;
     confidence: number;
-    selectedLlms?: LlmProvider[];
+    selectedModels?: SupportedModel[];
   };
   timestamp: string;
 }

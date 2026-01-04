@@ -5,6 +5,10 @@ export interface LlmPricing {
   model: string;
   inputPricePerMillion: number;
   outputPricePerMillion: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  cacheWriteMultiplier?: number;
+  cacheReadMultiplier?: number;
   updatedAt: string;
 }
 

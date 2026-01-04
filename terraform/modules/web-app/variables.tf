@@ -61,3 +61,9 @@ variable "shared_content_bucket_name" {
   default     = ""
 }
 
+variable "images_bucket_name" {
+  description = "Name of the generated images bucket for /assets/* path routing"
+  type        = string
+  default     = ""
+}
+

@@ -18,31 +18,26 @@ vi.mock('@intexuraos/infra-claude', () => ({
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 
+const mockTracker = {
+  track: vi.fn(),
+};
+
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key');
+    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', mockTracker);
   });
 
   describe('constructor', () => {
-    it('passes researchModel to client when provided', () => {
+    it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', 'claude-3-haiku-20240307');
+      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101');
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        researchModel: 'claude-3-haiku-20240307',
-      });
-    });
-
-    it('does not pass researchModel when not provided', () => {
-      mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key');
-
-      expect(mockCreateClaudeClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
+        model: 'claude-opus-4-5-20251101',
       });
     });
   });
@@ -119,6 +114,30 @@ describe('ClaudeAdapter', () => {
       );
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+    });
+
+    it('uses synthesis context when provided', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+
+      await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
+        language: 'en',
+        domain: 'general',
+        mode: 'standard',
+        synthesis_goals: ['merge'],
+        missing_sections: [],
+        detected_conflicts: [],
+        source_preference: {
+          prefer_official_over_aggregators: true,
+          prefer_recent_when_time_sensitive: true,
+        },
+        defaults_applied: [],
+        assumptions: [],
+        output_format: { wants_table: false, wants_actionable_summary: true },
+        safety: { high_stakes: false, required_disclaimers: [] },
+        red_flags: [],
+      });
+
+      expect(mockGenerate).toHaveBeenCalled();
     });
 
     it('maps errors correctly', async () => {

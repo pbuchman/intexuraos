@@ -153,40 +153,40 @@ describe('generateShareableHtml', () => {
     });
   });
 
-  describe('externalReports section', () => {
-    it('renders external reports as collapsible sections', () => {
+  describe('inputContexts section', () => {
+    it('renders input contexts as collapsible sections', () => {
       const html = generateShareableHtml({
         ...baseInput,
-        externalReports: [
-          { content: 'External report 1', model: 'claude-3.5-sonnet' },
-          { content: 'External report 2' },
+        inputContexts: [
+          { content: 'Input context 1', label: 'claude-3.5-sonnet' },
+          { content: 'Input context 2' },
         ],
       });
 
-      expect(html).toContain('External Reports');
+      expect(html).toContain('Additional Context');
       expect(html).toContain('<details>');
       expect(html).toContain('claude-3.5-sonnet');
-      expect(html).toContain('External report 1');
-      expect(html).toContain('External Report 2');
-      expect(html).toContain('External report 2');
+      expect(html).toContain('Input context 1');
+      expect(html).toContain('Context 2');
+      expect(html).toContain('Input context 2');
     });
 
-    it('uses numbered label when model is empty string', () => {
+    it('uses numbered label when label is empty string', () => {
       const html = generateShareableHtml({
         ...baseInput,
-        externalReports: [{ content: 'Report content', model: '' }],
+        inputContexts: [{ content: 'Context content', label: '' }],
       });
 
-      expect(html).toContain('External Report 1');
+      expect(html).toContain('Context 1');
     });
 
     it('does not render section when empty array', () => {
       const html = generateShareableHtml({
         ...baseInput,
-        externalReports: [],
+        inputContexts: [],
       });
 
-      expect(html).not.toContain('External Reports');
+      expect(html).not.toContain('Additional Context');
     });
   });
 });

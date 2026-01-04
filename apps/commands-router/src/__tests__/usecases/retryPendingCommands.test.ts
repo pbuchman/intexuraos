@@ -158,7 +158,7 @@ describe('retryPendingCommands usecase', () => {
     expect(result.processed).toBe(0);
   });
 
-  it('includes selectedLlms in event when present in classification', async () => {
+  it('includes selectedModels in event when present in classification', async () => {
     const command = createCommand();
     commandRepository.addCommand(command);
     userServiceClient.setApiKeys('user-456', { google: 'google-key' });
@@ -167,7 +167,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.95,
       title: 'AI Trends Research',
       reasoning: 'Research task',
-      selectedLlms: ['google', 'openai'],
+      selectedModels: ['gemini-2.5-flash', 'o4-mini-deep-research'],
     });
 
     const usecase = createRetryPendingCommandsUseCase({
@@ -183,7 +183,10 @@ describe('retryPendingCommands usecase', () => {
 
     const events = eventPublisher.getPublishedEvents();
     expect(events).toHaveLength(1);
-    expect(events[0]?.payload.selectedLlms).toEqual(['google', 'openai']);
+    expect(events[0]?.payload.selectedModels).toEqual([
+      'gemini-2.5-flash',
+      'o4-mini-deep-research',
+    ]);
   });
 
   it('handles unclassified type without creating action', async () => {

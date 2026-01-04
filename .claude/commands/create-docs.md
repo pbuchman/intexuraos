@@ -100,7 +100,16 @@ Write the following structure to `docs/current/pub-sub.md`:
 ```markdown
 # Pub/Sub Architecture
 
-[Brief description of how Pub/Sub is used in the system]
+## Overview
+
+IntexuraOS uses Google Cloud Pub/Sub for asynchronous, event-driven communication between services. This decoupled architecture enables fire-and-forget patterns where services can acknowledge HTTP requests quickly while background processing continues independently. Each topic has a dedicated HTTP push subscription that delivers messages to Cloud Run endpoints.
+
+**Key patterns:**
+
+- **Event-driven workflows** — Commands flow through topics to trigger research, notifications, and integrations
+- **Fire-and-forget processing** — Webhook handlers acknowledge immediately, then publish events for async processing
+- **Reliable delivery** — Dead letter queues capture failed messages for retry and debugging
+- **Service isolation** — Services communicate via events, not direct calls
 
 ## Flow Summary
 
@@ -261,10 +270,9 @@ Write the following structure to `docs/current/schedulers.md`:
 ```markdown
 # Cloud Scheduler Jobs
 
-> **Auto-generated documentation** - Do not edit manually.
-> Last updated: YYYY-MM-DD
+## Overview
 
-Cloud Scheduler is used for periodic tasks like retrying failed operations and cleanup jobs.
+Cloud Scheduler manages periodic tasks across IntexuraOS services. These automated jobs handle critical background operations like retrying failed message deliveries, cleaning up stale data, and triggering scheduled workflows. Each job targets a specific Cloud Run service endpoint with OIDC authentication.
 
 ## Jobs Summary
 
@@ -385,10 +393,16 @@ Write the following structure to `docs/current/llm.md`:
 ```markdown
 # LLM Usage
 
-> **Auto-generated documentation** - Do not edit manually.
-> Last updated: YYYY-MM-DD
+## Overview
 
-IntexuraOS uses multiple LLM providers for research, synthesis, and text generation.
+IntexuraOS leverages multiple Large Language Model providers to deliver intelligent research, synthesis, and content generation capabilities. The system orchestrates parallel calls across providers to maximize quality and reliability, automatically synthesizing results into comprehensive, well-structured outputs.
+
+**Key capabilities powered by LLMs:**
+
+- **Research** — Deep web-grounded research using multiple AI providers simultaneously
+- **Synthesis** — Intelligent combination of multiple research results into cohesive reports
+- **Title Generation** — Automatic creation of meaningful titles based on content
+- **Context Inference** — Understanding user intent, language, and domain to tailor responses
 
 ## Critical Requirement
 
@@ -621,8 +635,8 @@ After generating documentation, output to chat (NOT in docs):
 - Generate documentation in English
 - Include file paths and line numbers for traceability
 - Improvement suggestions go to chat output, never in docs
-- Docs are auto-generated - include "Do not edit manually" notice
-- Include last updated date in docs
+- Keep headers minimal - no "auto-generated" notices
+- Include detailed Overview section explaining the purpose and value of the feature
 
 ### Table Formatting
 

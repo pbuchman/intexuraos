@@ -8,7 +8,7 @@ import type { EncryptedValue } from '@intexuraos/common-core';
 /**
  * LLM provider identifiers.
  */
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 /**
  * Result of testing an LLM API key.
@@ -26,6 +26,7 @@ export interface LlmApiKeys {
   google?: EncryptedValue; // Gemini API key
   openai?: EncryptedValue; // OpenAI API key
   anthropic?: EncryptedValue; // Anthropic API key
+  perplexity?: EncryptedValue; // Perplexity API key
 }
 
 /**
@@ -35,20 +36,7 @@ export interface LlmTestResults {
   google?: LlmTestResult;
   openai?: LlmTestResult;
   anthropic?: LlmTestResult;
-}
-
-/**
- * Search mode for research operations.
- * - 'deep': Uses research-optimized models (slower, more thorough)
- * - 'quick': Uses default models with web search (faster, cheaper)
- */
-export type SearchMode = 'deep' | 'quick';
-
-/**
- * Research-related settings.
- */
-export interface ResearchSettings {
-  searchMode: SearchMode;
+  perplexity?: LlmTestResult;
 }
 
 /**
@@ -76,7 +64,6 @@ export interface UserSettings {
   notifications?: NotificationSettings;
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
-  researchSettings?: ResearchSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,7 +75,6 @@ export function createDefaultSettings(userId: string): UserSettings {
   const now = new Date().toISOString();
   return {
     userId,
-    researchSettings: { searchMode: 'deep' },
     createdAt: now,
     updatedAt: now,
   };

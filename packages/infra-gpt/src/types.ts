@@ -6,13 +6,5 @@ export type {
 
 export interface GptConfig {
   apiKey: string;
-  researchModel?: string;
-  defaultModel?: string;
-  evaluateModel?: string;
+  model: string;
 }
-
-export const GPT_DEFAULTS = {
-  researchModel: 'o4-mini-deep-research',
-  defaultModel: 'gpt-5.2',
-  evaluateModel: 'gpt-5-nano',
-} as const;

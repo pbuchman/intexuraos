@@ -2,54 +2,80 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSynthesisPrompt,
   type SynthesisReport,
-  type ExternalReport,
+  type AdditionalSource,
 } from '../synthesisPrompt.js';
+import type { SynthesisContext } from '../context/types.js';
+
+const createTestSynthesisContext = (overrides?: Partial<SynthesisContext>): SynthesisContext => ({
+  language: 'en',
+  domain: 'technical',
+  mode: 'standard',
+  synthesis_goals: ['merge', 'summarize'],
+  missing_sections: [],
+  detected_conflicts: [],
+  source_preference: {
+    prefer_official_over_aggregators: true,
+    prefer_recent_when_time_sensitive: false,
+  },
+  defaults_applied: [],
+  assumptions: [],
+  output_format: {
+    wants_table: false,
+    wants_actionable_summary: true,
+  },
+  safety: {
+    high_stakes: false,
+    required_disclaimers: [],
+  },
+  red_flags: [],
+  ...overrides,
+});
 
 describe('buildSynthesisPrompt', () => {
   const originalPrompt = 'What are the latest developments in AI?';
 
-  it('includes original prompt in research analyst section', () => {
+  it('includes original prompt section', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'AI report content' }];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
-    expect(result).toContain('## Original Research Prompt');
+    expect(result).toContain('## Original Prompt');
     expect(result).toContain(originalPrompt);
   });
 
-  it('includes source attribution instruction with model names', () => {
+  it('includes sources used section with model names', () => {
     const reports: SynthesisReport[] = [
       { model: 'GPT-4', content: 'Content 1' },
       { model: 'Claude', content: 'Content 2' },
     ];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
-    expect(result).toContain('Begin with source attribution');
+    expect(result).toContain('## Sources Used');
     expect(result).toContain('GPT-4, Claude');
   });
 
-  it('includes external sources in attribution when present', () => {
+  it('includes additional sources in sources used section', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
-    const externalReports: ExternalReport[] = [
-      { model: 'Perplexity', content: 'External content 1' },
-      { model: 'Custom Source', content: 'External content 2' },
+    const additionalSources: AdditionalSource[] = [
+      { label: 'Perplexity', content: 'External content 1' },
+      { label: 'Custom Source', content: 'External content 2' },
     ];
-    const result = buildSynthesisPrompt(originalPrompt, reports, externalReports);
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
-    expect(result).toContain('external sources: Perplexity, Custom Source');
+    expect(result).toContain('**Additional sources**: Perplexity, Custom Source');
   });
 
-  it('uses fallback name for external reports without model', () => {
+  it('uses fallback name for additional sources without label', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
-    const externalReports: ExternalReport[] = [
-      { content: 'Unnamed external content' },
-      { model: 'Named Source', content: 'Named content' },
+    const additionalSources: AdditionalSource[] = [
+      { content: 'Unnamed content' },
+      { label: 'Named Source', content: 'Named content' },
     ];
-    const result = buildSynthesisPrompt(originalPrompt, reports, externalReports);
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
-    expect(result).toContain('External 1, Named Source');
+    expect(result).toContain('Source 1, Named Source');
   });
 
-  it('formats system reports with model headers', () => {
+  it('formats LLM reports with model headers', () => {
     const reports: SynthesisReport[] = [
       { model: 'GPT-4', content: 'GPT content here' },
       { model: 'Claude', content: 'Claude content here' },
@@ -62,35 +88,35 @@ describe('buildSynthesisPrompt', () => {
     expect(result).toContain('Claude content here');
   });
 
-  it('includes external reports section when external reports provided', () => {
+  it('includes additional sources section when additional sources provided', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
-    const externalReports: ExternalReport[] = [
-      { model: 'Perplexity', content: 'External analysis' },
+    const additionalSources: AdditionalSource[] = [
+      { label: 'Perplexity', content: 'External analysis' },
     ];
-    const result = buildSynthesisPrompt(originalPrompt, reports, externalReports);
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
-    expect(result).toContain('## External LLM Reports');
-    expect(result).toContain('External Report 1 (Perplexity)');
+    expect(result).toContain('## Additional Sources');
+    expect(result).toContain('### Perplexity');
     expect(result).toContain('External analysis');
   });
 
-  it('does not include external section when no external reports', () => {
+  it('does not include additional sources section when no additional sources', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
-    expect(result).not.toContain('## External LLM Reports');
+    expect(result).not.toContain('## Additional Sources');
   });
 
-  it('includes conflict resolution guidelines when external reports present', () => {
+  it('includes conflict resolution guidelines when additional sources present', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
-    const externalReports: ExternalReport[] = [{ content: 'External content' }];
-    const result = buildSynthesisPrompt(originalPrompt, reports, externalReports);
+    const additionalSources: AdditionalSource[] = [{ content: 'Additional content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
     expect(result).toContain('## Conflict Resolution Guidelines');
     expect(result).toContain('Note the discrepancy explicitly');
   });
 
-  it('does not include conflict guidelines without external reports', () => {
+  it('does not include conflict guidelines without additional sources', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
@@ -101,31 +127,307 @@ describe('buildSynthesisPrompt', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
-    expect(result).toContain('Combines the best insights');
-    expect(result).toContain('conflicting information');
-    expect(result).toContain('balanced conclusion');
-    expect(result).toContain('key sources');
+    expect(result).toContain('Combine insights');
+    expect(result).toContain('Handle conflicts');
+    expect(result).toContain('balanced summary');
   });
 
-  it('mentions both system and external in task when external present', () => {
+  it('mentions both LLM reports and additional sources in task when additional sources present', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
-    const externalReports: ExternalReport[] = [{ content: 'External content' }];
-    const result = buildSynthesisPrompt(originalPrompt, reports, externalReports);
+    const additionalSources: AdditionalSource[] = [{ content: 'Additional content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
-    expect(result).toContain('(both system and external)');
+    expect(result).toContain('(both LLM reports and additional sources)');
   });
 
   it('handles empty reports array', () => {
     const result = buildSynthesisPrompt(originalPrompt, []);
 
-    expect(result).toContain('## Original Research Prompt');
-    expect(result).toContain('## System Reports');
+    expect(result).toContain('## Original Prompt');
+    expect(result).toContain('## LLM Reports');
   });
 
-  it('handles empty external reports array', () => {
+  it('handles empty additional sources array', () => {
     const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
     const result = buildSynthesisPrompt(originalPrompt, reports, []);
 
-    expect(result).not.toContain('## External LLM Reports');
+    expect(result).not.toContain('## Additional Sources');
+  });
+
+  it('includes inline citation rules with example', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('## Citation Rules (CRITICAL)');
+    expect(result).toContain('Inline citations');
+    expect(result).toContain('Teide volcano');
+  });
+
+  it('includes language requirement', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('## Language Requirement');
+    expect(result).toContain('SAME LANGUAGE');
+  });
+
+  it('includes adaptive behavior section', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('## Adaptive Behavior');
+    expect(result).toContain('Travel/lifestyle');
+    expect(result).toContain('Technical/programming');
+    expect(result).toContain('Medical/health');
+  });
+
+  describe('with SynthesisContext', () => {
+    it('includes synthesis goals from context', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        synthesis_goals: ['merge', 'conflict_audit', 'rank_recommendations'],
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Synthesis Goals');
+      expect(result).toContain('MERGE');
+      expect(result).toContain('CONFLICT AUDIT');
+      expect(result).toContain('RANK RECOMMENDATIONS');
+    });
+
+    it('includes detected conflicts from context', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        detected_conflicts: [
+          {
+            topic: 'Pricing information',
+            sources_involved: ['GPT-4', 'Claude'],
+            conflict_summary: 'Different prices reported',
+            severity: 'high',
+          },
+        ],
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Detected Conflicts to Address');
+      expect(result).toContain('Pricing information');
+      expect(result).toContain('HIGH');
+      expect(result).toContain('Different prices reported');
+    });
+
+    it('includes missing sections from context', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        missing_sections: ['Budget breakdown', 'Timeline'],
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Missing Coverage');
+      expect(result).toContain('Budget breakdown');
+      expect(result).toContain('Timeline');
+    });
+
+    it('includes safety section when high stakes', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        safety: {
+          high_stakes: true,
+          required_disclaimers: ['Consult a medical professional'],
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Safety Considerations');
+      expect(result).toContain('HIGH-STAKES');
+      expect(result).toContain('Consult a medical professional');
+    });
+
+    it('includes red flags from context', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        red_flags: ['Potential outdated information'],
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Concerns to Address');
+      expect(result).toContain('Potential outdated information');
+    });
+
+    it('includes source preference guidelines', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        source_preference: {
+          prefer_official_over_aggregators: true,
+          prefer_recent_when_time_sensitive: true,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Source Preference Strategy');
+      expect(result).toContain('Prefer official sources');
+      expect(result).toContain('Prefer more recent sources');
+    });
+
+    it('includes language requirement from context', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({ language: 'es' });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Language Requirement');
+      expect(result).toContain('ES');
+    });
+
+    it('works with additional sources', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext();
+      const additionalSources: AdditionalSource[] = [
+        { label: 'External', content: 'External data' },
+      ];
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx, additionalSources);
+
+      expect(result).toContain('## Additional Sources');
+      expect(result).toContain('External');
+      expect(result).toContain('External data');
+    });
+
+    it('includes output format preferences', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        output_format: {
+          wants_table: true,
+          wants_actionable_summary: true,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Output Format');
+      expect(result).toContain('comparison tables');
+      expect(result).toContain('actionable summary');
+    });
+
+    it('includes only table in output format', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        output_format: {
+          wants_table: true,
+          wants_actionable_summary: false,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Output Format');
+      expect(result).toContain('comparison tables');
+      expect(result).not.toContain('actionable summary');
+    });
+
+    it('includes only actionable summary in output format', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        output_format: {
+          wants_table: false,
+          wants_actionable_summary: true,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Output Format');
+      expect(result).not.toContain('comparison tables');
+      expect(result).toContain('actionable summary');
+    });
+
+    it('skips output format section when no format preferences', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        output_format: {
+          wants_table: false,
+          wants_actionable_summary: false,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).not.toContain('## Output Format');
+    });
+
+    it('includes high stakes without disclaimers in synthesis', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        safety: { high_stakes: true, required_disclaimers: [] },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Safety Considerations');
+      expect(result).toContain('HIGH-STAKES');
+      expect(result).not.toContain('Include these disclaimers');
+    });
+
+    it('skips conflicts section when no conflicts detected', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({ detected_conflicts: [] });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).not.toContain('## Detected Conflicts');
+    });
+
+    it('skips missing sections when none', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({ missing_sections: [] });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).not.toContain('## Missing Coverage');
+    });
+
+    it('skips red flags section when none', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({ red_flags: [] });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).not.toContain('## Concerns');
+    });
+
+    it('skips safety section when no safety concerns', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        safety: { high_stakes: false, required_disclaimers: [] },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).not.toContain('## Safety Considerations');
+    });
+
+    it('shows disclaimer without high stakes when disclaimers present', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        safety: { high_stakes: false, required_disclaimers: ['Disclaimer 1'] },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('## Safety Considerations');
+      expect(result).toContain('Disclaimer 1');
+      expect(result).not.toContain('HIGH-STAKES');
+    });
+
+    it('includes prefer_recent when time sensitive is false', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext({
+        source_preference: {
+          prefer_official_over_aggregators: false,
+          prefer_recent_when_time_sensitive: false,
+        },
+      });
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('Weight all sources equally');
+      expect(result).toContain('Consider all timeframes equally');
+    });
+
+    it('uses fallback label for additional sources without label', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext();
+      const additionalSources: AdditionalSource[] = [{ content: 'Unlabeled content' }];
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx, additionalSources);
+
+      expect(result).toContain('### Source 1');
+      expect(result).toContain('Unlabeled content');
+    });
   });
 });

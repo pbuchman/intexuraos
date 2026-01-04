@@ -6,7 +6,6 @@
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
-  LlmProvider,
   LlmResult,
   RepositoryError,
   Research,
@@ -109,7 +108,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
   async updateLlmResult(
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>> {
     try {
@@ -123,7 +122,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
 
       const research = doc.data() as Research;
       const llmResults = research.llmResults.map((r) => {
-        if (r.provider !== provider) {
+        if (r.model !== model) {
           return r;
         }
         const merged = { ...r, ...result };

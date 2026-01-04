@@ -13,3 +13,14 @@ export type {
   LLMError,
   LLMClient,
 } from './types.js';
+
+export {
+  SUPPORTED_MODELS,
+  SYSTEM_DEFAULT_MODELS,
+  getProviderForModel,
+  isValidModel,
+  getModelsForProvider,
+  getDisplayName,
+} from './supportedModels.js';
+
+export type { SupportedModel, LlmProvider } from './supportedModels.js';

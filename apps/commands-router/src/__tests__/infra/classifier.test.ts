@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { GeminiError } from '@intexuraos/infra-gemini';
-import { extractSelectedLlms } from '../../infra/gemini/classifier.js';
+import { extractSelectedModels } from '../../infra/gemini/classifier.js';
 
 const mockGenerate = vi.fn();
 
@@ -13,8 +13,8 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
 
-function jsonResponse(type: string, confidence: number, title: string): string {
-  return JSON.stringify({ type, confidence, title });
+function jsonResponse(type: string, confidence: number, title: string, reasoning?: string): string {
+  return JSON.stringify({ type, confidence, title, reasoning: reasoning ?? 'Test reasoning' });
 }
 
 describe('GeminiClassifier', () => {
@@ -180,95 +180,134 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.9);
     });
 
-    it('extracts selectedLlms from text', async () => {
+    it('returns unclassified when JSON parses to non-object (defensive)', async () => {
+      const originalParse = JSON.parse;
+      JSON.parse = (): null => null;
+
+      try {
+        mockGenerate.mockResolvedValue(ok('{"type": "todo"}'));
+
+        const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+        const classificationResult = await classifier.classify('test');
+
+        expect(classificationResult.type).toBe('unclassified');
+        expect(classificationResult.reasoning).toBe('Invalid response format');
+      } finally {
+        JSON.parse = originalParse;
+      }
+    });
+
+    it('uses defaults for missing confidence, title, and reasoning', async () => {
+      mockGenerate.mockResolvedValue(ok('{"type": "todo"}'));
+
+      const classifier = createGeminiClassifier({ apiKey: 'test-key' });
+      const classificationResult = await classifier.classify('test');
+
+      expect(classificationResult.type).toBe('todo');
+      expect(classificationResult.confidence).toBe(0.5);
+      expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toBe('No reasoning provided');
+    });
+
+    it('extracts selectedModels from text', async () => {
       mockGenerate.mockResolvedValue(ok(jsonResponse('research', 0.9, 'Research topic')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('Research this using only gemini');
 
-      expect(classificationResult.selectedLlms).toEqual(['google']);
+      expect(classificationResult.selectedModels).toEqual(['gemini-2.5-flash']);
     });
 
-    it('returns undefined selectedLlms when no LLM specified', async () => {
+    it('returns undefined selectedModels when no model specified', async () => {
       mockGenerate.mockResolvedValue(ok(jsonResponse('research', 0.9, 'Research topic')));
 
       const classifier = createGeminiClassifier({ apiKey: 'test-key' });
       const classificationResult = await classifier.classify('Research this topic');
 
-      expect(classificationResult.selectedLlms).toBeUndefined();
+      expect(classificationResult.selectedModels).toBeUndefined();
     });
   });
 });
 
-describe('extractSelectedLlms', () => {
-  describe('all LLMs patterns', () => {
-    it('returns all LLMs for "use all LLMs"', () => {
-      expect(extractSelectedLlms('use all LLMs for this research')).toEqual([
-        'google',
-        'openai',
-        'anthropic',
+describe('extractSelectedModels', () => {
+  describe('all models patterns', () => {
+    it('returns default models for "use all LLMs"', () => {
+      expect(extractSelectedModels('use all LLMs for this research')).toEqual([
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
 
-    it('returns all LLMs for "use all models"', () => {
-      expect(extractSelectedLlms('use all models')).toEqual(['google', 'openai', 'anthropic']);
-    });
-
-    it('returns all LLMs for Polish "użyj wszystkich"', () => {
-      expect(extractSelectedLlms('użyj wszystkich modeli')).toEqual([
-        'google',
-        'openai',
-        'anthropic',
+    it('returns default models for "use all models"', () => {
+      expect(extractSelectedModels('use all models')).toEqual([
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
 
-    it('returns all LLMs for Polish "wszystkie modele"', () => {
-      expect(extractSelectedLlms('chcę wszystkie modele')).toEqual([
-        'google',
-        'openai',
-        'anthropic',
+    it('returns default models for Polish "użyj wszystkich"', () => {
+      expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'gpt-5.2',
+        'sonar-pro',
+      ]);
+    });
+
+    it('returns default models for Polish "wszystkie modele"', () => {
+      expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
   });
 
-  describe('specific LLM keywords', () => {
-    it('extracts google for "gemini"', () => {
-      expect(extractSelectedLlms('use gemini for this')).toEqual(['google']);
+  describe('specific model keywords', () => {
+    it('extracts gemini-2.5-flash for "gemini"', () => {
+      expect(extractSelectedModels('use gemini for this')).toEqual(['gemini-2.5-flash']);
     });
 
-    it('extracts openai for "gpt"', () => {
-      expect(extractSelectedLlms('ask gpt about this')).toEqual(['openai']);
+    it('extracts gpt-5.2 for "gpt"', () => {
+      expect(extractSelectedModels('ask gpt about this')).toEqual(['gpt-5.2']);
     });
 
-    it('extracts openai for "chatgpt"', () => {
-      expect(extractSelectedLlms('ask chatgpt about this')).toEqual(['openai']);
+    it('extracts gpt-5.2 for "chatgpt"', () => {
+      expect(extractSelectedModels('ask chatgpt about this')).toEqual(['gpt-5.2']);
     });
 
-    it('extracts anthropic for "claude"', () => {
-      expect(extractSelectedLlms('use claude for research')).toEqual(['anthropic']);
+    it('extracts claude-sonnet model for "claude"', () => {
+      expect(extractSelectedModels('use claude for research')).toEqual([
+        'claude-sonnet-4-5-20250929',
+      ]);
     });
 
-    it('extracts multiple LLMs', () => {
-      const result = extractSelectedLlms('use gpt and claude for this');
-      expect(result).toContain('openai');
-      expect(result).toContain('anthropic');
+    it('extracts multiple models', () => {
+      const result = extractSelectedModels('use gpt and claude for this');
+      expect(result).toContain('gpt-5.2');
+      expect(result).toContain('claude-sonnet-4-5-20250929');
     });
 
-    it('extracts all three LLMs when mentioned', () => {
-      const result = extractSelectedLlms('compare gemini, gpt and claude');
-      expect(result).toContain('google');
-      expect(result).toContain('openai');
-      expect(result).toContain('anthropic');
+    it('extracts multiple models when mentioned', () => {
+      const result = extractSelectedModels('compare gemini, gpt and claude');
+      expect(result).toContain('gemini-2.5-flash');
+      expect(result).toContain('gpt-5.2');
+      expect(result).toContain('claude-sonnet-4-5-20250929');
     });
   });
 
   describe('no match', () => {
-    it('returns undefined when no LLM mentioned', () => {
-      expect(extractSelectedLlms('research this topic')).toBeUndefined();
+    it('returns undefined when no model mentioned', () => {
+      expect(extractSelectedModels('research this topic')).toBeUndefined();
     });
 
     it('returns undefined for empty string', () => {
-      expect(extractSelectedLlms('')).toBeUndefined();
+      expect(extractSelectedModels('')).toBeUndefined();
     });
   });
 });

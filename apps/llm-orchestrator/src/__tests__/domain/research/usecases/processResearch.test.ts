@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
+import { err, ok, type ResearchContext } from '@intexuraos/common-core';
 import {
   processResearch,
   type ProcessResearchDeps,
@@ -27,6 +27,7 @@ function createMockDeps(): ProcessResearchDeps & {
   };
   mockTitleGenerator: {
     generateTitle: ReturnType<typeof vi.fn>;
+    generateContextLabel: ReturnType<typeof vi.fn>;
   };
   mockReportSuccess: ReturnType<typeof vi.fn>;
 } {
@@ -46,6 +47,7 @@ function createMockDeps(): ProcessResearchDeps & {
 
   const mockTitleGenerator = {
     generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    generateContextLabel: vi.fn().mockResolvedValue(ok('Generated Label')),
   };
 
   const mockReportSuccess = vi.fn();
@@ -70,8 +72,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'pending',
-    selectedLlms: ['google', 'openai'],
-    synthesisLlm: 'google',
+    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+    synthesisModel: 'gemini-2.5-pro',
     llmResults: [
       { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
       { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
@@ -133,11 +135,11 @@ describe('processResearch', () => {
 
     expect(deps.mockTitleGenerator.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Generated Title' });
-    expect(deps.mockReportSuccess).toHaveBeenCalledWith('google');
+    expect(deps.mockReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
   });
 
   it('uses synthesizer for title generation when titleGenerator not provided', async () => {
-    const research = createTestResearch({ synthesisLlm: 'anthropic' });
+    const research = createTestResearch({ synthesisModel: 'claude-opus-4-5-20251101' });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     const mockSynthesizer = {
@@ -158,7 +160,7 @@ describe('processResearch', () => {
 
     expect(mockSynthesizer.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Synthesizer Title' });
-    expect(mockReportSuccess).toHaveBeenCalledWith('anthropic');
+    expect(mockReportSuccess).toHaveBeenCalledWith('claude-opus-4-5-20251101');
   });
 
   it('does not update title when title generation fails', async () => {
@@ -177,8 +179,15 @@ describe('processResearch', () => {
     expect(deps.mockReportSuccess).not.toHaveBeenCalled();
   });
 
-  it('publishes LLM call for each selected provider', async () => {
-    const research = createTestResearch({ selectedLlms: ['google', 'openai', 'anthropic'] });
+  it('publishes LLM call for each pending provider', async () => {
+    const research = createTestResearch({
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+      ],
+    });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     await processResearch('research-1', deps);
@@ -188,34 +197,100 @@ describe('processResearch', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'google',
+      model: 'gemini-2.0-flash',
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'openai',
+      model: 'o4-mini-deep-research',
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
       prompt: 'Test research prompt',
     });
   });
 
-  it('publishes in order of selectedLlms', async () => {
-    const research = createTestResearch({ selectedLlms: ['anthropic', 'google'] });
+  it('publishes in order of llmResults', async () => {
+    const research = createTestResearch({
+      selectedModels: ['claude-sonnet-4-5-20250929', 'gemini-2.5-flash'],
+      llmResults: [
+        { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', status: 'pending' },
+        { provider: 'google', model: 'gemini-2.5-flash', status: 'pending' },
+      ],
+    });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     await processResearch('research-1', deps);
 
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
-    expect(calls[0]?.[0].provider).toBe('anthropic');
-    expect(calls[1]?.[0].provider).toBe('google');
+    expect(calls[0]?.[0].model).toBe('claude-sonnet-4-5-20250929');
+    expect(calls[1]?.[0].model).toBe('gemini-2.5-flash');
+  });
+
+  it('skips already completed llmResults', async () => {
+    const research = createTestResearch({
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      llmResults: [
+        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Existing' },
+        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    await processResearch('research-1', deps);
+
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
+    expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gemini-2.0-flash' })
+    );
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'o4-mini-deep-research' })
+    );
+    expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'claude-sonnet-4-20250514' })
+    );
+  });
+
+  it('triggers synthesis when all results already completed', async () => {
+    const research = createTestResearch({
+      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+      llmResults: [
+        {
+          provider: 'google',
+          model: 'gemini-2.0-flash',
+          status: 'completed',
+          result: 'Google result',
+        },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'completed',
+          result: 'OpenAI result',
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await processResearch('research-1', deps);
+
+    expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalled();
+    expect(result.triggerSynthesis).toBe(true);
+  });
+
+  it('does not trigger synthesis when pending results exist', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await processResearch('research-1', deps);
+
+    expect(result.triggerSynthesis).toBe(false);
   });
 
   it('works without optional dependencies', async () => {
@@ -237,6 +312,27 @@ describe('processResearch', () => {
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
   });
 
+  it('generates title without reportLlmSuccess callback', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const depsWithoutCallback: ProcessResearchDeps = {
+      researchRepo: deps.researchRepo,
+      llmCallPublisher: deps.llmCallPublisher,
+      logger: mockLogger,
+      titleGenerator: {
+        generateTitle: vi.fn().mockResolvedValue(ok('Title Without Callback')),
+        generateContextLabel: vi.fn().mockResolvedValue(ok('Label Without Callback')),
+      },
+    };
+
+    await processResearch('research-1', depsWithoutCallback);
+
+    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+      title: 'Title Without Callback',
+    });
+  });
+
   it('returns immediately after dispatching (does not wait for LLM results)', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -247,5 +343,149 @@ describe('processResearch', () => {
 
     expect(duration).toBeLessThan(100);
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
+  });
+
+  describe('context inference', () => {
+    const mockResearchContext: ResearchContext = {
+      language: 'en',
+      domain: 'travel',
+      mode: 'standard',
+      intent_summary: 'User wants travel info',
+      defaults_applied: [],
+      assumptions: [],
+      answer_style: ['practical'],
+      time_scope: {
+        as_of_date: '2024-01-01',
+        prefers_recent_years: 2,
+        is_time_sensitive: false,
+      },
+      locale_scope: {
+        country_or_region: 'United States',
+        jurisdiction: 'United States',
+        currency: 'USD',
+      },
+      research_plan: {
+        key_questions: ['What are the best destinations?'],
+        search_queries: ['travel destinations'],
+        preferred_source_types: ['official'],
+        avoid_source_types: ['random_blogs'],
+      },
+      output_format: {
+        wants_table: false,
+        wants_steps: false,
+        wants_pros_cons: false,
+        wants_budget_numbers: false,
+      },
+      safety: {
+        high_stakes: false,
+        required_disclaimers: [],
+      },
+      red_flags: [],
+    };
+
+    it('infers and stores research context when contextInferrer is provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const localReportSuccess = vi.fn();
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+        reportLlmSuccess: localReportSuccess,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalledWith('Test research prompt');
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        researchContext: mockResearchContext,
+      });
+      expect(localReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
+    });
+
+    it('logs warning when context inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed to infer context' })),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ researchId: 'research-1' }),
+        '[2.4.2] Context inference failed, proceeding without context'
+      );
+    });
+
+    it('does not call reportLlmSuccess when context inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed' })),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const localMockReportSuccess = vi.fn();
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+        reportLlmSuccess: localMockReportSuccess,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(localMockReportSuccess).not.toHaveBeenCalledWith('gemini-2.5-flash');
+    });
+
+    it('skips reportLlmSuccess when callback not provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const depsWithoutCallback: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+      };
+
+      await processResearch('research-1', depsWithoutCallback);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        researchContext: mockResearchContext,
+      });
+    });
   });
 });

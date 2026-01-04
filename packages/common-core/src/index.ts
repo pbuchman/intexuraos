@@ -22,5 +22,20 @@ export {
   buildResearchPrompt,
   buildSynthesisPrompt,
   type SynthesisReport,
-  type ExternalReport,
+  type AdditionalSource,
+  // Context inference module
+  buildInferResearchContextPrompt,
+  buildInferSynthesisContextPrompt,
+  isResearchContext,
+  isSynthesisContext,
+  type ResearchContext,
+  type SynthesisContext,
+  type InferResearchContextOptions,
+  type InferSynthesisContextParams,
+  type LlmReport,
+  type Domain,
+  type Mode,
 } from './prompts/index.js';
+
+// Logger interface for adapters
+export type { Logger } from './logging.js';

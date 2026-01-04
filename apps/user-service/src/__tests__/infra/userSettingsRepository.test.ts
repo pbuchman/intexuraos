@@ -27,7 +27,6 @@ function createTestSettings(overrides: Partial<UserSettings> = {}): UserSettings
   const now = new Date().toISOString();
   return {
     userId: 'user-123',
-    researchSettings: { searchMode: 'deep' },
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -59,9 +58,7 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('returns settings for existing user', async () => {
-      const settings = createTestSettings({
-        researchSettings: { searchMode: 'quick' },
-      });
+      const settings = createTestSettings();
       await repo.saveSettings(settings);
 
       const result = await repo.getSettings('user-123');
@@ -69,7 +66,6 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.userId).toBe('user-123');
-        expect(result.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -126,9 +122,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('saveSettings', () => {
     it('saves new settings', async () => {
-      const settings = createTestSettings({
-        researchSettings: { searchMode: 'quick' },
-      });
+      const settings = createTestSettings();
 
       const result = await repo.saveSettings(settings);
 
@@ -141,7 +135,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
+        expect(stored.value.userId).toBe('user-123');
       }
     });
 
@@ -183,7 +177,6 @@ describe('FirestoreUserSettingsRepository', () => {
         response: 'Hello from GPT!',
       };
       const initialSettings = createTestSettings({
-        researchSettings: { searchMode: 'deep' },
         llmTestResults: { openai: testResult },
       });
       await repo.saveSettings(initialSettings);
@@ -192,9 +185,8 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(getResult.ok).toBe(true);
       const existingSettings = (getResult as { ok: true; value: typeof initialSettings }).value;
 
-      const updatedSettings = {
+      const updatedSettings: UserSettings = {
         ...existingSettings,
-        researchSettings: { searchMode: 'quick' as const },
         updatedAt: new Date().toISOString(),
       };
       await repo.saveSettings(updatedSettings);
@@ -202,7 +194,6 @@ describe('FirestoreUserSettingsRepository', () => {
       const result = await repo.getSettings('user-123');
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.researchSettings?.searchMode).toBe('quick');
         expect(result.value.llmTestResults?.openai?.response).toBe('Hello from GPT!');
       }
     });
@@ -221,16 +212,11 @@ describe('FirestoreUserSettingsRepository', () => {
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
         expect(stored.value.llmApiKeys?.google).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('deep');
       }
     });
 
     it('updates existing settings document', async () => {
-      await repo.saveSettings(
-        createTestSettings({
-          researchSettings: { searchMode: 'quick' },
-        })
-      );
+      await repo.saveSettings(createTestSettings());
 
       const encryptedKey = createEncryptedValue('anthropic-key');
       const result = await repo.updateLlmApiKey('user-123', 'anthropic', encryptedKey);
@@ -241,7 +227,6 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmApiKeys?.anthropic).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -327,11 +312,7 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('updates existing settings document', async () => {
-      await repo.saveSettings(
-        createTestSettings({
-          researchSettings: { searchMode: 'quick' },
-        })
-      );
+      await repo.saveSettings(createTestSettings());
 
       const testResult: LlmTestResult = {
         testedAt: new Date().toISOString(),
@@ -346,7 +327,6 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.response).toBe('OpenAI response');
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 
@@ -382,11 +362,7 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('updates testedAt for existing settings document', async () => {
-      await repo.saveSettings(
-        createTestSettings({
-          researchSettings: { searchMode: 'quick' },
-        })
-      );
+      await repo.saveSettings(createTestSettings());
 
       const result = await repo.updateLlmLastUsed('user-123', 'openai');
 
@@ -396,7 +372,6 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
-        expect(stored.value.researchSettings?.searchMode).toBe('quick');
       }
     });
 

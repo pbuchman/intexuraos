@@ -2,25 +2,25 @@
  * JSON schemas for research endpoints.
  */
 
-import { llmProviderSchema, researchSchema } from './common.js';
+import { researchSchema, supportedModelSchema } from './common.js';
 
 export const createResearchBodySchema = {
   type: 'object',
-  required: ['prompt', 'selectedLlms'],
+  required: ['prompt', 'selectedModels'],
   properties: {
     prompt: {
       type: 'string',
       minLength: 10,
       maxLength: 20000,
     },
-    selectedLlms: {
+    selectedModels: {
       type: 'array',
-      items: llmProviderSchema,
+      items: supportedModelSchema,
       minItems: 1,
-      maxItems: 3,
+      maxItems: 6,
     },
-    synthesisLlm: llmProviderSchema,
-    externalReports: {
+    synthesisModel: supportedModelSchema,
+    inputContexts: {
       type: 'array',
       items: {
         type: 'object',
@@ -30,7 +30,7 @@ export const createResearchBodySchema = {
             type: 'string',
             maxLength: 60000,
           },
-          model: {
+          label: {
             type: 'string',
             maxLength: 100,
           },
@@ -41,7 +41,7 @@ export const createResearchBodySchema = {
     },
     skipSynthesis: {
       type: 'boolean',
-      description: 'Skip synthesis step (for single-provider research without input context)',
+      description: 'Skip synthesis step (for single-model research without input context)',
     },
   },
 } as const;
@@ -154,13 +154,13 @@ export const saveDraftBodySchema = {
       minLength: 1,
       maxLength: 20000,
     },
-    selectedLlms: {
+    selectedModels: {
       type: 'array',
-      items: llmProviderSchema,
-      maxItems: 3,
+      items: supportedModelSchema,
+      maxItems: 6,
     },
-    synthesisLlm: llmProviderSchema,
-    externalReports: {
+    synthesisModel: supportedModelSchema,
+    inputContexts: {
       type: 'array',
       items: {
         type: 'object',
@@ -170,7 +170,7 @@ export const saveDraftBodySchema = {
             type: 'string',
             maxLength: 60000,
           },
-          model: {
+          label: {
             type: 'string',
             maxLength: 100,
           },
@@ -250,13 +250,65 @@ export const retryFromFailedResponseSchema = {
           enum: ['retried_llms', 'retried_synthesis', 'already_completed'],
         },
         message: { type: 'string' },
-        retriedProviders: {
+        retriedModels: {
           type: 'array',
           items: { type: 'string' },
           nullable: true,
         },
       },
     },
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;
+
+export const enhanceResearchBodySchema = {
+  type: 'object',
+  properties: {
+    additionalModels: {
+      type: 'array',
+      items: supportedModelSchema,
+      maxItems: 6,
+      description: 'Additional models to run research with',
+    },
+    additionalContexts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: {
+            type: 'string',
+            maxLength: 60000,
+          },
+          label: {
+            type: 'string',
+            maxLength: 100,
+          },
+        },
+      },
+      maxItems: 5,
+      description: 'Additional custom sources/contexts to include',
+    },
+    synthesisModel: supportedModelSchema,
+    removeContextIds: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'IDs of existing contexts to remove',
+    },
+  },
+} as const;
+
+export const enhanceResearchResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: researchSchema,
     diagnostics: {
       type: 'object',
       properties: {

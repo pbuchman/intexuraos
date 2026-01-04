@@ -2,7 +2,15 @@
  * Fake implementations for testing.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import {
+  err,
+  ok,
+  type InferResearchContextOptions,
+  type InferSynthesisContextParams,
+  type ResearchContext,
+  type Result,
+  type SynthesisContext,
+} from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmPricing,
@@ -11,19 +19,19 @@ import type {
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
+  LlmUsageIncrement,
+  LlmUsageStats,
   NotificationError,
   PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
   TitleGenerator,
+  UsageStatsRepository,
 } from '../domain/research/index.js';
-import type {
-  DecryptedApiKeys,
-  ResearchSettings,
-  UserServiceClient,
-  UserServiceError,
-} from '../infra/user/index.js';
+import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
+import type { LlmUsageTracker, TrackLlmCallParams } from '../services.js';
+import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
 
@@ -88,14 +96,14 @@ export class FakeResearchRepository implements ResearchRepository {
 
   async updateLlmResult(
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>> {
     const existing = this.researches.get(researchId);
     if (existing === undefined) {
       return err({ code: 'NOT_FOUND', message: 'Research not found' });
     }
-    const llmIndex = existing.llmResults.findIndex((r) => r.provider === provider);
+    const llmIndex = existing.llmResults.findIndex((r) => r.model === model);
     if (llmIndex >= 0) {
       const llmResult = existing.llmResults[llmIndex];
       if (llmResult !== undefined) {
@@ -161,7 +169,6 @@ export class FakeResearchRepository implements ResearchRepository {
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
-  private researchSettings = new Map<string, ResearchSettings>();
   private failNextGetApiKeys = false;
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
@@ -173,11 +180,6 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(keys);
   }
 
-  async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
-    const settings = this.researchSettings.get(userId) ?? { searchMode: 'deep' };
-    return ok(settings);
-  }
-
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
     // Best effort - do nothing in tests
   }
@@ -187,17 +189,12 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.apiKeys.set(userId, keys);
   }
 
-  setResearchSettings(userId: string, settings: ResearchSettings): void {
-    this.researchSettings.set(userId, settings);
-  }
-
   setFailNextGetApiKeys(fail: boolean): void {
     this.failNextGetApiKeys = fail;
   }
 
   clear(): void {
     this.apiKeys.clear();
-    this.researchSettings.clear();
   }
 }
 
@@ -245,7 +242,7 @@ export class FakeNotificationSender implements NotificationSender {
   private sentFailures: {
     userId: string;
     researchId: string;
-    provider: LlmProvider;
+    model: string;
     error: string;
   }[] = [];
 
@@ -262,10 +259,10 @@ export class FakeNotificationSender implements NotificationSender {
   async sendLlmFailure(
     userId: string,
     researchId: string,
-    provider: LlmProvider,
+    model: string,
     error: string
   ): Promise<Result<void, NotificationError>> {
-    this.sentFailures.push({ userId, researchId, provider, error });
+    this.sentFailures.push({ userId, researchId, model, error });
     return ok(undefined);
   }
 
@@ -281,7 +278,7 @@ export class FakeNotificationSender implements NotificationSender {
   getSentFailures(): {
     userId: string;
     researchId: string;
-    provider: LlmProvider;
+    model: string;
     error: string;
   }[] {
     return [...this.sentFailures];
@@ -312,6 +309,7 @@ export function createFakeLlmProviders(): Record<LlmProvider, LlmResearchProvide
     google: createFakeLlmResearchProvider('Google research result'),
     openai: createFakeLlmResearchProvider('OpenAI research result'),
     anthropic: createFakeLlmResearchProvider('Anthropic research result'),
+    perplexity: createFakeLlmResearchProvider('Perplexity research result'),
   };
 }
 
@@ -326,7 +324,8 @@ export function createFakeSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _externalReports?: { content: string; model?: string }[]
+      _additionalSources?: { content: string; label?: string }[],
+      _synthesisContext?: SynthesisContext
     ): Promise<Result<string, LlmError>> {
       return ok(synthesisResult);
     },
@@ -346,7 +345,8 @@ export function createFailingSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _externalReports?: { content: string; model?: string }[]
+      _additionalSources?: { content: string; label?: string }[],
+      _synthesisContext?: SynthesisContext
     ): Promise<Result<string, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
@@ -359,10 +359,16 @@ export function createFailingSynthesizer(
 /**
  * Create a fake TitleGenerator for testing.
  */
-export function createFakeTitleGenerator(title = 'Generated Title'): TitleGenerator {
+export function createFakeTitleGenerator(
+  title = 'Generated Title',
+  contextLabel = 'Generated Label'
+): TitleGenerator {
   return {
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
       return ok(title);
+    },
+    async generateContextLabel(_content: string): Promise<Result<string, LlmError>> {
+      return ok(contextLabel);
     },
   };
 }
@@ -375,7 +381,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }[] = [];
   private failNextPublish = false;
@@ -384,7 +390,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }): Promise<Result<void, { code: 'PUBLISH_FAILED'; message: string }>> {
     if (this.failNextPublish) {
@@ -399,7 +405,7 @@ export class FakeLlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    provider: LlmProvider;
+    model: string;
     prompt: string;
   }[] {
     return [...this.publishedEvents];
@@ -440,5 +446,176 @@ export class FakePricingRepository implements PricingRepository {
 
   clear(): void {
     this.pricing.clear();
+  }
+}
+
+export class FakeUsageStatsRepository implements UsageStatsRepository {
+  private stats = new Map<string, LlmUsageStats>();
+
+  async increment(data: LlmUsageIncrement): Promise<void> {
+    const key = `${data.provider}_${data.model}_${data.callType}_total`;
+    const existing = this.stats.get(key);
+
+    if (existing !== undefined) {
+      this.stats.set(key, {
+        ...existing,
+        calls: existing.calls + 1,
+        successfulCalls: existing.successfulCalls + (data.success ? 1 : 0),
+        failedCalls: existing.failedCalls + (data.success ? 0 : 1),
+        inputTokens: existing.inputTokens + data.inputTokens,
+        outputTokens: existing.outputTokens + data.outputTokens,
+        totalTokens: existing.totalTokens + data.inputTokens + data.outputTokens,
+        costUsd: existing.costUsd + data.costUsd,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+    } else {
+      this.stats.set(key, {
+        provider: data.provider,
+        model: data.model,
+        callType: data.callType,
+        period: 'total',
+        calls: 1,
+        successfulCalls: data.success ? 1 : 0,
+        failedCalls: data.success ? 0 : 1,
+        inputTokens: data.inputTokens,
+        outputTokens: data.outputTokens,
+        totalTokens: data.inputTokens + data.outputTokens,
+        costUsd: data.costUsd,
+        lastUpdatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  async getAllTotals(): Promise<LlmUsageStats[]> {
+    return Array.from(this.stats.values()).filter((s) => s.period === 'total');
+  }
+
+  async getByPeriod(period: string): Promise<LlmUsageStats[]> {
+    return Array.from(this.stats.values()).filter((s) => s.period === period);
+  }
+
+  getAll(): LlmUsageStats[] {
+    return Array.from(this.stats.values());
+  }
+
+  clear(): void {
+    this.stats.clear();
+  }
+}
+
+/**
+ * Create a fake ContextInferenceProvider for testing.
+ */
+export function createFakeContextInferrer(): ContextInferenceProvider {
+  const defaultResearchContext: ResearchContext = {
+    language: 'en',
+    domain: 'general',
+    mode: 'standard',
+    intent_summary: 'General research query',
+    defaults_applied: [],
+    assumptions: [],
+    answer_style: ['practical'],
+    time_scope: {
+      as_of_date: new Date().toISOString().split('T')[0] ?? '',
+      prefers_recent_years: 2,
+      is_time_sensitive: false,
+    },
+    locale_scope: {
+      country_or_region: 'United States',
+      jurisdiction: 'United States',
+      currency: 'USD',
+    },
+    research_plan: {
+      key_questions: ['What are the main aspects?'],
+      search_queries: ['general query'],
+      preferred_source_types: ['official', 'academic'],
+      avoid_source_types: ['random_blogs'],
+    },
+    output_format: {
+      wants_table: false,
+      wants_steps: false,
+      wants_pros_cons: false,
+      wants_budget_numbers: false,
+    },
+    safety: {
+      high_stakes: false,
+      required_disclaimers: [],
+    },
+    red_flags: [],
+  };
+
+  const defaultSynthesisContext: SynthesisContext = {
+    language: 'en',
+    domain: 'general',
+    mode: 'standard',
+    synthesis_goals: ['merge', 'summarize'],
+    missing_sections: [],
+    detected_conflicts: [],
+    source_preference: {
+      prefer_official_over_aggregators: true,
+      prefer_recent_when_time_sensitive: true,
+    },
+    defaults_applied: [],
+    assumptions: [],
+    output_format: {
+      wants_table: false,
+      wants_actionable_summary: true,
+    },
+    safety: {
+      high_stakes: false,
+      required_disclaimers: [],
+    },
+    red_flags: [],
+  };
+
+  return {
+    async inferResearchContext(
+      _userQuery: string,
+      _opts?: InferResearchContextOptions
+    ): Promise<Result<ResearchContext, LlmError>> {
+      return ok(defaultResearchContext);
+    },
+    async inferSynthesisContext(
+      _params: InferSynthesisContextParams
+    ): Promise<Result<SynthesisContext, LlmError>> {
+      return ok(defaultSynthesisContext);
+    },
+  };
+}
+
+/**
+ * Create a fake ContextInferenceProvider that always fails for testing error paths.
+ */
+export function createFailingContextInferrer(
+  errorMessage = 'Test context inference failure'
+): ContextInferenceProvider {
+  return {
+    async inferResearchContext(
+      _userQuery: string,
+      _opts?: InferResearchContextOptions
+    ): Promise<Result<ResearchContext, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+    async inferSynthesisContext(
+      _params: InferSynthesisContextParams
+    ): Promise<Result<SynthesisContext, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+  };
+}
+
+export class FakeLlmUsageTracker implements LlmUsageTracker {
+  private trackedCalls: TrackLlmCallParams[] = [];
+
+  track(params: TrackLlmCallParams): void {
+    this.trackedCalls.push(params);
+  }
+
+  getTrackedCalls(): TrackLlmCallParams[] {
+    return [...this.trackedCalls];
+  }
+
+  clear(): void {
+    this.trackedCalls = [];
   }
 }

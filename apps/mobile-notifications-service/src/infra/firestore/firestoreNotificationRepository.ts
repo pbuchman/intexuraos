@@ -126,56 +126,83 @@ export class FirestoreNotificationRepository implements NotificationRepository {
   ): Promise<Result<PaginatedNotifications, RepositoryError>> {
     try {
       const db = getFirestore();
-      let query = db.collection(COLLECTION_NAME).where('userId', '==', userId);
+      const titleFilter = options.filter?.title?.toLowerCase();
+      const hasTitleFilter = titleFilter !== undefined && titleFilter !== '';
 
-      // Apply filters if provided (arrays use 'in' operator)
-      if (options.filter?.source !== undefined && options.filter.source.length > 0) {
-        query = query.where('source', 'in', options.filter.source);
-      }
-      if (options.filter?.app !== undefined && options.filter.app.length > 0) {
-        query = query.where('app', 'in', options.filter.app);
-      }
+      // Build base query with DB-level filters
+      const buildQuery = (cursor?: string): FirebaseFirestore.Query => {
+        let query: FirebaseFirestore.Query = db
+          .collection(COLLECTION_NAME)
+          .where('userId', '==', userId);
 
-      query = query.orderBy('receivedAt', 'desc');
+        if (options.filter?.source !== undefined && options.filter.source.length > 0) {
+          query = query.where('source', 'in', options.filter.source);
+        }
+        if (options.filter?.app !== undefined && options.filter.app.length > 0) {
+          query = query.where('app', 'in', options.filter.app);
+        }
 
-      // Apply cursor if provided - uses receivedAt for pagination
-      const cursorData = decodeCursor(options.cursor);
-      if (cursorData !== undefined) {
-        query = query.startAfter(cursorData.receivedAt);
-      }
+        query = query.orderBy('receivedAt', 'desc');
 
-      // Fetch one extra to determine if there are more results
-      const snapshot = await query.limit(options.limit + 1).get();
+        const cursorData = decodeCursor(cursor);
+        if (cursorData !== undefined) {
+          query = query.startAfter(cursorData.receivedAt);
+        }
 
-      const docs = snapshot.docs;
-      const hasMore = docs.length > options.limit;
+        return query;
+      };
 
-      // Take only the requested number of results
-      const resultDocs = hasMore ? docs.slice(0, options.limit) : docs;
+      const notifications: Notification[] = [];
+      let currentCursor = options.cursor;
+      let hasMoreInDb = true;
 
-      let notifications: Notification[] = resultDocs.map((docSnap) => {
-        const data = docSnap.data() as NotificationDoc;
-        return {
-          id: docSnap.id,
-          ...data,
-        };
-      });
+      // Safety limit to prevent infinite loops (max 5 batches = 5x reads)
+      const maxIterations = hasTitleFilter ? 5 : 1;
+      let iterations = 0;
 
-      // Apply title filter in memory (case-insensitive partial match)
-      if (options.filter?.title !== undefined) {
-        const titleFilter = options.filter.title.toLowerCase();
-        notifications = notifications.filter((n) => n.title.toLowerCase().includes(titleFilter));
+      while (notifications.length < options.limit && hasMoreInDb && iterations < maxIterations) {
+        iterations++;
+
+        const query = buildQuery(currentCursor);
+        const batchSize = hasTitleFilter ? options.limit * 2 : options.limit + 1;
+        const snapshot = await query.limit(batchSize).get();
+
+        const docs = snapshot.docs;
+        hasMoreInDb = docs.length === batchSize;
+
+        for (const docSnap of docs) {
+          if (notifications.length >= options.limit) {
+            hasMoreInDb = true;
+            break;
+          }
+
+          const data = docSnap.data() as NotificationDoc;
+          const notification: Notification = { id: docSnap.id, ...data };
+
+          // Apply title filter in memory
+          if (hasTitleFilter && !notification.title.toLowerCase().includes(titleFilter)) {
+            continue;
+          }
+
+          notifications.push(notification);
+        }
+
+        // Update cursor for next iteration (tracks DB position, not filtered results)
+        if (docs.length > 0) {
+          const lastDoc = docs[docs.length - 1];
+          if (lastDoc !== undefined) {
+            const lastData = lastDoc.data() as NotificationDoc;
+            currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
+          }
+        }
       }
 
       const result: PaginatedNotifications = { notifications };
 
-      // Set next cursor if there are more results
-      if (hasMore && resultDocs.length > 0) {
-        const lastDoc = resultDocs[resultDocs.length - 1];
-        if (lastDoc !== undefined) {
-          const lastData = lastDoc.data() as NotificationDoc;
-          result.nextCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
-        }
+      // Set next cursor if there might be more results
+      // Use currentCursor (DB position) so user can continue even if 0 results matched filter
+      if (hasMoreInDb && currentCursor !== undefined) {
+        result.nextCursor = currentCursor;
       }
 
       return ok(result);

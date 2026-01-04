@@ -157,7 +157,7 @@ export function createProcessCommandUseCase(deps: {
             type: classification.type,
             confidence: classification.confidence,
             title: classification.title,
-            payload: {},
+            payload: { prompt: input.text },
           });
 
           if (!actionResult.ok) {
@@ -168,7 +168,10 @@ export function createProcessCommandUseCase(deps: {
               },
               'Failed to create action via actions-agent'
             );
-            throw actionResult.error;
+            command.status = 'failed';
+            command.failureReason = actionResult.error.message;
+            await commandRepository.update(command);
+            return { command, isNew: true };
           }
 
           const action = actionResult.value;
@@ -182,8 +185,8 @@ export function createProcessCommandUseCase(deps: {
             prompt: input.text,
             confidence: classification.confidence,
           };
-          if (classification.selectedLlms !== undefined) {
-            eventPayload.selectedLlms = classification.selectedLlms;
+          if (classification.selectedModels !== undefined) {
+            eventPayload.selectedModels = classification.selectedModels;
           }
 
           const event: ActionCreatedEvent = {

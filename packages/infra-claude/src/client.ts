@@ -9,7 +9,6 @@ import {
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient } from '@intexuraos/llm-contract';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
-import { CLAUDE_DEFAULTS } from './types.js';
 
 export type ClaudeClient = LLMClient;
 
@@ -51,7 +50,13 @@ async function logSuccess(
   startTime: Date,
   response: string,
   auditContext: AuditContext,
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens?: number;
+    cacheReadTokens?: number;
+    webSearchCalls?: number;
+  }
 ): Promise<void> {
   // eslint-disable-next-line no-console
   console.info(
@@ -63,6 +68,9 @@ async function logSuccess(
       responsePreview: response.slice(0, 200),
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
+      cacheCreationTokens: usage?.cacheCreationTokens,
+      cacheReadTokens: usage?.cacheReadTokens,
+      webSearchCalls: usage?.webSearchCalls,
     })
   );
 
@@ -70,6 +78,15 @@ async function logSuccess(
   if (usage !== undefined) {
     auditParams.inputTokens = usage.inputTokens;
     auditParams.outputTokens = usage.outputTokens;
+    if (usage.cacheCreationTokens !== undefined) {
+      auditParams.cacheCreationTokens = usage.cacheCreationTokens;
+    }
+    if (usage.cacheReadTokens !== undefined) {
+      auditParams.cacheReadTokens = usage.cacheReadTokens;
+    }
+    if (usage.webSearchCalls !== undefined) {
+      auditParams.webSearchCalls = usage.webSearchCalls;
+    }
   }
   await auditContext.success(auditParams);
 }
@@ -98,22 +115,20 @@ async function logError(
 
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const defaultModel = config.defaultModel ?? CLAUDE_DEFAULTS.defaultModel;
-  const evaluateModel = config.evaluateModel ?? CLAUDE_DEFAULTS.evaluateModel;
-  const researchModel = config.researchModel ?? CLAUDE_DEFAULTS.researchModel;
+  const { model } = config;
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
       const researchPrompt = buildResearchPrompt(prompt);
       const { requestId, startTime, auditContext } = createRequestContext(
         'research',
-        researchModel,
+        model,
         researchPrompt
       );
 
       try {
         const response = await client.messages.create({
-          model: researchModel,
+          model,
           max_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: researchPrompt }],
           tools: [
@@ -130,10 +145,25 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
         const content = textBlocks.map((b) => b.text).join('\n\n');
         const sources = extractSourcesFromClaudeResponse(response);
-        const usage = {
+        const webSearchCalls = countWebSearchCalls(response);
+        const cacheCreationTokens = (response.usage as { cache_creation_input_tokens?: number })
+          .cache_creation_input_tokens;
+        const cacheReadTokens = (response.usage as { cache_read_input_tokens?: number })
+          .cache_read_input_tokens;
+
+        const usage: Parameters<typeof logSuccess>[5] = {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
         };
+        if (cacheCreationTokens !== undefined) {
+          usage.cacheCreationTokens = cacheCreationTokens;
+        }
+        if (cacheReadTokens !== undefined) {
+          usage.cacheReadTokens = cacheReadTokens;
+        }
+        if (webSearchCalls > 0) {
+          usage.webSearchCalls = webSearchCalls;
+        }
 
         await logSuccess('research', requestId, startTime, content, auditContext, usage);
         return ok({ content, sources, usage });
@@ -146,13 +176,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     async generate(prompt: string): Promise<Result<string, ClaudeError>> {
       const { requestId, startTime, auditContext } = createRequestContext(
         'generate',
-        defaultModel,
+        model,
         prompt
       );
 
       try {
         const response = await client.messages.create({
-          model: defaultModel,
+          model,
           max_tokens: MAX_TOKENS,
           messages: [{ role: 'user', content: prompt }],
         });
@@ -166,33 +196,6 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         return ok(text);
       } catch (error) {
         await logError('generate', requestId, startTime, error, auditContext);
-        return err(mapClaudeError(error));
-      }
-    },
-
-    async evaluate(prompt: string): Promise<Result<string, ClaudeError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'evaluate',
-        evaluateModel,
-        prompt
-      );
-
-      try {
-        const response = await client.messages.create({
-          model: evaluateModel,
-          max_tokens: 500,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const textBlocks = response.content.filter(
-          (block): block is Anthropic.TextBlock => block.type === 'text'
-        );
-        const text = textBlocks.map((b) => b.text).join('');
-
-        await logSuccess('evaluate', requestId, startTime, text, auditContext);
-        return ok(text);
-      } catch (error) {
-        await logError('evaluate', requestId, startTime, error, auditContext);
         return err(mapClaudeError(error));
       }
     },
@@ -244,4 +247,14 @@ function extractSourcesFromClaudeResponse(response: Anthropic.Message): string[]
   }
 
   return [...new Set(sources)];
+}
+
+function countWebSearchCalls(response: Anthropic.Message): number {
+  let count = 0;
+  for (const block of response.content) {
+    if (block.type === 'tool_use' && block.name === 'web_search') {
+      count++;
+    }
+  }
+  return count;
 }

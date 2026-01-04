@@ -35,6 +35,13 @@ export function createValidationErrorHandler(): (
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> => {
+    const fastifyError = error as { code?: string };
+    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+      reply.status(400);
+      await reply.fail('INVALID_REQUEST', 'Invalid JSON body');
+      return;
+    }
+
     if (isValidationError(error)) {
       const validation = (
         error as {

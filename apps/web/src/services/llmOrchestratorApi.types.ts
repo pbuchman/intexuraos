@@ -2,7 +2,35 @@
  * LLM Orchestrator types for research management.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic';
+export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+
+export type SupportedModel =
+  | 'gemini-2.5-pro'
+  | 'gemini-2.5-flash'
+  | 'claude-opus-4-5-20251101'
+  | 'claude-sonnet-4-5-20250929'
+  | 'o4-mini-deep-research'
+  | 'gpt-5.2'
+  | 'sonar'
+  | 'sonar-pro'
+  | 'sonar-deep-research';
+
+const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
+  'gemini-2.5-pro': 'google',
+  'gemini-2.5-flash': 'google',
+  'claude-opus-4-5-20251101': 'anthropic',
+  'claude-sonnet-4-5-20250929': 'anthropic',
+  'o4-mini-deep-research': 'openai',
+  'gpt-5.2': 'openai',
+  sonar: 'perplexity',
+  'sonar-pro': 'perplexity',
+  'sonar-deep-research': 'perplexity',
+};
+
+export function getProviderForModel(model: SupportedModel): LlmProvider {
+  return MODEL_TO_PROVIDER[model];
+}
+
 export type ResearchStatus =
   | 'draft'
   | 'pending'
@@ -46,6 +74,7 @@ export interface LlmResult {
 export interface InputContext {
   id: string;
   content: string;
+  label?: string;
   addedAt: string;
 }
 
@@ -68,8 +97,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   inputContexts?: InputContext[];
@@ -88,8 +117,8 @@ export interface Research {
  */
 export interface CreateResearchRequest {
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   inputContexts?: { content: string }[];
   skipSynthesis?: boolean;
 }
@@ -99,8 +128,8 @@ export interface CreateResearchRequest {
  */
 export interface SaveDraftRequest {
   prompt: string;
-  selectedLlms?: LlmProvider[];
-  synthesisLlm?: LlmProvider;
+  selectedModels?: SupportedModel[];
+  synthesisModel?: SupportedModel;
   inputContexts?: { content: string }[];
 }
 
@@ -118,4 +147,21 @@ export interface ListResearchesResponse {
 export interface ConfirmPartialFailureResponse {
   action: PartialFailureDecision;
   message: string;
+}
+
+/**
+ * LLM usage statistics per model.
+ */
+export interface LlmUsageStats {
+  provider: LlmProvider;
+  model: string;
+  period: string;
+  calls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  lastUpdatedAt: string;
 }

@@ -108,6 +108,26 @@ resource "google_compute_backend_bucket" "shared_content" {
   ]
 }
 
+# Backend bucket for generated images (/assets/*)
+resource "google_compute_backend_bucket" "images" {
+  count       = var.enable_load_balancer && var.images_bucket_name != "" ? 1 : 0
+  name        = "intexuraos-images-${var.environment}-backend"
+  project     = var.project_id
+  bucket_name = var.images_bucket_name
+  enable_cdn  = true
+
+  cdn_policy {
+    cache_mode  = "CACHE_ALL_STATIC"
+    default_ttl = 86400
+    max_ttl     = 31536000
+  }
+
+  custom_response_headers = [
+    "X-Content-Type-Options: nosniff",
+    "Cache-Control: public, max-age=31536000, immutable",
+  ]
+}
+
 # URL map for SPA hosting
 # NOTE: This is a simple pass-through URL map. All requests go to the backend bucket.
 # The bucket serves files as-is. For SPA deep links to work:
@@ -160,6 +180,23 @@ resource "google_compute_url_map" "web_app" {
         }
 
         service = google_compute_backend_bucket.shared_content[0].id
+      }
+    }
+
+    # Generated images path rule
+    # Maps /images/xxx.png -> bucket/images/xxx.png
+    dynamic "path_rule" {
+      for_each = var.images_bucket_name != "" ? [1] : []
+      content {
+        paths = ["/images/*"]
+
+        route_action {
+          url_rewrite {
+            path_prefix_rewrite = "/images/"
+          }
+        }
+
+        service = google_compute_backend_bucket.images[0].id
       }
     }
   }

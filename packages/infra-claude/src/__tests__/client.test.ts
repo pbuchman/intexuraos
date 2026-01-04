@@ -30,7 +30,9 @@ vi.mock('@intexuraos/llm-audit', () => ({
 }));
 
 const { createAuditContext } = await import('@intexuraos/llm-audit');
-const { createClaudeClient, CLAUDE_DEFAULTS } = await import('../index.js');
+const { createClaudeClient } = await import('../index.js');
+
+const TEST_MODEL = 'claude-opus-4-5-20251101';
 
 describe('createClaudeClient', () => {
   beforeEach(() => {
@@ -47,7 +49,7 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
@@ -58,7 +60,7 @@ describe('createClaudeClient', () => {
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: CLAUDE_DEFAULTS.researchModel,
+          model: TEST_MODEL,
           tools: expect.arrayContaining([expect.objectContaining({ type: 'web_search_20250305' })]),
         })
       );
@@ -76,7 +78,7 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -98,7 +100,7 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -114,7 +116,7 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -126,7 +128,7 @@ describe('createClaudeClient', () => {
     it('returns error on API failure', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Server error'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -138,7 +140,7 @@ describe('createClaudeClient', () => {
     it('returns INVALID_KEY error on 401', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid API key'));
 
-      const client = createClaudeClient({ apiKey: 'bad-key' });
+      const client = createClaudeClient({ apiKey: 'bad-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -150,7 +152,7 @@ describe('createClaudeClient', () => {
     it('returns RATE_LIMITED error on 429', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(429, 'Rate limited'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -162,7 +164,7 @@ describe('createClaudeClient', () => {
     it('returns OVERLOADED error on 529', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(529, 'Overloaded'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -174,7 +176,7 @@ describe('createClaudeClient', () => {
     it('returns TIMEOUT error on timeout message', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Request timeout'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -186,7 +188,7 @@ describe('createClaudeClient', () => {
     it('handles non-APIError exceptions', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('Network failure'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -203,7 +205,7 @@ describe('createClaudeClient', () => {
         content: [{ type: 'text', text: 'Generated response' }],
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
@@ -212,7 +214,7 @@ describe('createClaudeClient', () => {
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: CLAUDE_DEFAULTS.defaultModel,
+          model: TEST_MODEL,
         })
       );
     });
@@ -225,7 +227,7 @@ describe('createClaudeClient', () => {
         ],
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -237,117 +239,13 @@ describe('createClaudeClient', () => {
     it('returns error on failure', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('Network error'));
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
       }
-    });
-  });
-
-  describe('evaluate', () => {
-    it('returns evaluation result', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Evaluation response.' }],
-      });
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Rate this content');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Evaluation response.');
-      }
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: CLAUDE_DEFAULTS.evaluateModel,
-          max_tokens: 500,
-        })
-      );
-    });
-
-    it('handles empty content array', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [],
-      });
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('');
-      }
-    });
-
-    it('returns error on failure', async () => {
-      mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
-
-      const client = createClaudeClient({ apiKey: 'test-key' });
-      const result = await client.evaluate('Test prompt');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_KEY');
-      }
-    });
-  });
-
-  describe('custom models', () => {
-    it('uses custom researchModel when provided', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Response' }],
-      });
-
-      const client = createClaudeClient({
-        apiKey: 'test-key',
-        researchModel: 'claude-custom-research',
-      });
-      await client.research('Test prompt');
-
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'claude-custom-research',
-        })
-      );
-    });
-
-    it('uses custom defaultModel when provided', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Response' }],
-      });
-
-      const client = createClaudeClient({
-        apiKey: 'test-key',
-        defaultModel: 'claude-custom-default',
-      });
-      await client.generate('Test prompt');
-
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'claude-custom-default',
-        })
-      );
-    });
-
-    it('uses custom evaluateModel when provided', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Response' }],
-      });
-
-      const client = createClaudeClient({
-        apiKey: 'test-key',
-        evaluateModel: 'claude-custom-evaluate',
-      });
-      await client.evaluate('Test prompt');
-
-      expect(mockMessagesCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'claude-custom-evaluate',
-        })
-      );
     });
   });
 
@@ -364,7 +262,7 @@ describe('createClaudeClient', () => {
         error: vi.fn(),
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       await client.research('Test prompt');
 
       expect(createAuditContext).toHaveBeenCalledWith(
@@ -376,6 +274,96 @@ describe('createClaudeClient', () => {
       expect(mockSuccess).toHaveBeenCalled();
     });
 
+    it('includes cache creation tokens when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_creation_input_tokens: 500,
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.cacheCreationTokens).toBe(500);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheCreationTokens: 500,
+        })
+      );
+    });
+
+    it('includes cache read tokens when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 200,
+        },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.cacheReadTokens).toBe(200);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cacheReadTokens: 200,
+        })
+      );
+    });
+
+    it('includes web search calls count when present', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Response' },
+          { type: 'tool_use', name: 'web_search', id: 'id1', input: {} },
+          { type: 'tool_use', name: 'web_search', id: 'id2', input: {} },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockSuccess = vi.fn().mockResolvedValue(undefined);
+      (createAuditContext as unknown as MockInstance).mockReturnValue({
+        success: mockSuccess,
+        error: vi.fn(),
+      });
+
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage?.webSearchCalls).toBe(2);
+      }
+      expect(mockSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchCalls: 2,
+        })
+      );
+    });
+
     it('calls audit context on error', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('API error'));
 
@@ -385,7 +373,7 @@ describe('createClaudeClient', () => {
         error: mockError,
       });
 
-      const client = createClaudeClient({ apiKey: 'test-key' });
+      const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
       await client.research('Test prompt');
 
       expect(mockError).toHaveBeenCalled();

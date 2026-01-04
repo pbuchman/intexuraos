@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import type { SupportedModel } from '@intexuraos/llm-contract';
 import type { ResearchServiceClient } from '../../domain/ports/researchServiceClient.js';
-import type { LlmProvider } from '../../domain/models/actionEvent.js';
 import pino from 'pino';
 
 const logger = pino({
@@ -32,7 +32,7 @@ export function createLlmOrchestratorClient(
       userId: string;
       title: string;
       prompt: string;
-      selectedLlms: LlmProvider[];
+      selectedModels: SupportedModel[];
       sourceActionId?: string;
     }): Promise<Result<{ id: string }>> {
       try {
@@ -40,7 +40,7 @@ export function createLlmOrchestratorClient(
           {
             userId: params.userId,
             title: params.title,
-            selectedLlms: params.selectedLlms,
+            selectedModels: params.selectedModels,
             promptLength: params.prompt.length,
             sourceActionId: params.sourceActionId,
             endpoint: `${config.baseUrl}/internal/research/draft`,
@@ -58,7 +58,7 @@ export function createLlmOrchestratorClient(
             userId: params.userId,
             title: params.title,
             prompt: params.prompt,
-            selectedLlms: params.selectedLlms,
+            selectedModels: params.selectedModels,
             sourceActionId: params.sourceActionId,
           }),
         });

@@ -18,32 +18,39 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
+const mockTracker = {
+  track: vi.fn(),
+};
+
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key');
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', mockTracker);
   });
 
   describe('constructor', () => {
-    it('passes researchModel to client when provided', () => {
+    it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-1.5-flash');
+      new GeminiAdapter('test-key', 'gemini-2.5-pro');
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        researchModel: 'gemini-1.5-flash',
+        model: 'gemini-2.5-pro',
       });
     });
 
-    it('does not pass researchModel when not provided', () => {
-      mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key');
-
-      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
+    it('works without tracker', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Result', sources: [] },
       });
+
+      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro');
+      const result = await adapterNoTracker.research('Test');
+
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -121,6 +128,30 @@ describe('GeminiAdapter', () => {
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
     });
 
+    it('uses synthesis context when provided', async () => {
+      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+
+      await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
+        language: 'en',
+        domain: 'general',
+        mode: 'standard',
+        synthesis_goals: ['merge'],
+        missing_sections: [],
+        detected_conflicts: [],
+        source_preference: {
+          prefer_official_over_aggregators: true,
+          prefer_recent_when_time_sensitive: true,
+        },
+        defaults_applied: [],
+        assumptions: [],
+        output_format: { wants_table: false, wants_actionable_summary: true },
+        safety: { high_stakes: false, required_disclaimers: [] },
+        red_flags: [],
+      });
+
+      expect(mockGenerate).toHaveBeenCalled();
+    });
+
     it('maps errors correctly', async () => {
       mockGenerate.mockResolvedValue({
         ok: false,
@@ -167,6 +198,55 @@ describe('GeminiAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+  });
+
+  describe('generateContextLabel', () => {
+    it('generates label for short content', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: '  Context label  ',
+      });
+
+      const result = await adapter.generateContextLabel('Short context content');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('Context label');
+      }
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Generate a very short label')
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Short context content'));
+    });
+
+    it('truncates long content to 2000 characters', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: 'Long content label',
+      });
+
+      const longContent = 'x'.repeat(3000);
+      await adapter.generateContextLabel(longContent);
+
+      const calledArg = mockGenerate.mock.calls[0]?.[0] as string;
+      expect(calledArg).toContain('x'.repeat(2000));
+      expect(calledArg).toContain('...');
+      expect(calledArg).not.toContain('x'.repeat(2001));
+    });
+
+    it('maps errors correctly', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
+
+      const result = await adapter.generateContextLabel('Content');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
       }
     });
   });

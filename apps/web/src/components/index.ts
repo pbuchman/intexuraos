@@ -10,4 +10,9 @@ export { ImageThumbnail } from './ImageThumbnail.js';
 export { AudioPlayer } from './AudioPlayer.js';
 export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
+export {
+  ModelSelector,
+  getSelectedModelsList,
+  PROVIDER_MODELS,
+} from './ModelSelector.js';
 export * from './ui/index.js';

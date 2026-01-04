@@ -4,6 +4,8 @@
  * POST /internal/llm/pubsub/process-research - Process research from Pub/Sub
  * POST /internal/llm/pubsub/process-llm-call - Process individual LLM call from Pub/Sub
  * POST /internal/llm/pubsub/report-analytics - Report LLM analytics from Pub/Sub
+ * GET /internal/llm/usage-stats - Get aggregated LLM usage statistics
+ * POST /internal/llm/track-usage - Track LLM usage from external services
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -14,17 +16,19 @@ import {
   createDraftResearch,
   processResearch,
   runSynthesis,
-  calculateCost,
-  type LlmProvider,
+  calculateAccurateCost,
+  type SupportedModel,
 } from '../domain/research/index.js';
+import { getProviderForModel, type LlmProvider } from '@intexuraos/llm-contract';
+import type { LlmCallType } from '../domain/research/models/LlmUsageStats.js';
 import { getServices, type DecryptedApiKeys } from '../services.js';
-import { llmProviderSchema, researchSchema } from './schemas/index.js';
+import { supportedModelSchema, researchSchema } from './schemas/index.js';
 
 interface CreateDraftResearchBody {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
+  selectedModels: SupportedModel[];
   sourceActionId?: string;
 }
 
@@ -48,8 +52,7 @@ interface LlmAnalyticsEvent {
   type: 'llm.report';
   researchId: string;
   userId: string;
-  provider: LlmProvider;
-  model: string;
+  model: SupportedModel;
   inputTokens: number;
   outputTokens: number;
   durationMs: number;
@@ -59,8 +62,17 @@ interface LlmCallEvent {
   type: 'llm.call';
   researchId: string;
   userId: string;
-  provider: LlmProvider;
+  model: SupportedModel;
   prompt: string;
+}
+
+interface TrackUsageBody {
+  provider: LlmProvider;
+  model: string;
+  callType: LlmCallType;
+  success: boolean;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 function isPubSubPush(request: FastifyRequest): boolean {
@@ -80,16 +92,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['internal'],
         body: {
           type: 'object',
-          required: ['userId', 'title', 'prompt', 'selectedLlms'],
+          required: ['userId', 'title', 'prompt', 'selectedModels'],
           properties: {
             userId: { type: 'string', description: 'User ID' },
             title: { type: 'string', minLength: 1, maxLength: 200 },
             prompt: { type: 'string', minLength: 10, maxLength: 20000 },
-            selectedLlms: {
+            selectedModels: {
               type: 'array',
-              items: llmProviderSchema,
+              items: supportedModelSchema,
               minItems: 1,
-              maxItems: 3,
+              maxItems: 6,
             },
             sourceActionId: { type: 'string', description: 'ID of the originating action' },
           },
@@ -114,7 +126,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // Log incoming request BEFORE auth check (for debugging)
       logIncomingRequest(request, {
         message: 'Received request to /internal/research/draft',
         bodyPreviewLength: 500,
@@ -132,26 +143,38 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const body = request.body as CreateDraftResearchBody;
       const { researchRepo, generateId } = getServices();
+      const researchId = generateId();
+
+      request.log.info(
+        { researchId, userId: body.userId, modelsCount: body.selectedModels.length },
+        '[1.1] Creating draft research object'
+      );
 
       const createParams: Parameters<typeof createDraftResearch>[0] = {
-        id: generateId(),
+        id: researchId,
         userId: body.userId,
         title: body.title,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms,
-        synthesisLlm: body.selectedLlms[0] ?? 'google',
+        selectedModels: body.selectedModels,
+        synthesisModel: body.selectedModels[0] ?? 'gemini-2.5-pro',
       };
       if (body.sourceActionId !== undefined) {
         createParams.sourceActionId = body.sourceActionId;
       }
       const research = createDraftResearch(createParams);
 
+      request.log.info({ researchId }, '[1.2] Saving draft research to database');
       const saveResult = await researchRepo.save(research);
 
       if (!saveResult.ok) {
+        request.log.error(
+          { researchId, error: saveResult.error.message },
+          '[1.2] Failed to save draft research'
+        );
         return await reply.fail('INTERNAL_ERROR', saveResult.error.message);
       }
 
+      request.log.info({ researchId }, '[1.3] Draft research created successfully');
       return await reply.ok(saveResult.value);
     }
   );
@@ -273,47 +296,74 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const apiKeysResult = await userServiceClient.getApiKeys(research.userId);
         const apiKeys: DecryptedApiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
-        const researchSettingsResult = await userServiceClient.getResearchSettings(research.userId);
-        const searchMode = researchSettingsResult.ok
-          ? researchSettingsResult.value.searchMode
-          : 'deep';
-
-        request.log.info(
-          { researchId: event.researchId, searchMode },
-          'Using search mode for research'
-        );
-
-        const synthesisProvider = research.synthesisLlm;
+        const synthesisModel = research.synthesisModel;
+        const synthesisProvider = getProviderForModel(synthesisModel);
         const synthesisKey = apiKeys[synthesisProvider];
         if (synthesisKey === undefined) {
           await researchRepo.update(event.researchId, {
             status: 'failed',
-            synthesisError: `API key required for synthesis with ${synthesisProvider}`,
+            synthesisError: `API key required for synthesis with ${synthesisModel}`,
           });
           request.log.error(
-            { researchId: event.researchId, provider: synthesisProvider },
+            { researchId: event.researchId, model: synthesisModel },
             'API key missing for synthesis'
           );
           return { success: false, error: 'API key missing' };
         }
 
-        const synthesizer = services.createSynthesizer(synthesisProvider, synthesisKey);
+        const synthesizer = services.createSynthesizer(synthesisModel, synthesisKey);
 
         const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
           llmCallPublisher: services.llmCallPublisher,
           logger: request.log,
           synthesizer,
-          reportLlmSuccess: (provider): void => {
-            void userServiceClient.reportLlmSuccess(research.userId, provider);
+          reportLlmSuccess: (model): void => {
+            void userServiceClient.reportLlmSuccess(research.userId, getProviderForModel(model));
           },
         };
 
         if (apiKeys.google !== undefined) {
-          deps.titleGenerator = services.createTitleGenerator(apiKeys.google);
+          deps.titleGenerator = services.createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+          deps.contextInferrer = services.createContextInferrer(
+            'gemini-2.5-flash',
+            apiKeys.google,
+            request.log
+          );
         }
 
-        await processResearch(event.researchId, deps);
+        const processResult = await processResearch(event.researchId, deps);
+
+        // For enhanced researches where all LLM results are already completed,
+        // trigger synthesis immediately
+        if (processResult.triggerSynthesis) {
+          request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
+
+          const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+          await runSynthesis(event.researchId, {
+            researchRepo,
+            synthesizer,
+            notificationSender: services.notificationSender,
+            shareStorage: services.shareStorage,
+            shareConfig: services.shareConfig,
+            imageServiceClient: services.imageServiceClient,
+            ...(deps.contextInferrer !== undefined && { contextInferrer: deps.contextInferrer }),
+            userId: research.userId,
+            webAppUrl,
+            reportLlmSuccess: (): void => {
+              void userServiceClient.reportLlmSuccess(research.userId, synthesisProvider);
+            },
+            logger: {
+              info: (msg: string): void => {
+                request.log.info({ researchId: event.researchId }, msg);
+              },
+              error: (obj: object, msg: string): void => {
+                request.log.error({ researchId: event.researchId, ...obj }, msg);
+              },
+            },
+            imageApiKeys: apiKeys,
+          });
+        }
 
         request.log.info({ researchId: event.researchId }, 'Research processed successfully');
         return { success: true };
@@ -425,11 +475,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { userServiceClient } = getServices();
 
       try {
-        await userServiceClient.reportLlmSuccess(event.userId, event.provider);
-        request.log.info({ provider: event.provider, userId: event.userId }, 'Analytics reported');
+        await userServiceClient.reportLlmSuccess(event.userId, getProviderForModel(event.model));
+        request.log.info({ model: event.model, userId: event.userId }, 'Analytics reported');
       } catch (error) {
         request.log.warn(
-          { provider: event.provider, error: getErrorMessage(error) },
+          { model: event.model, error: getErrorMessage(error) },
           'Failed to report analytics'
         );
       }
@@ -538,45 +588,54 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         {
           researchId: event.researchId,
           userId: event.userId,
-          provider: event.provider,
+          model: event.model,
           messageId: body.message.messageId,
         },
-        'Processing LLM call event'
+        '[3.1] Processing LLM call event'
       );
 
       const services = getServices();
       const { researchRepo, userServiceClient, notificationSender, shareStorage, shareConfig } =
         services;
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+      const modelProvider = getProviderForModel(event.model);
 
       try {
+        request.log.info(
+          { researchId: event.researchId, model: event.model },
+          '[3.1.1] Loading research from database'
+        );
         const researchResult = await researchRepo.findById(event.researchId);
         if (!researchResult.ok || researchResult.value === null) {
-          request.log.error({ researchId: event.researchId }, 'Research not found for LLM call');
+          request.log.error({ researchId: event.researchId }, '[3.1.1] Research not found');
           return { success: false, error: 'Research not found' };
         }
         const research = researchResult.value;
 
-        const existingResult = research.llmResults.find((r) => r.provider === event.provider);
+        const existingResult = research.llmResults.find((r) => r.model === event.model);
         if (existingResult?.status === 'completed' || existingResult?.status === 'failed') {
           request.log.info(
             {
               researchId: event.researchId,
-              provider: event.provider,
+              model: event.model,
               status: existingResult.status,
             },
-            'LLM call already processed, skipping (idempotency)'
+            '[3.1.2] LLM call already processed, skipping (idempotency)'
           );
           return { success: true };
         }
 
+        request.log.info(
+          { researchId: event.researchId, model: event.model, provider: modelProvider },
+          '[3.2] Fetching API keys from user-service'
+        );
         const apiKeysResult = await userServiceClient.getApiKeys(event.userId);
         if (!apiKeysResult.ok) {
           request.log.error(
             { researchId: event.researchId, userId: event.userId },
-            'Failed to fetch API keys'
+            '[3.2] Failed to fetch API keys'
           );
-          await researchRepo.updateLlmResult(event.researchId, event.provider, {
+          await researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
             error: 'Failed to fetch API keys',
             completedAt: new Date().toISOString(),
@@ -584,22 +643,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: false, error: 'Failed to fetch API keys' };
         }
 
-        const apiKey = apiKeysResult.value[event.provider];
+        const apiKey = apiKeysResult.value[modelProvider];
         if (apiKey === undefined) {
           request.log.error(
-            { researchId: event.researchId, provider: event.provider },
-            'API key missing for provider'
+            { researchId: event.researchId, model: event.model },
+            '[3.2] API key missing for model'
           );
-          await researchRepo.updateLlmResult(event.researchId, event.provider, {
+          await researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
-            error: `API key missing for ${event.provider}`,
+            error: `API key missing for ${event.model}`,
             completedAt: new Date().toISOString(),
           });
           void notificationSender.sendLlmFailure(
             event.userId,
             event.researchId,
-            event.provider,
-            `API key missing for ${event.provider}`
+            event.model,
+            `API key missing for ${event.model}`
           );
 
           const keyMissingCompletionAction = await checkLlmCompletion(event.researchId, {
@@ -607,29 +666,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
           request.log.info(
             { researchId: event.researchId, action: keyMissingCompletionAction.type },
-            'LLM completion check after API key missing failure'
+            '[3.5] LLM completion check after API key missing failure'
           );
 
           return { success: false, error: 'API key missing' };
         }
 
-        const researchSettingsResult = await userServiceClient.getResearchSettings(event.userId);
-        const searchMode = researchSettingsResult.ok
-          ? researchSettingsResult.value.searchMode
-          : 'deep';
-
         const startedAt = new Date().toISOString();
-        await researchRepo.updateLlmResult(event.researchId, event.provider, {
+        await researchRepo.updateLlmResult(event.researchId, event.model, {
           status: 'processing',
           startedAt,
         });
 
         request.log.info(
-          { researchId: event.researchId, provider: event.provider, searchMode },
-          'Starting LLM research call'
+          { researchId: event.researchId, model: event.model },
+          '[3.3] Starting LLM research call'
         );
 
-        const llmProvider = services.createResearchProvider(event.provider, apiKey, searchMode);
+        const llmProvider = services.createResearchProvider(event.model, apiKey);
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt);
         const durationMs = Date.now() - startTime;
@@ -638,13 +692,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error(
             {
               researchId: event.researchId,
-              provider: event.provider,
+              model: event.model,
               error: llmResult.error.message,
               durationMs,
             },
-            'LLM research call failed'
+            '[3.3] LLM research call failed'
           );
-          await researchRepo.updateLlmResult(event.researchId, event.provider, {
+          await researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
             error: llmResult.error.message,
             completedAt: new Date().toISOString(),
@@ -653,14 +707,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           void notificationSender.sendLlmFailure(
             event.userId,
             event.researchId,
-            event.provider,
+            event.model,
             llmResult.error.message
           );
 
           const failCompletionAction = await checkLlmCompletion(event.researchId, { researchRepo });
           request.log.info(
             { researchId: event.researchId, action: failCompletionAction.type },
-            'LLM completion check after failure'
+            '[3.5] LLM completion check after failure'
           );
 
           return { success: true };
@@ -670,13 +724,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log.info(
           {
             researchId: event.researchId,
-            provider: event.provider,
+            model: event.model,
             durationMs,
             contentLength: llmResult.value.content.length,
             inputTokens: usage?.inputTokens,
             outputTokens: usage?.outputTokens,
           },
-          'LLM research call succeeded'
+          '[3.3] LLM research call succeeded'
         );
 
         const updateData: Parameters<typeof researchRepo.updateLlmResult>[2] = {
@@ -693,34 +747,39 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           updateData.inputTokens = usage.inputTokens;
           updateData.outputTokens = usage.outputTokens;
 
-          const model = existingResult?.model;
-          if (model !== undefined) {
-            const pricing = await services.pricingRepo.findByProviderAndModel(
-              event.provider,
-              model
+          const pricing = await services.pricingRepo.findByProviderAndModel(
+            modelProvider,
+            event.model
+          );
+          if (pricing !== null) {
+            updateData.costUsd = calculateAccurateCost(usage, pricing);
+          } else {
+            request.log.warn(
+              { model: event.model },
+              'Pricing not found for model, cost not calculated'
             );
-            if (pricing !== null) {
-              updateData.costUsd = calculateCost(usage.inputTokens, usage.outputTokens, pricing);
-            } else {
-              request.log.warn(
-                { provider: event.provider, model },
-                'Pricing not found for model, cost not calculated'
-              );
-            }
           }
         }
 
-        await researchRepo.updateLlmResult(event.researchId, event.provider, updateData);
+        request.log.info(
+          { researchId: event.researchId, model: event.model },
+          '[3.4] Saving LLM result to database'
+        );
+        await researchRepo.updateLlmResult(event.researchId, event.model, updateData);
 
-        void userServiceClient.reportLlmSuccess(event.userId, event.provider);
+        void userServiceClient.reportLlmSuccess(event.userId, modelProvider);
 
+        request.log.info(
+          { researchId: event.researchId, model: event.model },
+          '[3.5] Checking LLM completion status'
+        );
         const completionAction = await checkLlmCompletion(event.researchId, { researchRepo });
 
         switch (completionAction.type) {
           case 'pending':
             request.log.info(
               { researchId: event.researchId },
-              'LLM completion check: still waiting for other providers'
+              '[3.5.1] Still waiting for other LLM providers'
             );
             break;
           case 'all_completed': {
@@ -728,7 +787,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (!freshResearch.ok || freshResearch.value === null) {
               request.log.error(
                 { researchId: event.researchId },
-                'Research not found for synthesis'
+                '[3.5.2] Research not found for synthesis'
               );
               break;
             }
@@ -736,7 +795,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             if (freshResearch.value.skipSynthesis === true) {
               request.log.info(
                 { researchId: event.researchId },
-                'All LLMs completed, skipping synthesis (skipSynthesis flag set)'
+                '[3.5.2] All LLMs completed, skipping synthesis (skipSynthesis flag)'
               );
               const now = new Date();
               const startedAt = new Date(freshResearch.value.startedAt);
@@ -756,46 +815,67 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
             request.log.info(
               { researchId: event.researchId },
-              'All LLMs completed, triggering synthesis'
+              '[3.5.2] All LLMs completed, triggering synthesis (Phase 4)'
             );
 
-            const synthesisProvider = freshResearch.value.synthesisLlm;
+            const synthesisModel = freshResearch.value.synthesisModel;
+            const synthesisProvider = getProviderForModel(synthesisModel);
             const synthesisKey = apiKeysResult.value[synthesisProvider];
             if (synthesisKey === undefined) {
               request.log.error(
-                { researchId: event.researchId, provider: synthesisProvider },
-                'API key missing for synthesis provider'
+                { researchId: event.researchId, model: synthesisModel },
+                '[3.5.2] API key missing for synthesis model'
               );
               await researchRepo.update(event.researchId, {
                 status: 'failed',
-                synthesisError: `API key required for synthesis with ${synthesisProvider}`,
+                synthesisError: `API key required for synthesis with ${synthesisModel}`,
                 completedAt: new Date().toISOString(),
               });
               break;
             }
 
-            const synthesizer = services.createSynthesizer(synthesisProvider, synthesisKey);
+            const synthesizer = services.createSynthesizer(synthesisModel, synthesisKey);
+            const contextInferrer =
+              apiKeysResult.value.google !== undefined
+                ? services.createContextInferrer(
+                    'gemini-2.5-flash',
+                    apiKeysResult.value.google,
+                    request.log
+                  )
+                : undefined;
             const synthesisResult = await runSynthesis(event.researchId, {
               researchRepo,
               synthesizer,
               notificationSender,
               shareStorage,
               shareConfig,
+              imageServiceClient: services.imageServiceClient,
+              ...(contextInferrer !== undefined && { contextInferrer }),
+              userId: event.userId,
               webAppUrl,
               reportLlmSuccess: (): void => {
                 void userServiceClient.reportLlmSuccess(event.userId, synthesisProvider);
               },
+              logger: {
+                info: (msg: string): void => {
+                  request.log.info({ researchId: event.researchId }, msg);
+                },
+                error: (obj: object, msg: string): void => {
+                  request.log.error({ researchId: event.researchId, ...obj }, msg);
+                },
+              },
+              imageApiKeys: apiKeysResult.value,
             });
 
             if (synthesisResult.ok) {
               request.log.info(
                 { researchId: event.researchId },
-                'Synthesis completed successfully'
+                '[4.END] Synthesis completed successfully'
               );
             } else {
               request.log.error(
                 { researchId: event.researchId, error: synthesisResult.error },
-                'Synthesis failed'
+                '[4.END] Synthesis failed'
               );
             }
             break;
@@ -803,13 +883,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           case 'all_failed':
             request.log.warn(
               { researchId: event.researchId },
-              'All LLMs failed, research marked as failed'
+              '[3.5.3] All LLMs failed, research marked as failed'
             );
             break;
           case 'partial_failure':
             request.log.warn(
-              { researchId: event.researchId, failedProviders: completionAction.failedProviders },
-              'Partial failure detected, awaiting user confirmation'
+              { researchId: event.researchId, failedModels: completionAction.failedModels },
+              '[3.5.4] Partial failure detected, awaiting user confirmation'
             );
             break;
         }
@@ -817,16 +897,161 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { success: true };
       } catch (error) {
         request.log.error(
-          { researchId: event.researchId, provider: event.provider, error: getErrorMessage(error) },
-          'LLM call processing failed unexpectedly'
+          { researchId: event.researchId, model: event.model, error: getErrorMessage(error) },
+          '[3.ERR] LLM call processing failed unexpectedly'
         );
-        await researchRepo.updateLlmResult(event.researchId, event.provider, {
+        await researchRepo.updateLlmResult(event.researchId, event.model, {
           status: 'failed',
           error: getErrorMessage(error),
           completedAt: new Date().toISOString(),
         });
         return { success: false, error: getErrorMessage(error) };
       }
+    }
+  );
+
+  fastify.get(
+    '/internal/llm/usage-stats',
+    {
+      schema: {
+        operationId: 'getLlmUsageStats',
+        summary: 'Get LLM usage statistics',
+        description:
+          'Internal endpoint for retrieving aggregated LLM usage statistics. Returns totals per model.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Usage statistics retrieved',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    provider: { type: 'string' },
+                    model: { type: 'string' },
+                    period: { type: 'string' },
+                    calls: { type: 'number' },
+                    successfulCalls: { type: 'number' },
+                    failedCalls: { type: 'number' },
+                    inputTokens: { type: 'number' },
+                    outputTokens: { type: 'number' },
+                    totalTokens: { type: 'number' },
+                    costUsd: { type: 'number' },
+                    lastUpdatedAt: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/llm/usage-stats',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for usage-stats');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { usageStatsRepo } = getServices();
+      const stats = await usageStatsRepo.getAllTotals();
+
+      return await reply.ok(stats);
+    }
+  );
+
+  fastify.post<{ Body: TrackUsageBody }>(
+    '/internal/llm/track-usage',
+    {
+      schema: {
+        operationId: 'trackLlmUsage',
+        summary: 'Track LLM usage from external services',
+        description:
+          'Internal endpoint for other services to report their LLM usage. Used by image-service and user-service.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['provider', 'model', 'callType', 'success', 'inputTokens', 'outputTokens'],
+          properties: {
+            provider: { type: 'string', enum: ['openai', 'anthropic', 'google', 'perplexity'] },
+            model: { type: 'string' },
+            callType: {
+              type: 'string',
+              enum: [
+                'research',
+                'synthesis',
+                'title',
+                'context_inference',
+                'context_label',
+                'image_prompt',
+                'image_generation',
+                'validation',
+                'other',
+              ],
+            },
+            success: { type: 'boolean' },
+            inputTokens: { type: 'number' },
+            outputTokens: { type: 'number' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Usage tracked successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: TrackUsageBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/llm/track-usage',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for track-usage');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { llmUsageTracker } = getServices();
+      const body = request.body;
+
+      llmUsageTracker.track({
+        provider: body.provider,
+        model: body.model,
+        callType: body.callType,
+        success: body.success,
+        inputTokens: body.inputTokens,
+        outputTokens: body.outputTokens,
+      });
+
+      return { success: true };
     }
   );
 

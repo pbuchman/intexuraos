@@ -8,27 +8,32 @@
  * POST   /research/:id/approve - Approve draft research
  * POST   /research/:id/confirm - Confirm partial failure decision
  * POST   /research/:id/retry   - Retry from failed status
+ * POST   /research/:id/enhance - Create enhanced research from completed
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
+ * GET    /llm/usage-stats     - Get aggregated LLM usage statistics
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import {
   createDraftResearch,
+  createLlmResults,
   deleteResearch,
-  type ExternalReport,
+  enhanceResearch,
+  type InputContext,
   getResearch,
   listResearches,
-  type LlmProvider,
   type PartialFailureDecision,
   type Research,
+  type SupportedModel,
   retryFailedLlms,
   retryFromFailed,
   runSynthesis,
   submitResearch,
   unshareResearch,
 } from '../domain/research/index.js';
+import { getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   approveResearchResponseSchema,
@@ -37,6 +42,8 @@ import {
   createResearchBodySchema,
   createResearchResponseSchema,
   deleteResearchResponseSchema,
+  enhanceResearchBodySchema,
+  enhanceResearchResponseSchema,
   getResearchResponseSchema,
   listResearchesQuerySchema,
   listResearchesResponseSchema,
@@ -49,17 +56,17 @@ import {
 
 interface CreateResearchBody {
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm?: LlmProvider;
-  externalReports?: { content: string; model?: string }[];
+  selectedModels: SupportedModel[];
+  synthesisModel?: SupportedModel;
+  inputContexts?: { content: string; label?: string }[];
   skipSynthesis?: boolean;
 }
 
 interface SaveDraftBody {
   prompt: string;
-  selectedLlms?: LlmProvider[];
-  synthesisLlm?: LlmProvider;
-  externalReports?: { content: string; model?: string }[];
+  selectedModels?: SupportedModel[];
+  synthesisModel?: SupportedModel;
+  inputContexts?: { content: string; label?: string }[];
 }
 
 interface ListResearchesQuery {
@@ -73,6 +80,46 @@ interface ResearchIdParams {
 
 interface ConfirmPartialFailureBody {
   action: PartialFailureDecision;
+}
+
+interface EnhanceResearchBody {
+  additionalModels?: SupportedModel[];
+  additionalContexts?: { content: string; label?: string }[];
+  synthesisModel?: SupportedModel;
+  removeContextIds?: string[];
+}
+
+interface ContextWithLabel {
+  content: string;
+  label?: string | undefined;
+}
+
+async function generateContextLabels(
+  contexts: ContextWithLabel[],
+  googleApiKey: string | undefined,
+  createTitleGenerator: (
+    model: string,
+    apiKey: string
+  ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> }
+): Promise<ContextWithLabel[]> {
+  if (googleApiKey === undefined) {
+    return contexts;
+  }
+
+  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey);
+
+  return await Promise.all(
+    contexts.map(async (ctx) => {
+      if (ctx.label !== undefined && ctx.label !== '') {
+        return ctx;
+      }
+      const labelResult = await generator.generateContextLabel(ctx.content);
+      return {
+        content: ctx.content,
+        label: labelResult.ok && labelResult.value !== undefined ? labelResult.value : undefined,
+      };
+    })
+  );
 }
 
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -98,16 +145,30 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateResearchBody;
-      const { researchRepo, generateId, researchEventPublisher } = getServices();
+      const {
+        researchRepo,
+        generateId,
+        researchEventPublisher,
+        userServiceClient,
+        createTitleGenerator,
+      } = getServices();
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms,
-        synthesisLlm: body.synthesisLlm ?? body.selectedLlms[0] ?? 'google',
+        selectedModels: body.selectedModels,
+        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
       };
-      if (body.externalReports !== undefined) {
-        submitParams.externalReports = body.externalReports;
+      if (body.inputContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
+        submitParams.inputContexts = contextsWithLabels;
       }
       if (body.skipSynthesis === true) {
         submitParams.skipSynthesis = true;
@@ -161,7 +222,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Generate title using Gemini if Google API key is available
       let title: string;
       if (apiKeys.google !== undefined) {
-        const titleGenerator = createTitleGenerator(apiKeys.google);
+        const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
       } else {
@@ -170,27 +231,37 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Create draft research
-      const resolvedSelectedLlms = body.selectedLlms ?? ['google', 'openai', 'anthropic'];
+      const defaultModels: SupportedModel[] = [
+        'gemini-2.5-pro',
+        'claude-opus-4-5-20251101',
+        'o4-mini-deep-research',
+      ];
+      const resolvedSelectedModels = body.selectedModels ?? defaultModels;
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedLlms: resolvedSelectedLlms,
-        synthesisLlm: body.synthesisLlm ?? resolvedSelectedLlms[0] ?? 'google',
+        selectedModels: resolvedSelectedModels,
+        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
       };
-      if (body.externalReports !== undefined) {
+      if (body.inputContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
         const now = new Date().toISOString();
-        draftParams.externalReports = body.externalReports.map((report) => {
-          const externalReport: ExternalReport = {
+        draftParams.inputContexts = contextsWithLabels.map((ctx) => {
+          const inputContext: InputContext = {
             id: generateId(),
-            content: report.content,
+            content: ctx.content,
             addedAt: now,
           };
-          if (report.model !== undefined) {
-            externalReport.model = report.model;
+          if (ctx.label !== undefined) {
+            inputContext.label = ctx.label;
           }
-          return externalReport;
+          return inputContext;
         });
       }
       const draft = createDraftResearch(draftParams);
@@ -260,7 +331,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
-          const titleGenerator = createTitleGenerator(apiKeys.google);
+          const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
         } else {
@@ -269,25 +340,32 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // Update draft
+      const newSelectedModels = body.selectedModels ?? existing.selectedModels;
       const updates: Partial<Research> = {
         title,
         prompt: body.prompt,
-        selectedLlms: body.selectedLlms ?? existing.selectedLlms,
-        synthesisLlm: body.synthesisLlm ?? existing.synthesisLlm,
+        selectedModels: newSelectedModels,
+        synthesisModel: body.synthesisModel ?? existing.synthesisModel,
+        llmResults: createLlmResults(newSelectedModels),
       };
 
-      if (body.externalReports !== undefined) {
+      if (body.inputContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.inputContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
         const now = new Date().toISOString();
-        updates.externalReports = body.externalReports.map((report) => {
-          const externalReport: ExternalReport = {
+        updates.inputContexts = contextsWithLabels.map((ctx) => {
+          const inputContext: InputContext = {
             id: generateId(),
-            content: report.content,
+            content: ctx.content,
             addedAt: now,
           };
-          if (report.model !== undefined) {
-            externalReport.model = report.model;
+          if (ctx.label !== undefined) {
+            inputContext.label = ctx.label;
           }
-          return externalReport;
+          return inputContext;
         });
       }
 
@@ -481,9 +559,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const {
         researchRepo,
         userServiceClient,
+        imageServiceClient,
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
+        createContextInferrer,
         shareStorage,
         shareConfig,
       } = getServices();
@@ -522,12 +602,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
           }
 
-          const synthesisProvider = research.synthesisLlm;
+          const synthesisModel = research.synthesisModel;
+          const synthesisProvider = getProviderForModel(synthesisModel);
           const synthesisKey = apiKeysResult.value[synthesisProvider];
           if (synthesisKey === undefined) {
             return await reply.fail(
               'MISCONFIGURED',
-              `API key required for synthesis with ${synthesisProvider}`
+              `API key required for synthesis with ${synthesisModel}`
             );
           }
 
@@ -538,16 +619,31 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+          const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+          const contextInferrer =
+            apiKeysResult.value.google !== undefined
+              ? createContextInferrer('gemini-2.5-flash', apiKeysResult.value.google, request.log)
+              : undefined;
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
             notificationSender,
             shareStorage,
             shareConfig,
+            imageServiceClient,
+            ...(contextInferrer !== undefined && { contextInferrer }),
+            userId: user.userId,
             webAppUrl,
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
+            },
+            logger: {
+              info: (msg: string): void => {
+                request.log.info({ researchId: id }, msg);
+              },
+              error: (obj: object, msg: string): void => {
+                request.log.error({ researchId: id, ...obj }, msg);
+              },
             },
           });
 
@@ -573,7 +669,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (retryResult.ok) {
             return await reply.ok({
               action: 'retry',
-              message: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+              message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
             });
           }
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
@@ -622,6 +718,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const {
         researchRepo,
         userServiceClient,
+        imageServiceClient,
         notificationSender,
         llmCallPublisher,
         createSynthesizer,
@@ -651,16 +748,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
-      const synthesisProvider = research.synthesisLlm;
+      const synthesisModel = research.synthesisModel;
+      const synthesisProvider = getProviderForModel(synthesisModel);
       const synthesisKey = apiKeysResult.value[synthesisProvider];
       if (synthesisKey === undefined) {
         return await reply.fail(
           'MISCONFIGURED',
-          `API key required for synthesis with ${synthesisProvider}`
+          `API key required for synthesis with ${synthesisModel}`
         );
       }
 
-      const synthesizer = createSynthesizer(synthesisProvider, synthesisKey);
+      const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
 
       const retryResult = await retryFromFailed(id, {
         researchRepo,
@@ -670,10 +768,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           notificationSender,
           shareStorage,
           shareConfig,
+          imageServiceClient,
+          userId: user.userId,
           webAppUrl,
           reportLlmSuccess: (): void => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
           },
+          imageApiKeys: apiKeysResult.value,
         },
       });
 
@@ -685,7 +786,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const messages: Record<string, string> = {
-        retried_llms: `Retrying failed providers: ${(retryResult.retriedProviders ?? []).join(', ')}`,
+        retried_llms: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
         retried_synthesis: 'Re-running synthesis',
         already_completed: 'Research is already completed',
       };
@@ -693,10 +794,100 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return await reply.ok({
         action: retryResult.action,
         message: messages[retryResult.action ?? 'already_completed'],
-        ...(retryResult.retriedProviders !== undefined && {
-          retriedProviders: retryResult.retriedProviders,
+        ...(retryResult.retriedModels !== undefined && {
+          retriedModels: retryResult.retriedModels,
         }),
       });
+    }
+  );
+
+  // POST /research/:id/enhance
+  fastify.post(
+    '/research/:id/enhance',
+    {
+      schema: {
+        operationId: 'enhanceResearch',
+        summary: 'Enhance completed research',
+        description:
+          'Create a new research based on a completed one, reusing successful LLM results and adding new providers or contexts.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: enhanceResearchBodySchema,
+        response: {
+          201: enhanceResearchResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const body = request.body as EnhanceResearchBody;
+      const {
+        researchRepo,
+        generateId,
+        researchEventPublisher,
+        userServiceClient,
+        createTitleGenerator,
+      } = getServices();
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+
+      const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
+        sourceResearchId: id,
+        userId: user.userId,
+      };
+      if (body.additionalModels !== undefined) {
+        enhanceInput.additionalModels = body.additionalModels;
+      }
+      if (body.additionalContexts !== undefined) {
+        const contextsWithLabels = await generateContextLabels(
+          body.additionalContexts,
+          apiKeys.google,
+          createTitleGenerator
+        );
+        enhanceInput.additionalContexts = contextsWithLabels;
+      }
+      if (body.synthesisModel !== undefined) {
+        enhanceInput.synthesisModel = body.synthesisModel;
+      }
+      if (body.removeContextIds !== undefined) {
+        enhanceInput.removeContextIds = body.removeContextIds;
+      }
+
+      const result = await enhanceResearch(enhanceInput, { researchRepo, generateId });
+
+      if (!result.ok) {
+        switch (result.error.type) {
+          case 'NOT_FOUND':
+            return await reply.fail('NOT_FOUND', 'Research not found');
+          case 'FORBIDDEN':
+            return await reply.fail('FORBIDDEN', 'Access denied');
+          case 'INVALID_STATUS':
+            return await reply.fail(
+              'CONFLICT',
+              `Cannot enhance research in ${result.error.status} status`
+            );
+          case 'NO_CHANGES':
+            return await reply.fail('CONFLICT', 'At least one change is required');
+          case 'REPO_ERROR':
+            return await reply.fail('INTERNAL_ERROR', result.error.error.message);
+        }
+      }
+
+      // Publish to Pub/Sub for async processing
+      await researchEventPublisher.publishProcessResearch({
+        type: 'research.process',
+        researchId: result.value.id,
+        userId: user.userId,
+        triggeredBy: 'create',
+      });
+
+      return await reply.code(201).ok(result.value);
     }
   );
 
@@ -767,11 +958,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as ResearchIdParams;
-      const { researchRepo, shareStorage } = getServices();
+      const { researchRepo, shareStorage, imageServiceClient } = getServices();
 
       const result = await unshareResearch(params.id, user.userId, {
         researchRepo,
         shareStorage,
+        imageServiceClient,
+        logger: request.log,
       });
 
       if (!result.ok) {
@@ -788,6 +981,57 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(null);
+    }
+  );
+
+  // GET /llm/usage-stats
+  fastify.get(
+    '/llm/usage-stats',
+    {
+      schema: {
+        operationId: 'getLlmUsageStats',
+        summary: 'Get LLM usage statistics',
+        description: 'Get aggregated LLM usage statistics (calls, tokens, costs) per model.',
+        tags: ['llm'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    provider: { type: 'string' },
+                    model: { type: 'string' },
+                    period: { type: 'string' },
+                    calls: { type: 'number' },
+                    successfulCalls: { type: 'number' },
+                    failedCalls: { type: 'number' },
+                    inputTokens: { type: 'number' },
+                    outputTokens: { type: 'number' },
+                    totalTokens: { type: 'number' },
+                    costUsd: { type: 'number' },
+                    lastUpdatedAt: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { usageStatsRepo } = getServices();
+      const stats = await usageStatsRepo.getAllTotals();
+
+      return await reply.ok(stats);
     }
   );
 

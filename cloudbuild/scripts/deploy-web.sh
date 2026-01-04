@@ -39,4 +39,12 @@ gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/*.png" 2>/dev/null
 gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/favicon.png" 2>/dev/null || true
 gsutil -m setmeta -h "Content-Type:image/png" "gs://${BUCKET}/logo.png" 2>/dev/null || true
 
+# Invalidate CDN cache for index.html to ensure fresh content
+log "Invalidating CDN cache for index.html..."
+URL_MAP="intexuraos-web-${ENVIRONMENT}-url-map"
+gcloud compute url-maps invalidate-cdn-cache "${URL_MAP}" \
+  --path "/index.html" \
+  --async \
+  2>/dev/null || log "CDN cache invalidation skipped (no load balancer or permission issue)"
+
 log "Deployment complete for ${SERVICE}"

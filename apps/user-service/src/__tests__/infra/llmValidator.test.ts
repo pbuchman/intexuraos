@@ -19,10 +19,15 @@ vi.mock('@intexuraos/infra-claude', () => ({
   createClaudeClient: vi.fn(),
 }));
 
+vi.mock('@intexuraos/infra-perplexity', () => ({
+  createPerplexityClient: vi.fn(),
+}));
+
 // Import mocked modules after vi.mock
 const { createGeminiClient } = await import('@intexuraos/infra-gemini');
 const { createGptClient } = await import('@intexuraos/infra-gpt');
 const { createClaudeClient } = await import('@intexuraos/infra-claude');
+const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
@@ -36,20 +41,23 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
         const result = await validator.validateKey('google', 'test-api-key');
 
         expect(result.ok).toBe(true);
-        expect(createGeminiClient).toHaveBeenCalledWith({ apiKey: 'test-api-key' });
-        expect(mockClient.evaluate).toHaveBeenCalled();
+        expect(createGeminiClient).toHaveBeenCalledWith({
+          apiKey: 'test-api-key',
+          model: 'gemini-2.0-flash',
+        });
+        expect(mockClient.generate).toHaveBeenCalled();
       });
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -64,7 +72,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          evaluate: vi
+          generate: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR', message: 'Connection failed' })),
         };
@@ -83,19 +91,22 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
         const result = await validator.validateKey('openai', 'sk-test-key');
 
         expect(result.ok).toBe(true);
-        expect(createGptClient).toHaveBeenCalledWith({ apiKey: 'sk-test-key' });
+        expect(createGptClient).toHaveBeenCalledWith({
+          apiKey: 'sk-test-key',
+          model: 'gpt-4o-mini',
+        });
       });
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -110,7 +121,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -127,19 +138,22 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok('validated')),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
         const result = await validator.validateKey('anthropic', 'sk-ant-key');
 
         expect(result.ok).toBe(true);
-        expect(createClaudeClient).toHaveBeenCalledWith({ apiKey: 'sk-ant-key' });
+        expect(createClaudeClient).toHaveBeenCalledWith({
+          apiKey: 'sk-ant-key',
+          model: 'claude-3-5-haiku-20241022',
+        });
       });
 
       it('returns INVALID_KEY error when key is invalid', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -154,7 +168,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when other errors occur', async () => {
         const mockClient = {
-          evaluate: vi
+          generate: vi
             .fn()
             .mockResolvedValue(err({ code: 'SERVICE_ERROR', message: 'Unavailable' })),
         };
@@ -169,6 +183,53 @@ describe('LlmValidatorImpl', () => {
         }
       });
     });
+
+    describe('perplexity provider', () => {
+      it('returns ok when validation succeeds', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(ok('validated')),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'pplx-test-key');
+
+        expect(result.ok).toBe(true);
+        expect(createPerplexityClient).toHaveBeenCalledWith({
+          apiKey: 'pplx-test-key',
+          model: 'sonar',
+        });
+      });
+
+      it('returns INVALID_KEY error when key is invalid', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'bad-key');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('INVALID_KEY');
+          expect(result.error.message).toBe('Invalid Perplexity API key');
+        }
+      });
+
+      it('returns API_ERROR when other errors occur', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.validateKey('perplexity', 'test-key');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toContain('Perplexity API error');
+        }
+      });
+    });
   });
 
   describe('testRequest', () => {
@@ -177,7 +238,7 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
+          generate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -187,12 +248,12 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from Gemini!');
         }
-        expect(mockClient.evaluate).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
       });
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -209,7 +270,7 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('Hello from GPT!')),
+          generate: vi.fn().mockResolvedValue(ok('Hello from GPT!')),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -223,7 +284,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Rate limited' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Rate limited' })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -240,7 +301,7 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(ok('Hello from Claude!')),
+          generate: vi.fn().mockResolvedValue(ok('Hello from Claude!')),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -254,7 +315,7 @@ describe('LlmValidatorImpl', () => {
 
       it('returns API_ERROR when test fails', async () => {
         const mockClient = {
-          evaluate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service down' })),
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service down' })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -264,6 +325,38 @@ describe('LlmValidatorImpl', () => {
         if (!result.ok) {
           expect(result.error.code).toBe('API_ERROR');
           expect(result.error.message).toBe('Service down');
+        }
+      });
+    });
+
+    describe('perplexity provider', () => {
+      it('returns content when test succeeds', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(ok('Hello from Perplexity!')),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('Hello from Perplexity!');
+        }
+        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+      });
+
+      it('returns API_ERROR when test fails', async () => {
+        const mockClient = {
+          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Search failed' })),
+        };
+        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
+
+        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('API_ERROR');
+          expect(result.error.message).toBe('Search failed');
         }
       });
     });
