@@ -10,6 +10,7 @@ import type {
   ResearchRepository,
   ShareStoragePort,
 } from '../ports/index.js';
+import type { ContextInferenceProvider } from '../ports/contextInference.js';
 import type { ShareInfo } from '../models/Research.js';
 import type { CoverImageInput } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
@@ -27,6 +28,7 @@ export interface RunSynthesisDeps {
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
   imageServiceClient: ImageServiceClient | null;
+  contextInferrer?: ContextInferenceProvider;
   userId: string;
   webAppUrl: string;
   reportLlmSuccess?: () => void;
@@ -44,6 +46,7 @@ export async function runSynthesis(
     shareStorage,
     shareConfig,
     imageServiceClient,
+    contextInferrer,
     userId,
     webAppUrl,
     reportLlmSuccess,
@@ -107,7 +110,30 @@ export async function runSynthesis(
     return source;
   });
 
-  const synthesisResult = await synthesizer.synthesize(research.prompt, reports, additionalSources);
+  let synthesisContext = undefined;
+  if (contextInferrer !== undefined) {
+    const contextResult = await contextInferrer.inferSynthesisContext({
+      originalPrompt: research.prompt,
+      reports: reports.map((r) => ({ model: r.model, content: r.content })),
+      additionalSources,
+    });
+    if (contextResult.ok) {
+      synthesisContext = contextResult.value;
+      logger?.info('Synthesis context inferred successfully');
+    } else {
+      logger?.error(
+        { error: contextResult.error },
+        'Synthesis context inference failed, proceeding without context'
+      );
+    }
+  }
+
+  const synthesisResult = await synthesizer.synthesize(
+    research.prompt,
+    reports,
+    additionalSources,
+    synthesisContext
+  );
 
   if (!synthesisResult.ok) {
     await researchRepo.update(researchId, {

@@ -3,7 +3,7 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
-import { buildSynthesisPrompt, type Result } from '@intexuraos/common-core';
+import { buildSynthesisPrompt, type Result, type SynthesisContext } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -34,9 +34,13 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async synthesize(
     originalPrompt: string,
     reports: { model: string; content: string }[],
-    additionalSources?: { content: string; label?: string }[]
+    additionalSources?: { content: string; label?: string }[],
+    synthesisContext?: SynthesisContext
   ): Promise<Result<string, LlmError>> {
-    const synthesisPrompt = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
+    const synthesisPrompt =
+      synthesisContext !== undefined
+        ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
+        : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {

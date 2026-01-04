@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, type SynthesisContext } from '@intexuraos/common-core';
 import {
   runSynthesis,
   type RunSynthesisDeps,
@@ -182,6 +182,7 @@ describe('runSynthesis', () => {
         { model: 'gemini-2.0-flash', content: 'Google Result' },
         { model: 'claude-3', content: 'Claude Result' },
       ],
+      undefined,
       undefined
     );
   });
@@ -205,7 +206,8 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       expect.any(Array),
-      [{ content: 'Input context 1', label: 'external-model' }, { content: 'Input context 2' }]
+      [{ content: 'Input context 1', label: 'external-model' }, { content: 'Input context 2' }],
+      undefined
     );
   });
 
@@ -302,6 +304,7 @@ describe('runSynthesis', () => {
         { model: 'gemini-2.0-flash', content: '' },
         { model: 'gpt-4', content: 'OpenAI Result' },
       ],
+      undefined,
       undefined
     );
   });
@@ -461,6 +464,137 @@ describe('runSynthesis', () => {
       await runSynthesis('research-1', deps);
 
       expect(deps.mockReportSuccess).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('synthesis context inference', () => {
+    const mockSynthesisContext: SynthesisContext = {
+      language: 'en',
+      domain: 'travel',
+      mode: 'standard',
+      synthesis_goals: ['merge', 'summarize'],
+      missing_sections: [],
+      detected_conflicts: [],
+      source_preference: {
+        prefer_official_over_aggregators: true,
+        prefer_recent_when_time_sensitive: true,
+      },
+      defaults_applied: [],
+      assumptions: [],
+      output_format: {
+        wants_table: false,
+        wants_actionable_summary: true,
+      },
+      safety: {
+        high_stakes: false,
+        required_disclaimers: [],
+      },
+      red_flags: [],
+    };
+
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    it('infers synthesis context when contextInferrer is provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
+        originalPrompt: 'Test research prompt',
+        reports: [
+          { model: 'gemini-2.0-flash', content: 'Google Result' },
+          { model: 'o4-mini-deep-research', content: 'OpenAI Result' },
+        ],
+        additionalSources: undefined,
+      });
+      expect(mockLogger.info).toHaveBeenCalledWith('Synthesis context inferred successfully');
+    });
+
+    it('passes synthesis context to synthesizer', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+        'Test research prompt',
+        expect.any(Array),
+        undefined,
+        mockSynthesisContext
+      );
+    });
+
+    it('logs error when synthesis context inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed to infer' })),
+      };
+
+      await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(Object) }),
+        'Synthesis context inference failed, proceeding without context'
+      );
+    });
+
+    it('proceeds without context when inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed' })),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
+        'Test research prompt',
+        expect.any(Array),
+        undefined,
+        undefined
+      );
     });
   });
 

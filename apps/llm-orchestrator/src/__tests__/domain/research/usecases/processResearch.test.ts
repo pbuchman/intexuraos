@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
+import { err, ok, type ResearchContext } from '@intexuraos/common-core';
 import {
   processResearch,
   type ProcessResearchDeps,
@@ -343,5 +343,149 @@ describe('processResearch', () => {
 
     expect(duration).toBeLessThan(100);
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
+  });
+
+  describe('context inference', () => {
+    const mockResearchContext: ResearchContext = {
+      language: 'en',
+      domain: 'travel',
+      mode: 'standard',
+      intent_summary: 'User wants travel info',
+      defaults_applied: [],
+      assumptions: [],
+      answer_style: ['practical'],
+      time_scope: {
+        as_of_date: '2024-01-01',
+        prefers_recent_years: 2,
+        is_time_sensitive: false,
+      },
+      locale_scope: {
+        country_or_region: 'United States',
+        jurisdiction: 'United States',
+        currency: 'USD',
+      },
+      research_plan: {
+        key_questions: ['What are the best destinations?'],
+        search_queries: ['travel destinations'],
+        preferred_source_types: ['official'],
+        avoid_source_types: ['random_blogs'],
+      },
+      output_format: {
+        wants_table: false,
+        wants_steps: false,
+        wants_pros_cons: false,
+        wants_budget_numbers: false,
+      },
+      safety: {
+        high_stakes: false,
+        required_disclaimers: [],
+      },
+      red_flags: [],
+    };
+
+    it('infers and stores research context when contextInferrer is provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const localReportSuccess = vi.fn();
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+        reportLlmSuccess: localReportSuccess,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalledWith('Test research prompt');
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        researchContext: mockResearchContext,
+      });
+      expect(localReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
+    });
+
+    it('logs warning when context inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed to infer context' })),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ researchId: 'research-1' }),
+        'Context inference failed, proceeding without context'
+      );
+    });
+
+    it('does not call reportLlmSuccess when context inference fails', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'API_ERROR', message: 'Failed' })),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const localMockReportSuccess = vi.fn();
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+        reportLlmSuccess: localMockReportSuccess,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(localMockReportSuccess).not.toHaveBeenCalledWith('gemini-2.5-flash');
+    });
+
+    it('skips reportLlmSuccess when callback not provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const depsWithoutCallback: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+      };
+
+      await processResearch('research-1', depsWithoutCallback);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        researchContext: mockResearchContext,
+      });
+    });
   });
 });

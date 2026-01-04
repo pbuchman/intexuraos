@@ -8,8 +8,10 @@ import {
   type LlmProvider,
   type SupportedModel,
 } from '@intexuraos/llm-contract';
+import type { ResearchContext } from '@intexuraos/common-core';
 
 export type { LlmProvider, SupportedModel } from '@intexuraos/llm-contract';
+export type { ResearchContext } from '@intexuraos/common-core';
 
 export type ResearchStatus =
   | 'draft'
@@ -89,6 +91,7 @@ export interface Research {
   totalDurationMs?: number;
   sourceActionId?: string;
   skipSynthesis?: boolean;
+  researchContext?: ResearchContext;
   shareInfo?: ShareInfo;
   sourceResearchId?: string;
 }

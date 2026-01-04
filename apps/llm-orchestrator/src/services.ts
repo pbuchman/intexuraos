@@ -7,6 +7,7 @@ import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
 import { FirestoreUsageStatsRepository } from './infra/usage/index.js';
 import {
+  createContextInferrer,
   createResearchProvider,
   createSynthesizer,
   createTitleGenerator,
@@ -24,6 +25,7 @@ import { createImageServiceClient, type ImageServiceClient } from './infra/image
 
 export type { DecryptedApiKeys } from './infra/user/index.js';
 export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
+import type { Logger } from '@intexuraos/common-core';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -35,6 +37,7 @@ import {
   type TitleGenerator,
   type UsageStatsRepository,
 } from './domain/research/index.js';
+import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
 
 /**
  * Configuration for sharing features.
@@ -62,6 +65,11 @@ export interface ServiceContainer {
   createResearchProvider: (model: SupportedModel, apiKey: string) => LlmResearchProvider;
   createSynthesizer: (model: SupportedModel, apiKey: string) => LlmSynthesisProvider;
   createTitleGenerator: (model: string, apiKey: string) => TitleGenerator;
+  createContextInferrer: (
+    model: string,
+    apiKey: string,
+    logger?: Logger
+  ) => ContextInferenceProvider;
 }
 
 let container: ServiceContainer | null = null;
@@ -194,5 +202,6 @@ export function initializeServices(): void {
     createResearchProvider,
     createSynthesizer,
     createTitleGenerator,
+    createContextInferrer,
   };
 }

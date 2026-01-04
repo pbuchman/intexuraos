@@ -2,7 +2,15 @@
  * Fake implementations for testing.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import {
+  err,
+  ok,
+  type InferResearchContextOptions,
+  type InferSynthesisContextParams,
+  type ResearchContext,
+  type Result,
+  type SynthesisContext,
+} from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmPricing,
@@ -21,6 +29,7 @@ import type {
   TitleGenerator,
   UsageStatsRepository,
 } from '../domain/research/index.js';
+import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
 import type {
   DecryptedApiKeys,
   ResearchSettings,
@@ -329,7 +338,8 @@ export function createFakeSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _additionalSources?: { content: string; label?: string }[]
+      _additionalSources?: { content: string; label?: string }[],
+      _synthesisContext?: SynthesisContext
     ): Promise<Result<string, LlmError>> {
       return ok(synthesisResult);
     },
@@ -349,7 +359,8 @@ export function createFailingSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _additionalSources?: { content: string; label?: string }[]
+      _additionalSources?: { content: string; label?: string }[],
+      _synthesisContext?: SynthesisContext
     ): Promise<Result<string, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
@@ -503,4 +514,105 @@ export class FakeUsageStatsRepository implements UsageStatsRepository {
   clear(): void {
     this.stats.clear();
   }
+}
+
+/**
+ * Create a fake ContextInferenceProvider for testing.
+ */
+export function createFakeContextInferrer(): ContextInferenceProvider {
+  const defaultResearchContext: ResearchContext = {
+    language: 'en',
+    domain: 'general',
+    mode: 'standard',
+    intent_summary: 'General research query',
+    defaults_applied: [],
+    assumptions: [],
+    answer_style: ['practical'],
+    time_scope: {
+      as_of_date: new Date().toISOString().split('T')[0] ?? '',
+      prefers_recent_years: 2,
+      is_time_sensitive: false,
+    },
+    locale_scope: {
+      country_or_region: 'United States',
+      jurisdiction: 'United States',
+      currency: 'USD',
+    },
+    research_plan: {
+      key_questions: ['What are the main aspects?'],
+      search_queries: ['general query'],
+      preferred_source_types: ['official', 'academic'],
+      avoid_source_types: ['random_blogs'],
+    },
+    output_format: {
+      wants_table: false,
+      wants_steps: false,
+      wants_pros_cons: false,
+      wants_budget_numbers: false,
+    },
+    safety: {
+      high_stakes: false,
+      required_disclaimers: [],
+    },
+    red_flags: [],
+  };
+
+  const defaultSynthesisContext: SynthesisContext = {
+    language: 'en',
+    domain: 'general',
+    mode: 'standard',
+    synthesis_goals: ['merge', 'summarize'],
+    missing_sections: [],
+    detected_conflicts: [],
+    source_preference: {
+      prefer_official_over_aggregators: true,
+      prefer_recent_when_time_sensitive: true,
+    },
+    defaults_applied: [],
+    assumptions: [],
+    output_format: {
+      wants_table: false,
+      wants_actionable_summary: true,
+    },
+    safety: {
+      high_stakes: false,
+      required_disclaimers: [],
+    },
+    red_flags: [],
+  };
+
+  return {
+    async inferResearchContext(
+      _userQuery: string,
+      _opts?: InferResearchContextOptions
+    ): Promise<Result<ResearchContext, LlmError>> {
+      return ok(defaultResearchContext);
+    },
+    async inferSynthesisContext(
+      _params: InferSynthesisContextParams
+    ): Promise<Result<SynthesisContext, LlmError>> {
+      return ok(defaultSynthesisContext);
+    },
+  };
+}
+
+/**
+ * Create a fake ContextInferenceProvider that always fails for testing error paths.
+ */
+export function createFailingContextInferrer(
+  errorMessage = 'Test context inference failure'
+): ContextInferenceProvider {
+  return {
+    async inferResearchContext(
+      _userQuery: string,
+      _opts?: InferResearchContextOptions
+    ): Promise<Result<ResearchContext, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+    async inferSynthesisContext(
+      _params: InferSynthesisContextParams
+    ): Promise<Result<SynthesisContext, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
+    },
+  };
 }

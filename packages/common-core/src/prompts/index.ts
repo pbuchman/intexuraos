@@ -6,3 +6,4 @@ export {
   /** @deprecated Use AdditionalSource instead */
   type ExternalReport,
 } from './synthesisPrompt.js';
+export * from './context/index.js';

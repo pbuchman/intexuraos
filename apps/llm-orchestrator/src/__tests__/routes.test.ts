@@ -11,6 +11,7 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
+  createFakeContextInferrer,
   createFailingSynthesizer,
   createFakeLlmResearchProvider,
   createFakeSynthesizer,
@@ -81,6 +82,7 @@ describe('Research Routes - Unauthenticated', () => {
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
+      createContextInferrer: () => createFakeContextInferrer(),
     };
     setServices(services);
 
@@ -279,6 +281,7 @@ describe('Research Routes - Authenticated', () => {
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
+      createContextInferrer: () => createFakeContextInferrer(),
     };
     setServices(services);
 
@@ -1620,6 +1623,7 @@ describe('Research Routes - Authenticated', () => {
         createResearchProvider: () => createFakeLlmResearchProvider(),
         createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
         createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
       };
       setServices(services);
 
@@ -1883,6 +1887,7 @@ describe('Research Routes - Authenticated', () => {
         createResearchProvider: () => createFakeLlmResearchProvider(),
         createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
         createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
       };
       setServices(services);
 
@@ -1980,6 +1985,7 @@ describe('System Endpoints', () => {
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
+      createContextInferrer: () => createFakeContextInferrer(),
     };
     setServices(services);
 
@@ -2044,6 +2050,7 @@ describe('Internal Routes', () => {
       createResearchProvider: () => createFakeLlmResearchProvider(),
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
+      createContextInferrer: () => createFakeContextInferrer(),
     };
     setServices(services);
 
@@ -2481,6 +2488,7 @@ describe('Internal Routes', () => {
         createResearchProvider: () => createFakeLlmResearchProvider(),
         createSynthesizer: () => createFakeSynthesizer(),
         createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
       };
       setServices(services);
     });

@@ -3,7 +3,7 @@
  * Implemented by Gemini, Claude, and GPT adapters.
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type { Result, SynthesisContext } from '@intexuraos/common-core';
 
 export interface LlmError {
   code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED';
@@ -27,7 +27,8 @@ export interface LlmSynthesisProvider {
   synthesize(
     originalPrompt: string,
     reports: { model: string; content: string }[],
-    additionalSources?: { content: string; label?: string }[]
+    additionalSources?: { content: string; label?: string }[],
+    synthesisContext?: SynthesisContext
   ): Promise<Result<string, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<string, LlmError>>;

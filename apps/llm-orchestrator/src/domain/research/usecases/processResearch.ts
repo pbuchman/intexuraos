@@ -7,6 +7,7 @@ import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
 import type { SupportedModel } from '../models/index.js';
 import type { LlmSynthesisProvider, ResearchRepository, TitleGenerator } from '../ports/index.js';
+import type { ContextInferenceProvider } from '../ports/contextInference.js';
 
 interface MinimalLogger {
   info(obj: object, msg: string): void;
@@ -30,6 +31,7 @@ export interface ProcessResearchDeps {
   logger: MinimalLogger;
   titleGenerator?: TitleGenerator;
   synthesizer?: LlmSynthesisProvider;
+  contextInferrer?: ContextInferenceProvider;
   reportLlmSuccess?: (model: SupportedModel) => void;
 }
 
@@ -74,6 +76,26 @@ export async function processResearch(
     }
   } else {
     deps.logger.debug({ researchId }, 'Title generation skipped, no generator available');
+  }
+
+  // Infer research context if context inferrer is available
+  if (deps.contextInferrer !== undefined) {
+    const contextResult = await deps.contextInferrer.inferResearchContext(research.prompt);
+    if (contextResult.ok) {
+      await deps.researchRepo.update(researchId, { researchContext: contextResult.value });
+      deps.logger.info(
+        { researchId, domain: contextResult.value.domain },
+        'Research context inferred'
+      );
+      if (deps.reportLlmSuccess !== undefined) {
+        deps.reportLlmSuccess('gemini-2.5-flash');
+      }
+    } else {
+      deps.logger.warn(
+        { researchId, error: contextResult.error },
+        'Context inference failed, proceeding without context'
+      );
+    }
   }
 
   // Dispatch LLM calls to Pub/Sub (runs in separate Cloud Run instances)
