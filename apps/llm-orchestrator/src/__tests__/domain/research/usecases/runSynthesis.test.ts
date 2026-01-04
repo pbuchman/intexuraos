@@ -186,16 +186,16 @@ describe('runSynthesis', () => {
     );
   });
 
-  it('includes external reports in synthesis', async () => {
+  it('includes input contexts in synthesis', async () => {
     const research = createTestResearch({
-      externalReports: [
+      inputContexts: [
         {
-          id: 'ext-1',
-          content: 'External report 1',
-          model: 'external-model',
+          id: 'ctx-1',
+          content: 'Input context 1',
+          label: 'external-model',
           addedAt: '2024-01-01T10:00:00Z',
         },
-        { id: 'ext-2', content: 'External report 2', addedAt: '2024-01-01T10:00:00Z' },
+        { id: 'ctx-2', content: 'Input context 2', addedAt: '2024-01-01T10:00:00Z' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -205,7 +205,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       expect.any(Array),
-      [{ content: 'External report 1', label: 'external-model' }, { content: 'External report 2' }]
+      [{ content: 'Input context 1', label: 'external-model' }, { content: 'Input context 2' }]
     );
   });
 
@@ -307,7 +307,7 @@ describe('runSynthesis', () => {
   });
 
   describe('skip synthesis logic', () => {
-    it('skips synthesis when only 1 successful LLM and no external reports', async () => {
+    it('skips synthesis when only 1 successful LLM and no input contexts', async () => {
       const research = createTestResearch({
         selectedModels: ['gemini-2.5-pro'],
         llmResults: [
@@ -353,7 +353,7 @@ describe('runSynthesis', () => {
       expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
     });
 
-    it('runs synthesis when 1 LLM succeeds with external reports', async () => {
+    it('runs synthesis when 1 LLM succeeds with input contexts', async () => {
       const research = createTestResearch({
         selectedModels: ['gemini-2.5-pro'],
         llmResults: [
@@ -364,9 +364,9 @@ describe('runSynthesis', () => {
             result: 'Google result',
           },
         ],
-        externalReports: [
-          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
-          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        inputContexts: [
+          { id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ctx-2', content: 'Context 2', addedAt: '2024-01-01T10:00:00Z' },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -402,14 +402,14 @@ describe('runSynthesis', () => {
       expect(deps.mockSynthesizer.synthesize).toHaveBeenCalled();
     });
 
-    it('runs synthesis when no LLMs succeed but has external reports', async () => {
+    it('runs synthesis when no LLMs succeed but has input contexts', async () => {
       const research = createTestResearch({
         llmResults: [
           { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Failed' },
         ],
-        externalReports: [
-          { id: 'ext-1', content: 'External 1', addedAt: '2024-01-01T10:00:00Z' },
-          { id: 'ext-2', content: 'External 2', addedAt: '2024-01-01T10:00:00Z' },
+        inputContexts: [
+          { id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T10:00:00Z' },
+          { id: 'ctx-2', content: 'Context 2', addedAt: '2024-01-01T10:00:00Z' },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));

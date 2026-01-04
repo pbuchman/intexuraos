@@ -329,7 +329,7 @@ export function createFakeSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _externalReports?: { content: string; model?: string }[]
+      _additionalSources?: { content: string; label?: string }[]
     ): Promise<Result<string, LlmError>> {
       return ok(synthesisResult);
     },
@@ -349,7 +349,7 @@ export function createFailingSynthesizer(
     async synthesize(
       _originalPrompt: string,
       _reports: { model: string; content: string }[],
-      _externalReports?: { content: string; model?: string }[]
+      _additionalSources?: { content: string; label?: string }[]
     ): Promise<Result<string, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },

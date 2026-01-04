@@ -222,14 +222,14 @@ describe('enhanceResearch', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.externalReports).toBeDefined();
-      expect(result.value.externalReports?.length).toBeGreaterThan(0);
+      expect(result.value.inputContexts).toBeDefined();
+      expect(result.value.inputContexts?.length).toBeGreaterThan(0);
     }
   });
 
   it('creates enhanced research with removed contexts', async () => {
     const source = createCompletedResearch({
-      externalReports: [{ id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T00:00:00Z' }],
+      inputContexts: [{ id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T00:00:00Z' }],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(source));
     deps.mockRepo.save.mockImplementation((research: Research) => ok(research));
@@ -244,7 +244,7 @@ describe('enhanceResearch', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.externalReports ?? []).toHaveLength(0);
+      expect(result.value.inputContexts ?? []).toHaveLength(0);
     }
   });
 

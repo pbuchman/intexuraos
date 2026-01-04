@@ -48,13 +48,13 @@ export interface LlmResult {
 }
 
 /**
- * External LLM report provided by user (e.g., from Perplexity, GPT-4 web).
- * Max 60k chars per report, max 5 reports total.
+ * Input context provided by user (e.g., articles, notes, external research).
+ * Max 60k chars per context, max 5 contexts total.
  */
-export interface ExternalReport {
+export interface InputContext {
   id: string;
   content: string;
-  model?: string;
+  label?: string;
   addedAt: string;
 }
 
@@ -80,7 +80,7 @@ export interface Research {
   synthesisModel: SupportedModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
-  externalReports?: ExternalReport[];
+  inputContexts?: InputContext[];
   synthesizedResult?: string;
   synthesisError?: string;
   partialFailure?: PartialFailure;
@@ -107,7 +107,7 @@ export function createResearch(params: {
   prompt: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
-  externalReports?: { content: string; model?: string }[];
+  inputContexts?: { content: string; label?: string }[];
   skipSynthesis?: boolean;
 }): Research {
   const now = new Date().toISOString();
@@ -123,17 +123,17 @@ export function createResearch(params: {
     startedAt: now,
   };
 
-  if (params.externalReports !== undefined && params.externalReports.length > 0) {
-    research.externalReports = params.externalReports.map((report, idx) => {
-      const externalReport: ExternalReport = {
-        id: `${params.id}-ext-${String(idx)}`,
-        content: report.content,
+  if (params.inputContexts !== undefined && params.inputContexts.length > 0) {
+    research.inputContexts = params.inputContexts.map((ctx, idx) => {
+      const inputContext: InputContext = {
+        id: `${params.id}-ctx-${String(idx)}`,
+        content: ctx.content,
         addedAt: now,
       };
-      if (report.model !== undefined) {
-        externalReport.model = report.model;
+      if (ctx.label !== undefined) {
+        inputContext.label = ctx.label;
       }
-      return externalReport;
+      return inputContext;
     });
   }
 
@@ -152,7 +152,7 @@ export function createDraftResearch(params: {
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
   sourceActionId?: string;
-  externalReports?: ExternalReport[];
+  inputContexts?: InputContext[];
 }): Research {
   const now = new Date().toISOString();
   const research: Research = {
@@ -171,8 +171,8 @@ export function createDraftResearch(params: {
     research.sourceActionId = params.sourceActionId;
   }
 
-  if (params.externalReports !== undefined) {
-    research.externalReports = params.externalReports;
+  if (params.inputContexts !== undefined) {
+    research.inputContexts = params.inputContexts;
   }
 
   return research;
@@ -183,7 +183,7 @@ export interface EnhanceResearchParams {
   userId: string;
   sourceResearch: Research;
   additionalModels?: SupportedModel[];
-  additionalContexts?: { content: string; model?: string }[];
+  additionalContexts?: { content: string; label?: string }[];
   synthesisModel?: SupportedModel;
   removeContextIds?: string[];
 }
@@ -205,18 +205,18 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   ];
 
   const removeSet = new Set(params.removeContextIds ?? []);
-  const existingContexts = (source.externalReports ?? []).filter((r) => !removeSet.has(r.id));
+  const existingContexts = (source.inputContexts ?? []).filter((r) => !removeSet.has(r.id));
 
-  const additionalContexts: ExternalReport[] = (params.additionalContexts ?? []).map((ctx, idx) => {
-    const report: ExternalReport = {
-      id: `${params.id}-ext-${String(idx)}`,
+  const additionalContexts: InputContext[] = (params.additionalContexts ?? []).map((ctx, idx) => {
+    const inputContext: InputContext = {
+      id: `${params.id}-ctx-${String(idx)}`,
       content: ctx.content,
       addedAt: now,
     };
-    if (ctx.model !== undefined) {
-      report.model = ctx.model;
+    if (ctx.label !== undefined) {
+      inputContext.label = ctx.label;
     }
-    return report;
+    return inputContext;
   });
 
   const allContexts = [...existingContexts, ...additionalContexts];
@@ -235,7 +235,7 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   };
 
   if (allContexts.length > 0) {
-    research.externalReports = allContexts;
+    research.inputContexts = allContexts;
   }
 
   return research;

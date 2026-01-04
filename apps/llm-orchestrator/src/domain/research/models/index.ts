@@ -1,6 +1,6 @@
 export {
   type EnhanceResearchParams,
-  type ExternalReport,
+  type InputContext,
   type LlmProvider,
   type LlmResult,
   type LlmResultStatus,

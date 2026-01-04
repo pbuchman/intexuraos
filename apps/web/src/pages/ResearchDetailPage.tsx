@@ -19,7 +19,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, PROVIDER_MODELS } from '@/components';
 import { useAuth } from '@/context';
 import { useResearch } from '@/hooks';
 import {
@@ -30,12 +30,13 @@ import {
   retryFromFailed,
   unshareResearch,
 } from '@/services/llmOrchestratorApi';
-import type {
-  LlmProvider,
-  LlmResult,
-  PartialFailure,
-  PartialFailureDecision,
-  ResearchStatus,
+import {
+  getProviderForModel,
+  type LlmProvider,
+  type LlmResult,
+  type PartialFailure,
+  type PartialFailureDecision,
+  type ResearchStatus,
 } from '@/services/llmOrchestratorApi.types';
 
 /**
@@ -358,8 +359,11 @@ export function ResearchDetailPage(): React.JSX.Element {
 
     try {
       const token = await getAccessToken();
+      const additionalModels = selectedEnhanceLlms
+        .map((provider) => PROVIDER_MODELS.find((p) => p.id === provider)?.default)
+        .filter((m): m is NonNullable<typeof m> => m !== undefined);
       const enhanced = await enhanceResearch(token, id, {
-        ...(selectedEnhanceLlms.length > 0 && { additionalLlms: selectedEnhanceLlms }),
+        ...(additionalModels.length > 0 && { additionalModels }),
         ...(validContexts.length > 0 && {
           additionalContexts: validContexts.map((content) => ({ content })),
         }),
@@ -383,7 +387,7 @@ export function ResearchDetailPage(): React.JSX.Element {
 
   const getAvailableEnhanceLlms = (): LlmProvider[] => {
     if (research === null) return [];
-    const existingProviders = new Set(research.selectedLlms);
+    const existingProviders = new Set(research.selectedModels.map(getProviderForModel));
     return ALL_PROVIDERS.filter((p) => !existingProviders.has(p));
   };
 
@@ -708,8 +712,8 @@ export function ResearchDetailPage(): React.JSX.Element {
       {showLlmStatus ? (
         <ProcessingStatus
           llmResults={research.llmResults}
-          selectedLlms={research.selectedLlms}
-          synthesisLlm={research.synthesisLlm}
+          selectedProviders={[...new Set(research.selectedModels.map(getProviderForModel))]}
+          synthesisProvider={getProviderForModel(research.synthesisModel)}
           researchStatus={research.status}
           title={research.status === 'failed' ? 'LLM Status' : 'Processing Status'}
         />
@@ -947,8 +951,8 @@ export function ResearchDetailPage(): React.JSX.Element {
 
 interface ProcessingStatusProps {
   llmResults: LlmResult[];
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedProviders: LlmProvider[];
+  synthesisProvider: LlmProvider;
   researchStatus: ResearchStatus;
   title?: string;
 }
@@ -963,8 +967,8 @@ const PROVIDER_DISPLAY_NAMES: Record<LlmProvider, string> = {
 
 function ProcessingStatus({
   llmResults,
-  selectedLlms,
-  synthesisLlm,
+  selectedProviders,
+  synthesisProvider,
   researchStatus,
   title = 'Processing Status',
 }: ProcessingStatusProps): React.JSX.Element {
@@ -1007,7 +1011,7 @@ function ProcessingStatus({
     <Card title={title} className="mb-6">
       <div className="space-y-3">
         {ALL_PROVIDERS.map((provider) => {
-          const isSelected = selectedLlms.includes(provider);
+          const isSelected = selectedProviders.includes(provider);
           const result = llmResults.find((r) => r.provider === provider);
 
           if (!isSelected) {
@@ -1048,7 +1052,7 @@ function ProcessingStatus({
           <div className="flex items-center gap-3">
             <StatusDot status={synthesisStatus.status} />
             <span className="font-medium">Synthesis</span>
-            <span className="text-sm text-slate-500">({synthesisLlm})</span>
+            <span className="text-sm text-slate-500">({synthesisProvider})</span>
             <span className="text-sm text-slate-500">{synthesisStatus.text}</span>
           </div>
         </div>

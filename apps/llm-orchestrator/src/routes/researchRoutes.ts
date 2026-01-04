@@ -21,7 +21,7 @@ import {
   createLlmResults,
   deleteResearch,
   enhanceResearch,
-  type ExternalReport,
+  type InputContext,
   getResearch,
   listResearches,
   type PartialFailureDecision,
@@ -58,7 +58,7 @@ interface CreateResearchBody {
   prompt: string;
   selectedModels: SupportedModel[];
   synthesisModel?: SupportedModel;
-  externalReports?: { content: string; model?: string }[];
+  inputContexts?: { content: string; label?: string }[];
   skipSynthesis?: boolean;
 }
 
@@ -66,7 +66,7 @@ interface SaveDraftBody {
   prompt: string;
   selectedModels?: SupportedModel[];
   synthesisModel?: SupportedModel;
-  externalReports?: { content: string; model?: string }[];
+  inputContexts?: { content: string; label?: string }[];
 }
 
 interface ListResearchesQuery {
@@ -84,7 +84,7 @@ interface ConfirmPartialFailureBody {
 
 interface EnhanceResearchBody {
   additionalModels?: SupportedModel[];
-  additionalContexts?: { content: string; model?: string }[];
+  additionalContexts?: { content: string; label?: string }[];
   synthesisModel?: SupportedModel;
   removeContextIds?: string[];
 }
@@ -120,8 +120,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         selectedModels: body.selectedModels,
         synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
       };
-      if (body.externalReports !== undefined) {
-        submitParams.externalReports = body.externalReports;
+      if (body.inputContexts !== undefined) {
+        submitParams.inputContexts = body.inputContexts;
       }
       if (body.skipSynthesis === true) {
         submitParams.skipSynthesis = true;
@@ -198,18 +198,18 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         selectedModels: resolvedSelectedModels,
         synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
       };
-      if (body.externalReports !== undefined) {
+      if (body.inputContexts !== undefined) {
         const now = new Date().toISOString();
-        draftParams.externalReports = body.externalReports.map((report) => {
-          const externalReport: ExternalReport = {
+        draftParams.inputContexts = body.inputContexts.map((ctx) => {
+          const inputContext: InputContext = {
             id: generateId(),
-            content: report.content,
+            content: ctx.content,
             addedAt: now,
           };
-          if (report.model !== undefined) {
-            externalReport.model = report.model;
+          if (ctx.label !== undefined) {
+            inputContext.label = ctx.label;
           }
-          return externalReport;
+          return inputContext;
         });
       }
       const draft = createDraftResearch(draftParams);
@@ -297,18 +297,18 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         llmResults: createLlmResults(newSelectedModels),
       };
 
-      if (body.externalReports !== undefined) {
+      if (body.inputContexts !== undefined) {
         const now = new Date().toISOString();
-        updates.externalReports = body.externalReports.map((report) => {
-          const externalReport: ExternalReport = {
+        updates.inputContexts = body.inputContexts.map((ctx) => {
+          const inputContext: InputContext = {
             id: generateId(),
-            content: report.content,
+            content: ctx.content,
             addedAt: now,
           };
-          if (report.model !== undefined) {
-            externalReport.model = report.model;
+          if (ctx.label !== undefined) {
+            inputContext.label = ctx.label;
           }
-          return externalReport;
+          return inputContext;
         });
       }
 

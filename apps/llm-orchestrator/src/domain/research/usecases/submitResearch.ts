@@ -12,7 +12,7 @@ export interface SubmitResearchParams {
   prompt: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
-  externalReports?: { content: string; model?: string }[];
+  inputContexts?: { content: string; label?: string }[];
   skipSynthesis?: boolean;
 }
 
@@ -32,8 +32,8 @@ export async function submitResearch(
     selectedModels: params.selectedModels,
     synthesisModel: params.synthesisModel,
   };
-  if (params.externalReports !== undefined) {
-    createParams.externalReports = params.externalReports;
+  if (params.inputContexts !== undefined) {
+    createParams.inputContexts = params.inputContexts;
   }
   if (params.skipSynthesis === true) {
     createParams.skipSynthesis = true;

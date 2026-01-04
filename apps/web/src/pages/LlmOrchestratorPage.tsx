@@ -13,10 +13,11 @@ import {
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
 import { getResearch, saveDraft, updateDraft } from '@/services/llmOrchestratorApi';
-import type {
-  LlmProvider,
-  SupportedModel,
-  SaveDraftRequest,
+import {
+  getProviderForModel,
+  type LlmProvider,
+  type SupportedModel,
+  type SaveDraftRequest,
 } from '@/services/llmOrchestratorApi.types';
 
 const MAX_INPUT_CONTEXTS = 5;
@@ -82,20 +83,18 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
         setPrompt(draft.prompt);
 
-        // Convert legacy selectedLlms to model selections
+        // Load model selections from draft
         const selections = new Map<LlmProvider, SupportedModel | null>();
         for (const provider of PROVIDER_MODELS) {
-          if (draft.selectedLlms.includes(provider.id)) {
-            selections.set(provider.id, provider.default);
-          } else {
-            selections.set(provider.id, null);
-          }
+          const selectedModel = draft.selectedModels.find(
+            (m) => getProviderForModel(m) === provider.id
+          );
+          selections.set(provider.id, selectedModel ?? null);
         }
         setModelSelections(selections);
 
-        // Convert legacy synthesisLlm to model
-        const synthProvider = PROVIDER_MODELS.find((p) => p.id === draft.synthesisLlm);
-        setSynthesisModel(synthProvider?.default ?? null);
+        // Load synthesis model from draft
+        setSynthesisModel(draft.synthesisModel);
 
         lastSavedPromptRef.current = draft.prompt;
 
@@ -109,7 +108,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         // Track initial saved state for change detection
         lastSavedStateRef.current = {
           modelSelections: selections,
-          synthesisModel: synthProvider?.default ?? null,
+          synthesisModel: draft.synthesisModel,
           inputContexts: loadedContexts,
         };
       } catch (err) {

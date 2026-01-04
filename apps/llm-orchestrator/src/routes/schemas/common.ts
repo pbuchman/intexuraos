@@ -49,17 +49,7 @@ export const inputContextSchema = {
   properties: {
     id: { type: 'string' },
     content: { type: 'string' },
-    addedAt: { type: 'string' },
-  },
-  required: ['id', 'content', 'addedAt'],
-} as const;
-
-export const externalReportSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    content: { type: 'string' },
-    model: { type: 'string', nullable: true },
+    label: { type: 'string', nullable: true },
     addedAt: { type: 'string' },
   },
   required: ['id', 'content', 'addedAt'],
@@ -111,11 +101,6 @@ export const researchSchema = {
     inputContexts: {
       type: 'array',
       items: inputContextSchema,
-      nullable: true,
-    },
-    externalReports: {
-      type: 'array',
-      items: externalReportSchema,
       nullable: true,
     },
     synthesizedResult: { type: 'string', nullable: true },

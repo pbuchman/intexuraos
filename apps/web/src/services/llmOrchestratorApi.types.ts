@@ -12,6 +12,19 @@ export type SupportedModel =
   | 'o4-mini-deep-research'
   | 'gpt-5.2';
 
+const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
+  'gemini-2.5-pro': 'google',
+  'gemini-2.5-flash': 'google',
+  'claude-opus-4-5-20251101': 'anthropic',
+  'claude-sonnet-4-5-20250929': 'anthropic',
+  'o4-mini-deep-research': 'openai',
+  'gpt-5.2': 'openai',
+};
+
+export function getProviderForModel(model: SupportedModel): LlmProvider {
+  return MODEL_TO_PROVIDER[model];
+}
+
 export type ResearchStatus =
   | 'draft'
   | 'pending'
@@ -77,8 +90,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
-  selectedLlms: LlmProvider[];
-  synthesisLlm: LlmProvider;
+  selectedModels: SupportedModel[];
+  synthesisModel: SupportedModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   inputContexts?: InputContext[];

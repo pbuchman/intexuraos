@@ -20,7 +20,7 @@ export const createResearchBodySchema = {
       maxItems: 6,
     },
     synthesisModel: supportedModelSchema,
-    externalReports: {
+    inputContexts: {
       type: 'array',
       items: {
         type: 'object',
@@ -30,7 +30,7 @@ export const createResearchBodySchema = {
             type: 'string',
             maxLength: 60000,
           },
-          model: {
+          label: {
             type: 'string',
             maxLength: 100,
           },
@@ -160,7 +160,7 @@ export const saveDraftBodySchema = {
       maxItems: 6,
     },
     synthesisModel: supportedModelSchema,
-    externalReports: {
+    inputContexts: {
       type: 'array',
       items: {
         type: 'object',
@@ -170,7 +170,7 @@ export const saveDraftBodySchema = {
             type: 'string',
             maxLength: 60000,
           },
-          model: {
+          label: {
             type: 'string',
             maxLength: 100,
           },
@@ -286,7 +286,7 @@ export const enhanceResearchBodySchema = {
             type: 'string',
             maxLength: 60000,
           },
-          model: {
+          label: {
             type: 'string',
             maxLength: 100,
           },

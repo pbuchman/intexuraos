@@ -326,14 +326,14 @@ describe('Research Routes - Authenticated', () => {
           prompt: 'Test prompt',
           selectedModels: ['gemini-2.5-pro'],
           synthesisModel: 'claude-opus-4-5-20251101',
-          externalReports: [{ content: 'External report content', model: 'Custom Model' }],
+          inputContexts: [{ content: 'Input context content', label: 'Custom Label' }],
         },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.externalReports).toHaveLength(1);
+      expect(body.data.inputContexts).toHaveLength(1);
     });
 
     it('returns 500 on save failure', async () => {
@@ -399,7 +399,7 @@ describe('Research Routes - Authenticated', () => {
           prompt: 'Test prompt',
           selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
           synthesisModel: 'claude-opus-4-5-20251101',
-          externalReports: [{ content: 'Test report', model: 'Test Model' }],
+          inputContexts: [{ content: 'Test context', label: 'Test Label' }],
         },
       });
 
@@ -410,7 +410,7 @@ describe('Research Routes - Authenticated', () => {
       if (saved !== undefined) {
         expect(saved.selectedModels).toEqual(['gemini-2.5-pro', 'o4-mini-deep-research']);
         expect(saved.synthesisModel).toBe('claude-opus-4-5-20251101');
-        expect(saved.externalReports).toHaveLength(1);
+        expect(saved.inputContexts).toHaveLength(1);
       }
     });
 
@@ -660,10 +660,10 @@ describe('Research Routes - Authenticated', () => {
         url: '/research/draft-123',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          prompt: 'Updated prompt with external reports',
-          externalReports: [
-            { content: 'External report content', model: 'gpt-4' },
-            { content: 'Another report without model' },
+          prompt: 'Updated prompt with input contexts',
+          inputContexts: [
+            { content: 'Input context content', label: 'gpt-4' },
+            { content: 'Another context without label' },
           ],
         },
       });
@@ -671,11 +671,11 @@ describe('Research Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.externalReports).toHaveLength(2);
-      expect(body.data.externalReports?.[0]?.content).toBe('External report content');
-      expect(body.data.externalReports?.[0]?.model).toBe('gpt-4');
-      expect(body.data.externalReports?.[1]?.content).toBe('Another report without model');
-      expect(body.data.externalReports?.[1]?.model).toBeUndefined();
+      expect(body.data.inputContexts).toHaveLength(2);
+      expect(body.data.inputContexts?.[0]?.content).toBe('Input context content');
+      expect(body.data.inputContexts?.[0]?.label).toBe('gpt-4');
+      expect(body.data.inputContexts?.[1]?.content).toBe('Another context without label');
+      expect(body.data.inputContexts?.[1]?.label).toBeUndefined();
     });
 
     it('returns 500 when update fails', async () => {
@@ -1206,13 +1206,13 @@ describe('Research Routes - Authenticated', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.externalReports?.length).toBeGreaterThan(0);
+      expect(body.data.inputContexts?.length).toBeGreaterThan(0);
     });
 
     it('creates enhanced research with removed contexts', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch({
-        externalReports: [{ id: 'ctx-1', content: 'Context', addedAt: '2024-01-01T00:00:00Z' }],
+        inputContexts: [{ id: 'ctx-1', content: 'Context', addedAt: '2024-01-01T00:00:00Z' }],
       });
       fakeRepo.addResearch(source);
 
@@ -1627,8 +1627,8 @@ describe('Research Routes - Authenticated', () => {
       try {
         const token = await createToken(TEST_USER_ID);
         const research = createAwaitingConfirmationResearch({
-          externalReports: [
-            { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
+          inputContexts: [
+            { id: 'ctx-1', content: 'Input context', addedAt: '2024-01-01T10:00:00Z' },
           ],
         });
         newFakeRepo.addResearch(research);
@@ -2770,9 +2770,7 @@ describe('Internal Routes', () => {
         selectedModels: ['gemini-2.5-pro'],
         synthesisModel: 'gemini-2.5-pro',
         llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
-        externalReports: [
-          { id: 'ext-1', content: 'External report', addedAt: '2024-01-01T10:00:00Z' },
-        ],
+        inputContexts: [{ id: 'ctx-1', content: 'Input context', addedAt: '2024-01-01T10:00:00Z' }],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });

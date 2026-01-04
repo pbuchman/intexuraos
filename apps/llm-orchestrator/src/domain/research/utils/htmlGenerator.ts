@@ -10,9 +10,9 @@ export interface LlmResultInput {
   status: string;
 }
 
-export interface ExternalReportInput {
+export interface InputContextInput {
   content: string;
-  model?: string;
+  label?: string;
 }
 
 export interface CoverImageInput {
@@ -28,7 +28,7 @@ export interface HtmlGeneratorInput {
   sharedAt: string;
   staticAssetsUrl: string;
   llmResults?: LlmResultInput[];
-  externalReports?: ExternalReportInput[];
+  inputContexts?: InputContextInput[];
   coverImage?: CoverImageInput;
 }
 
@@ -291,7 +291,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
     sharedAt,
     staticAssetsUrl,
     llmResults,
-    externalReports,
+    inputContexts,
     coverImage,
   } = input;
 
@@ -341,19 +341,19 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
     `
       : '';
 
-  const externalReportsHtml =
-    externalReports !== undefined && externalReports.length > 0
+  const inputContextsHtml =
+    inputContexts !== undefined && inputContexts.length > 0
       ? `
-      <h2>External Reports</h2>
-      ${externalReports
+      <h2>Additional Context</h2>
+      ${inputContexts
         .map(
-          (r, i) => `
+          (ctx, i) => `
         <details>
           <summary>
-            ${r.model !== undefined && r.model !== '' ? escapeHtml(r.model) : `External Report ${String(i + 1)}`}
+            ${ctx.label !== undefined && ctx.label !== '' ? escapeHtml(ctx.label) : `Context ${String(i + 1)}`}
           </summary>
           <div class="detail-content prose">
-            ${marked.parse(r.content, { async: false })}
+            ${marked.parse(ctx.content, { async: false })}
           </div>
         </details>
       `
@@ -396,7 +396,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
 
       ${llmResultsHtml}
 
-      ${externalReportsHtml}
+      ${inputContextsHtml}
     </main>
 
     <footer>

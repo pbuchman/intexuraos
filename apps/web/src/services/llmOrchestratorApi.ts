@@ -4,11 +4,11 @@ import type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
   ListResearchesResponse,
-  LlmProvider,
   LlmUsageStats,
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
+  SupportedModel,
 } from './llmOrchestratorApi.types.js';
 
 /**
@@ -148,9 +148,9 @@ export async function unshareResearch(accessToken: string, id: string): Promise<
 }
 
 export interface EnhanceResearchRequest {
-  additionalLlms?: LlmProvider[];
-  additionalContexts?: { content: string; model?: string }[];
-  synthesisLlm?: LlmProvider;
+  additionalModels?: SupportedModel[];
+  additionalContexts?: { content: string; label?: string }[];
+  synthesisModel?: SupportedModel;
   removeContextIds?: string[];
 }
 
@@ -193,6 +193,7 @@ export type {
   PartialFailureDecision,
   Research,
   ResearchStatus,
+  SupportedModel,
   CreateResearchRequest,
   SaveDraftRequest,
   ListResearchesResponse,

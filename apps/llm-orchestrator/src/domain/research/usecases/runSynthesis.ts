@@ -60,9 +60,9 @@ export async function runSynthesis(
   await researchRepo.update(researchId, { status: 'synthesizing' });
 
   const successfulResults = research.llmResults.filter((r) => r.status === 'completed');
-  const externalReportsCount = research.externalReports?.length ?? 0;
+  const inputContextsCount = research.inputContexts?.length ?? 0;
 
-  if (successfulResults.length === 0 && externalReportsCount === 0) {
+  if (successfulResults.length === 0 && inputContextsCount === 0) {
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: 'No successful LLM results to synthesize',
@@ -71,7 +71,7 @@ export async function runSynthesis(
     return { ok: false, error: 'No successful LLM results' };
   }
 
-  const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCount === 0;
+  const shouldSkipSynthesis = successfulResults.length <= 1 && inputContextsCount === 0;
 
   if (shouldSkipSynthesis) {
     const now = new Date();
@@ -99,10 +99,10 @@ export async function runSynthesis(
     content: r.result ?? '',
   }));
 
-  const additionalSources = research.externalReports?.map((r) => {
-    const source: { content: string; label?: string } = { content: r.content };
-    if (r.model !== undefined) {
-      source.label = r.model;
+  const additionalSources = research.inputContexts?.map((ctx) => {
+    const source: { content: string; label?: string } = { content: ctx.content };
+    if (ctx.label !== undefined) {
+      source.label = ctx.label;
     }
     return source;
   });
@@ -159,7 +159,7 @@ export async function runSynthesis(
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
       llmResults: research.llmResults,
-      ...(research.externalReports !== undefined && { externalReports: research.externalReports }),
+      ...(research.inputContexts !== undefined && { inputContexts: research.inputContexts }),
       ...(coverImage !== undefined && { coverImage }),
     });
 
