@@ -714,7 +714,7 @@ describe('runSynthesis', () => {
       });
     });
 
-    it('includes cover image in shareInfo when image generation succeeds', async () => {
+    it('includes cover image in shareInfo when image generation succeeds with Google key', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -740,6 +740,7 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-google-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -750,7 +751,7 @@ describe('runSynthesis', () => {
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        'gpt-image-1',
+        'gemini-2.5-flash-image',
         'user-1'
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
@@ -762,6 +763,70 @@ describe('runSynthesis', () => {
           coverImageId: 'img-123',
         }),
       });
+    });
+
+    it('uses OpenAI when only OpenAI key is available', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi.fn().mockResolvedValue(ok({ prompt: 'generated prompt' })),
+        generateImage: vi.fn().mockResolvedValue(
+          ok({
+            id: 'img-456',
+            thumbnailUrl: 'https://storage.example.com/thumb.jpg',
+            fullSizeUrl: 'https://storage.example.com/full.png',
+          })
+        ),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { openai: 'test-openai-key' },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
+        'generated prompt',
+        'gpt-image-1',
+        'user-1'
+      );
+    });
+
+    it('skips image generation when no API keys provided', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi.fn(),
+        generateImage: vi.fn(),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generatePrompt).not.toHaveBeenCalled();
+      expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
     });
 
     it('continues without cover image when prompt generation fails', async () => {
@@ -786,6 +851,7 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -823,6 +889,7 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });

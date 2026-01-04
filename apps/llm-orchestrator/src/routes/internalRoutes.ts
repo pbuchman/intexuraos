@@ -361,6 +361,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 request.log.error({ researchId: event.researchId, ...obj }, msg);
               },
             },
+            imageApiKeys: apiKeys,
           });
         }
 
@@ -863,6 +864,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   request.log.error({ researchId: event.researchId, ...obj }, msg);
                 },
               },
+              imageApiKeys: apiKeysResult.value,
             });
 
             if (synthesisResult.ok) {

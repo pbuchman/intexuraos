@@ -49,7 +49,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       const image = createTestImage({
         id: 'img-456',
         prompt: 'A futuristic city at night',
-        model: 'nano-banana-pro',
+        model: 'gemini-2.5-flash-image',
       });
 
       const result = await repository.save(image);
@@ -58,7 +58,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       if (result.ok) {
         expect(result.value.id).toBe('img-456');
         expect(result.value.prompt).toBe('A futuristic city at night');
-        expect(result.value.model).toBe('nano-banana-pro');
+        expect(result.value.model).toBe('gemini-2.5-flash-image');
       }
     });
 

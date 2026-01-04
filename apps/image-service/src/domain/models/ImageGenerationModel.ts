@@ -1,4 +1,4 @@
-export type ImageGenerationModel = 'gpt-image-1' | 'nano-banana-pro';
+export type ImageGenerationModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
 export interface ImageGenerationModelConfig {
   provider: 'openai' | 'google';
@@ -7,7 +7,7 @@ export interface ImageGenerationModelConfig {
 
 export const IMAGE_GENERATION_MODELS: Record<ImageGenerationModel, ImageGenerationModelConfig> = {
   'gpt-image-1': { provider: 'openai', modelId: 'gpt-image-1' },
-  'nano-banana-pro': { provider: 'google', modelId: 'imagen-3.0-generate-002' },
+  'gemini-2.5-flash-image': { provider: 'google', modelId: 'gemini-2.5-flash-image' },
 };
 
 export function isValidImageGenerationModel(model: string): model is ImageGenerationModel {

@@ -774,6 +774,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           reportLlmSuccess: (): void => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
           },
+          imageApiKeys: apiKeysResult.value,
         },
       });
 

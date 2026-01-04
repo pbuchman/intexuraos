@@ -54,7 +54,7 @@ function createMockResponse(b64Image: string): object {
 
 describe('GoogleImageGenerator', () => {
   const testApiKey = 'test-api-key';
-  const testModel = 'nano-banana-pro' as const;
+  const testModel = 'gemini-2.5-flash-image' as const;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
 

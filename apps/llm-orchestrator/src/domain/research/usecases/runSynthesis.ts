@@ -21,6 +21,11 @@ export interface ShareConfig {
   staticAssetsUrl: string;
 }
 
+export interface ImageApiKeys {
+  google?: string;
+  openai?: string;
+}
+
 export interface RunSynthesisDeps {
   researchRepo: ResearchRepository;
   synthesizer: LlmSynthesisProvider;
@@ -33,6 +38,7 @@ export interface RunSynthesisDeps {
   webAppUrl: string;
   reportLlmSuccess?: () => void;
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void };
+  imageApiKeys?: ImageApiKeys;
 }
 
 export async function runSynthesis(
@@ -51,6 +57,7 @@ export async function runSynthesis(
     webAppUrl,
     reportLlmSuccess,
     logger,
+    imageApiKeys,
   } = deps;
 
   logger?.info('[4.1] Loading research from database');
@@ -169,6 +176,7 @@ export async function runSynthesis(
       imageServiceClient,
       synthesisResult.value,
       userId,
+      imageApiKeys,
       logger
     );
     if (imageResult !== null) {
@@ -249,14 +257,38 @@ export async function runSynthesis(
   return { ok: true };
 }
 
+type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+
+function selectImageModel(imageApiKeys: ImageApiKeys | undefined): ImageModel | null {
+  if (imageApiKeys?.google !== undefined) {
+    return 'gemini-2.5-flash-image';
+  }
+  if (imageApiKeys?.openai !== undefined) {
+    return 'gpt-image-1';
+  }
+  return null;
+}
+
 async function generateCoverImage(
   client: ImageServiceClient,
   synthesizedResult: string,
   userId: string,
+  imageApiKeys: ImageApiKeys | undefined,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
   const promptModel = 'gemini-2.5-pro';
-  const imageModel = 'gpt-image-1';
+  const imageModel = selectImageModel(imageApiKeys);
+
+  if (imageModel === null) {
+    logger?.info(
+      '[4.4.1a] No API keys available for image generation (neither Google nor OpenAI key set)'
+    );
+    return null;
+  }
+
+  logger?.info(
+    `[4.4.1b] Selected image model: ${imageModel} (Google key: ${imageApiKeys?.google !== undefined ? 'present' : 'missing'}, OpenAI key: ${imageApiKeys?.openai !== undefined ? 'present' : 'missing'})`
+  );
 
   try {
     logger?.info(

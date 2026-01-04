@@ -235,7 +235,8 @@ describe('extractSelectedModels', () => {
       expect(extractSelectedModels('use all LLMs for this research')).toEqual([
         'gemini-2.5-pro',
         'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
 
@@ -243,7 +244,8 @@ describe('extractSelectedModels', () => {
       expect(extractSelectedModels('use all models')).toEqual([
         'gemini-2.5-pro',
         'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
 
@@ -251,7 +253,8 @@ describe('extractSelectedModels', () => {
       expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
         'gemini-2.5-pro',
         'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
 
@@ -259,7 +262,8 @@ describe('extractSelectedModels', () => {
       expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
         'gemini-2.5-pro',
         'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
+        'gpt-5.2',
+        'sonar-pro',
       ]);
     });
   });

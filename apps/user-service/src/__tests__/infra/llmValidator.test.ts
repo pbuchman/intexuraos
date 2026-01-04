@@ -196,7 +196,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createPerplexityClient).toHaveBeenCalledWith({
           apiKey: 'pplx-test-key',
-          model: 'sonar-pro',
+          model: 'sonar',
         });
       });
 

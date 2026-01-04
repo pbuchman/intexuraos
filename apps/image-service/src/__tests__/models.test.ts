@@ -51,10 +51,10 @@ describe('ImageGenerationModel', () => {
       });
     });
 
-    it('has nano-banana-pro with google provider', () => {
-      expect(IMAGE_GENERATION_MODELS['nano-banana-pro']).toEqual({
+    it('has gemini-2.5-flash-image with google provider', () => {
+      expect(IMAGE_GENERATION_MODELS['gemini-2.5-flash-image']).toEqual({
         provider: 'google',
-        modelId: 'imagen-3.0-generate-002',
+        modelId: 'gemini-2.5-flash-image',
       });
     });
   });
@@ -64,8 +64,8 @@ describe('ImageGenerationModel', () => {
       expect(isValidImageGenerationModel('gpt-image-1')).toBe(true);
     });
 
-    it('returns true for nano-banana-pro', () => {
-      expect(isValidImageGenerationModel('nano-banana-pro')).toBe(true);
+    it('returns true for gemini-2.5-flash-image', () => {
+      expect(isValidImageGenerationModel('gemini-2.5-flash-image')).toBe(true);
     });
 
     it('returns false for invalid model', () => {

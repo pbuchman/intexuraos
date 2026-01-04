@@ -27,9 +27,9 @@ describe('supportedModels', () => {
 
   describe('SYSTEM_DEFAULT_MODELS', () => {
     it('contains one model per provider', () => {
-      expect(SYSTEM_DEFAULT_MODELS).toHaveLength(3);
+      expect(SYSTEM_DEFAULT_MODELS).toHaveLength(4);
       const providers = SYSTEM_DEFAULT_MODELS.map((m) => SUPPORTED_MODELS[m].provider);
-      expect(new Set(providers).size).toBe(3);
+      expect(new Set(providers).size).toBe(4);
     });
   });
 
@@ -95,9 +95,10 @@ describe('supportedModels', () => {
 
     it('returns Perplexity models', () => {
       const models = getModelsForProvider('perplexity');
+      expect(models).toContain('sonar');
       expect(models).toContain('sonar-pro');
       expect(models).toContain('sonar-deep-research');
-      expect(models).toHaveLength(2);
+      expect(models).toHaveLength(3);
     });
   });
 

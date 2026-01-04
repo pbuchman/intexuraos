@@ -421,7 +421,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'nano-banana-pro',
+          model: 'gemini-2.5-flash-image',
           userId: TEST_USER_ID,
         },
       });

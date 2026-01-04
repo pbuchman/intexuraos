@@ -54,6 +54,7 @@ const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
   'claude-sonnet-4-5-20250929': ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
   'o4-mini-deep-research': ['o4', 'o4-mini', 'deep research'],
   'gpt-5.2': ['gpt', 'gpt-5', 'openai', 'chatgpt'],
+  sonar: ['sonar basic'],
   'sonar-pro': ['sonar', 'sonar pro', 'pplx', 'perplexity'],
   'sonar-deep-research': ['sonar deep', 'perplexity deep', 'deep sonar'],
 };
@@ -61,7 +62,8 @@ const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
 const DEFAULT_MODELS: SupportedModel[] = [
   'gemini-2.5-pro',
   'claude-opus-4-5-20251101',
-  'o4-mini-deep-research',
+  'gpt-5.2',
+  'sonar-pro',
 ];
 
 const ALL_LLMS_PATTERNS = [

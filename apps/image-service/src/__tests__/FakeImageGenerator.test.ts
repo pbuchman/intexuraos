@@ -29,7 +29,7 @@ describe('FakeImageGenerator', () => {
   it('uses crypto.randomUUID by default for id generation', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: 'nano-banana-pro',
+      model: 'gemini-2.5-flash-image',
     });
 
     const result = await generator.generate('A sunset');
@@ -45,7 +45,7 @@ describe('FakeImageGenerator', () => {
   it('preserves prompt and model in generated image', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'my-bucket',
-      model: 'nano-banana-pro',
+      model: 'gemini-2.5-flash-image',
     });
 
     const result = await generator.generate('Mountain landscape with snow');
@@ -53,7 +53,7 @@ describe('FakeImageGenerator', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.prompt).toBe('Mountain landscape with snow');
-      expect(result.value.model).toBe('nano-banana-pro');
+      expect(result.value.model).toBe('gemini-2.5-flash-image');
     }
   });
 });

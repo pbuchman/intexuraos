@@ -96,11 +96,11 @@ describe('services', () => {
       expect(generator.generate).toBeDefined();
     });
 
-    it('createImageGenerator returns Google generator for nano-banana-pro', () => {
+    it('createImageGenerator returns Google generator for gemini-2.5-flash-image', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createImageGenerator('nano-banana-pro', 'test-key');
+      const generator = services.createImageGenerator('gemini-2.5-flash-image', 'test-key');
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();

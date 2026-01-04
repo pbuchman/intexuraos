@@ -10,7 +10,7 @@ export const generateImageBodySchema = {
     },
     model: {
       type: 'string',
-      enum: ['gpt-image-1', 'nano-banana-pro'],
+      enum: ['gpt-image-1', 'gemini-2.5-flash-image'],
       description: 'Image generation model to use',
     },
     userId: {
@@ -54,7 +54,7 @@ export const generateImageResponseSchema = {
 
 export interface GenerateImageBody {
   prompt: string;
-  model: 'gpt-image-1' | 'nano-banana-pro';
+  model: 'gpt-image-1' | 'gemini-2.5-flash-image';
   userId: string;
 }
 

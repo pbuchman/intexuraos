@@ -38,7 +38,7 @@ export interface GeneratedImageData {
 }
 
 export type PromptModel = 'gpt-4.1' | 'gemini-2.5-pro';
-export type ImageModel = 'gpt-image-1' | 'nano-banana-pro';
+export type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
 export interface ImageServiceClient {
   generatePrompt(

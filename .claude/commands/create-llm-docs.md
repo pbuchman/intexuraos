@@ -2,7 +2,7 @@
 
 Generate a comprehensive document about LLM costs, pricing, and usage in the codebase.
 
-**Output:** `docs/current/llm-costs.md`
+**Output:** `docs/current/llm-usage.md`
 
 ---
 
@@ -22,6 +22,7 @@ Generate a comprehensive document about LLM costs, pricing, and usage in the cod
 4. **Documents pricing calculation logic** in the code
 5. **Describes token counting differences** between providers (especially for web search)
 6. **Maps model usage** to specific features (research, synthesis, title generation, etc.)
+7. **Documents image generation costs** (DALL-E, Imagen) and their usage in image-service
 
 ---
 
@@ -33,12 +34,18 @@ Search for official pricing for each provider:
 
 **Searches to perform:**
 
+Use current year in queries (check today's date). Example for 2027:
+
 ```
-1. "Anthropic Claude API pricing 2026" - Get Claude model prices
-2. "Google Gemini API pricing 2026" - Get Gemini model prices
-3. "OpenAI API pricing 2026" - Get GPT model prices
-4. "Perplexity Sonar API pricing 2026" - Get Perplexity model prices
+1. "Anthropic Claude API pricing" site:anthropic.com - Get Claude model prices
+2. "Google Gemini API pricing" site:ai.google.dev - Get Gemini model prices
+3. "OpenAI API pricing" site:openai.com - Get GPT model prices
+4. "Perplexity Sonar API pricing" site:perplexity.ai - Get Perplexity model prices
+5. "OpenAI DALL-E API pricing" site:openai.com - Get DALL-E image generation prices
+6. "Google Imagen API pricing" site:cloud.google.com - Get Google image generation prices
 ```
+
+**Note:** Use `site:` filter to get official pricing pages, not outdated blog posts.
 
 Extract for each model:
 
@@ -46,6 +53,7 @@ Extract for each model:
 - Output token price (per million)
 - Web search/grounding cost (per request or per call)
 - Cache pricing (if applicable)
+- Image generation cost (per image, by size/quality)
 - Any additional fees
 
 ### Step 2: Analyze Code for Model Usage (Explore Agents)
@@ -70,13 +78,14 @@ For each execution point, document:
 - File path and function name
 - Which method is called (research, generate, synthesize, etc.)
 - Which model is used
-- Purpose (research, title generation, synthesis, validation, etc.)
+- Purpose (research, title generation, synthesis, validation, image prompt, etc.)
 
 Search in:
 - packages/infra-*/src/client.ts
 - apps/llm-orchestrator/src/infra/llm/*.ts
 - apps/llm-orchestrator/src/domain/research/usecases/*.ts
 - apps/user-service/src/infra/llm/*.ts
+- apps/image-service/src/infra/*.ts
 ```
 
 **Agent 3 - Token Counting & Cost Calculation:**
@@ -109,6 +118,29 @@ Look for:
 Search in:
 - packages/llm-audit/src/
 - apps/llm-orchestrator/src/infra/usage/
+```
+
+**Agent 5 - Image Generation:**
+
+```
+Find ALL places where images are generated using AI.
+For each image generation point, document:
+- File path and function name
+- Which provider/model is used (DALL-E, Imagen, etc.)
+- Image size and quality settings
+- How costs are tracked (if at all)
+- Purpose (cover image, thumbnail, etc.)
+
+Search in:
+- apps/image-service/src/infra/*.ts
+- apps/image-service/src/domain/*.ts
+- packages/infra-openai/src/ (for DALL-E)
+
+Look for:
+- Image generation API calls
+- Prompt generation for images (LLM calls to create prompts)
+- Image size/quality parameters
+- Cost calculation or tracking
 ```
 
 ### Step 3: Compare Pricing with Database
@@ -209,31 +241,54 @@ Write the document following the template below.
 
 ## Documentation Template
 
-Write the following structure to `docs/current/llm-costs.md`:
+Write the following structure to `docs/current/llm-usage.md`:
 
 ````markdown
-# LLM Costs & Pricing
+# LLM Usage
 
-> **Auto-generated documentation** - Do not edit manually.
-> Last updated: YYYY-MM-DD
-> Pricing verified from official sources as of this date.
+## Overview
 
-This document provides comprehensive information about LLM costs in IntexuraOS, including official pricing, how costs are calculated in code, and where models are used.
+IntexuraOS leverages multiple Large Language Model providers to deliver intelligent research, synthesis, and content generation capabilities. The system orchestrates parallel calls across providers to maximize quality and reliability, automatically synthesizing results into comprehensive, well-structured outputs.
+
+**Key capabilities powered by LLMs:**
+
+- **Research** — Deep web-grounded research using multiple AI providers simultaneously (Claude, Gemini, GPT, Perplexity)
+- **Synthesis** — Intelligent combination of multiple research results into cohesive, comprehensive reports
+- **Title Generation** — Automatic creation of meaningful titles based on research content
+- **Context Inference** — Understanding user intent, language, and domain to tailor responses
+- **Image Generation** — AI-powered cover image creation from research summaries
+- **API Key Validation** — Lightweight model calls to verify user-provided API credentials
+
+The system is designed for resilience: if one provider fails or is rate-limited, research continues with available providers. Gemini serves as the default and fallback provider.
+
+## Pricing Reference
+
+Pricing data verified as of: **YYYY-MM-DD** (insert date when running this command)
 
 ## Quick Reference: Model Pricing
 
 ### Token Pricing (per million tokens)
 
-| Provider   | Model                      | Input | Output | Web Search | Notes                     |
-| ---------- | -------------------------- | ----- | ------ | ---------- | ------------------------- |
-| Anthropic  | claude-opus-4-5-20251101   | $X.XX | $X.XX  | $0.01/call | Research model            |
-| Anthropic  | claude-sonnet-4-5-20250929 | $X.XX | $X.XX  | $0.01/call | Quick model               |
-| Google     | gemini-2.5-pro             | $X.XX | $X.XX  | $0.035/req | Research model            |
-| Google     | gemini-2.5-flash           | $X.XX | $X.XX  | $0.035/req | Quick model               |
-| OpenAI     | o4-mini-deep-research      | $X.XX | $X.XX  | $0.01/call | Research model            |
-| OpenAI     | gpt-5.2                    | $X.XX | $X.XX  | $0.01/call | Quick model               |
-| Perplexity | sonar-pro                  | $X.XX | $X.XX  | $X.XX/req  | Includes cost in response |
-| Perplexity | sonar-deep-research        | $X.XX | $X.XX  | included   | Includes cost in response |
+| Provider   | Model                      | Input | Output | Web Search | Notes                    |
+| ---------- | -------------------------- | ----- | ------ | ---------- | ------------------------ |
+| Anthropic  | claude-opus-4-5-20251101   | $X.XX | $X.XX  | $0.01/call | Research model           |
+| Anthropic  | claude-sonnet-4-5-20250929 | $X.XX | $X.XX  | $0.01/call | Quick model              |
+| Google     | gemini-2.5-pro             | $X.XX | $X.XX  | $0.035/req | Research model           |
+| Google     | gemini-2.5-flash           | $X.XX | $X.XX  | $0.035/req | Quick model              |
+| OpenAI     | o4-mini-deep-research      | $X.XX | $X.XX  | $0.01/call | Research model           |
+| OpenAI     | gpt-5.2                    | $X.XX | $X.XX  | $0.01/call | Quick model              |
+| Perplexity | sonar                      | $X.XX | $X.XX  | $X.XX/req  | Validation, low context  |
+| Perplexity | sonar-pro                  | $X.XX | $X.XX  | $X.XX/req  | Research, medium context |
+| Perplexity | sonar-deep-research        | $X.XX | $X.XX  | included   | Deep research, high ctx  |
+
+### Image Generation Pricing
+
+| Provider | Model    | Size      | Quality  | Price/Image | Notes                |
+| -------- | -------- | --------- | -------- | ----------- | -------------------- |
+| OpenAI   | DALL-E 3 | 1024x1024 | standard | $X.XX       | Cover images         |
+| OpenAI   | DALL-E 3 | 1024x1024 | hd       | $X.XX       | High quality         |
+| OpenAI   | DALL-E 3 | 1792x1024 | standard | $X.XX       | Wide format          |
+| Google   | Imagen 3 | 1024x1024 | -        | $X.XX       | Alternative provider |
 
 ### Additional Pricing Factors
 
@@ -337,13 +392,15 @@ This document provides comprehensive information about LLM costs in IntexuraOS, 
 
 ### By Feature
 
-| Feature            | Provider    | Model           | Method            | File                  |
-| ------------------ | ----------- | --------------- | ----------------- | --------------------- |
-| Research (deep)    | Multiple    | `researchModel` | `research()`      | `processLlmCall.ts`   |
-| Research (quick)   | Multiple    | `defaultModel`  | `research()`      | `processLlmCall.ts`   |
-| Title generation   | Google      | `defaultModel`  | `generateTitle()` | `processResearch.ts`  |
-| Synthesis          | User choice | Any             | `synthesize()`    | `runSynthesis.ts`     |
-| API key validation | Each        | `evaluateModel` | `evaluate()`      | `LlmValidatorImpl.ts` |
+| Feature            | Provider    | Model           | Method            | File                      |
+| ------------------ | ----------- | --------------- | ----------------- | ------------------------- |
+| Research (deep)    | Multiple    | `researchModel` | `research()`      | `processLlmCall.ts`       |
+| Research (quick)   | Multiple    | `defaultModel`  | `research()`      | `processLlmCall.ts`       |
+| Title generation   | Google      | `defaultModel`  | `generateTitle()` | `processResearch.ts`      |
+| Synthesis          | User choice | Any             | `synthesize()`    | `runSynthesis.ts`         |
+| API key validation | Each        | `evaluateModel` | `evaluate()`      | `LlmValidatorImpl.ts`     |
+| Image prompt       | Google      | gemini-2.5-pro  | `generate()`      | `GptPromptAdapter.ts`     |
+| Image generation   | OpenAI      | dall-e-3        | `generateImage()` | `OpenAIImageGenerator.ts` |
 
 ### Execution Points
 
@@ -382,6 +439,9 @@ cost =
 | Perplexity | prompt_tokens               |     ✅     |       ✅       | -                         |
 | Perplexity | completion_tokens           |     ✅     |       ✅       | -                         |
 | Perplexity | cost.total_cost             |     ❌     |       ✅       | **Could use exact cost!** |
+| OpenAI     | image_size                  |     ❌     |       ✅       | Affects pricing           |
+| OpenAI     | image_quality               |     ❌     |       ✅       | hd vs standard            |
+| OpenAI     | images_generated            |     ❌     |       ✅       | Count of images           |
 
 ### Pricing Data Storage
 
@@ -480,11 +540,56 @@ cost = (input_tokens - cached_tokens) × input_price
 cost = response.usage.cost.total_cost  // Already calculated!
 ```
 
+**OpenAI DALL-E (Image Generation):**
+
+```
+cost = images_count × price_per_image
+where price_per_image depends on:
+  - size: 1024x1024, 1024x1792, 1792x1024
+  - quality: standard, hd
+  - model: dall-e-2, dall-e-3
+```
+
+**Google Imagen (Image Generation):**
+
+```
+cost = images_count × price_per_image
+where price_per_image depends on:
+  - resolution: 1024x1024, etc.
+  - model version: imagen-3, etc.
+```
+
+## Image Generation in Codebase
+
+### Current Implementation
+
+**Location:** `apps/image-service/src/`
+
+**Flow:**
+
+1. User requests cover image for research
+2. `GptPromptAdapter` uses Gemini to generate image prompt from research content
+3. `OpenAIImageGenerator` generates image using DALL-E 3
+4. Image stored in Cloud Storage
+
+**Cost Components:**
+
+1. LLM call to generate prompt (Gemini tokens)
+2. Image generation call (DALL-E per-image pricing)
+
+**What's NOT Tracked:**
+
+- Image generation costs
+- Prompt generation token costs (separate from research)
+- Image size/quality metadata
+
 ## Sources
 
 - [Anthropic Pricing](https://www.anthropic.com/pricing)
 - [Google Gemini Pricing](https://ai.google.dev/gemini-api/docs/pricing)
 - [OpenAI Pricing](https://openai.com/api/pricing)
+- [OpenAI DALL-E Pricing](https://openai.com/api/pricing#image-models)
+- [Google Imagen Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Perplexity Pricing](https://docs.perplexity.ai/getting-started/pricing)
 
 ```
@@ -525,15 +630,27 @@ Output improvement suggestions to chat (NOT in docs):
 
 3. Use Perplexity's native cost.total_cost instead of calculating
 
+4. Track image generation costs:
+   - Add image pricing to LlmPricing schema (per-image costs)
+   - Track image_prompt calls separately in llm_usage_stats
+   - Track image_generation calls in llm_usage_stats
+   - Capture image size/quality for accurate costing
+
+5. Update image-service to report usage:
+   - Call llm-orchestrator tracking endpoint for prompt generation
+   - Call llm-orchestrator tracking endpoint for image generation
+
 ```
 
 ---
 
 ## Implementation Notes
 
-- Always fetch CURRENT pricing via WebSearch (prices change)
-- Include pricing verification date prominently
+- Always fetch CURRENT pricing via WebSearch (prices change frequently)
+- Include pricing verification date in the Pricing Reference section
 - Show exact API response structures for each provider
 - Highlight discrepancies between what we track vs what's available
 - Document the financial impact of missing data
+- Keep headers minimal - no "auto-generated" notices
+- Overview section should convey the intelligence and value of the LLM integration
 ```

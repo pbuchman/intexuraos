@@ -20,7 +20,7 @@ const VALIDATION_MODELS = {
   google: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-haiku-20241022',
-  perplexity: 'sonar-pro',
+  perplexity: 'sonar',
 } as const;
 
 /**

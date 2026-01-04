@@ -26,6 +26,7 @@ interface LoggerLike {
 const API_BASE_URL = 'https://api.perplexity.ai';
 
 const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
+  sonar: 'low',
   'sonar-pro': 'medium',
   'sonar-deep-research': 'high',
 };
