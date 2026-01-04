@@ -2,6 +2,8 @@
 
 Share an interesting tech insight and log it for future reference.
 
+**IMPORTANT: Always write content in English, regardless of the conversation language.**
+
 **Usage:**
 
 - `/teach-me-something` — pick topic from recent context or trending tech
