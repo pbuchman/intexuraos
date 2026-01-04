@@ -171,8 +171,9 @@ Create a unified synthesis that:
 ## Citation Rules (CRITICAL)
 
 - **Inline citations**: Include source links DIRECTLY in the paragraph where information is mentioned
-- **List items**: Each recommended place, product, or service must have its source linked inline
-- **All URLs**: Format as clickable markdown links: [descriptive text](URL)
+- **Link text MUST describe the source**: Use [Official Government Site](URL), [Canary Tourism](URL), [Fishing Guide](URL)
+- **NEVER use model names as link text**: Do NOT write [gemini-2.5-pro](URL) or [claude-sonnet](URL)
+- **All URLs**: Format as clickable markdown links with descriptive text
 - **Sources section**: Only list additional sources at the end if they weren't already cited inline
 
 ## Language Requirement
@@ -292,8 +293,9 @@ Adjust your synthesis style based on the topic:
 ## Citation Rules (CRITICAL)
 
 - **Inline citations**: Include source links DIRECTLY in the paragraph where information is mentioned. Example: "The Teide volcano is Spain's highest peak ([Canary Tourism](https://example.com/teide))."
-- **List items**: Each recommended place, product, or service must have its source linked inline
-- **All URLs**: Format as clickable markdown links: [descriptive text](URL)
+- **Link text MUST describe the source**: Use [Official Government Site](URL), [Canary Tourism](URL), [Fishing Guide](URL)
+- **NEVER use model names as link text**: Do NOT write [gemini-2.5-pro](URL) or [claude-sonnet](URL)
+- **All URLs**: Format as clickable markdown links with descriptive text
 - **Sources section**: Only list additional sources at the end if they weren't already cited inline
 
 ## Language Requirement
