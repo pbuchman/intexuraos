@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
+import { formatLlmError, formatLlmErrorString } from '@/utils/formatLlmError';
 
 /**
  * Format a date as human-readable string.
@@ -15,6 +16,22 @@ function formatDate(isoString: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function FormattedErrorDisplay({ error }: { error: string }): React.JSX.Element {
+  const formatted = formatLlmError(error);
+
+  return (
+    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+      <p className="text-sm font-medium text-red-800">{formatted.title}</p>
+      {formatted.detail !== undefined && (
+        <p className="text-sm text-red-700 mt-1">{formatted.detail}</p>
+      )}
+      {formatted.retryIn !== undefined && (
+        <p className="text-xs text-red-600 mt-1">{formatted.retryIn}</p>
+      )}
+    </div>
+  );
 }
 
 interface ProviderConfig {
@@ -253,9 +270,7 @@ function ApiKeyRow({
       </div>
 
       {testError !== null ? (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm text-red-700">{testError}</p>
-        </div>
+        <FormattedErrorDisplay error={testError} />
       ) : savedTestResult !== null ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
           <p className="text-sm font-medium text-green-800 mb-1">
@@ -279,7 +294,7 @@ function ApiKeyRow({
             disabled={isSaving}
           />
           {validationError !== null ? (
-            <p className="text-sm text-red-600">{validationError}</p>
+            <p className="text-sm text-red-600">{formatLlmErrorString(validationError)}</p>
           ) : null}
           {isSaving ? <p className="text-sm text-blue-600">Validating API key...</p> : null}
           <div className="flex gap-2">

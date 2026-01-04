@@ -35,25 +35,33 @@ export function formatLlmError(rawError: string): FormattedError {
   return parseGenericError(rawError);
 }
 
+interface GoogleErrorDetail {
+  '@type'?: string;
+  retryDelay?: string;
+  violations?: { quotaMetric?: string; quotaValue?: string }[];
+  reason?: string;
+  domain?: string;
+  metadata?: Record<string, string>;
+  locale?: string;
+  message?: string;
+}
+
+interface GoogleError {
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+    details?: GoogleErrorDetail[];
+  };
+}
+
 function parseGeminiError(raw: string): FormattedError | null {
-  // Gemini errors often come as JSON strings
   if (!raw.includes('"error"') || !raw.includes('"message"')) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(raw) as {
-      error?: {
-        code?: number;
-        message?: string;
-        status?: string;
-        details?: {
-          '@type'?: string;
-          retryDelay?: string;
-          violations?: { quotaMetric?: string; quotaValue?: string }[];
-        }[];
-      };
-    };
+    const parsed = JSON.parse(raw) as GoogleError;
 
     if (parsed.error === undefined) {
       return null;
@@ -61,13 +69,39 @@ function parseGeminiError(raw: string): FormattedError | null {
 
     const { code, message, status, details } = parsed.error;
 
-    // Extract retry delay if present
     const retryInfo = details?.find((d) => d['@type']?.includes('RetryInfo') === true);
     const retryIn = retryInfo?.retryDelay;
 
-    // Extract quota info if present
     const quotaInfo = details?.find((d) => d['@type']?.includes('QuotaFailure') === true);
     const quotaViolation = quotaInfo?.violations?.[0];
+
+    const errorInfo = details?.find((d) => d['@type']?.includes('ErrorInfo') === true);
+    const localizedMessage = details?.find(
+      (d) => d['@type']?.includes('LocalizedMessage') === true
+    );
+
+    const displayMessage = localizedMessage?.message ?? message;
+
+    if (errorInfo?.reason === 'API_KEY_INVALID') {
+      return {
+        title: 'Invalid API key',
+        detail: displayMessage ?? 'The API key is invalid or has expired',
+      };
+    }
+
+    if (errorInfo?.reason === 'API_KEY_NOT_FOUND') {
+      return {
+        title: 'API key not found',
+        detail: displayMessage ?? 'The API key does not exist',
+      };
+    }
+
+    if (status === 'PERMISSION_DENIED' || code === 403) {
+      return {
+        title: 'Permission denied',
+        detail: displayMessage ?? 'The API key lacks required permissions',
+      };
+    }
 
     if (status === 'RESOURCE_EXHAUSTED' || code === 429) {
       const result: FormattedError = {
@@ -83,12 +117,24 @@ function parseGeminiError(raw: string): FormattedError | null {
       return result;
     }
 
-    // Generic Gemini error
+    if (status === 'INVALID_ARGUMENT' || code === 400) {
+      return {
+        title: 'Invalid request',
+        detail: displayMessage ?? 'The request was invalid',
+      };
+    }
+
+    const statusLabel = status !== undefined ? status.replace(/_/g, ' ').toLowerCase() : null;
+    const titleFromStatus =
+      statusLabel !== null
+        ? statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)
+        : `Error ${String(code ?? '')}`;
+
     return {
-      title: status ?? `Error ${String(code ?? '')}`,
+      title: titleFromStatus,
       detail:
-        message !== undefined && message.length < 100
-          ? message
+        displayMessage !== undefined && displayMessage.length < 150
+          ? displayMessage
           : 'An error occurred with the Gemini API',
     };
   } catch {

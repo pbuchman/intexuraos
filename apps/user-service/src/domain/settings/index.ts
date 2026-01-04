@@ -4,7 +4,7 @@
  * Provides:
  * - models/    Domain entities (UserSettings, SettingsError)
  * - ports/     Interfaces for external dependencies (UserSettingsRepository)
- * - usecases/  Business logic (getUserSettings, updateUserSettings)
+ * - usecases/  Business logic (getUserSettings)
  */
 
 // Models
@@ -14,7 +14,6 @@ export type {
   LlmApiKeys,
   LlmTestResult,
   LlmTestResults,
-  ResearchSettings,
   NotificationFilter,
   NotificationSettings,
 } from './models/UserSettings.js';
@@ -32,11 +31,6 @@ export {
   type GetUserSettingsErrorCode,
   type GetUserSettingsDeps,
   getUserSettings,
-  type UpdateUserSettingsInput,
-  type UpdateUserSettingsError,
-  type UpdateUserSettingsErrorCode,
-  type UpdateUserSettingsDeps,
-  updateUserSettings,
 } from './usecases/index.js';
 
 // Utils

@@ -14,7 +14,6 @@ import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import type {
   LlmProvider,
   LlmTestResult,
-  ResearchSettings,
   SettingsError,
   UserSettings,
   UserSettingsRepository,
@@ -37,7 +36,6 @@ interface UserSettingsDoc {
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
   };
-  researchSettings?: ResearchSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,9 +66,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (data.llmTestResults !== undefined) {
         settings.llmTestResults = data.llmTestResults;
       }
-      if (data.researchSettings !== undefined) {
-        settings.researchSettings = data.researchSettings;
-      }
       return ok(settings);
     } catch (error) {
       return err({
@@ -95,9 +90,6 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
       if (settings.llmTestResults !== undefined) {
         doc.llmTestResults = settings.llmTestResults;
-      }
-      if (settings.researchSettings !== undefined) {
-        doc.researchSettings = settings.researchSettings;
       }
 
       await docRef.set(doc);

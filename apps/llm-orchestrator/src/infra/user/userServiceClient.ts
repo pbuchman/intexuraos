@@ -5,9 +5,9 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import type { SupportedModel, LlmProvider } from '@intexuraos/llm-contract';
+import type { LlmProvider } from '@intexuraos/llm-contract';
 
-export type { SupportedModel, LlmProvider };
+export type { LlmProvider };
 
 /**
  * Configuration for the user service client.
@@ -36,19 +36,10 @@ export interface UserServiceError {
 }
 
 /**
- * Research settings from user-service.
- * defaultModels is null when user hasn't configured any (use system defaults).
- */
-export interface ResearchSettings {
-  defaultModels: SupportedModel[] | null;
-}
-
-/**
  * Client interface for user-service internal API.
  */
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
-  getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
 }
 
@@ -101,28 +92,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           code: 'NETWORK_ERROR',
           message,
         });
-      }
-    },
-
-    async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
-      try {
-        const response = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/research-settings`,
-          {
-            headers: {
-              'X-Internal-Auth': config.internalAuthToken,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          return ok({ defaultModels: null });
-        }
-
-        const data = (await response.json()) as { defaultModels?: string[] | null };
-        return ok({ defaultModels: (data.defaultModels ?? null) as SupportedModel[] | null });
-      } catch {
-        return ok({ defaultModels: null });
       }
     },
 

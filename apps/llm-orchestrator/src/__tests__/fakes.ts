@@ -31,12 +31,7 @@ import type {
 } from '../domain/research/index.js';
 import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
 import type { LlmUsageTracker, TrackLlmCallParams } from '../services.js';
-import type {
-  DecryptedApiKeys,
-  ResearchSettings,
-  UserServiceClient,
-  UserServiceError,
-} from '../infra/user/index.js';
+import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
 
@@ -174,7 +169,6 @@ export class FakeResearchRepository implements ResearchRepository {
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
-  private researchSettings = new Map<string, ResearchSettings>();
   private failNextGetApiKeys = false;
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
@@ -186,11 +180,6 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(keys);
   }
 
-  async getResearchSettings(userId: string): Promise<Result<ResearchSettings, UserServiceError>> {
-    const settings = this.researchSettings.get(userId) ?? { defaultModels: null };
-    return ok(settings);
-  }
-
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
     // Best effort - do nothing in tests
   }
@@ -200,17 +189,12 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.apiKeys.set(userId, keys);
   }
 
-  setResearchSettings(userId: string, settings: ResearchSettings): void {
-    this.researchSettings.set(userId, settings);
-  }
-
   setFailNextGetApiKeys(fail: boolean): void {
     this.failNextGetApiKeys = fail;
   }
 
   clear(): void {
     this.apiKeys.clear();
-    this.researchSettings.clear();
   }
 }
 

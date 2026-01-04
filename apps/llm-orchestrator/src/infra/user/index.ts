@@ -8,6 +8,4 @@ export {
   type DecryptedApiKeys,
   type UserServiceError,
   type LlmProvider,
-  type SupportedModel,
-  type ResearchSettings,
 } from './userServiceClient.js';

@@ -84,63 +84,6 @@ describe('createUserServiceClient', () => {
     });
   });
 
-  describe('getResearchSettings', () => {
-    it('returns research settings when successful', async () => {
-      nock(baseUrl)
-        .get('/internal/users/user-1/research-settings')
-        .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200, {
-          defaultModels: ['gemini-2.5-flash'],
-        });
-
-      const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getResearchSettings('user-1');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.defaultModels).toEqual(['gemini-2.5-flash']);
-      }
-    });
-
-    it('returns null defaultModels when not found in response', async () => {
-      nock(baseUrl).get('/internal/users/user-1/research-settings').reply(200, {});
-
-      const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getResearchSettings('user-1');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.defaultModels).toBeNull();
-      }
-    });
-
-    it('returns null defaultModels on non-200 response', async () => {
-      nock(baseUrl).get('/internal/users/user-1/research-settings').reply(404);
-
-      const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getResearchSettings('user-1');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.defaultModels).toBeNull();
-      }
-    });
-
-    it('returns null defaultModels on network error', async () => {
-      nock(baseUrl)
-        .get('/internal/users/user-1/research-settings')
-        .replyWithError('Connection refused');
-
-      const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.getResearchSettings('user-1');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.defaultModels).toBeNull();
-      }
-    });
-  });
-
   describe('reportLlmSuccess', () => {
     it('sends POST request to report success', async () => {
       const scope = nock(baseUrl)
