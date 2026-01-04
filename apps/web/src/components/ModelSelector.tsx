@@ -10,7 +10,6 @@ interface ProviderConfig {
   id: LlmProvider;
   displayName: string;
   models: ModelOption[];
-  default: SupportedModel;
 }
 
 const PROVIDER_MODELS: ProviderConfig[] = [
@@ -21,7 +20,6 @@ const PROVIDER_MODELS: ProviderConfig[] = [
       { id: 'gemini-2.5-flash', name: 'Gemini Flash' },
       { id: 'gemini-2.5-pro', name: 'Gemini Pro' },
     ],
-    default: 'gemini-2.5-flash',
   },
   {
     id: 'anthropic',
@@ -30,7 +28,6 @@ const PROVIDER_MODELS: ProviderConfig[] = [
       { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet' },
       { id: 'claude-opus-4-5-20251101', name: 'Claude Opus' },
     ],
-    default: 'claude-sonnet-4-5-20250929',
   },
   {
     id: 'openai',
@@ -39,7 +36,6 @@ const PROVIDER_MODELS: ProviderConfig[] = [
       { id: 'gpt-5.2', name: 'GPT-5.2' },
       { id: 'o4-mini-deep-research', name: 'O4 Mini' },
     ],
-    default: 'gpt-5.2',
   },
   {
     id: 'perplexity',
@@ -49,7 +45,6 @@ const PROVIDER_MODELS: ProviderConfig[] = [
       { id: 'sonar-pro', name: 'Sonar Pro' },
       { id: 'sonar-deep-research', name: 'Deep Research' },
     ],
-    default: 'sonar-pro',
   },
 ];
 
@@ -104,7 +99,7 @@ export function ModelSelector({
                 ) : null}
               </div>
 
-              <div className="relative">
+              <div className="relative w-40">
                 <select
                   value={selectedModel ?? ''}
                   onChange={(e): void => {
@@ -112,7 +107,7 @@ export function ModelSelector({
                     onChange(provider.id, value === '' ? null : (value as SupportedModel));
                   }}
                   disabled={isRowDisabled}
-                  className={`appearance-none rounded-lg border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`w-full appearance-none rounded-lg border px-4 py-2 pr-10 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     isRowDisabled
                       ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
                       : 'border-slate-200 bg-white text-slate-700 cursor-pointer hover:border-slate-300'
@@ -137,22 +132,6 @@ export function ModelSelector({
       })}
     </div>
   );
-}
-
-export function getDefaultModelSelections(
-  configuredProviders: LlmProvider[]
-): Map<LlmProvider, SupportedModel | null> {
-  const selections = new Map<LlmProvider, SupportedModel | null>();
-
-  for (const provider of PROVIDER_MODELS) {
-    if (configuredProviders.includes(provider.id)) {
-      selections.set(provider.id, provider.default);
-    } else {
-      selections.set(provider.id, null);
-    }
-  }
-
-  return selections;
 }
 
 export function getSelectedModelsList(

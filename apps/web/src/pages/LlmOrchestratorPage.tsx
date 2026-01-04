@@ -6,7 +6,6 @@ import {
   Card,
   Layout,
   ModelSelector,
-  getDefaultModelSelections,
   getSelectedModelsList,
   PROVIDER_MODELS,
 } from '@/components';
@@ -127,16 +126,21 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     })();
   }, [isEditMode, draftId, getAccessToken]);
 
-  // Auto-select default models for configured providers (only for new research)
+  // Initialize model selections when keys load (only for new research)
   useEffect(() => {
-    if (isEditMode) return; // Skip auto-select when editing draft
+    if (isEditMode) return;
 
     if (!keysLoading && keys !== null) {
       const configured = PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
-      const selections = getDefaultModelSelections(configured);
+
+      // Initialize all providers to null (no defaults)
+      const selections = new Map<LlmProvider, SupportedModel | null>();
+      for (const provider of PROVIDER_MODELS) {
+        selections.set(provider.id, null);
+      }
       setModelSelections(selections);
 
-      // Set first available synthesis-capable model based on API keys (independent of research selection)
+      // Set first available synthesis-capable model based on API keys
       const availableSynthesis = SYNTHESIS_CAPABLE_MODELS.find((m) =>
         configured.includes(getProviderForModel(m))
       );

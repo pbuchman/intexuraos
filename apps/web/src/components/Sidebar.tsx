@@ -353,7 +353,7 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
-          {/* Notes */}
+          {/* WhatsApp */}
           <NavLink
             to="/notes"
             end
@@ -366,7 +366,7 @@ export function Sidebar(): React.JSX.Element {
             }
           >
             <MessageSquare className="h-5 w-5 shrink-0" />
-            {!isCollapsed ? <span>Notes</span> : null}
+            {!isCollapsed ? <span>WhatsApp</span> : null}
           </NavLink>
 
           {/* Notifications section (collapsible with saved filters) */}

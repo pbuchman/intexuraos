@@ -12,7 +12,6 @@ export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
 export {
   ModelSelector,
-  getDefaultModelSelections,
   getSelectedModelsList,
   PROVIDER_MODELS,
 } from './ModelSelector.js';
