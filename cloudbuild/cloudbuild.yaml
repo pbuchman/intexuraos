@@ -40,6 +40,11 @@ steps:
         fi
         echo "=== Marker files ==="
         ls -la /workspace/.affected/ 2>/dev/null || echo "(none)"
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=${_REGION}'
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # Each service independently checks if affected via check-affected.mjs
