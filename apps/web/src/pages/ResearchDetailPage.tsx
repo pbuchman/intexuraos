@@ -205,6 +205,16 @@ function renderPromptWithLinks(text: string): React.JSX.Element {
 
 const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
 
+function getModelDisplayName(modelId: SupportedModel): string {
+  for (const provider of PROVIDER_MODELS) {
+    const model = provider.models.find((m) => m.id === modelId);
+    if (model !== undefined) {
+      return model.name;
+    }
+  }
+  return modelId;
+}
+
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { research, loading, error, refresh } = useResearch(id ?? '');
@@ -795,7 +805,10 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       {research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
         <Card title="Synthesis Report" className="mb-6">
-          <div className="mb-2 flex justify-end">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm text-slate-500">
+              Synthesized by {getModelDisplayName(research.synthesisModel)}
+            </span>
             <Button
               variant="secondary"
               onClick={(): void => {
