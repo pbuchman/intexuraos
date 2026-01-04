@@ -39,22 +39,30 @@ export class OpenAIImageGenerator implements ImageGenerator {
         prompt,
         n: 1,
         size: '1024x1024',
-      });
+        response_format: 'b64_json',
+      } as Parameters<typeof this.client.images.generate>[0]);
 
-      const imageUrl = response.data?.[0]?.url;
-      if (imageUrl === undefined) {
-        return err({ code: 'API_ERROR', message: 'No image URL in response' });
+      const imageData = response.data?.[0];
+      if (imageData === undefined) {
+        return err({ code: 'API_ERROR', message: 'No image data in response' });
       }
 
-      const imageResponse = await fetch(imageUrl);
-      if (!imageResponse.ok) {
-        return err({
-          code: 'API_ERROR',
-          message: `Failed to fetch image: ${String(imageResponse.status)}`,
-        });
-      }
+      let imageBuffer: Buffer;
 
-      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      if (imageData.b64_json !== undefined) {
+        imageBuffer = Buffer.from(imageData.b64_json, 'base64');
+      } else if (imageData.url !== undefined) {
+        const imageResponse = await fetch(imageData.url);
+        if (!imageResponse.ok) {
+          return err({
+            code: 'API_ERROR',
+            message: `Failed to fetch image: ${String(imageResponse.status)}`,
+          });
+        }
+        imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      } else {
+        return err({ code: 'API_ERROR', message: 'No image URL or b64_json in response' });
+      }
 
       const uploadResult = await this.storage.upload(id, imageBuffer);
       if (!uploadResult.ok) {
