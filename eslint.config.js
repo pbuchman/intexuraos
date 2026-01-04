@@ -82,8 +82,8 @@ export default tseslint.config(
             { from: 'infra-pubsub', allow: ['infra-pubsub', 'common-core'] },
             // llm-contract can import from common-core
             { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
-            // llm-pricing can import from common-core and llm-contract
-            { from: 'llm-pricing', allow: ['llm-pricing', 'common-core', 'llm-contract'] },
+            // llm-pricing can import from llm-contract (no common-core needed)
+            { from: 'llm-pricing', allow: ['llm-pricing', 'llm-contract'] },
             // infra-gemini can import from common-core, llm-audit, llm-contract, and llm-pricing
             {
               from: 'infra-gemini',

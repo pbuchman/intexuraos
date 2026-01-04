@@ -32,6 +32,7 @@ const phases = [
       'verify:workspace-deps',
       'verify:migrations',
       'verify:no-console',
+      'verify:llm-architecture',
     ],
   },
   {

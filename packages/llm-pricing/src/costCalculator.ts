@@ -6,7 +6,7 @@
 import type { TokenUsage } from '@intexuraos/llm-contract';
 import type { LlmPricing } from './types.js';
 
-const DEFAULT_WEB_SEARCH_COST = 0.01;
+const DEFAULT_WEB_SEARCH_COST = 0.03;
 const DEFAULT_GROUNDING_COST = 0.035;
 const DEFAULT_CACHE_WRITE_MULTIPLIER = 1.25;
 const DEFAULT_CACHE_READ_MULTIPLIER = 0.1;
