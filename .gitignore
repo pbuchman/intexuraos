@@ -5,6 +5,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
+scripts/test-results/
 
 # IDE - exclude user-specific files but keep project configuration
 .idea/workspace.xml

@@ -1,14 +1,15 @@
-export type { LLMError as PerplexityError, ResearchResult } from '@intexuraos/llm-contract';
-
-interface LoggerLike {
-  info(obj: object, msg: string): void;
-  error(obj: object, msg: string): void;
-}
+export type {
+  LLMError as PerplexityError,
+  ResearchResult,
+  GenerateResult,
+  UsageLogger,
+} from '@intexuraos/llm-contract';
 
 export interface PerplexityConfig {
   apiKey: string;
   model: string;
-  logger?: LoggerLike;
+  usageLogger?: import('@intexuraos/llm-contract').UsageLogger;
+  userId?: string;
 }
 
 export type SearchContextSize = 'low' | 'medium' | 'high';

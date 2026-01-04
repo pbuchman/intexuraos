@@ -31,6 +31,7 @@ const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
+  const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,7 +42,7 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -91,7 +92,7 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -138,7 +139,7 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -187,7 +188,7 @@ describe('LlmValidatorImpl', () => {
     describe('perplexity provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
@@ -238,7 +239,9 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Gemini!', usage: mockUsage })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
@@ -270,7 +273,7 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from GPT!')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'Hello from GPT!', usage: mockUsage })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
@@ -301,7 +304,9 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Claude!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Claude!', usage: mockUsage })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
@@ -332,7 +337,9 @@ describe('LlmValidatorImpl', () => {
     describe('perplexity provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Perplexity!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Perplexity!', usage: mockUsage })),
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 

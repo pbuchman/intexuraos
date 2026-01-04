@@ -43,10 +43,12 @@ describe('GptAdapter', () => {
   });
 
   describe('research', () => {
+    const mockUsage = { inputTokens: 100, outputTokens: 50 };
+
     it('delegates to GPT client', async () => {
       mockResearch.mockResolvedValue({
         ok: true,
-        value: { content: 'Research result', sources: ['https://source.com'] },
+        value: { content: 'Research result', sources: ['https://source.com'], usage: mockUsage },
       });
 
       const result = await adapter.research('Test prompt');
@@ -88,10 +90,12 @@ describe('GptAdapter', () => {
   });
 
   describe('synthesize', () => {
+    const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
     it('builds synthesis prompt and calls generate', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Synthesized result',
+        value: { content: 'Synthesized result', usage: mockUsage },
       });
 
       const result = await adapter.synthesize('Prompt', [
@@ -107,7 +111,7 @@ describe('GptAdapter', () => {
     });
 
     it('includes external reports in synthesis prompt', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize(
         'Prompt',
@@ -119,7 +123,7 @@ describe('GptAdapter', () => {
     });
 
     it('uses synthesis context when provided', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }], undefined, {
         language: 'en',
@@ -158,10 +162,12 @@ describe('GptAdapter', () => {
   });
 
   describe('generateTitle', () => {
+    const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
     it('delegates to generate with title prompt', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '  Generated Title  ',
+        value: { content: '  Generated Title  ', usage: mockUsage },
       });
 
       const result = await adapter.generateTitle('Test prompt');

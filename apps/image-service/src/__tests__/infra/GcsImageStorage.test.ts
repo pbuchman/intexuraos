@@ -173,6 +173,72 @@ describe('GcsImageStorage', () => {
     });
   });
 
+  describe('thumbnail resize behavior', () => {
+    it('resizes by width for landscape images (width > height)', async () => {
+      const { default: sharp } = await import('sharp');
+      const mockResize = vi.fn().mockReturnThis();
+      (sharp as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        metadata: vi.fn().mockResolvedValue({ width: 1024, height: 768 }),
+        resize: mockResize,
+        jpeg: vi.fn().mockReturnThis(),
+        toBuffer: vi.fn().mockResolvedValue(Buffer.from('thumbnail')),
+      });
+      mockSave.mockResolvedValue(undefined);
+
+      await storage.upload('img-123', Buffer.from('image'));
+
+      expect(mockResize).toHaveBeenCalledWith({ width: 256 });
+    });
+
+    it('resizes by height for portrait images (height > width)', async () => {
+      const { default: sharp } = await import('sharp');
+      const mockResize = vi.fn().mockReturnThis();
+      (sharp as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        metadata: vi.fn().mockResolvedValue({ width: 768, height: 1024 }),
+        resize: mockResize,
+        jpeg: vi.fn().mockReturnThis(),
+        toBuffer: vi.fn().mockResolvedValue(Buffer.from('thumbnail')),
+      });
+      mockSave.mockResolvedValue(undefined);
+
+      await storage.upload('img-456', Buffer.from('portrait image'));
+
+      expect(mockResize).toHaveBeenCalledWith({ height: 256 });
+    });
+
+    it('handles images with missing width in metadata', async () => {
+      const { default: sharp } = await import('sharp');
+      const mockResize = vi.fn().mockReturnThis();
+      (sharp as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        metadata: vi.fn().mockResolvedValue({ height: 500 }),
+        resize: mockResize,
+        jpeg: vi.fn().mockReturnThis(),
+        toBuffer: vi.fn().mockResolvedValue(Buffer.from('thumbnail')),
+      });
+      mockSave.mockResolvedValue(undefined);
+
+      await storage.upload('img-789', Buffer.from('image'));
+
+      expect(mockResize).toHaveBeenCalledWith({ height: 256 });
+    });
+
+    it('handles images with missing height in metadata', async () => {
+      const { default: sharp } = await import('sharp');
+      const mockResize = vi.fn().mockReturnThis();
+      (sharp as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        metadata: vi.fn().mockResolvedValue({ width: 500 }),
+        resize: mockResize,
+        jpeg: vi.fn().mockReturnThis(),
+        toBuffer: vi.fn().mockResolvedValue(Buffer.from('thumbnail')),
+      });
+      mockSave.mockResolvedValue(undefined);
+
+      await storage.upload('img-101', Buffer.from('image'));
+
+      expect(mockResize).toHaveBeenCalledWith({ width: 256 });
+    });
+  });
+
   describe('delete', () => {
     it('deletes files with legacy paths when no slug provided', async () => {
       mockDelete.mockResolvedValue(undefined);

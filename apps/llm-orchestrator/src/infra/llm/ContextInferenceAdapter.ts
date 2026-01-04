@@ -55,7 +55,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const parsed = parseJson<ResearchContext>(result.value, isResearchContext);
+    const parsed = parseJson<ResearchContext>(result.value.content, isResearchContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse research context');
       this.tracker?.track({
@@ -105,7 +105,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const parsed = parseJson<SynthesisContext>(result.value, isSynthesisContext);
+    const parsed = parseJson<SynthesisContext>(result.value.content, isSynthesisContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse synthesis context');
       this.tracker?.track({

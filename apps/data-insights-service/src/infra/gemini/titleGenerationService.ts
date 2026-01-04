@@ -83,7 +83,7 @@ export function createTitleGenerationService(
         });
       }
 
-      const title = result.value.trim().slice(0, MAX_TITLE_LENGTH);
+      const title = result.value.content.trim().slice(0, MAX_TITLE_LENGTH);
 
       return ok(title);
     },

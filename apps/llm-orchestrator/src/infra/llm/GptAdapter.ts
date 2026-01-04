@@ -46,8 +46,8 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       model: this.model,
       callType: 'research',
       success: true,
-      inputTokens: result.value.usage?.inputTokens ?? 0,
-      outputTokens: result.value.usage?.outputTokens ?? 0,
+      inputTokens: result.value.usage.inputTokens,
+      outputTokens: result.value.usage.outputTokens,
     });
 
     return result;
@@ -85,11 +85,11 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       model: this.model,
       callType: 'synthesis',
       success: true,
-      inputTokens: 0,
-      outputTokens: 0,
+      inputTokens: result.value.usage.inputTokens,
+      outputTokens: result.value.usage.outputTokens,
     });
 
-    return result;
+    return { ok: true, value: result.value.content };
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
@@ -130,7 +130,7 @@ Generate title:`;
       outputTokens: 0,
     });
 
-    return { ok: true, value: result.value.trim() };
+    return { ok: true, value: result.value.content.trim() };
   }
 }
 

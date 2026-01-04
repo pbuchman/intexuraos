@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "value": {
+    "content": "1. Python  \n2. JavaScript  \n3. Java  \n4. C#  \n5. TypeScript  ",
+    "usage": {
+      "inputTokens": 37,
+      "outputTokens": 23,
+      "totalTokens": 60,
+      "costUsd": 0.000019
+    }
+  }
+}

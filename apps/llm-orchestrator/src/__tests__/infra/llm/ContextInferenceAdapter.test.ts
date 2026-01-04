@@ -17,6 +17,8 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { ContextInferenceAdapter } = await import('../../../infra/llm/ContextInferenceAdapter.js');
 
+const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
 const validResearchContext: ResearchContext = {
   language: 'en',
   domain: 'technical',
@@ -101,7 +103,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns parsed context on success', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify(validResearchContext),
+        value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
       });
 
       const result = await adapter.inferResearchContext('Test query');
@@ -117,7 +119,7 @@ describe('ContextInferenceAdapter', () => {
     it('passes options to prompt builder', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify(validResearchContext),
+        value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
       });
 
       await adapter.inferResearchContext('Query', {
@@ -160,7 +162,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns error and logs warning on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'not valid json',
+        value: { content: 'not valid json', usage: mockUsage },
       });
 
       const result = await adapter.inferResearchContext('Test query');
@@ -179,7 +181,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns error on schema mismatch', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify({ invalid: 'schema' }),
+        value: { content: JSON.stringify({ invalid: 'schema' }), usage: mockUsage },
       });
 
       const result = await adapter.inferResearchContext('Test query');
@@ -193,7 +195,10 @@ describe('ContextInferenceAdapter', () => {
     it('strips markdown code blocks from response', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '```json\n' + JSON.stringify(validResearchContext) + '\n```',
+        value: {
+          content: '```json\n' + JSON.stringify(validResearchContext) + '\n```',
+          usage: mockUsage,
+        },
       });
 
       const result = await adapter.inferResearchContext('Test query');
@@ -204,7 +209,10 @@ describe('ContextInferenceAdapter', () => {
     it('strips plain code blocks from response', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '```\n' + JSON.stringify(validResearchContext) + '\n```',
+        value: {
+          content: '```\n' + JSON.stringify(validResearchContext) + '\n```',
+          usage: mockUsage,
+        },
       });
 
       const result = await adapter.inferResearchContext('Test query');
@@ -216,7 +224,7 @@ describe('ContextInferenceAdapter', () => {
       const adapterNoLogger = new ContextInferenceAdapter('key', 'model');
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'invalid json',
+        value: { content: 'invalid json', usage: mockUsage },
       });
 
       const result = await adapterNoLogger.inferResearchContext('Test query');
@@ -229,7 +237,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns parsed context on success', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify(validSynthesisContext),
+        value: { content: JSON.stringify(validSynthesisContext), usage: mockUsage },
       });
 
       const result = await adapter.inferSynthesisContext({
@@ -263,7 +271,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns error and logs warning on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '{ malformed json',
+        value: { content: '{ malformed json', usage: mockUsage },
       });
 
       const result = await adapter.inferSynthesisContext({
@@ -280,7 +288,7 @@ describe('ContextInferenceAdapter', () => {
     it('returns error on schema mismatch', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify({ wrong: 'structure' }),
+        value: { content: JSON.stringify({ wrong: 'structure' }), usage: mockUsage },
       });
 
       const result = await adapter.inferSynthesisContext({
@@ -297,7 +305,7 @@ describe('ContextInferenceAdapter', () => {
       const adapterNoLogger = new ContextInferenceAdapter('key', 'model');
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '{ invalid }',
+        value: { content: '{ invalid }', usage: mockUsage },
       });
 
       const result = await adapterNoLogger.inferSynthesisContext({
@@ -310,7 +318,7 @@ describe('ContextInferenceAdapter', () => {
     it('includes additional sources in prompt', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: JSON.stringify(validSynthesisContext),
+        value: { content: JSON.stringify(validSynthesisContext), usage: mockUsage },
       });
 
       await adapter.inferSynthesisContext({

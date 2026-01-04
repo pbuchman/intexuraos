@@ -38,7 +38,7 @@ describe('createPerplexityClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
-        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+        expect(result.value.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
       }
     });
 
@@ -53,6 +53,26 @@ describe('createPerplexityClient', () => {
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
+    });
+
+    it('uses default pricing for unknown model', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+          },
+        });
+
+      const client = createPerplexityClient({ apiKey: 'test-key', model: 'unknown-model' });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.costUsd).toBe(0.0015);
+      }
     });
 
     it('handles empty choices array', async () => {
@@ -232,6 +252,7 @@ describe('createPerplexityClient', () => {
         .post('/chat/completions')
         .reply(200, {
           choices: [{ message: { content: 'Generated response' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
         });
 
       const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -239,7 +260,7 @@ describe('createPerplexityClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated response');
+        expect(result.value.content).toBe('Generated response');
       }
     });
 
@@ -248,6 +269,7 @@ describe('createPerplexityClient', () => {
         .post('/chat/completions')
         .reply(200, {
           choices: [{ message: {} }],
+          usage: { prompt_tokens: 100, completion_tokens: 0 },
         });
 
       const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -255,7 +277,7 @@ describe('createPerplexityClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
@@ -266,6 +288,106 @@ describe('createPerplexityClient', () => {
       const result = await client.generate('Test');
 
       expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('usage logging', () => {
+    it('calls usageLogger.log on successful research', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-123',
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-123',
+          provider: 'perplexity',
+          model: TEST_MODEL,
+          method: 'research',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log on successful generate', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-456',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-456',
+          provider: 'perplexity',
+          method: 'generate',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log with errorMessage on failure', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(500, 'API error');
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+          success: false,
+          errorMessage: 'API error',
+        })
+      );
+    });
+
+    it('uses "unknown" for userId when not provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+        })
+      );
     });
   });
 
@@ -329,15 +451,8 @@ describe('createPerplexityClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.providerCost).toBe(0.0123);
+        expect(result.value.usage.costUsd).toBe(0.0123);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inputTokens: 100,
-          outputTokens: 50,
-          providerCost: 0.0123,
-        })
-      );
     });
 
     it('calls audit context on error', async () => {

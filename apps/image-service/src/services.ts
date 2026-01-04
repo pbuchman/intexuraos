@@ -69,12 +69,12 @@ export function initializeServices(): void {
     createPromptGenerator: (
       provider: 'google' | 'openai',
       apiKey: string,
-      logger?: LoggerLike
+      _logger?: LoggerLike
     ): PromptGenerator => {
       if (provider === 'google') {
-        return createGeminiPromptAdapter({ apiKey, logger });
+        return createGeminiPromptAdapter({ apiKey });
       }
-      return createGptPromptAdapter({ apiKey, logger });
+      return createGptPromptAdapter({ apiKey });
     },
     createImageGenerator: (model: ImageGenerationModel, apiKey: string): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];

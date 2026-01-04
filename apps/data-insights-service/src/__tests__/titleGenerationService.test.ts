@@ -3,6 +3,14 @@ import { ok, err } from '@intexuraos/common-core';
 import { createTitleGenerationService } from '../infra/gemini/titleGenerationService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
 
+const mockGenerate = vi.fn();
+
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: vi.fn().mockImplementation(() => ({
+    generate: mockGenerate,
+  })),
+}));
+
 describe('titleGenerationService', () => {
   function createMockUserServiceClient(apiKey: string | null = 'test-api-key'): UserServiceClient {
     return {
@@ -17,15 +25,12 @@ describe('titleGenerationService', () => {
   }
 
   describe('generateTitle', () => {
+    const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
     it('returns generated title from Gemini', async () => {
+      mockGenerate.mockResolvedValue(ok({ content: 'Test Generated Title', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
       const service = createTitleGenerationService(mockClient);
-
-      vi.mock('@intexuraos/infra-gemini', () => ({
-        createGeminiClient: vi.fn().mockImplementation(() => ({
-          generate: vi.fn().mockResolvedValue(ok('Test Generated Title')),
-        })),
-      }));
 
       const result = await service.generateTitle('user-123', 'Some test content');
 
@@ -64,6 +69,7 @@ describe('titleGenerationService', () => {
     });
 
     it('truncates long content to 5000 characters', async () => {
+      mockGenerate.mockResolvedValue(ok({ content: 'Truncated Title', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
       const service = createTitleGenerationService(mockClient);
 
@@ -74,6 +80,7 @@ describe('titleGenerationService', () => {
     });
 
     it('trims generated title', async () => {
+      mockGenerate.mockResolvedValue(ok({ content: '  Trimmed Title  ', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
       const service = createTitleGenerationService(mockClient);
 
@@ -86,15 +93,10 @@ describe('titleGenerationService', () => {
     });
 
     it('returns GENERATION_ERROR when Gemini fails', async () => {
+      mockGenerate.mockResolvedValue(err({ message: 'Gemini API error' }));
       const mockClient = createMockUserServiceClient();
-
-      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-      const mockCreate = createGeminiClient as ReturnType<typeof vi.fn>;
-      mockCreate.mockImplementationOnce(() => ({
-        generate: vi.fn().mockResolvedValue(err({ message: 'Gemini API error' })),
-      }));
-
       const service = createTitleGenerationService(mockClient);
+
       const result = await service.generateTitle('user-123', 'Some content');
 
       expect(result.ok).toBe(false);

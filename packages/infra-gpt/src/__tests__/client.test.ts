@@ -55,7 +55,7 @@ describe('createGptClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
-        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+        expect(result.value.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockResponsesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -251,6 +251,7 @@ describe('createGptClient', () => {
     it('returns generated content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Generated response' } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
       });
 
       const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -258,7 +259,7 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated response');
+        expect(result.value.content).toBe('Generated response');
       }
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -270,6 +271,7 @@ describe('createGptClient', () => {
     it('handles empty choices', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [],
+        usage: { prompt_tokens: 100, completion_tokens: 0 },
       });
 
       const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -277,13 +279,14 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
     it('handles null content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: null } }],
+        usage: { prompt_tokens: 100, completion_tokens: 0 },
       });
 
       const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -291,7 +294,7 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
@@ -305,6 +308,102 @@ describe('createGptClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
       }
+    });
+  });
+
+  describe('usage logging', () => {
+    it('calls usageLogger.log on successful research', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-123',
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-123',
+          provider: 'openai',
+          model: TEST_MODEL,
+          method: 'research',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log on successful generate', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Response' } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-456',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-456',
+          provider: 'openai',
+          method: 'generate',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log with errorMessage on failure', async () => {
+      mockResponsesCreate.mockRejectedValue(new Error('API error'));
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+          success: false,
+          errorMessage: 'API error',
+        })
+      );
+    });
+
+    it('uses "unknown" for userId when not provided', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+        })
+      );
     });
   });
 
@@ -361,13 +460,67 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.cachedTokens).toBe(100);
+        expect(result.value.usage.cacheTokens).toBe(100);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cachedTokens: 100,
-        })
-      );
+    });
+
+    it('handles usage without input_tokens_details', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+        },
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBeUndefined();
+      }
+    });
+
+    it('handles input_tokens_details without cached_tokens', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+          input_tokens_details: {},
+        },
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBeUndefined();
+      }
+    });
+
+    it('uses default pricing for unknown model', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+        },
+      });
+
+      const client = createGptClient({ apiKey: 'test-key', model: 'unknown-model' });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(1000);
+        expect(result.value.usage.costUsd).toBeGreaterThan(0);
+      }
     });
 
     it('includes reasoning tokens when present', async () => {
@@ -396,7 +549,8 @@ describe('createGptClient', () => {
       }
       expect(mockSuccess).toHaveBeenCalledWith(
         expect.objectContaining({
-          reasoningTokens: 500,
+          inputTokens: 150,
+          outputTokens: 75,
         })
       );
     });

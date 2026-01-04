@@ -909,5 +909,40 @@ describe('runSynthesis', () => {
         }),
       });
     });
+
+    it('continues without cover image when image service throws an exception', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi.fn().mockRejectedValue(new Error('Network error')),
+        generateImage: vi.fn(),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-key' },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
+        status: 'completed',
+        synthesizedResult: 'Synthesized result',
+        completedAt: '2024-01-01T12:00:00.000Z',
+        totalDurationMs: 7200000,
+        shareInfo: expect.not.objectContaining({
+          coverImageId: expect.anything(),
+        }),
+      });
+    });
   });
 });

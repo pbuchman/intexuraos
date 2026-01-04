@@ -56,7 +56,7 @@ describe('createClaudeClient', () => {
       if (result.ok) {
         expect(result.value.content).toContain('Research findings about AI');
         expect(result.value.sources).toContain('https://example.com');
-        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+        expect(result.value.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -203,6 +203,7 @@ describe('createClaudeClient', () => {
     it('returns generated content', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Generated response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -210,7 +211,7 @@ describe('createClaudeClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated response');
+        expect(result.value.content).toBe('Generated response');
       }
       expect(mockMessagesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -225,6 +226,7 @@ describe('createClaudeClient', () => {
           { type: 'text', text: 'First part' },
           { type: 'text', text: 'Second part' },
         ],
+        usage: { input_tokens: 100, output_tokens: 50 },
       });
 
       const client = createClaudeClient({ apiKey: 'test-key', model: TEST_MODEL });
@@ -232,7 +234,7 @@ describe('createClaudeClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('First part\n\nSecond part');
+        expect(result.value.content).toBe('First part\n\nSecond part');
       }
     });
 
@@ -246,6 +248,100 @@ describe('createClaudeClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
       }
+    });
+  });
+
+  describe('usage logging', () => {
+    it('calls usageLogger.log on successful research', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-123',
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-123',
+          provider: 'anthropic',
+          model: TEST_MODEL,
+          method: 'research',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log on successful generate', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+        userId: 'test-user-456',
+      });
+      await client.generate('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-456',
+          provider: 'anthropic',
+          method: 'generate',
+          success: true,
+        })
+      );
+    });
+
+    it('calls usageLogger.log with errorMessage on failure', async () => {
+      mockMessagesCreate.mockRejectedValue(new Error('API error'));
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+          success: false,
+          errorMessage: 'API error',
+        })
+      );
+    });
+
+    it('uses "unknown" for userId when not provided', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const mockUsageLogger = { log: vi.fn().mockResolvedValue(undefined) };
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        usageLogger: mockUsageLogger,
+      });
+      await client.research('Test prompt');
+
+      expect(mockUsageLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'unknown',
+        })
+      );
     });
   });
 
@@ -295,13 +391,8 @@ describe('createClaudeClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.cacheCreationTokens).toBe(500);
+        expect(result.value.usage.cacheTokens).toBe(500);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cacheCreationTokens: 500,
-        })
-      );
     });
 
     it('includes cache read tokens when present', async () => {
@@ -325,13 +416,8 @@ describe('createClaudeClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.cacheReadTokens).toBe(200);
+        expect(result.value.usage.cacheTokens).toBe(200);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cacheReadTokens: 200,
-        })
-      );
     });
 
     it('includes web search calls count when present', async () => {

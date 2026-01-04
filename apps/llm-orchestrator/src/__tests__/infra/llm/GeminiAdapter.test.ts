@@ -22,6 +22,8 @@ const mockTracker = {
   track: vi.fn(),
 };
 
+const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
@@ -44,7 +46,7 @@ describe('GeminiAdapter', () => {
     it('works without tracker', async () => {
       mockResearch.mockResolvedValue({
         ok: true,
-        value: { content: 'Result', sources: [] },
+        value: { content: 'Result', sources: [], usage: mockUsage },
       });
 
       const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro');
@@ -58,7 +60,7 @@ describe('GeminiAdapter', () => {
     it('delegates to Gemini client', async () => {
       mockResearch.mockResolvedValue({
         ok: true,
-        value: { content: 'Research result', sources: ['https://source.com'] },
+        value: { content: 'Research result', sources: ['https://source.com'], usage: mockUsage },
       });
 
       const result = await adapter.research('Test prompt');
@@ -103,7 +105,7 @@ describe('GeminiAdapter', () => {
     it('builds synthesis prompt and calls generate', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Synthesized result',
+        value: { content: 'Synthesized result', usage: mockUsage },
       });
 
       const result = await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT result' }]);
@@ -117,7 +119,7 @@ describe('GeminiAdapter', () => {
     });
 
     it('includes external reports in synthesis prompt', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize(
         'Prompt',
@@ -129,7 +131,7 @@ describe('GeminiAdapter', () => {
     });
 
     it('uses synthesis context when provided', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
         language: 'en',
@@ -171,7 +173,7 @@ describe('GeminiAdapter', () => {
     it('delegates to generate with title prompt', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '  Generated Title  ',
+        value: { content: '  Generated Title  ', usage: mockUsage },
       });
 
       const result = await adapter.generateTitle('Test prompt');
@@ -206,7 +208,7 @@ describe('GeminiAdapter', () => {
     it('generates label for short content', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '  Context label  ',
+        value: { content: '  Context label  ', usage: mockUsage },
       });
 
       const result = await adapter.generateContextLabel('Short context content');
@@ -224,7 +226,7 @@ describe('GeminiAdapter', () => {
     it('truncates long content to 2000 characters', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Long content label',
+        value: { content: 'Long content label', usage: mockUsage },
       });
 
       const longContent = 'x'.repeat(3000);

@@ -114,7 +114,7 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
         throw new Error(`Classification failed: ${result.error.message}`);
       }
 
-      const parsed = parseClassifyResponse(result.value, VALID_TYPES);
+      const parsed = parseClassifyResponse(result.value.content, VALID_TYPES);
       const selectedModels = extractSelectedModels(text);
 
       const classificationResult: ClassificationResult = {

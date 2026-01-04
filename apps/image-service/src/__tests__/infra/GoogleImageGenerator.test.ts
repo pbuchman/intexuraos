@@ -11,30 +11,12 @@ import type {
   ImageGenerationError,
 } from '../../domain/ports/imageGenerator.js';
 
-const { mockGenerateContent, mockAuditSuccess, mockAuditError, mockCreateAuditContext } =
-  vi.hoisted(() => {
-    const mockGenerateContent = vi.fn();
-    const mockAuditSuccess = vi.fn().mockResolvedValue(undefined);
-    const mockAuditError = vi.fn().mockResolvedValue(undefined);
-    const mockCreateAuditContext = vi.fn(() => ({
-      success: mockAuditSuccess,
-      error: mockAuditError,
-    }));
-    return { mockGenerateContent, mockAuditSuccess, mockAuditError, mockCreateAuditContext };
-  });
+const mockGenerateImage = vi.fn();
 
-vi.mock('@google/genai', () => {
-  return {
-    GoogleGenAI: class MockGoogleGenAI {
-      models = {
-        generateContent: mockGenerateContent,
-      };
-    },
-  };
-});
-
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: mockCreateAuditContext,
+vi.mock('@intexuraos/infra-gemini', () => ({
+  createGeminiClient: vi.fn(() => ({
+    generateImage: mockGenerateImage,
+  })),
 }));
 
 function createMockStorage(): ImageStorage & {
@@ -54,18 +36,6 @@ function createMockStorage(): ImageStorage & {
   };
 }
 
-function createMockResponse(b64Image: string): object {
-  return {
-    candidates: [
-      {
-        content: {
-          parts: [{ inlineData: { data: b64Image, mimeType: 'image/png' } }],
-        },
-      },
-    ],
-  };
-}
-
 describe('GoogleImageGenerator', () => {
   const testApiKey = 'test-api-key';
   const testModel = 'gemini-2.5-flash-image' as const;
@@ -77,17 +47,19 @@ describe('GoogleImageGenerator', () => {
   beforeEach(() => {
     mockStorage = createMockStorage();
     vi.clearAllMocks();
-    mockAuditSuccess.mockClear();
-    mockAuditError.mockClear();
-    mockCreateAuditContext.mockClear();
   });
 
   describe('generate', () => {
     it('returns GeneratedImage on successful generation', async () => {
-      const fakeImageData = 'fake image data';
-      const b64Image = Buffer.from(fakeImageData).toString('base64');
+      const fakeImageData = Buffer.from('fake image data');
 
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: 'gemini-2.5-flash-image',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
 
       mockStorage.uploadMock.mockResolvedValue(
         ok({
@@ -117,33 +89,16 @@ describe('GoogleImageGenerator', () => {
       }
     });
 
-    it('calls Google API with correct parameters', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
-
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
-
-      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      await generator.generate(testPrompt);
-
-      expect(mockGenerateContent).toHaveBeenCalledWith({
-        model: 'gemini-2.5-flash-image',
-        contents: testPrompt,
-      });
-    });
-
     it('uploads image buffer to storage', async () => {
-      const fakeImageData = 'fake image data';
-      const b64Image = Buffer.from(fakeImageData).toString('base64');
+      const fakeImageData = Buffer.from('fake image data');
 
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: 'gemini-2.5-flash-image',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
@@ -156,16 +111,21 @@ describe('GoogleImageGenerator', () => {
 
       await generator.generate(testPrompt);
 
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, fakeImageData, {
         slug: undefined,
       });
     });
 
     it('passes slug option to storage when provided', async () => {
-      const fakeImageData = 'fake image data';
-      const b64Image = Buffer.from(fakeImageData).toString('base64');
+      const fakeImageData = Buffer.from('fake image data');
 
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: 'gemini-2.5-flash-image',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
@@ -182,35 +142,15 @@ describe('GoogleImageGenerator', () => {
       if (result.ok) {
         expect(result.value.slug).toBe('my-cool-image');
       }
-      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, Buffer.from(fakeImageData), {
+      expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, fakeImageData, {
         slug: 'my-cool-image',
       });
     });
 
-    it('returns API_ERROR when no candidates in response', async () => {
-      mockGenerateContent.mockResolvedValue({ candidates: [] });
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result: Result<GeneratedImageData, ImageGenerationError> =
-        await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('No content in response');
-      }
-    });
-
-    it('returns API_ERROR when no image data in parts', async () => {
-      mockGenerateContent.mockResolvedValue({
-        candidates: [{ content: { parts: [{ text: 'Some text' }] } }],
-      });
+    it('returns API_ERROR when generateImage returns error', async () => {
+      mockGenerateImage.mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'No image data in response' })
+      );
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -230,9 +170,15 @@ describe('GoogleImageGenerator', () => {
     });
 
     it('returns STORAGE_ERROR when upload fails', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = Buffer.from('fake image data');
 
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: 'gemini-2.5-flash-image',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
 
       mockStorage.uploadMock.mockResolvedValue(
         err({ code: 'STORAGE_ERROR', message: 'GCS upload failed' })
@@ -256,7 +202,7 @@ describe('GoogleImageGenerator', () => {
     });
 
     it('returns INVALID_KEY for authentication errors', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('API_KEY invalid'));
+      mockGenerateImage.mockResolvedValue(err({ code: 'INVALID_KEY', message: 'API_KEY invalid' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: 'bad-key',
@@ -274,8 +220,8 @@ describe('GoogleImageGenerator', () => {
       }
     });
 
-    it('returns RATE_LIMITED for quota errors', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Quota exceeded'));
+    it('returns RATE_LIMITED for rate limit errors', async () => {
+      mockGenerateImage.mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Quota exceeded' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -294,7 +240,7 @@ describe('GoogleImageGenerator', () => {
     });
 
     it('returns TIMEOUT for timeout errors', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Request timed out'));
+      mockGenerateImage.mockResolvedValue(err({ code: 'TIMEOUT', message: 'Request timed out' }));
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -313,7 +259,9 @@ describe('GoogleImageGenerator', () => {
     });
 
     it('returns API_ERROR for other errors', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Internal server error'));
+      mockGenerateImage.mockResolvedValue(
+        err({ code: 'API_ERROR', message: 'Internal server error' })
+      );
 
       const generator = new GoogleImageGenerator({
         apiKey: testApiKey,
@@ -332,9 +280,15 @@ describe('GoogleImageGenerator', () => {
     });
 
     it('uses default generateId when not provided', async () => {
-      const b64Image = Buffer.from('fake image data').toString('base64');
+      const fakeImageData = Buffer.from('fake image data');
 
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: 'gemini-2.5-flash-image',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
 
       mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
 
@@ -365,116 +319,6 @@ describe('GoogleImageGenerator', () => {
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);
-    });
-  });
-
-  describe('audit logging', () => {
-    it('creates audit context with correct params', async () => {
-      const b64Image = Buffer.from('fake image').toString('base64');
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
-      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      await generator.generate(testPrompt);
-
-      expect(mockCreateAuditContext).toHaveBeenCalledWith(
-        expect.objectContaining({
-          provider: 'google',
-          model: 'gemini-2.5-flash-image',
-          method: 'image-generation',
-          prompt: testPrompt,
-        })
-      );
-    });
-
-    it('logs success with image fields on successful generation', async () => {
-      const b64Image = Buffer.from('fake image').toString('base64');
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
-      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result = await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(true);
-      expect(mockAuditSuccess).toHaveBeenCalledWith({
-        response: '[image-generated]',
-        imageCount: 1,
-        imageModel: 'gemini-2.5-flash-image',
-        imageSize: '1024x1024',
-        imageCostUsd: 0.03,
-      });
-      expect(mockAuditError).not.toHaveBeenCalled();
-    });
-
-    it('logs error on API failure', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('API_KEY invalid'));
-
-      const generator = new GoogleImageGenerator({
-        apiKey: 'bad-key',
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result = await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      expect(mockAuditError).toHaveBeenCalledWith({
-        error: 'API_KEY invalid',
-      });
-      expect(mockAuditSuccess).not.toHaveBeenCalled();
-    });
-
-    it('logs error when no content in response', async () => {
-      mockGenerateContent.mockResolvedValue({ candidates: [] });
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result = await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      expect(mockAuditError).toHaveBeenCalledWith({
-        error: 'No content in response',
-      });
-    });
-
-    it('logs error when storage upload fails', async () => {
-      const b64Image = Buffer.from('fake image').toString('base64');
-      mockGenerateContent.mockResolvedValue(createMockResponse(b64Image));
-      mockStorage.uploadMock.mockResolvedValue(
-        err({ code: 'STORAGE_ERROR', message: 'GCS upload failed' })
-      );
-
-      const generator = new GoogleImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-      });
-
-      const result = await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      expect(mockAuditError).toHaveBeenCalledWith({
-        error: 'GCS upload failed',
-      });
     });
   });
 });

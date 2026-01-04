@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import {
   buildResearchPrompt,
@@ -7,32 +8,41 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type { LLMClient } from '@intexuraos/llm-contract';
+import type {
+  LLMClient,
+  NormalizedUsage,
+  ImageGenerateOptions,
+  ImageGenerationResult,
+  GenerateResult,
+} from '@intexuraos/llm-contract';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 
 export type GptClient = LLMClient;
 
 const MAX_TOKENS = 8192;
+const IMAGE_MODEL = 'dall-e-3';
+const DEFAULT_IMAGE_COST = 0.04;
+const WEB_SEARCH_COST_PER_CALL = 0.025;
+
+const GPT_PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-4o': { input: 2.5, output: 10.0 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-4.1': { input: 2.0, output: 8.0 },
+  'gpt-4.1-mini': { input: 0.4, output: 1.6 },
+  'gpt-4.1-nano': { input: 0.1, output: 0.4 },
+  'gpt-5.2': { input: 0.4, output: 2.0 },
+  o1: { input: 15.0, output: 60.0 },
+  'o1-mini': { input: 1.1, output: 4.4 },
+  'o3-mini': { input: 1.1, output: 4.4 },
+};
 
 function createRequestContext(
   method: string,
   model: string,
   prompt: string
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = crypto.randomUUID();
+  const requestId = randomUUID();
   const startTime = new Date();
-
-  // eslint-disable-next-line no-console
-  console.info(
-    `[GPT:${method}] Request`,
-    JSON.stringify({
-      requestId,
-      model,
-      promptLength: prompt.length,
-      promptPreview: prompt.slice(0, 200),
-    })
-  );
-
   const auditContext = createAuditContext({
     provider: 'openai',
     model,
@@ -40,91 +50,90 @@ function createRequestContext(
     prompt,
     startedAt: startTime,
   });
-
   return { requestId, startTime, auditContext };
 }
 
-async function logSuccess(
-  method: string,
-  requestId: string,
-  startTime: Date,
-  response: string,
-  auditContext: AuditContext,
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    cachedTokens?: number;
-    reasoningTokens?: number;
-    webSearchCalls?: number;
-  }
-): Promise<void> {
-  // eslint-disable-next-line no-console
-  console.info(
-    `[GPT:${method}] Response`,
-    JSON.stringify({
-      requestId,
-      durationMs: Date.now() - startTime.getTime(),
-      responseLength: response.length,
-      responsePreview: response.slice(0, 200),
-      inputTokens: usage?.inputTokens,
-      outputTokens: usage?.outputTokens,
-      cachedTokens: usage?.cachedTokens,
-      reasoningTokens: usage?.reasoningTokens,
-      webSearchCalls: usage?.webSearchCalls,
-    })
-  );
-
-  const auditParams: Parameters<typeof auditContext.success>[0] = { response };
-  if (usage !== undefined) {
-    auditParams.inputTokens = usage.inputTokens;
-    auditParams.outputTokens = usage.outputTokens;
-    if (usage.cachedTokens !== undefined) {
-      auditParams.cachedTokens = usage.cachedTokens;
-    }
-    if (usage.reasoningTokens !== undefined) {
-      auditParams.reasoningTokens = usage.reasoningTokens;
-    }
-    if (usage.webSearchCalls !== undefined) {
-      auditParams.webSearchCalls = usage.webSearchCalls;
-    }
-  }
-  await auditContext.success(auditParams);
+function calculateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  webSearchCalls: number,
+  cachedTokens: number
+): number {
+  const pricing = GPT_PRICING[model] ?? { input: 2.5, output: 10.0 };
+  const effectiveInputTokens = inputTokens - cachedTokens * 0.5;
+  const inputCost = (effectiveInputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const webSearchCost = webSearchCalls * WEB_SEARCH_COST_PER_CALL;
+  return Math.round((inputCost + outputCost + webSearchCost) * 1_000_000) / 1_000_000;
 }
 
-async function logError(
-  method: string,
-  requestId: string,
-  startTime: Date,
-  error: unknown,
-  auditContext: AuditContext
-): Promise<void> {
-  const errorMessage = getErrorMessage(error, String(error));
+function normalizeUsage(
+  model: string,
+  usage: OpenAI.Responses.ResponseUsage | OpenAI.CompletionUsage | undefined,
+  webSearchCalls: number
+): NormalizedUsage {
+  if (usage === undefined) {
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: 0,
+    };
+  }
 
-  // eslint-disable-next-line no-console
-  console.error(
-    `[GPT:${method}] Error`,
-    JSON.stringify({
-      requestId,
-      durationMs: Date.now() - startTime.getTime(),
-      error: errorMessage,
-    })
-  );
+  const inputTokens = 'input_tokens' in usage ? usage.input_tokens : usage.prompt_tokens;
+  const outputTokens = 'output_tokens' in usage ? usage.output_tokens : usage.completion_tokens;
 
-  await auditContext.error({ error: errorMessage });
+  const cachedTokens =
+    'input_tokens_details' in usage
+      ? ((usage as { input_tokens_details?: { cached_tokens?: number } }).input_tokens_details
+          ?.cached_tokens ?? 0)
+      : 0;
+
+  const reasoningTokens =
+    'output_tokens_details' in usage
+      ? (usage as { output_tokens_details?: { reasoning_tokens?: number } }).output_tokens_details
+          ?.reasoning_tokens
+      : undefined;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: calculateCost(model, inputTokens, outputTokens, webSearchCalls, cachedTokens),
+    ...(cachedTokens > 0 && { cacheTokens: cachedTokens }),
+    ...(reasoningTokens !== undefined && reasoningTokens > 0 && { reasoningTokens }),
+    ...(webSearchCalls > 0 && { webSearchCalls }),
+  };
 }
 
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model } = config;
+  const { model, usageLogger, userId } = config;
+
+  function logUsage(
+    method: string,
+    usage: NormalizedUsage,
+    success: boolean,
+    errorMessage?: string
+  ): void {
+    if (usageLogger === undefined) return;
+    const params = {
+      userId: userId ?? 'unknown',
+      provider: 'openai',
+      model,
+      method,
+      usage,
+      success,
+    };
+    void usageLogger.log(errorMessage !== undefined ? { ...params, errorMessage } : params);
+  }
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
       const researchPrompt = buildResearchPrompt(prompt);
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'research',
-        model,
-        researchPrompt
-      );
+      const { auditContext } = createRequestContext('research', model, researchPrompt);
 
       try {
         const response = await client.responses.create({
@@ -132,54 +141,42 @@ export function createGptClient(config: GptConfig): GptClient {
           instructions:
             'You are a senior research analyst. Search the web for current, authoritative information. Cross-reference sources and cite all findings with URLs.',
           input: researchPrompt,
-          tools: [
-            {
-              type: 'web_search_preview',
-              search_context_size: 'medium',
-            },
-          ],
+          tools: [{ type: 'web_search_preview', search_context_size: 'medium' }],
         });
 
         const content = response.output_text;
         const sources = extractSourcesFromResponse(response);
         const webSearchCalls = countWebSearchCalls(response);
-        const result: ResearchResult = { content, sources };
-        if (response.usage !== undefined) {
-          const cachedTokens = (
-            response.usage as { input_tokens_details?: { cached_tokens?: number } }
-          ).input_tokens_details?.cached_tokens;
-          const reasoningTokens = (
-            response.usage as { output_tokens_details?: { reasoning_tokens?: number } }
-          ).output_tokens_details?.reasoning_tokens;
-          result.usage = {
-            inputTokens: response.usage.input_tokens,
-            outputTokens: response.usage.output_tokens,
-          };
-          if (cachedTokens !== undefined) {
-            result.usage.cachedTokens = cachedTokens;
-          }
-          if (reasoningTokens !== undefined) {
-            result.usage.reasoningTokens = reasoningTokens;
-          }
-          if (webSearchCalls > 0) {
-            result.usage.webSearchCalls = webSearchCalls;
-          }
-        }
+        const usage = normalizeUsage(model, response.usage, webSearchCalls);
 
-        await logSuccess('research', requestId, startTime, content, auditContext, result.usage);
-        return ok(result);
+        const successParams: Parameters<typeof auditContext.success>[0] = {
+          response: content,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+        };
+        if (usage.webSearchCalls !== undefined) {
+          successParams.webSearchCalls = usage.webSearchCalls;
+        }
+        await auditContext.success(successParams);
+        logUsage('research', usage, true);
+
+        return ok({ content, sources, usage });
       } catch (error) {
-        await logError('research', requestId, startTime, error, auditContext);
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('research', emptyUsage, false, errorMsg);
         return err(mapGptError(error));
       }
     },
 
-    async generate(prompt: string): Promise<Result<string, GptError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'generate',
-        model,
-        prompt
-      );
+    async generate(prompt: string): Promise<Result<GenerateResult, GptError>> {
+      const { auditContext } = createRequestContext('generate', model, prompt);
 
       try {
         const response = await client.chat.completions.create({
@@ -189,10 +186,77 @@ export function createGptClient(config: GptConfig): GptClient {
         });
 
         const text = response.choices[0]?.message.content ?? '';
-        await logSuccess('generate', requestId, startTime, text, auditContext);
-        return ok(text);
+        const usage = normalizeUsage(model, response.usage, 0);
+
+        await auditContext.success({
+          response: text,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+        });
+        logUsage('generate', usage, true);
+
+        return ok({ content: text, usage });
       } catch (error) {
-        await logError('generate', requestId, startTime, error, auditContext);
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('generate', emptyUsage, false, errorMsg);
+        return err(mapGptError(error));
+      }
+    },
+
+    async generateImage(
+      prompt: string,
+      options?: ImageGenerateOptions
+    ): Promise<Result<ImageGenerationResult, GptError>> {
+      const { auditContext } = createRequestContext('generateImage', IMAGE_MODEL, prompt);
+
+      try {
+        const response = await client.images.generate({
+          model: IMAGE_MODEL,
+          prompt,
+          n: 1,
+          size: options?.size ?? '1024x1024',
+          response_format: 'b64_json',
+        });
+
+        const b64Data = response.data?.[0]?.b64_json;
+        if (b64Data === undefined) {
+          const errorMsg = 'No image data in response';
+          await auditContext.error({ error: errorMsg });
+          return err({ code: 'API_ERROR', message: errorMsg });
+        }
+
+        const imageBuffer = Buffer.from(b64Data, 'base64');
+        const usage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: DEFAULT_IMAGE_COST,
+        };
+
+        await auditContext.success({
+          response: '[image-generated]',
+          imageCostUsd: DEFAULT_IMAGE_COST,
+        });
+        logUsage('generateImage', usage, true);
+
+        return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
+      } catch (error) {
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('generateImage', emptyUsage, false, errorMsg);
         return err(mapGptError(error));
       }
     },
@@ -202,30 +266,18 @@ export function createGptClient(config: GptConfig): GptClient {
 function mapGptError(error: unknown): GptError {
   if (error instanceof OpenAI.APIError) {
     const message = error.message;
-
-    if (error.status === 401) {
-      return { code: 'INVALID_KEY', message };
-    }
-    if (error.status === 429) {
-      return { code: 'RATE_LIMITED', message };
-    }
-    if (error.code === 'context_length_exceeded') {
-      return { code: 'CONTEXT_LENGTH', message };
-    }
-    if (message.includes('timeout')) {
-      return { code: 'TIMEOUT', message };
-    }
-
+    if (error.status === 401) return { code: 'INVALID_KEY', message };
+    if (error.status === 429) return { code: 'RATE_LIMITED', message };
+    if (error.code === 'context_length_exceeded') return { code: 'CONTEXT_LENGTH', message };
+    if (message.includes('timeout')) return { code: 'TIMEOUT', message };
     return { code: 'API_ERROR', message };
   }
-
   const message = getErrorMessage(error);
   return { code: 'API_ERROR', message };
 }
 
 function extractSourcesFromResponse(response: OpenAI.Responses.Response): string[] {
   const sources: string[] = [];
-
   for (const item of response.output) {
     if (item.type === 'web_search_call' && 'results' in item) {
       const results = item.results as { url?: string }[] | undefined;
@@ -238,7 +290,6 @@ function extractSourcesFromResponse(response: OpenAI.Responses.Response): string
       }
     }
   }
-
   return [...new Set(sources)];
 }
 

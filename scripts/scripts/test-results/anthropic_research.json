@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "value": {
+    "content": "Na podstawie najnowszych badań, oto krótka analiza trendów języków programowania na najbliższe 3 lata:\n\n\n\nPython pozostaje niekwestionowanym liderem, notując znaczący wzrost popularności. Jest to główny język dla AI, nauki o danych, automatyzacji i rozwoju stron internetowych, o czym świadczy jego prosty ekosystem i rosnąca dominacja narzędzi AI.\n\n \n\nOprócz Pythona, kluczowe języki to TypeScript (który w sierpniu 2025 roku wyprzedził Pythona na GitHubie), JavaScript, Java, a także C#, który zyskuje na popularności.",
+    "sources": [
+      "https://spectrum.ieee.org/top-programming-languages-2024",
+      "https://spectrum.ieee.org/top-programming-languages-2025",
+      "https://www.tiobe.com/tiobe-index/",
+      "https://www.index.dev/blog/most-popular-programming-languages-",
+      "https://graffersid.com/in-demand-programming-languages/",
+      "https://thisisanitsupportgroup.com/blog/best-programming-languages-2026-complete-guide/",
+      "https://survey.stackoverflow.co/2024/technology",
+      "https://www.statista.com/statistics/793628/worldwide-developer-survey-most-used-languages/",
+      "https://www.orientsoftware.com/blog/most-popular-programming-languages/",
+      "https://www.pluralsight.com/resources/blog/upskilling/top-programming-languages-2025"
+    ],
+    "usage": {
+      "inputTokens": 19241,
+      "outputTokens": 294,
+      "totalTokens": 19535,
+      "costUsd": 0.016569
+    }
+  }
+}

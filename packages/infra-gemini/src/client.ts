@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { type GenerateContentResponse, GoogleGenAI } from '@google/genai';
 import {
   buildResearchPrompt,
@@ -7,30 +8,34 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type { LLMClient } from '@intexuraos/llm-contract';
+import type {
+  LLMClient,
+  NormalizedUsage,
+  ImageGenerateOptions,
+  ImageGenerationResult,
+  GenerateResult,
+} from '@intexuraos/llm-contract';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 
 export type GeminiClient = LLMClient;
+
+const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-2.5-pro': { input: 1.25, output: 10.0 },
+  'gemini-2.5-flash': { input: 0.075, output: 0.3 },
+  'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  'gemini-2.5-flash-image': { input: 0.075, output: 0.3 },
+};
+const DEFAULT_GROUNDING_COST = 0.035;
+const DEFAULT_IMAGE_COST = 0.03;
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 function createRequestContext(
   method: string,
   model: string,
   prompt: string
 ): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = crypto.randomUUID();
+  const requestId = randomUUID();
   const startTime = new Date();
-
-  // eslint-disable-next-line no-console
-  console.info(
-    `[Gemini:${method}] Request`,
-    JSON.stringify({
-      requestId,
-      model,
-      promptLength: prompt.length,
-      promptPreview: prompt.slice(0, 200),
-    })
-  );
-
   const auditContext = createAuditContext({
     provider: 'google',
     model,
@@ -38,133 +43,176 @@ function createRequestContext(
     prompt,
     startedAt: startTime,
   });
-
   return { requestId, startTime, auditContext };
 }
 
-async function logSuccess(
-  method: string,
-  requestId: string,
-  startTime: Date,
-  response: string,
-  auditContext: AuditContext,
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    groundingEnabled?: boolean;
-  }
-): Promise<void> {
-  // eslint-disable-next-line no-console
-  console.info(
-    `[Gemini:${method}] Response`,
-    JSON.stringify({
-      requestId,
-      durationMs: Date.now() - startTime.getTime(),
-      responseLength: response.length,
-      responsePreview: response.slice(0, 200),
-      inputTokens: usage?.inputTokens,
-      outputTokens: usage?.outputTokens,
-      groundingEnabled: usage?.groundingEnabled,
-    })
-  );
-
-  const auditParams: Parameters<typeof auditContext.success>[0] = { response };
-  if (usage !== undefined) {
-    auditParams.inputTokens = usage.inputTokens;
-    auditParams.outputTokens = usage.outputTokens;
-    if (usage.groundingEnabled !== undefined) {
-      auditParams.groundingEnabled = usage.groundingEnabled;
-    }
-  }
-  await auditContext.success(auditParams);
+function calculateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  groundingEnabled: boolean
+): number {
+  const pricing = GEMINI_PRICING[model] ?? { input: 0.1, output: 0.4 };
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  const groundingCost = groundingEnabled ? DEFAULT_GROUNDING_COST : 0;
+  return Math.round((inputCost + outputCost + groundingCost) * 1_000_000) / 1_000_000;
 }
 
-async function logError(
-  method: string,
-  requestId: string,
-  startTime: Date,
-  error: unknown,
-  auditContext: AuditContext
-): Promise<void> {
-  const errorMessage = getErrorMessage(error, String(error));
-
-  // eslint-disable-next-line no-console
-  console.error(
-    `[Gemini:${method}] Error`,
-    JSON.stringify({
-      requestId,
-      durationMs: Date.now() - startTime.getTime(),
-      error: errorMessage,
-    })
-  );
-
-  await auditContext.error({ error: errorMessage });
+function normalizeUsage(
+  model: string,
+  response: GenerateContentResponse,
+  groundingEnabled: boolean
+): NormalizedUsage {
+  const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+  const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: calculateCost(model, inputTokens, outputTokens, groundingEnabled),
+    ...(groundingEnabled && { groundingEnabled: true }),
+  };
 }
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model } = config;
+  const { model, usageLogger, userId } = config;
+
+  function logUsage(
+    method: string,
+    usage: NormalizedUsage,
+    success: boolean,
+    errorMessage?: string
+  ): void {
+    if (usageLogger === undefined) return;
+    const params = {
+      userId: userId ?? 'unknown',
+      provider: 'google',
+      model,
+      method,
+      usage,
+      success,
+    };
+    void usageLogger.log(errorMessage !== undefined ? { ...params, errorMessage } : params);
+  }
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
       const researchPrompt = buildResearchPrompt(prompt);
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'research',
-        model,
-        researchPrompt
-      );
+      const { auditContext } = createRequestContext('research', model, researchPrompt);
 
       try {
         const response = await ai.models.generateContent({
           model,
           contents: researchPrompt,
-          config: {
-            tools: [{ googleSearch: {} }],
-          },
+          config: { tools: [{ googleSearch: {} }] },
         });
 
         const text = response.text ?? '';
         const sources = extractSourcesFromResponse(response);
         const groundingEnabled = hasGroundingMetadata(response);
-        const result: ResearchResult = { content: text, sources };
-        const usageMetadata = response.usageMetadata;
-        if (usageMetadata !== undefined) {
-          result.usage = {
-            inputTokens: usageMetadata.promptTokenCount ?? 0,
-            outputTokens: usageMetadata.candidatesTokenCount ?? 0,
-          };
-          if (groundingEnabled) {
-            result.usage.groundingEnabled = groundingEnabled;
-          }
-        }
+        const usage = normalizeUsage(model, response, groundingEnabled);
 
-        await logSuccess('research', requestId, startTime, text, auditContext, result.usage);
-        return ok(result);
+        await auditContext.success({
+          response: text,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          groundingEnabled,
+        });
+        logUsage('research', usage, true);
+
+        return ok({ content: text, sources, usage });
       } catch (error) {
-        await logError('research', requestId, startTime, error, auditContext);
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('research', emptyUsage, false, errorMsg);
         return err(mapGeminiError(error));
       }
     },
 
-    async generate(prompt: string): Promise<Result<string, GeminiError>> {
-      const { requestId, startTime, auditContext } = createRequestContext(
-        'generate',
-        model,
-        prompt
-      );
+    async generate(prompt: string): Promise<Result<GenerateResult, GeminiError>> {
+      const { auditContext } = createRequestContext('generate', model, prompt);
+
+      try {
+        const response = await ai.models.generateContent({ model, contents: prompt });
+        const text = response.text ?? '';
+        const usage = normalizeUsage(model, response, false);
+
+        await auditContext.success({
+          response: text,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+        });
+        logUsage('generate', usage, true);
+
+        return ok({ content: text, usage });
+      } catch (error) {
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('generate', emptyUsage, false, errorMsg);
+        return err(mapGeminiError(error));
+      }
+    },
+
+    async generateImage(
+      prompt: string,
+      _options?: ImageGenerateOptions
+    ): Promise<Result<ImageGenerationResult, GeminiError>> {
+      const { auditContext } = createRequestContext('generateImage', IMAGE_MODEL, prompt);
 
       try {
         const response = await ai.models.generateContent({
-          model,
+          model: IMAGE_MODEL,
           contents: prompt,
         });
 
-        const text = response.text ?? '';
+        const parts = response.candidates?.[0]?.content?.parts;
+        const imagePart = parts?.find((part) => part.inlineData !== undefined);
 
-        await logSuccess('generate', requestId, startTime, text, auditContext);
-        return ok(text);
+        if (imagePart?.inlineData?.data === undefined) {
+          const errorMsg = 'No image data in response';
+          await auditContext.error({ error: errorMsg });
+          return err({ code: 'API_ERROR', message: errorMsg });
+        }
+
+        const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
+        const usage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: DEFAULT_IMAGE_COST,
+        };
+
+        await auditContext.success({
+          response: '[image-generated]',
+          imageCostUsd: DEFAULT_IMAGE_COST,
+        });
+        logUsage('generateImage', usage, true);
+
+        return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
-        await logError('generate', requestId, startTime, error, auditContext);
+        const errorMsg = getErrorMessage(error);
+        await auditContext.error({ error: errorMsg });
+        const emptyUsage: NormalizedUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        };
+        logUsage('generateImage', emptyUsage, false, errorMsg);
         return err(mapGeminiError(error));
       }
     },
@@ -173,24 +221,19 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
 function mapGeminiError(error: unknown): GeminiError {
   const message = getErrorMessage(error);
-
-  if (message.includes('API_KEY')) {
-    return { code: 'INVALID_KEY', message };
-  }
-  if (message.includes('429') || message.includes('quota')) {
+  if (message.includes('API_KEY')) return { code: 'INVALID_KEY', message };
+  if (message.includes('429') || message.includes('quota'))
     return { code: 'RATE_LIMITED', message };
+  if (message.includes('timeout')) return { code: 'TIMEOUT', message };
+  if (message.includes('SAFETY') || message.includes('blocked')) {
+    return { code: 'CONTENT_FILTERED', message };
   }
-  if (message.includes('timeout')) {
-    return { code: 'TIMEOUT', message };
-  }
-
   return { code: 'API_ERROR', message };
 }
 
 function extractSourcesFromResponse(response: GenerateContentResponse): string[] {
   const sources: string[] = [];
   const candidate = response.candidates?.[0];
-
   if (candidate?.groundingMetadata !== undefined) {
     const groundingChunks = candidate.groundingMetadata.groundingChunks;
     if (Array.isArray(groundingChunks)) {
@@ -201,11 +244,9 @@ function extractSourcesFromResponse(response: GenerateContentResponse): string[]
       }
     }
   }
-
   return [...new Set(sources)];
 }
 
 function hasGroundingMetadata(response: GenerateContentResponse): boolean {
-  const candidate = response.candidates?.[0];
-  return candidate?.groundingMetadata !== undefined;
+  return response.candidates?.[0]?.groundingMetadata !== undefined;
 }

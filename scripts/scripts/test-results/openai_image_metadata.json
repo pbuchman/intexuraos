@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "model": "dall-e-3",
+  "usage": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "totalTokens": 0,
+    "costUsd": 0.04
+  },
+  "imageSizeBytes": 1711720
+}

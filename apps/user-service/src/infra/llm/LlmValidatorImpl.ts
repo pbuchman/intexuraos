@@ -107,7 +107,7 @@ export class LlmValidatorImpl implements LlmValidator {
             message: result.error.message,
           });
         }
-        return ok({ content: result.value });
+        return ok({ content: result.value.content });
       }
       case 'openai': {
         const client = createGptClient({ apiKey, model: VALIDATION_MODELS.openai });
@@ -118,7 +118,7 @@ export class LlmValidatorImpl implements LlmValidator {
             message: result.error.message,
           });
         }
-        return ok({ content: result.value });
+        return ok({ content: result.value.content });
       }
       case 'anthropic': {
         const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
@@ -129,7 +129,7 @@ export class LlmValidatorImpl implements LlmValidator {
             message: result.error.message,
           });
         }
-        return ok({ content: result.value });
+        return ok({ content: result.value.content });
       }
       case 'perplexity': {
         const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
@@ -140,7 +140,7 @@ export class LlmValidatorImpl implements LlmValidator {
             message: result.error.message,
           });
         }
-        return ok({ content: result.value });
+        return ok({ content: result.value.content });
       }
     }
   }
