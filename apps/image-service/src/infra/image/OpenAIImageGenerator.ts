@@ -39,8 +39,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
         prompt,
         n: 1,
         size: '1024x1024',
-        response_format: 'b64_json',
-      } as Parameters<typeof this.client.images.generate>[0]);
+      });
 
       const imageData = response.data?.[0];
       if (imageData === undefined) {

@@ -131,7 +131,7 @@ describe('OpenAIImageGenerator', () => {
           expect(body.prompt).toBe(testPrompt);
           expect(body.n).toBe(1);
           expect(body.size).toBe('1024x1024');
-          expect(body.response_format).toBe('b64_json');
+          expect(body.response_format).toBeUndefined();
           return true;
         })
         .reply(200, {

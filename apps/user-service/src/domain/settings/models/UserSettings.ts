@@ -4,7 +4,6 @@
  */
 
 import type { EncryptedValue } from '@intexuraos/common-core';
-import type { SupportedModel } from '@intexuraos/llm-contract';
 
 /**
  * LLM provider identifiers.
@@ -41,14 +40,6 @@ export interface LlmTestResults {
 }
 
 /**
- * Research-related settings.
- * If defaultModels is undefined, system defaults will be used.
- */
-export interface ResearchSettings {
-  defaultModels?: SupportedModel[];
-}
-
-/**
  * A notification filter rule.
  */
 export interface NotificationFilter {
@@ -73,7 +64,6 @@ export interface UserSettings {
   notifications?: NotificationSettings;
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
-  researchSettings?: ResearchSettings;
   createdAt: string;
   updatedAt: string;
 }
