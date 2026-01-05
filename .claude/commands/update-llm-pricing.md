@@ -39,26 +39,26 @@ Model names like `gpt-5.2`, `gpt-4.1`, `gemini-2.5-pro` contain dots that break 
 
 Current registry of used models (14 total):
 
-| Provider    | Model                      | Usage                         | Source File                                     |
-| ----------- | -------------------------- | ----------------------------- | ----------------------------------------------- |
-| **Google**  |                            |                               |                                                 |
-|             | `gemini-2.5-pro`           | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `gemini-2.5-flash`         | Research, context, titles     | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `gemini-2.0-flash`         | API key validation            | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` |
-|             | `gemini-2.5-flash-image`   | Image generation              | `apps/image-service/src/domain/models/ImageGenerationModel.ts` |
-| **OpenAI**  |                            |                               |                                                 |
-|             | `o4-mini-deep-research`    | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `gpt-5.2`                  | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `gpt-4o-mini`              | API key validation            | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` |
-|             | `gpt-image-1`              | Image generation              | `apps/image-service/src/domain/models/ImageGenerationModel.ts` |
-| **Anthropic** |                          |                               |                                                 |
-|             | `claude-opus-4-5-20251101` | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `claude-sonnet-4-5-20250929` | Research                    | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `claude-3-5-haiku-20241022` | API key validation           | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` |
-| **Perplexity** |                         |                               |                                                 |
-|             | `sonar`                    | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `sonar-pro`                | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
-|             | `sonar-deep-research`      | Research                      | `packages/llm-contract/src/supportedModels.ts`  |
+| Provider       | Model                        | Usage                     | Source File                                                    |
+| -------------- | ---------------------------- | ------------------------- | -------------------------------------------------------------- |
+| **Google**     |                              |                           |                                                                |
+|                | `gemini-2.5-pro`             | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `gemini-2.5-flash`           | Research, context, titles | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `gemini-2.0-flash`           | API key validation        | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`          |
+|                | `gemini-2.5-flash-image`     | Image generation          | `apps/image-service/src/domain/models/ImageGenerationModel.ts` |
+| **OpenAI**     |                              |                           |                                                                |
+|                | `o4-mini-deep-research`      | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `gpt-5.2`                    | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `gpt-4o-mini`                | API key validation        | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`          |
+|                | `gpt-image-1`                | Image generation          | `apps/image-service/src/domain/models/ImageGenerationModel.ts` |
+| **Anthropic**  |                              |                           |                                                                |
+|                | `claude-opus-4-5-20251101`   | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `claude-sonnet-4-5-20250929` | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `claude-3-5-haiku-20241022`  | API key validation        | `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`          |
+| **Perplexity** |                              |                           |                                                                |
+|                | `sonar`                      | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `sonar-pro`                  | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
+|                | `sonar-deep-research`        | Research                  | `packages/llm-contract/src/supportedModels.ts`                 |
 
 **Before adding a new model to pricing, verify it's actually used in the codebase!**
 
@@ -413,10 +413,10 @@ Present a summary of changes:
 
 ### Prices Updated
 
-| Provider | Model            | Old          | New         |
-| -------- | ---------------- | ------------ | ----------- |
-| Google   | gemini-2.5-flash | $0.50/$3.00  | $0.30/$2.50 |
-| ...      | ...              | ...          | ...         |
+| Provider | Model            | Old         | New         |
+| -------- | ---------------- | ----------- | ----------- |
+| Google   | gemini-2.5-flash | $0.50/$3.00 | $0.30/$2.50 |
+| ...      | ...              | ...         | ...         |
 
 ### Files Modified
 
@@ -446,11 +446,11 @@ Both must be synchronized until the architecture is unified.
 
 ### Where pricing is used:
 
-| Location                                                             | Purpose                                          |
-| -------------------------------------------------------------------- | ------------------------------------------------ |
-| `apps/llm-orchestrator/src/domain/research/utils/costCalculator.ts`  | Research cost calculation (reads from Firestore) |
-| `packages/infra-*/src/client.ts`                                     | Usage logging to `llm_usage_stats` (hardcoded)   |
-| `packages/llm-pricing/src/usageLogger.ts`                            | Logs to Firestore + Cloud Logging                |
+| Location                                                            | Purpose                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------ |
+| `apps/llm-orchestrator/src/domain/research/utils/costCalculator.ts` | Research cost calculation (reads from Firestore) |
+| `packages/infra-*/src/client.ts`                                    | Usage logging to `llm_usage_stats` (hardcoded)   |
+| `packages/llm-pricing/src/usageLogger.ts`                           | Logs to Firestore + Cloud Logging                |
 
 ---
 

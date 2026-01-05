@@ -18,21 +18,12 @@ vi.mock('@intexuraos/infra-claude', () => ({
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 
-const mockTracker = {
-  track: vi.fn(),
-};
-
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter(
-      'test-key',
-      'claude-opus-4-5-20251101',
-      'test-user-id',
-      mockTracker
-    );
+    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
   });
 
   describe('constructor', () => {

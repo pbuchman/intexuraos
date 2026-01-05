@@ -4,8 +4,6 @@
  * POST /internal/llm/pubsub/process-research - Process research from Pub/Sub
  * POST /internal/llm/pubsub/process-llm-call - Process individual LLM call from Pub/Sub
  * POST /internal/llm/pubsub/report-analytics - Report LLM analytics from Pub/Sub
- * GET /internal/llm/usage-stats - Get aggregated LLM usage statistics
- * POST /internal/llm/track-usage - Track LLM usage from external services
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -19,8 +17,7 @@ import {
   calculateAccurateCost,
   type SupportedModel,
 } from '../domain/research/index.js';
-import { getProviderForModel, type LlmProvider } from '@intexuraos/llm-contract';
-import type { LlmCallType } from '../domain/research/models/LlmUsageStats.js';
+import { getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { supportedModelSchema, researchSchema } from './schemas/index.js';
 
@@ -64,15 +61,6 @@ interface LlmCallEvent {
   userId: string;
   model: SupportedModel;
   prompt: string;
-}
-
-interface TrackUsageBody {
-  provider: LlmProvider;
-  model: string;
-  callType: LlmCallType;
-  success: boolean;
-  inputTokens: number;
-  outputTokens: number;
 }
 
 function isPubSubPush(request: FastifyRequest): boolean {
@@ -921,151 +909,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
         return { success: false, error: getErrorMessage(error) };
       }
-    }
-  );
-
-  fastify.get(
-    '/internal/llm/usage-stats',
-    {
-      schema: {
-        operationId: 'getLlmUsageStats',
-        summary: 'Get LLM usage statistics',
-        description:
-          'Internal endpoint for retrieving aggregated LLM usage statistics. Returns totals per model.',
-        tags: ['internal'],
-        response: {
-          200: {
-            description: 'Usage statistics retrieved',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              data: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    provider: { type: 'string' },
-                    model: { type: 'string' },
-                    period: { type: 'string' },
-                    calls: { type: 'number' },
-                    successfulCalls: { type: 'number' },
-                    failedCalls: { type: 'number' },
-                    inputTokens: { type: 'number' },
-                    outputTokens: { type: 'number' },
-                    totalTokens: { type: 'number' },
-                    costUsd: { type: 'number' },
-                    lastUpdatedAt: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to /internal/llm/usage-stats',
-      });
-
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for usage-stats');
-        reply.status(401);
-        return { error: 'Unauthorized' };
-      }
-
-      const { usageStatsRepo } = getServices();
-      const stats = await usageStatsRepo.getAllTotals();
-
-      return await reply.ok(stats);
-    }
-  );
-
-  fastify.post<{ Body: TrackUsageBody }>(
-    '/internal/llm/track-usage',
-    {
-      schema: {
-        operationId: 'trackLlmUsage',
-        summary: 'Track LLM usage from external services',
-        description:
-          'Internal endpoint for other services to report their LLM usage. Used by image-service and user-service.',
-        tags: ['internal'],
-        body: {
-          type: 'object',
-          required: ['provider', 'model', 'callType', 'success', 'inputTokens', 'outputTokens'],
-          properties: {
-            provider: { type: 'string', enum: ['openai', 'anthropic', 'google', 'perplexity'] },
-            model: { type: 'string' },
-            callType: {
-              type: 'string',
-              enum: [
-                'research',
-                'synthesis',
-                'title',
-                'context_inference',
-                'context_label',
-                'image_prompt',
-                'image_generation',
-                'validation',
-                'other',
-              ],
-            },
-            success: { type: 'boolean' },
-            inputTokens: { type: 'number' },
-            outputTokens: { type: 'number' },
-          },
-        },
-        response: {
-          200: {
-            description: 'Usage tracked successfully',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-            },
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: TrackUsageBody }>, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to /internal/llm/track-usage',
-      });
-
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for track-usage');
-        reply.status(401);
-        return { error: 'Unauthorized' };
-      }
-
-      const { llmUsageTracker } = getServices();
-      const body = request.body;
-
-      llmUsageTracker.track({
-        provider: body.provider,
-        model: body.model,
-        callType: body.callType,
-        success: body.success,
-        inputTokens: body.inputTokens,
-        outputTokens: body.outputTokens,
-      });
-
-      return { success: true };
     }
   );
 

@@ -1,5 +1,6 @@
 /**
  * GPT adapter implementing LlmResearchProvider and LlmSynthesisProvider.
+ * Usage logging is handled by the client (packages/infra-gpt).
  */
 
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
@@ -10,46 +11,19 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
 } from '../../domain/research/index.js';
-import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
-  private readonly model: string;
-  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, userId: string, tracker?: LlmUsageTracker) {
+  constructor(apiKey: string, model: string, userId: string) {
     this.client = createGptClient({ apiKey, model, userId });
-    this.model = model;
-    this.tracker = tracker;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
-
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'openai',
-        model: this.model,
-        callType: 'research',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'openai',
-      model: this.model,
-      callType: 'research',
-      success: true,
-      inputTokens: result.value.usage.inputTokens,
-      outputTokens: result.value.usage.outputTokens,
-    });
-
     return result;
   }
 
@@ -66,29 +40,8 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'openai',
-        model: this.model,
-        callType: 'synthesis',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'openai',
-      model: this.model,
-      callType: 'synthesis',
-      success: true,
-      inputTokens: result.value.usage.inputTokens,
-      outputTokens: result.value.usage.outputTokens,
-    });
-
     return { ok: true, value: result.value.content };
   }
 
@@ -107,29 +60,8 @@ Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'openai',
-        model: this.model,
-        callType: 'title',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'openai',
-      model: this.model,
-      callType: 'title',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
-
     return { ok: true, value: result.value.content.trim() };
   }
 }

@@ -11,7 +11,6 @@
  * POST   /research/:id/enhance - Create enhanced research from completed
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
- * GET    /llm/usage-stats     - Get aggregated LLM usage statistics
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -1000,57 +999,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(null);
-    }
-  );
-
-  // GET /llm/usage-stats
-  fastify.get(
-    '/llm/usage-stats',
-    {
-      schema: {
-        operationId: 'getLlmUsageStats',
-        summary: 'Get LLM usage statistics',
-        description: 'Get aggregated LLM usage statistics (calls, tokens, costs) per model.',
-        tags: ['llm'],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              data: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    provider: { type: 'string' },
-                    model: { type: 'string' },
-                    period: { type: 'string' },
-                    calls: { type: 'number' },
-                    successfulCalls: { type: 'number' },
-                    failedCalls: { type: 'number' },
-                    inputTokens: { type: 'number' },
-                    outputTokens: { type: 'number' },
-                    totalTokens: { type: 'number' },
-                    costUsd: { type: 'number' },
-                    lastUpdatedAt: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const user = await requireAuth(request, reply);
-      if (user === null) {
-        return;
-      }
-
-      const { usageStatsRepo } = getServices();
-      const stats = await usageStatsRepo.getAllTotals();
-
-      return await reply.ok(stats);
     }
   );
 

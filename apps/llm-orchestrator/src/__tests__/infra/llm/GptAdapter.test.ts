@@ -18,16 +18,12 @@ vi.mock('@intexuraos/infra-gpt', () => ({
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 
-const mockTracker = {
-  track: vi.fn(),
-};
-
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id', mockTracker);
+    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id');
   });
 
   describe('constructor', () => {

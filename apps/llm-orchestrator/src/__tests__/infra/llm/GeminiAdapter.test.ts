@@ -18,10 +18,6 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
-const mockTracker = {
-  track: vi.fn(),
-};
-
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
 describe('GeminiAdapter', () => {
@@ -29,7 +25,7 @@ describe('GeminiAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id', mockTracker);
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
   });
 
   describe('constructor', () => {
@@ -44,16 +40,9 @@ describe('GeminiAdapter', () => {
       });
     });
 
-    it('works without tracker', async () => {
-      mockResearch.mockResolvedValue({
-        ok: true,
-        value: { content: 'Result', sources: [], usage: mockUsage },
-      });
-
-      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
-      const result = await adapterNoTracker.research('Test');
-
-      expect(result.ok).toBe(true);
+    it('creates adapter successfully', () => {
+      const testAdapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
+      expect(testAdapter).toBeDefined();
     });
   });
 

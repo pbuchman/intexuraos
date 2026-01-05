@@ -1,26 +1,45 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
+const mockBatch = {
+  set: vi.fn().mockReturnThis(),
+  commit: vi.fn().mockResolvedValue(undefined),
+};
+
 const mockTransaction = {
   get: vi.fn(),
   update: vi.fn(),
   set: vi.fn(),
 };
 
-const mockDocRef = { id: 'test-doc-ref' };
-const mockUserDocRef = { id: 'test-user-doc-ref' };
+const mockUserDocRef = { id: 'user-123', path: 'by_user/user-123' };
 const mockByUserCollection = {
   doc: vi.fn().mockReturnValue(mockUserDocRef),
 };
 
-const mockMainDoc = {
-  ...mockDocRef,
+const mockPeriodDocRef = {
   collection: vi.fn().mockReturnValue(mockByUserCollection),
+};
+const mockByPeriodCollection = {
+  doc: vi.fn().mockReturnValue(mockPeriodDocRef),
+};
+
+const mockCallTypeDocRef = {
+  collection: vi.fn().mockReturnValue(mockByPeriodCollection),
+};
+const mockByCallTypeCollection = {
+  doc: vi.fn().mockReturnValue(mockCallTypeDocRef),
+};
+
+const mockModelDocRef = {
+  collection: vi.fn().mockReturnValue(mockByCallTypeCollection),
+};
+const mockCollection = {
+  doc: vi.fn().mockReturnValue(mockModelDocRef),
 };
 
 const mockFirestore = {
-  collection: vi.fn().mockReturnValue({
-    doc: vi.fn().mockReturnValue(mockMainDoc),
-  }),
+  collection: vi.fn().mockReturnValue(mockCollection),
+  batch: vi.fn().mockReturnValue(mockBatch),
   runTransaction: vi.fn(async (callback: (tx: typeof mockTransaction) => Promise<void>) => {
     await callback(mockTransaction);
   }),
@@ -28,6 +47,9 @@ const mockFirestore = {
 
 vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: (): typeof mockFirestore => mockFirestore,
+  FieldValue: {
+    increment: (n: number): { _increment: number } => ({ _increment: n }),
+  },
 }));
 
 const { logUsage, isUsageLoggingEnabled } = await import('../usageLogger.js');
@@ -112,91 +134,107 @@ describe('usageLogger', () => {
   });
 
   describe('logUsage', () => {
-    it('creates new document when it does not exist', async () => {
+    it('uses model as document ID in collection', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 
       await logUsage(baseParams);
 
-      const setCalls = mockTransaction.set.mock.calls;
-      const mainDocSetCall = setCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocSetCall).toBeDefined();
-      expect(mainDocSetCall?.[1]).toMatchObject({
-        provider: 'google',
+      expect(mockFirestore.collection).toHaveBeenCalledWith('llm_usage_stats');
+      expect(mockCollection.doc).toHaveBeenCalledWith('gemini-2.5-flash');
+    });
+
+    it('creates batch with model metadata', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+      await logUsage(baseParams);
+
+      const setCalls = mockBatch.set.mock.calls;
+      const modelSetCall = setCalls.find(
+        (call) => call[1]?.model === 'gemini-2.5-flash' && call[1]?.provider === 'google'
+      );
+      expect(modelSetCall).toBeDefined();
+      expect(modelSetCall?.[1]).toMatchObject({
         model: 'gemini-2.5-flash',
-        callType: 'research',
-        totalCalls: 1,
-        successfulCalls: 1,
-        failedCalls: 0,
-        inputTokens: 100,
-        outputTokens: 200,
-        totalTokens: 300,
-        costUsd: 0.001,
+        provider: 'google',
       });
+      expect(modelSetCall?.[2]).toEqual({ merge: true });
+
+      vi.useRealTimers();
     });
 
-    it('creates document with failedCalls when success is false', async () => {
+    it('creates batch with callType metadata', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-
-      await logUsage({ ...baseParams, success: false, errorMessage: 'Test error' });
-
-      const setCalls = mockTransaction.set.mock.calls;
-      const mainDocSetCall = setCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocSetCall?.[1]).toMatchObject({
-        totalCalls: 1,
-        successfulCalls: 0,
-        failedCalls: 1,
-      });
-    });
-
-    it('updates existing document', async () => {
-      const existingData = {
-        totalCalls: 5,
-        successfulCalls: 4,
-        failedCalls: 1,
-        inputTokens: 500,
-        outputTokens: 1000,
-        totalTokens: 1500,
-        costUsd: 0.01,
-      };
-      mockTransaction.get.mockResolvedValue({ exists: true, data: () => existingData });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
 
       await logUsage(baseParams);
 
-      const updateCalls = mockTransaction.update.mock.calls;
-      const mainDocUpdateCall = updateCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocUpdateCall).toBeDefined();
-      expect(mainDocUpdateCall?.[1]).toMatchObject({
-        totalCalls: 6,
-        successfulCalls: 5,
-        failedCalls: 1,
-        inputTokens: 600,
-        outputTokens: 1200,
-        totalTokens: 1800,
+      expect(mockModelDocRef.collection).toHaveBeenCalledWith('by_call_type');
+      expect(mockByCallTypeCollection.doc).toHaveBeenCalledWith('research');
+
+      const setCalls = mockBatch.set.mock.calls;
+      const callTypeSetCall = setCalls.find(
+        (call) => call[1]?.callType === 'research' && !call[1]?.model
+      );
+      expect(callTypeSetCall).toBeDefined();
+      expect(callTypeSetCall?.[1]).toMatchObject({
+        callType: 'research',
       });
-      expect(mainDocUpdateCall?.[1].costUsd).toBeCloseTo(0.011, 5);
+
+      vi.useRealTimers();
     });
 
-    it('updates existing document with failed call', async () => {
-      const existingData = {
-        totalCalls: 5,
-        successfulCalls: 5,
-        failedCalls: 0,
-        inputTokens: 500,
-        outputTokens: 1000,
-        totalTokens: 1500,
-        costUsd: 0.01,
-      };
-      mockTransaction.get.mockResolvedValue({ exists: true, data: () => existingData });
+    it('updates three period documents: total, month, day', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+      await logUsage(baseParams);
+
+      expect(mockCallTypeDocRef.collection).toHaveBeenCalledWith('by_period');
+      expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('total');
+      expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01');
+      expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01-05');
+
+      vi.useRealTimers();
+    });
+
+    it('uses FieldValue.increment for atomic updates', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+      await logUsage(baseParams);
+
+      const setCalls = mockBatch.set.mock.calls;
+      const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+      expect(periodSetCall).toBeDefined();
+      expect(periodSetCall?.[1].totalCalls).toEqual({ _increment: 1 });
+      expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 1 });
+      expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 0 });
+      expect(periodSetCall?.[1].inputTokens).toEqual({ _increment: 100 });
+      expect(periodSetCall?.[1].outputTokens).toEqual({ _increment: 200 });
+      expect(periodSetCall?.[1].totalTokens).toEqual({ _increment: 300 });
+      expect(periodSetCall?.[1].costUsd).toEqual({ _increment: 0.001 });
+    });
+
+    it('increments failedCalls when success is false', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 
       await logUsage({ ...baseParams, success: false });
 
-      const updateCalls = mockTransaction.update.mock.calls;
-      const mainDocUpdateCall = updateCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocUpdateCall?.[1]).toMatchObject({
-        totalCalls: 6,
-        successfulCalls: 5,
-        failedCalls: 1,
-      });
+      const setCalls = mockBatch.set.mock.calls;
+      const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+      expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 0 });
+      expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
+    });
+
+    it('commits the batch', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+      await logUsage(baseParams);
+
+      expect(mockBatch.commit).toHaveBeenCalled();
     });
 
     it('skips logging when disabled via env var', async () => {
@@ -204,11 +242,11 @@ describe('usageLogger', () => {
 
       await logUsage(baseParams);
 
-      expect(mockFirestore.runTransaction).not.toHaveBeenCalled();
+      expect(mockFirestore.batch).not.toHaveBeenCalled();
     });
 
     it('silently catches errors', async () => {
-      mockFirestore.runTransaction.mockRejectedValueOnce(new Error('Firestore error'));
+      mockBatch.commit.mockRejectedValueOnce(new Error('Firestore error'));
 
       await expect(logUsage(baseParams)).resolves.toBeUndefined();
     });
@@ -218,8 +256,8 @@ describe('usageLogger', () => {
 
       await logUsage(baseParams);
 
+      expect(mockFirestore.runTransaction).toHaveBeenCalled();
       expect(mockByUserCollection.doc).toHaveBeenCalledWith('user-123');
-      expect(mockFirestore.runTransaction).toHaveBeenCalledTimes(2);
     });
 
     it('skips per-user stats when userId is empty', async () => {
@@ -227,123 +265,70 @@ describe('usageLogger', () => {
 
       await logUsage({ ...baseParams, userId: '' });
 
-      expect(mockFirestore.runTransaction).toHaveBeenCalledTimes(1);
+      expect(mockFirestore.runTransaction).not.toHaveBeenCalled();
     });
 
     it('creates new user document when it does not exist', async () => {
-      mockTransaction.get
-        .mockResolvedValueOnce({ exists: false, data: () => undefined })
-        .mockResolvedValueOnce({ exists: false, data: () => undefined });
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
 
       await logUsage(baseParams);
 
-      const setCalls = mockTransaction.set.mock.calls;
-      const userDocSetCall = setCalls.find((call) => call[0]?.id === 'test-user-doc-ref');
-      expect(userDocSetCall).toBeDefined();
-      expect(userDocSetCall?.[1]).toMatchObject({
+      expect(mockTransaction.set).toHaveBeenCalled();
+      const setCall = mockTransaction.set.mock.calls[0];
+      expect(setCall?.[1]).toMatchObject({
         userId: 'user-123',
-        totalCalls: 1,
-        successfulCalls: 1,
-        inputTokens: 100,
-        outputTokens: 200,
-        costUsd: 0.001,
+        createdAt: '2025-01-05T10:00:00.000Z',
       });
+
+      vi.useRealTimers();
     });
 
     it('updates existing user document', async () => {
-      const existingUserData = {
-        totalCalls: 10,
-        successfulCalls: 9,
-        inputTokens: 1000,
-        outputTokens: 2000,
-        costUsd: 0.05,
-      };
-      mockTransaction.get
-        .mockResolvedValueOnce({ exists: false, data: () => undefined })
-        .mockResolvedValueOnce({ exists: true, data: () => existingUserData });
+      mockTransaction.get.mockResolvedValue({ exists: true, data: () => ({}) });
 
       await logUsage(baseParams);
 
-      const updateCalls = mockTransaction.update.mock.calls;
-      const userDocUpdateCall = updateCalls.find((call) => call[0]?.id === 'test-user-doc-ref');
-      expect(userDocUpdateCall).toBeDefined();
-      expect(userDocUpdateCall?.[1]).toMatchObject({
-        totalCalls: 11,
-        successfulCalls: 10,
-        inputTokens: 1100,
-        outputTokens: 2200,
-      });
-      expect(userDocUpdateCall?.[1].costUsd).toBeCloseTo(0.051, 5);
+      expect(mockTransaction.update).toHaveBeenCalled();
     });
 
-    it('creates user document with successfulCalls=0 when success is false', async () => {
-      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-
-      await logUsage({ ...baseParams, success: false });
-
-      const setCalls = mockTransaction.set.mock.calls;
-      const userDocSetCall = setCalls.find((call) => call[0]?.id === 'test-user-doc-ref');
-      expect(userDocSetCall?.[1]).toMatchObject({
-        successfulCalls: 0,
-      });
-    });
-
-    it('uses correct collection name', async () => {
+    it('uses FieldValue.increment for user stats', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 
       await logUsage(baseParams);
 
-      expect(mockFirestore.collection).toHaveBeenCalledWith('llm_usage_stats');
+      const setCall = mockTransaction.set.mock.calls[0];
+      expect(setCall?.[1].totalCalls).toEqual({ _increment: 1 });
+      expect(setCall?.[1].successfulCalls).toEqual({ _increment: 1 });
+      expect(setCall?.[1].inputTokens).toEqual({ _increment: 100 });
+      expect(setCall?.[1].outputTokens).toEqual({ _increment: 200 });
+      expect(setCall?.[1].costUsd).toEqual({ _increment: 0.001 });
     });
 
-    it('generates correct document ID format', async () => {
+    it('includes updatedAt in period documents', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
-
-      await logUsage(baseParams);
-
-      const docFn = mockFirestore.collection('llm_usage_stats').doc;
-      expect(docFn).toHaveBeenCalledWith('google_gemini-2.5-flash_research_2025-01-05');
-
-      vi.useRealTimers();
-    });
-
-    it('includes date in created document', async () => {
-      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
-
-      await logUsage(baseParams);
-
-      const setCalls = mockTransaction.set.mock.calls;
-      const mainDocSetCall = setCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocSetCall?.[1].date).toBe('2025-01-05');
-      expect(mainDocSetCall?.[1].createdAt).toBe('2025-01-05T10:00:00.000Z');
-      expect(mainDocSetCall?.[1].updatedAt).toBe('2025-01-05T10:00:00.000Z');
-
-      vi.useRealTimers();
-    });
-
-    it('includes updatedAt in updated document', async () => {
-      const existingData = {
-        totalCalls: 1,
-        successfulCalls: 1,
-        failedCalls: 0,
-        inputTokens: 100,
-        outputTokens: 200,
-        totalTokens: 300,
-        costUsd: 0.001,
-      };
-      mockTransaction.get.mockResolvedValue({ exists: true, data: () => existingData });
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2025-01-05T12:00:00.000Z'));
 
       await logUsage(baseParams);
 
-      const updateCalls = mockTransaction.update.mock.calls;
-      const mainDocUpdateCall = updateCalls.find((call) => call[0]?.id === 'test-doc-ref');
-      expect(mainDocUpdateCall?.[1].updatedAt).toBe('2025-01-05T12:00:00.000Z');
+      const setCalls = mockBatch.set.mock.calls;
+      const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+      expect(periodSetCall?.[1].updatedAt).toBe('2025-01-05T12:00:00.000Z');
+
+      vi.useRealTimers();
+    });
+
+    it('user document path is under date period', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+      await logUsage(baseParams);
+
+      expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01-05');
+      expect(mockPeriodDocRef.collection).toHaveBeenCalledWith('by_user');
 
       vi.useRealTimers();
     });

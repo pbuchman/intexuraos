@@ -1,6 +1,7 @@
 /**
  * Perplexity adapter implementing LlmResearchProvider.
  * Note: Perplexity is used ONLY for research, not synthesis.
+ * Usage logging is handled by the client (packages/infra-perplexity).
  */
 
 import { createPerplexityClient, type PerplexityClient } from '@intexuraos/infra-perplexity';
@@ -10,47 +11,19 @@ import type {
   LlmResearchProvider,
   LlmResearchResult,
 } from '../../domain/research/index.js';
-import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class PerplexityAdapter implements LlmResearchProvider {
   private readonly client: PerplexityClient;
-  private readonly model: string;
-  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, userId: string, tracker?: LlmUsageTracker) {
+  constructor(apiKey: string, model: string, userId: string) {
     this.client = createPerplexityClient({ apiKey, model, userId });
-    this.model = model;
-    this.tracker = tracker;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
-
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'perplexity',
-        model: this.model,
-        callType: 'research',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'perplexity',
-      model: this.model,
-      callType: 'research',
-      success: true,
-      inputTokens: result.value.usage.inputTokens,
-      outputTokens: result.value.usage.outputTokens,
-      providerCost: result.value.usage.costUsd,
-    });
-
     return result;
   }
 }

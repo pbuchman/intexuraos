@@ -3,25 +3,26 @@
  *
  * Logs LLM usage to Firestore for cost tracking and analytics.
  * Follows the same pattern as llm-audit - direct Firestore writes, no DI needed.
+ *
+ * Structure:
+ * llm_usage_stats/{model}/                      (model as doc ID)
+ *   by_call_type/{callType}/                    (callType subcollection)
+ *     by_period/
+ *       total/                                  (all-time aggregate)
+ *         by_user/{userId}
+ *       YYYY-MM/                                (monthly aggregate)
+ *         by_user/{userId}
+ *       YYYY-MM-DD/                             (daily stats)
+ *         by_user/{userId}
  */
 
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 import type { NormalizedUsage } from '@intexuraos/llm-contract';
 import type { LlmProvider } from './types.js';
 
 const COLLECTION_NAME = 'llm_usage_stats';
 
-export type CallType =
-  | 'research'
-  | 'generate'
-  | 'synthesis'
-  | 'title'
-  | 'context_inference'
-  | 'context_label'
-  | 'classification'
-  | 'validation'
-  | 'image_generation'
-  | 'prompt_generation';
+export type CallType = 'research' | 'generate' | 'image_generation';
 
 export interface UsageLogParams {
   userId: string;
@@ -77,122 +78,103 @@ export async function logUsage(params: UsageLogParams): Promise<void> {
     const firestore = getFirestore();
     const now = new Date();
     const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const monthKey = now.toISOString().slice(0, 7); // YYYY-MM
 
-    // Document ID: provider_model_callType_date (for easy aggregation)
-    const docId = `${params.provider}_${params.model}_${params.callType}_${dateKey}`;
+    // Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{period}
+    const modelRef = firestore.collection(COLLECTION_NAME).doc(params.model);
+    const callTypeRef = modelRef.collection('by_call_type').doc(params.callType);
 
-    const docRef = firestore.collection(COLLECTION_NAME).doc(docId);
+    const batch = firestore.batch();
 
-    await firestore.runTransaction(async (transaction) => {
-      const doc = await transaction.get(docRef);
+    // Ensure model doc exists with metadata (prevents ghost documents)
+    batch.set(
+      modelRef,
+      {
+        model: params.model,
+        provider: params.provider,
+        updatedAt: now.toISOString(),
+      },
+      { merge: true }
+    );
 
-      if (doc.exists) {
-        const data = doc.data() as UsageStatsDocument;
-        transaction.update(docRef, {
-          totalCalls: data.totalCalls + 1,
-          successfulCalls: data.successfulCalls + (params.success ? 1 : 0),
-          failedCalls: data.failedCalls + (params.success ? 0 : 1),
-          inputTokens: data.inputTokens + params.usage.inputTokens,
-          outputTokens: data.outputTokens + params.usage.outputTokens,
-          totalTokens: data.totalTokens + params.usage.totalTokens,
-          costUsd: data.costUsd + params.usage.costUsd,
-          updatedAt: now.toISOString(),
-        });
-      } else {
-        const newDoc: UsageStatsDocument = {
-          provider: params.provider,
-          model: params.model,
-          callType: params.callType,
-          date: dateKey,
-          totalCalls: 1,
-          successfulCalls: params.success ? 1 : 0,
-          failedCalls: params.success ? 0 : 1,
-          inputTokens: params.usage.inputTokens,
-          outputTokens: params.usage.outputTokens,
-          totalTokens: params.usage.totalTokens,
-          costUsd: params.usage.costUsd,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
-        };
-        transaction.set(docRef, newDoc);
-      }
-    });
+    // Ensure callType doc exists with metadata
+    batch.set(
+      callTypeRef,
+      {
+        callType: params.callType,
+        updatedAt: now.toISOString(),
+      },
+      { merge: true }
+    );
 
-    // Also log per-user stats if userId is provided
+    // Update periods: total, month, day
+    const periods = ['total', monthKey, dateKey];
+    for (const period of periods) {
+      const periodRef = callTypeRef.collection('by_period').doc(period);
+      const updateData = {
+        provider: params.provider,
+        model: params.model,
+        callType: params.callType,
+        period,
+        totalCalls: FieldValue.increment(1),
+        successfulCalls: FieldValue.increment(params.success ? 1 : 0),
+        failedCalls: FieldValue.increment(params.success ? 0 : 1),
+        inputTokens: FieldValue.increment(params.usage.inputTokens),
+        outputTokens: FieldValue.increment(params.usage.outputTokens),
+        totalTokens: FieldValue.increment(params.usage.inputTokens + params.usage.outputTokens),
+        costUsd: FieldValue.increment(params.usage.costUsd),
+        updatedAt: now.toISOString(),
+      };
+      batch.set(periodRef, updateData, { merge: true });
+    }
+
+    await batch.commit();
+
+    // Log per-user stats if userId is provided
     if (params.userId !== '') {
-      await logUserUsage(params, now);
+      await logUserUsage(params, now, callTypeRef, dateKey);
     }
   } catch {
     // Fire-and-forget - silently ignore errors to not disrupt LLM operations
   }
 }
 
-interface UsageStatsDocument {
-  provider: LlmProvider;
-  model: string;
-  callType: CallType;
-  date: string;
-  totalCalls: number;
-  successfulCalls: number;
-  failedCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  costUsd: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
 /**
  * Log per-user usage stats.
- * Stored in subcollection: llm_usage_stats/{docId}/by_user/{userId}
+ * Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{date}/by_user/{userId}
  */
-async function logUserUsage(params: UsageLogParams, now: Date): Promise<void> {
+async function logUserUsage(
+  params: UsageLogParams,
+  now: Date,
+  callTypeRef: FirebaseFirestore.DocumentReference,
+  dateKey: string
+): Promise<void> {
   const firestore = getFirestore();
-  const dateKey = now.toISOString().slice(0, 10);
-  const parentDocId = `${params.provider}_${params.model}_${params.callType}_${dateKey}`;
-  const userDocRef = firestore
-    .collection(COLLECTION_NAME)
-    .doc(parentDocId)
+  const userDocRef = callTypeRef
+    .collection('by_period')
+    .doc(dateKey)
     .collection('by_user')
     .doc(params.userId);
 
+  const updateData = {
+    userId: params.userId,
+    totalCalls: FieldValue.increment(1),
+    successfulCalls: FieldValue.increment(params.success ? 1 : 0),
+    inputTokens: FieldValue.increment(params.usage.inputTokens),
+    outputTokens: FieldValue.increment(params.usage.outputTokens),
+    costUsd: FieldValue.increment(params.usage.costUsd),
+    updatedAt: now.toISOString(),
+  };
+
   await firestore.runTransaction(async (transaction) => {
     const doc = await transaction.get(userDocRef);
-
     if (doc.exists) {
-      const data = doc.data() as UserUsageDocument;
-      transaction.update(userDocRef, {
-        totalCalls: data.totalCalls + 1,
-        successfulCalls: data.successfulCalls + (params.success ? 1 : 0),
-        inputTokens: data.inputTokens + params.usage.inputTokens,
-        outputTokens: data.outputTokens + params.usage.outputTokens,
-        costUsd: data.costUsd + params.usage.costUsd,
-        updatedAt: now.toISOString(),
-      });
+      transaction.update(userDocRef, updateData);
     } else {
-      const newDoc: UserUsageDocument = {
-        userId: params.userId,
-        totalCalls: 1,
-        successfulCalls: params.success ? 1 : 0,
-        inputTokens: params.usage.inputTokens,
-        outputTokens: params.usage.outputTokens,
-        costUsd: params.usage.costUsd,
+      transaction.set(userDocRef, {
+        ...updateData,
         createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
-      transaction.set(userDocRef, newDoc);
+      });
     }
   });
-}
-
-interface UserUsageDocument {
-  userId: string;
-  totalCalls: number;
-  successfulCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  createdAt: string;
-  updatedAt: string;
 }
