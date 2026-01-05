@@ -4,7 +4,6 @@ import type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,
   ListResearchesResponse,
-  LlmUsageStats,
   PartialFailureDecision,
   Research,
   SaveDraftRequest,
@@ -173,22 +172,10 @@ export async function enhanceResearch(
   );
 }
 
-/**
- * Get aggregated LLM usage statistics.
- */
-export async function getLlmUsageStats(accessToken: string): Promise<LlmUsageStats[]> {
-  return await apiRequest<LlmUsageStats[]>(
-    config.llmOrchestratorUrl,
-    '/llm/usage-stats',
-    accessToken
-  );
-}
-
 export type {
   ConfirmPartialFailureResponse,
   LlmProvider,
   LlmResult,
-  LlmUsageStats,
   PartialFailure,
   PartialFailureDecision,
   Research,
