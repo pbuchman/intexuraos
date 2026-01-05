@@ -10,6 +10,7 @@ import type {
   LlmResearchProvider,
   LlmResearchResult,
   LlmSynthesisProvider,
+  LlmSynthesisResult,
 } from '../../domain/research/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
@@ -32,7 +33,7 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
     synthesisContext?: SynthesisContext
-  ): Promise<Result<string, LlmError>> {
+  ): Promise<Result<LlmSynthesisResult, LlmError>> {
     const synthesisPrompt =
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
@@ -42,7 +43,18 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
     }
-    return { ok: true, value: result.value.content };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        content: result.value.content,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {

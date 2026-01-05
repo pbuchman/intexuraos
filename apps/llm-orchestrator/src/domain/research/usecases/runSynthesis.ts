@@ -159,8 +159,27 @@ export async function runSynthesis(
     return { ok: false, error: synthesisResult.error.message };
   }
 
+  const synthesisContent = synthesisResult.value.content;
+  const synthesisUsage = synthesisResult.value.usage;
+
+  logger?.info(`[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
+
+  // Calculate aggregate totals from all LLM results + synthesis
+  const llmTotals = research.llmResults.reduce(
+    (acc, r) => ({
+      inputTokens: acc.inputTokens + (r.inputTokens ?? 0),
+      outputTokens: acc.outputTokens + (r.outputTokens ?? 0),
+      costUsd: acc.costUsd + (r.costUsd ?? 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+  );
+
+  const totalInputTokens = llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0);
+  const totalOutputTokens = llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0);
+  const totalCostUsd = llmTotals.costUsd + (synthesisUsage?.costUsd ?? 0);
+
   logger?.info(
-    `[4.3.2] Synthesis LLM call succeeded (${String(synthesisResult.value.length)} chars)`
+    `[4.3.3] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)}`
   );
 
   const now = new Date();
@@ -174,7 +193,7 @@ export async function runSynthesis(
     logger?.info('[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
-      synthesisResult.value,
+      synthesisContent,
       userId,
       imageApiKeys,
       logger
@@ -207,7 +226,7 @@ export async function runSynthesis(
 
     const html = generateShareableHtml({
       title: research.title,
-      synthesizedResult: synthesisResult.value,
+      synthesizedResult: synthesisContent,
       shareUrl,
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
@@ -236,9 +255,12 @@ export async function runSynthesis(
   logger?.info('[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
-    synthesizedResult: synthesisResult.value,
+    synthesizedResult: synthesisContent,
     completedAt: now.toISOString(),
     totalDurationMs,
+    totalInputTokens,
+    totalOutputTokens,
+    totalCostUsd,
     ...(shareInfo !== undefined && { shareInfo }),
   });
 

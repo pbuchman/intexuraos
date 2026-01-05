@@ -5,6 +5,8 @@ export type {
   LlmResearchResult,
   LlmResearchProvider,
   LlmSynthesisProvider,
+  LlmSynthesisResult,
+  LlmUsage,
   TitleGenerator,
 } from './llmProvider.js';
 

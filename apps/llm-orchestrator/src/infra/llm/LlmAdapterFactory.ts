@@ -47,7 +47,7 @@ export function createSynthesizer(
     case 'google':
       return new GeminiAdapter(apiKey, model, userId);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId);
+      throw new Error('Anthropic does not support synthesis');
     case 'openai':
       return new GptAdapter(apiKey, model, userId);
     case 'perplexity':

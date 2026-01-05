@@ -19,6 +19,7 @@ import type {
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
+  LlmSynthesisResult,
   NotificationError,
   PricingRepository,
   RepositoryError,
@@ -322,8 +323,8 @@ export function createFakeSynthesizer(
       _reports: { model: string; content: string }[],
       _additionalSources?: { content: string; label?: string }[],
       _synthesisContext?: SynthesisContext
-    ): Promise<Result<string, LlmError>> {
-      return ok(synthesisResult);
+    ): Promise<Result<LlmSynthesisResult, LlmError>> {
+      return ok({ content: synthesisResult });
     },
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
       return ok(titleResult);
@@ -343,7 +344,7 @@ export function createFailingSynthesizer(
       _reports: { model: string; content: string }[],
       _additionalSources?: { content: string; label?: string }[],
       _synthesisContext?: SynthesisContext
-    ): Promise<Result<string, LlmError>> {
+    ): Promise<Result<LlmSynthesisResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {

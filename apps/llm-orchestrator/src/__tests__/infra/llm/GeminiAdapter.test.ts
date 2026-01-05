@@ -102,7 +102,12 @@ describe('GeminiAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Synthesized result');
+        expect(result.value.content).toBe('Synthesized result');
+        expect(result.value.usage).toEqual({
+          inputTokens: 10,
+          outputTokens: 20,
+          costUsd: 0.001,
+        });
       }
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));

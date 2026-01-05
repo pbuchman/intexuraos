@@ -89,6 +89,9 @@ export interface Research {
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCostUsd?: number;
   sourceActionId?: string;
   skipSynthesis?: boolean;
   researchContext?: ResearchContext;

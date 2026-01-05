@@ -10,13 +10,21 @@ export interface LlmError {
   message: string;
 }
 
+export interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd?: number;
+}
+
 export interface LlmResearchResult {
   content: string;
   sources?: string[];
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-  };
+  usage?: LlmUsage;
+}
+
+export interface LlmSynthesisResult {
+  content: string;
+  usage?: LlmUsage;
 }
 
 export interface LlmResearchProvider {
@@ -29,7 +37,7 @@ export interface LlmSynthesisProvider {
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
     synthesisContext?: SynthesisContext
-  ): Promise<Result<string, LlmError>>;
+  ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<string, LlmError>>;
 }

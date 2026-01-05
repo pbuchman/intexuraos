@@ -106,15 +106,10 @@ describe('LlmAdapterFactory', () => {
       expect((synthesizer as unknown as { model: string }).model).toBe('gemini-2.5-pro');
     });
 
-    it('creates ClaudeAdapter for claude model', () => {
-      const synthesizer = createSynthesizer(
-        'claude-opus-4-5-20251101',
-        'anthropic-key',
-        'test-user-id'
-      );
-
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe('claude-opus-4-5-20251101');
+    it('throws error for claude model (synthesis not supported)', () => {
+      expect(() =>
+        createSynthesizer('claude-opus-4-5-20251101', 'anthropic-key', 'test-user-id')
+      ).toThrow('Anthropic does not support synthesis');
     });
 
     it('creates GptAdapter for openai model', () => {

@@ -38,7 +38,7 @@ function createMockDeps(): RunSynthesisDeps & {
   };
 
   const mockSynthesizer = {
-    synthesize: vi.fn().mockResolvedValue(ok('Synthesized result')),
+    synthesize: vi.fn().mockResolvedValue(ok({ content: 'Synthesized result' })),
     generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
   };
 
@@ -240,7 +240,9 @@ describe('runSynthesis', () => {
       synthesizedResult: 'Synthesized result',
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
-      shareInfo: undefined,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCostUsd: 0,
     });
   });
 
@@ -653,6 +655,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
         shareInfo: expect.objectContaining({
           shareToken: expect.any(String),
           slug: 'test-research',
@@ -711,6 +716,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
       });
     });
 
@@ -762,6 +770,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
         }),
@@ -867,6 +878,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -904,6 +918,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -939,6 +956,9 @@ describe('runSynthesis', () => {
         synthesizedResult: 'Synthesized result',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
