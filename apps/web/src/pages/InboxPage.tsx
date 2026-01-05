@@ -239,6 +239,23 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
     message: string;
     linkLabel: string;
   } | null>(null);
+  // Track if action was executed successfully - hide buttons when true
+  const [actionExecuted, setActionExecuted] = useState(false);
+
+  /**
+   * Normalizes resource_url for HashRouter.
+   * Backend returns URLs like "/#/research/..." but HashRouter's Link component
+   * expects just "/research/..." (it handles the # prefix automatically).
+   */
+  const normalizeResourceUrl = (url: string): string => {
+    if (url.startsWith('/#')) {
+      return url.slice(2);
+    }
+    if (url.startsWith('#')) {
+      return url.slice(1);
+    }
+    return url;
+  };
 
   return (
     <div
@@ -284,31 +301,35 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
             </div>
           )}
         </div>
-        <div
-          className="flex shrink-0 gap-1"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          {buttons.map((button) => (
-            <ConfigurableActionButton
-              key={button.id}
-              button={button}
-              onSuccess={(): void => {
-                onActionSuccess(button);
-              }}
-              onResult={(result, btn): void => {
-                if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
-                  setExecutionResult({
-                    resource_url: result.resource_url,
-                    message: btn.onSuccess.message,
-                    linkLabel: btn.onSuccess.linkLabel,
-                  });
-                }
-              }}
-            />
-          ))}
-        </div>
+        {/* Hide buttons after action with resource_url was executed */}
+        {!actionExecuted && (
+          <div
+            className="flex shrink-0 gap-1"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {buttons.map((button) => (
+              <ConfigurableActionButton
+                key={button.id}
+                button={button}
+                onSuccess={(): void => {
+                  onActionSuccess(button);
+                }}
+                onResult={(result, btn): void => {
+                  if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
+                    setExecutionResult({
+                      resource_url: normalizeResourceUrl(result.resource_url),
+                      message: btn.onSuccess.message,
+                      linkLabel: btn.onSuccess.linkLabel,
+                    });
+                    setActionExecuted(true);
+                  }
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -805,8 +826,11 @@ export function InboxPage(): React.JSX.Element {
                     // If action is DELETE, remove from local state
                     if (button.endpoint.method === 'DELETE') {
                       setActions((prev) => prev.filter((a) => a.id !== button.action.id));
-                    } else if (button.endpoint.method === 'PATCH') {
-                      // If PATCH (archive, reject), refresh to get updated status
+                    } else if (
+                      button.endpoint.method === 'PATCH' ||
+                      button.endpoint.method === 'POST'
+                    ) {
+                      // If PATCH (archive, reject) or POST (approve, retry), refresh to get updated status
                       void fetchData(true);
                     }
                   }}

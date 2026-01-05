@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
@@ -94,6 +94,8 @@ export function ActionDetailModal({
   const [selectedType, setSelectedType] = useState<CommandType>(action.type);
   const [isChangingType, setIsChangingType] = useState(false);
   const [typeChangeError, setTypeChangeError] = useState<string | null>(null);
+  // Track if current action result has resource_url (used to prevent modal close)
+  const hasResourceUrlRef = useRef(false);
 
   const canChangeType = action.status === 'pending' || action.status === 'awaiting_approval';
 
@@ -132,12 +134,28 @@ export function ActionDetailModal({
     };
   }, [onClose]);
 
+  /**
+   * Normalizes resource_url for HashRouter.
+   * Backend returns URLs like "/#/research/..." but HashRouter's Link component
+   * expects just "/research/..." (it handles the # prefix automatically).
+   */
+  const normalizeResourceUrl = (url: string): string => {
+    // Strip leading /# or # prefix if present
+    if (url.startsWith('/#')) {
+      return url.slice(2);
+    }
+    if (url.startsWith('#')) {
+      return url.slice(1);
+    }
+    return url;
+  };
+
   const handleResult = (result: ActionExecutionResult, button: ResolvedActionButton): void => {
     if (result.resource_url !== undefined) {
       const newResult: typeof executionResult = {
         actionId: result.actionId,
         status: result.status,
-        resource_url: result.resource_url,
+        resource_url: normalizeResourceUrl(result.resource_url),
       };
       if (button.onSuccess !== undefined) {
         newResult.message = button.onSuccess.message;
@@ -303,9 +321,19 @@ export function ActionDetailModal({
                   key={button.id}
                   button={button}
                   onSuccess={(): void => {
-                    onActionSuccess(button);
+                    // Note: onResult is called before onSuccess, but React state
+                    // updates are batched, so executionResult may not be updated yet.
+                    // The hasResourceUrl ref tells us if we should stay open.
+                    if (!hasResourceUrlRef.current) {
+                      onActionSuccess(button);
+                    }
+                    hasResourceUrlRef.current = false; // Reset for next action
                   }}
-                  onResult={handleResult}
+                  onResult={(result, btn): void => {
+                    handleResult(result, btn);
+                    // Track if this result has resource_url (for onSuccess check)
+                    hasResourceUrlRef.current = result.resource_url !== undefined;
+                  }}
                 />
               ))
             )}

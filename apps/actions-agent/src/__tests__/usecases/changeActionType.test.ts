@@ -54,7 +54,7 @@ describe('ChangeActionTypeUseCase', () => {
   });
 
   it('returns NOT_FOUND for action belonging to different user', async () => {
-    await actionRepository.save(testAction);
+    await actionRepository.save({ ...testAction });
 
     const result = await useCase({
       actionId: testAction.id,
@@ -176,7 +176,7 @@ describe('ChangeActionTypeUseCase', () => {
   });
 
   it('skips transition log when type unchanged', async () => {
-    await actionRepository.save(testAction);
+    await actionRepository.save({ ...testAction });
 
     const result = await useCase({
       actionId: testAction.id,
@@ -189,7 +189,7 @@ describe('ChangeActionTypeUseCase', () => {
   });
 
   it('returns NOT_FOUND if command missing', async () => {
-    await actionRepository.save(testAction);
+    await actionRepository.save({ ...testAction });
     // Don't set command in client
 
     const result = await useCase({
@@ -205,7 +205,7 @@ describe('ChangeActionTypeUseCase', () => {
   });
 
   it('logs transition before updating action', async () => {
-    await actionRepository.save(testAction);
+    await actionRepository.save({ ...testAction });
     commandsRouterClient.setCommand(testAction.commandId, 'Original command text');
 
     const result = await useCase({
@@ -230,17 +230,18 @@ describe('ChangeActionTypeUseCase', () => {
   });
 
   it('updates action type and updatedAt', async () => {
-    const originalUpdatedAt = testAction.updatedAt;
-    await actionRepository.save(testAction);
-    commandsRouterClient.setCommand(testAction.commandId, 'Test command');
+    const freshAction = { ...testAction };
+    const originalUpdatedAt = freshAction.updatedAt;
+    await actionRepository.save(freshAction);
+    commandsRouterClient.setCommand(freshAction.commandId, 'Test command');
 
     await useCase({
-      actionId: testAction.id,
-      userId: testAction.userId,
+      actionId: freshAction.id,
+      userId: freshAction.userId,
       newType: 'calendar',
     });
 
-    const updatedAction = await actionRepository.getById(testAction.id);
+    const updatedAction = await actionRepository.getById(freshAction.id);
     expect(updatedAction?.type).toBe('calendar');
     expect(updatedAction?.updatedAt).not.toBe(originalUpdatedAt);
   });

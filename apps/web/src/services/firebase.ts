@@ -16,7 +16,13 @@ import {
   connectFirestoreEmulator,
   type Firestore,
 } from 'firebase/firestore';
-import { getAuth, signInWithCustomToken, signOut, connectAuthEmulator, type Auth } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithCustomToken,
+  signOut,
+  connectAuthEmulator,
+  type Auth,
+} from 'firebase/auth';
 import { config } from '@/config';
 
 let firebaseApp: FirebaseApp | null = null;
