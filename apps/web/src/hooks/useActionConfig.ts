@@ -108,14 +108,18 @@ function resolveButtons(action: Action, config: ActionConfig): ResolvedActionBut
     const conditionsMet = evaluateCondition(action, mapping.when);
 
     if (conditionsMet) {
-      resolved.push({
+      const button: ResolvedActionButton = {
         id: mapping.action,
         label: actionDef.ui.label,
         variant: actionDef.ui.variant,
         icon: actionDef.ui.icon,
         endpoint: actionDef.endpoint,
         action,
-      });
+      };
+      if (actionDef.onSuccess !== undefined) {
+        button.onSuccess = actionDef.onSuccess;
+      }
+      resolved.push(button);
     }
   }
 

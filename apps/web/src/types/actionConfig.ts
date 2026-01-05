@@ -31,6 +31,16 @@ export interface ActionConfigUI {
 }
 
 /**
+ * Configuration for success notification after action execution.
+ */
+export interface ActionConfigOnSuccess {
+  /** Success message to display */
+  message: string;
+  /** Label for the link to resource_url */
+  linkLabel: string;
+}
+
+/**
  * Complete action definition.
  */
 export interface ActionConfigAction {
@@ -38,6 +48,8 @@ export interface ActionConfigAction {
   endpoint: ActionConfigEndpoint;
   /** UI configuration */
   ui: ActionConfigUI;
+  /** Success notification configuration (optional) */
+  onSuccess?: ActionConfigOnSuccess;
 }
 
 /**
@@ -139,6 +151,8 @@ export interface ResolvedActionButton {
   endpoint: ActionConfigEndpoint;
   /** Original action for context */
   action: Action;
+  /** Success notification configuration (optional) */
+  onSuccess?: ActionConfigOnSuccess;
 }
 
 /**

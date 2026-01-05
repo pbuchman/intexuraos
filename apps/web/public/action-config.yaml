@@ -12,6 +12,9 @@ actions:
       variant: success
       icon: CheckCircle
       confirmationMessage: 'This will create a research draft. Continue?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
 
   retry:
     endpoint:
@@ -23,6 +26,9 @@ actions:
       variant: primary
       icon: Play
       confirmationMessage: 'Retry creating research draft?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
 
   reject:
     endpoint:
