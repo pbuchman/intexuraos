@@ -51,7 +51,6 @@ const DOCKER_LOG_SERVICES = [
 ];
 
 const RESET = '\x1b[0m';
-const DIM = '\x1b[2m';
 const BOLD = '\x1b[1m';
 
 const processes = new Map();

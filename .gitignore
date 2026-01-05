@@ -55,3 +55,5 @@ data/firestore-export/
 firestore.indexes.json
 firestore.rules
 
+# Local Next.js build output
+apps/web/dev-dist/
