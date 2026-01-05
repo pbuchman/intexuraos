@@ -31,10 +31,11 @@ const GPT_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4.1': { input: 2.0, output: 8.0 },
   'gpt-4.1-mini': { input: 0.4, output: 1.6 },
   'gpt-4.1-nano': { input: 0.1, output: 0.4 },
-  'gpt-5.2': { input: 0.4, output: 2.0 },
+  'gpt-5.2': { input: 1.75, output: 14.0 },
   o1: { input: 15.0, output: 60.0 },
   'o1-mini': { input: 1.1, output: 4.4 },
   'o3-mini': { input: 1.1, output: 4.4 },
+  'o4-mini-deep-research': { input: 1.1, output: 4.4 },
 };
 
 function createRequestContext(

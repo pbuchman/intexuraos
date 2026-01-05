@@ -22,9 +22,9 @@ export type GeminiClient = LLMClient;
 
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
   'gemini-2.5-pro': { input: 1.25, output: 10.0 },
-  'gemini-2.5-flash': { input: 0.075, output: 0.3 },
+  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
-  'gemini-2.5-flash-image': { input: 0.075, output: 0.3 },
+  'gemini-2.5-flash-image': { input: 0.3, output: 2.5 },
 };
 const DEFAULT_GROUNDING_COST = 0.035;
 const DEFAULT_IMAGE_COST = 0.03;
