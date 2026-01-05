@@ -403,7 +403,6 @@ echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE
 echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
 ```
 
-
 ### 12. Add to Root tsconfig.json
 
 Edit `tsconfig.json`:
@@ -428,7 +427,7 @@ const SERVICES = [
 ];
 ```
 
-Choose next unused port in range 8110-* and an ANSI color code.
+Choose next unused port in range 8110-\* and an ANSI color code.
 
 **Also add to `.envrc.local.example`** for local development (use the same port):
 

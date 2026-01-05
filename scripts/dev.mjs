@@ -17,6 +17,7 @@
  * Usage:
  *   npm run dev           # Start all services + web app
  *   npm run dev:emulators # Start only emulators
+ *   npm run dev:services  # Start only services + web app (assumes emulators are running)
  */
 
 import { spawn, execSync } from 'node:child_process';
@@ -55,10 +56,63 @@ const BOLD = '\x1b[1m';
 
 const processes = new Map();
 let shuttingDown = false;
+let emulatorsStartedByUs = false;
 
 function log(prefix, message, color = '') {
   const timestamp = new Date().toISOString().slice(11, 19);
-  console.log(`${DIM}[${timestamp}]${RESET} ${color}${prefix}${RESET} ${message}`);
+  console.log(`\x1b[97m[${timestamp}]\x1b[0m ${color}${prefix}\x1b[0m ${message}`);
+}
+
+/**
+ * Format pino JSON log line into readable format.
+ * Input: {"level":30,"time":1767629271989,"name":"retryPendingActions","msg":"Processing pending action",...}
+ * Output: [retryPendingActions] Processing pending action
+ */
+function formatPinoLog(line) {
+  // Try to parse as JSON (pino format)
+  if (!line.startsWith('{')) {
+    return line;
+  }
+
+  try {
+    const log = JSON.parse(line);
+    const parts = [];
+
+    // Add name/component if present
+    if (log.name) {
+      parts.push(`\x1b[36m[${log.name}]\x1b[0m`);
+    }
+
+    // Add message
+    if (log.msg) {
+      parts.push(log.msg);
+    }
+
+    // Add key context fields (exclude internal pino fields)
+    const excludeKeys = new Set([
+      'level',
+      'time',
+      'pid',
+      'hostname',
+      'name',
+      'msg',
+      'severity',
+      'message',
+    ]);
+    const contextFields = Object.entries(log)
+      .filter(([key]) => !excludeKeys.has(key))
+      .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
+      .join(' ');
+
+    if (contextFields) {
+      parts.push(`\x1b[90m${contextFields}\x1b[0m`);
+    }
+
+    return parts.join(' ') || line;
+  } catch {
+    // Not valid JSON, return as-is
+    return line;
+  }
 }
 
 function logEmulator(message) {
@@ -90,7 +144,45 @@ async function generateFirestoreConfig() {
   }
 }
 
+async function syncFirestore() {
+  logOrchestrator('Syncing Firestore data from GCP...');
+
+  const syncScript = join(ROOT_DIR, 'scripts', 'sync-firestore.sh');
+  if (!existsSync(syncScript)) {
+    throw new Error(`Firestore sync script not found: ${syncScript}`);
+  }
+
+  // Verify gcloud is authenticated
+  try {
+    execSync('gcloud auth print-access-token', { stdio: 'pipe' });
+  } catch {
+    throw new Error(
+      'gcloud is not authenticated. Run: gcloud auth login && gcloud auth application-default login'
+    );
+  }
+
+  // Verify PROJECT_ID is set
+  const projectId = process.env.PROJECT_ID || process.env.INTEXURAOS_GCP_PROJECT_ID;
+  if (!projectId) {
+    throw new Error('PROJECT_ID or INTEXURAOS_GCP_PROJECT_ID must be set for Firestore sync');
+  }
+
+  execSync(`bash "${syncScript}"`, {
+    cwd: ROOT_DIR,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      PROJECT_ID: projectId,
+    },
+  });
+
+  logOrchestrator('Firestore sync completed');
+}
+
 async function startEmulators() {
+  // Sync Firestore data from GCP first
+  await syncFirestore();
+
   logOrchestrator('Starting emulators...');
 
   const composeFile = join(ROOT_DIR, 'docker', 'docker-compose.local.yaml');
@@ -110,6 +202,9 @@ async function startEmulators() {
   logEmulator('Waiting for emulators to be healthy...');
   await waitForEmulators();
   logEmulator('All emulators are ready!');
+
+  // Mark that we started the emulators (so we stop them on shutdown)
+  emulatorsStartedByUs = true;
 }
 
 async function waitForEmulators() {
@@ -119,6 +214,7 @@ async function waitForEmulators() {
   const endpoints = [
     { name: 'Firestore', url: 'http://localhost:8101' },
     { name: 'GCS', url: 'http://localhost:8103/storage/v1/b' },
+    { name: 'Firebase Auth', url: 'http://localhost:8104' },
     { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
   ];
 
@@ -174,6 +270,8 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
   INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
+  INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
+  INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
 };
 
 const COMMON_SERVICE_ENV = {
@@ -183,6 +281,7 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
   INTEXURAOS_AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
   INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
+  FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
 };
 
 const SERVICE_ENV_MAPPINGS = {
@@ -193,6 +292,8 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'llm-orchestrator': {
     INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+    INTEXURAOS_IMAGE_SERVICE_URL:
+      process.env.INTEXURAOS_IMAGE_SERVICE_URL ?? 'http://localhost:8120',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -220,6 +321,9 @@ const SERVICE_ENV_MAPPINGS = {
   'data-insights-service': {
     INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
+  'image-service': {
+    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
+  },
 };
 
 function startService(service) {
@@ -244,12 +348,13 @@ function startService(service) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  const prefix = `[${service.name}]`.padEnd(30);
+  const prefix = `[${service.name}]`;
 
   const processLine = (stream) => {
     const rl = createInterface({ input: stream });
     rl.on('line', (line) => {
-      log(prefix, line, service.color);
+      const formatted = formatPinoLog(line);
+      log(prefix, formatted, service.color);
     });
   };
 
@@ -292,7 +397,7 @@ function startWebApp() {
     shell: true,
   });
 
-  const prefix = `[${WEB_APP.name}]`.padEnd(30);
+  const prefix = `[${WEB_APP.name}]`;
 
   const processLine = (stream) => {
     const rl = createInterface({ input: stream });
@@ -326,7 +431,7 @@ function followDockerLogs(service) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  const prefix = `[${service.name}]`.padEnd(30);
+  const prefix = `[${service.name}]`;
 
   const processLine = (stream) => {
     const rl = createInterface({ input: stream });
@@ -415,7 +520,10 @@ async function shutdown() {
     }
   }
 
-  await stopEmulators();
+  // Only stop emulators if we started them
+  if (emulatorsStartedByUs) {
+    await stopEmulators();
+  }
 
   logOrchestrator('Goodbye!');
   process.exit(0);
@@ -427,6 +535,7 @@ process.on('SIGTERM', shutdown);
 async function main() {
   const args = process.argv.slice(2);
   const emulatorsOnly = args.includes('--emulators-only');
+  const servicesOnly = args.includes('--services-only');
 
   logOrchestrator('IntexuraOS Local Development Environment');
   logOrchestrator('');
@@ -440,12 +549,19 @@ async function main() {
 
   try {
     await generateFirestoreConfig();
-    await startEmulators();
 
-    if (!emulatorsOnly) {
+    if (servicesOnly) {
+      // Assume emulators are already running
+      logOrchestrator('Starting services only (emulators should be running)...');
       await startAllServices();
-    } else {
+    } else if (emulatorsOnly) {
+      // Start only emulators
+      await startEmulators();
       logOrchestrator('Emulators started. Press Ctrl+C to stop.');
+    } else {
+      // Full startup: emulators + services
+      await startEmulators();
+      await startAllServices();
     }
   } catch (error) {
     console.error(`Error: ${error.message}`);

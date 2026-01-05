@@ -40,6 +40,14 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
     displayName: 'Actions Agent API',
   },
+  {
+    key: 'INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL',
+    displayName: 'Data Insights Service API',
+  },
+  {
+    key: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL',
+    displayName: 'Image Service API',
+  },
 ];
 
 /**

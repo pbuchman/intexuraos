@@ -1,6 +1,7 @@
 /**
  * Firebase Admin SDK initialization.
  * Uses Application Default Credentials for authentication.
+ * Supports Firebase Auth Emulator for local development.
  */
 
 import { initializeApp, getApps, type App } from 'firebase-admin/app';
@@ -11,6 +12,7 @@ let firebaseApp: App | null = null;
  * Get or initialize the Firebase Admin app.
  * Uses Application Default Credentials (ADC) for authentication.
  * In GCP environments (Cloud Run), ADC is automatically available.
+ * For local development, uses Firebase Auth Emulator when FIREBASE_AUTH_EMULATOR_HOST is set.
  */
 export function getFirebaseAdmin(): App {
   if (firebaseApp !== null) {

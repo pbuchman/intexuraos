@@ -864,6 +864,7 @@ module "api_docs_hub" {
     INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
+    INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -878,6 +879,7 @@ module "api_docs_hub" {
     module.commands_router,
     module.actions_agent,
     module.data_insights_service,
+    module.image_service,
   ]
 }
 
