@@ -71,12 +71,21 @@ export interface ServiceContainer {
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
-  createResearchProvider: (model: SupportedModel, apiKey: string) => LlmResearchProvider;
-  createSynthesizer: (model: SupportedModel, apiKey: string) => LlmSynthesisProvider;
-  createTitleGenerator: (model: string, apiKey: string) => TitleGenerator;
+  createResearchProvider: (
+    model: SupportedModel,
+    apiKey: string,
+    userId: string
+  ) => LlmResearchProvider;
+  createSynthesizer: (
+    model: SupportedModel,
+    apiKey: string,
+    userId: string
+  ) => LlmSynthesisProvider;
+  createTitleGenerator: (model: string, apiKey: string, userId: string) => TitleGenerator;
   createContextInferrer: (
     model: string,
     apiKey: string,
+    userId: string,
     logger?: Logger
   ) => ContextInferenceProvider;
 }
@@ -216,13 +225,13 @@ export function initializeServices(): void {
     notificationSender,
     shareStorage,
     shareConfig,
-    createResearchProvider: (model, apiKey): LlmResearchProvider =>
-      createResearchProvider(model, apiKey, llmUsageTracker),
-    createSynthesizer: (model, apiKey): LlmSynthesisProvider =>
-      createSynthesizer(model, apiKey, llmUsageTracker),
-    createTitleGenerator: (model, apiKey): TitleGenerator =>
-      createTitleGenerator(model, apiKey, llmUsageTracker),
-    createContextInferrer: (model, apiKey, logger): ContextInferenceProvider =>
-      createContextInferrer(model, apiKey, logger, llmUsageTracker),
+    createResearchProvider: (model, apiKey, userId): LlmResearchProvider =>
+      createResearchProvider(model, apiKey, userId, llmUsageTracker),
+    createSynthesizer: (model, apiKey, userId): LlmSynthesisProvider =>
+      createSynthesizer(model, apiKey, userId, llmUsageTracker),
+    createTitleGenerator: (model, apiKey, userId): TitleGenerator =>
+      createTitleGenerator(model, apiKey, userId, llmUsageTracker),
+    createContextInferrer: (model, apiKey, userId, logger): ContextInferenceProvider =>
+      createContextInferrer(model, apiKey, userId, logger, llmUsageTracker),
   };
 }

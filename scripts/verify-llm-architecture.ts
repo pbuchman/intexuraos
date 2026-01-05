@@ -110,32 +110,28 @@ function checkRule2_ClientsLogUsage(): void {
 
     const content = readFileSync(fullPath, 'utf-8');
 
-    // Check for usageLogger in config destructuring or as a field
-    // Patterns: "usageLogger" in destructuring or "usageLogger?: UsageLogger" in types
-    const hasUsageLoggerAccess =
-      /const\s*\{[^}]*usageLogger[^}]*\}\s*=\s*config/.test(content) ||
-      /usageLogger\??\s*:\s*UsageLogger/.test(content);
+    // Check that client imports logUsage from @intexuraos/llm-pricing
+    const hasLogUsageImport =
+      /import\s*\{[^}]*logUsage[^}]*\}\s*from\s*['"]@intexuraos\/llm-pricing['"]/.test(content);
 
-    // Check that usageLogger.log is called (directly or via a helper)
-    // The clients use a local logUsage() function that calls usageLogger.log()
-    const hasLogCall =
-      /usageLogger\??\.log\s*\(/.test(content) || /void\s+usageLogger\??\.log\s*\(/.test(content);
+    // Check that logUsage is called (directly or via a trackUsage helper)
+    const hasLogUsageCall = /\blogUsage\s*\(/.test(content) || /\btrackUsage\s*\(/.test(content);
 
-    if (!hasUsageLoggerAccess) {
+    if (!hasLogUsageImport) {
       violations.push({
         file: clientFile,
         line: 0,
         rule: 'RULE-2',
-        message: `Client missing usageLogger access. Each client must accept UsageLogger dependency.`,
+        message: `Client missing logUsage import. Must import { logUsage } from '@intexuraos/llm-pricing'.`,
       });
     }
 
-    if (!hasLogCall) {
+    if (!hasLogUsageCall) {
       violations.push({
         file: clientFile,
         line: 0,
         rule: 'RULE-2',
-        message: `Client does not call usageLogger.log(). Each client must log usage.`,
+        message: `Client does not call logUsage(). Each client must log usage via llm-pricing.`,
       });
     }
   }

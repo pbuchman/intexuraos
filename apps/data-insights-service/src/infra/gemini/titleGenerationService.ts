@@ -69,7 +69,11 @@ export function createTitleGenerationService(
       }
 
       const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({ apiKey, model: TITLE_GENERATION_MODEL });
+      const geminiClient = createGeminiClient({
+        apiKey,
+        model: TITLE_GENERATION_MODEL,
+        userId,
+      });
 
       const contentPreview = content.length > 5000 ? content.slice(0, 5000) + '...' : content;
       const prompt = TITLE_PROMPT_TEMPLATE.replace('{CONTENT}', contentPreview);

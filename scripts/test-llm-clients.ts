@@ -9,7 +9,7 @@
  * 1. Fetches API keys from user-service (internal endpoint)
  * 2. Tests each provider's research(), generate(), and generateImage() methods
  * 3. Logs usage via console.error
- * 4. Saves results as JSON files in scripts/test-results/
+ * 4. Saves results as JSON files in test-results/
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  mkdirSync('scripts/test-results', { recursive: true });
+  mkdirSync('test-results', { recursive: true });
 
   for (const [provider, model] of Object.entries(MODELS)) {
     const apiKey = keys[provider as keyof typeof keys];
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
         const imageResult = await client.generateImage(IMAGE_PROMPT);
         if (imageResult.ok) {
           const imageData = imageResult.value.imageData;
-          const imagePath = `scripts/test-results/${provider}_image.png`;
+          const imagePath = `test-results/${provider}_image.png`;
           writeFileSync(imagePath, imageData);
           console.log(`   ✓ Success: Generated image saved to ${imagePath}`);
           console.log(`   → Size: ${imageData.length} bytes`);
@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\n\n✅ All tests completed! Results saved to scripts/test-results/\n');
+  console.log('\n\n✅ All tests completed! Results saved to test-results/\n');
 }
 
 main().catch((error) => {

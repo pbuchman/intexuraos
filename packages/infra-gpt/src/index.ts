@@ -7,5 +7,4 @@ export type {
   ImageGenerationResult,
   ImageGenerateOptions,
   SynthesisInput,
-  UsageLogger,
 } from './types.js';

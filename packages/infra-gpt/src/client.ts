@@ -15,6 +15,7 @@ import type {
   ImageGenerationResult,
   GenerateResult,
 } from '@intexuraos/llm-contract';
+import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 
 export type GptClient = LLMClient;
@@ -110,24 +111,23 @@ function normalizeUsage(
 
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, usageLogger, userId } = config;
+  const { model, userId } = config;
 
-  function logUsage(
-    method: string,
+  function trackUsage(
+    callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
     errorMessage?: string
   ): void {
-    if (usageLogger === undefined) return;
-    const params = {
-      userId: userId ?? 'unknown',
+    void logUsage({
+      userId,
       provider: 'openai',
       model,
-      method,
+      callType,
       usage,
       success,
-    };
-    void usageLogger.log(errorMessage !== undefined ? { ...params, errorMessage } : params);
+      ...(errorMessage !== undefined && { errorMessage }),
+    });
   }
 
   return {
@@ -158,7 +158,7 @@ export function createGptClient(config: GptConfig): GptClient {
           successParams.webSearchCalls = usage.webSearchCalls;
         }
         await auditContext.success(successParams);
-        logUsage('research', usage, true);
+        trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -170,7 +170,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, errorMsg);
         return err(mapGptError(error));
       }
     },
@@ -193,7 +193,7 @@ export function createGptClient(config: GptConfig): GptClient {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
         });
-        logUsage('generate', usage, true);
+        trackUsage('generate', usage, true);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -205,7 +205,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg);
         return err(mapGptError(error));
       }
     },
@@ -244,7 +244,7 @@ export function createGptClient(config: GptConfig): GptClient {
           response: '[image-generated]',
           imageCostUsd: DEFAULT_IMAGE_COST,
         });
-        logUsage('generateImage', usage, true);
+        trackUsage('image_generation', usage, true);
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
@@ -256,7 +256,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('generateImage', emptyUsage, false, errorMsg);
+        trackUsage('image_generation', emptyUsage, false, errorMsg);
         return err(mapGptError(error));
       }
     },

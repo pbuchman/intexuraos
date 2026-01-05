@@ -97,16 +97,18 @@ interface ContextWithLabel {
 async function generateContextLabels(
   contexts: ContextWithLabel[],
   googleApiKey: string | undefined,
+  userId: string,
   createTitleGenerator: (
     model: string,
-    apiKey: string
+    apiKey: string,
+    userId: string
   ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> }
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;
   }
 
-  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey);
+  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey, userId);
 
   return await Promise.all(
     contexts.map(async (ctx) => {
@@ -166,6 +168,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         submitParams.inputContexts = contextsWithLabels;
@@ -222,7 +225,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Generate title using Gemini if Google API key is available
       let title: string;
       if (apiKeys.google !== undefined) {
-        const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+        const titleGenerator = createTitleGenerator(
+          'gemini-2.5-flash',
+          apiKeys.google,
+          user.userId
+        );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
       } else {
@@ -249,6 +256,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         const now = new Date().toISOString();
@@ -331,7 +339,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
-          const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+          const titleGenerator = createTitleGenerator(
+            'gemini-2.5-flash',
+            apiKeys.google,
+            user.userId
+          );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
         } else {
@@ -353,6 +365,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         const now = new Date().toISOString();
@@ -619,10 +632,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+          const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
           const contextInferrer =
             apiKeysResult.value.google !== undefined
-              ? createContextInferrer('gemini-2.5-flash', apiKeysResult.value.google, request.log)
+              ? createContextInferrer(
+                  'gemini-2.5-flash',
+                  apiKeysResult.value.google,
+                  user.userId,
+                  request.log
+                )
               : undefined;
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
@@ -758,7 +776,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+      const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
 
       const retryResult = await retryFromFailed(id, {
         researchRepo,
@@ -848,6 +866,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.additionalContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         enhanceInput.additionalContexts = contextsWithLabels;

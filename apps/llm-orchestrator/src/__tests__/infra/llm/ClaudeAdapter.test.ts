@@ -27,17 +27,23 @@ describe('ClaudeAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', mockTracker);
+    adapter = new ClaudeAdapter(
+      'test-key',
+      'claude-opus-4-5-20251101',
+      'test-user-id',
+      mockTracker
+    );
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101');
+      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'claude-opus-4-5-20251101',
+        userId: 'test-user-id',
       });
     });
   });

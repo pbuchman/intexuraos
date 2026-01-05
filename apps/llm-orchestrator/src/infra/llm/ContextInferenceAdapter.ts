@@ -26,8 +26,14 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
   private readonly logger: Logger | undefined;
   private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, logger?: Logger, tracker?: LlmUsageTracker) {
-    this.client = createGeminiClient({ apiKey, model });
+  constructor(
+    apiKey: string,
+    model: string,
+    userId: string,
+    logger?: Logger,
+    tracker?: LlmUsageTracker
+  ) {
+    this.client = createGeminiClient({ apiKey, model, userId });
     this.model = model;
     this.logger = logger;
     this.tracker = tracker;

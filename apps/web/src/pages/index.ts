@@ -13,4 +13,6 @@ export { ResearchDetailPage } from './ResearchDetailPage.js';
 export { InboxPage } from './InboxPage.js';
 export { DataSourcesListPage } from './DataSourcesListPage.js';
 export { DataSourceFormPage } from './DataSourceFormPage.js';
+export { CompositeFeedsListPage } from './CompositeFeedsListPage.js';
+export { CompositeFeedFormPage } from './CompositeFeedFormPage.js';
 export { ShareTargetPage } from './ShareTargetPage.js';

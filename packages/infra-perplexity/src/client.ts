@@ -8,6 +8,7 @@ import {
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient, NormalizedUsage, GenerateResult } from '@intexuraos/llm-contract';
+import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type {
   PerplexityConfig,
   PerplexityError,
@@ -82,24 +83,23 @@ function normalizeUsage(model: string, usage: PerplexityUsage | undefined): Norm
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, usageLogger, userId } = config;
+  const { apiKey, model, userId } = config;
 
-  function logUsage(
-    method: string,
+  function trackUsage(
+    callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
     errorMessage?: string
   ): void {
-    if (usageLogger === undefined) return;
-    const params = {
-      userId: userId ?? 'unknown',
+    void logUsage({
+      userId,
       provider: 'perplexity',
       model,
-      method,
+      callType,
       usage,
       success,
-    };
-    void usageLogger.log(errorMessage !== undefined ? { ...params, errorMessage } : params);
+      ...(errorMessage !== undefined && { errorMessage }),
+    });
   }
 
   return {
@@ -145,7 +145,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             totalTokens: 0,
             costUsd: 0,
           };
-          logUsage('research', emptyUsage, false, errorMsg);
+          trackUsage('research', emptyUsage, false, errorMsg);
           return err(mapPerplexityError(apiError));
         }
 
@@ -160,7 +160,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           outputTokens: usage.outputTokens,
           providerCost: usage.costUsd,
         });
-        logUsage('research', usage, true);
+        trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -172,7 +172,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, errorMsg);
         return err(mapPerplexityError(error));
       }
     },
@@ -212,7 +212,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             totalTokens: 0,
             costUsd: 0,
           };
-          logUsage('generate', emptyUsage, false, errorMsg);
+          trackUsage('generate', emptyUsage, false, errorMsg);
           return err(mapPerplexityError(apiError));
         }
 
@@ -225,7 +225,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
         });
-        logUsage('generate', usage, true);
+        trackUsage('generate', usage, true);
 
         return ok({ content, usage });
       } catch (error) {
@@ -237,7 +237,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg);
         return err(mapPerplexityError(error));
       }
     },

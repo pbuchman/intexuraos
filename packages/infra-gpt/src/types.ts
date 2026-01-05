@@ -5,12 +5,10 @@ export type {
   ImageGenerationResult,
   ImageGenerateOptions,
   SynthesisInput,
-  UsageLogger,
 } from '@intexuraos/llm-contract';
 
 export interface GptConfig {
   apiKey: string;
   model: string;
-  usageLogger?: import('@intexuraos/llm-contract').UsageLogger;
-  userId?: string;
+  userId: string;
 }

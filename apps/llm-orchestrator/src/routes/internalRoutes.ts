@@ -311,7 +311,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: false, error: 'API key missing' };
         }
 
-        const synthesizer = services.createSynthesizer(synthesisModel, synthesisKey);
+        const synthesizer = services.createSynthesizer(
+          synthesisModel,
+          synthesisKey,
+          research.userId
+        );
 
         const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
@@ -324,10 +328,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
 
         if (apiKeys.google !== undefined) {
-          deps.titleGenerator = services.createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+          deps.titleGenerator = services.createTitleGenerator(
+            'gemini-2.5-flash',
+            apiKeys.google,
+            research.userId
+          );
           deps.contextInferrer = services.createContextInferrer(
             'gemini-2.5-flash',
             apiKeys.google,
+            research.userId,
             request.log
           );
         }
@@ -683,7 +692,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] Starting LLM research call'
         );
 
-        const llmProvider = services.createResearchProvider(event.model, apiKey);
+        const llmProvider = services.createResearchProvider(event.model, apiKey, event.userId);
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt);
         const durationMs = Date.now() - startTime;
@@ -834,12 +843,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               break;
             }
 
-            const synthesizer = services.createSynthesizer(synthesisModel, synthesisKey);
+            const synthesizer = services.createSynthesizer(
+              synthesisModel,
+              synthesisKey,
+              event.userId
+            );
             const contextInferrer =
               apiKeysResult.value.google !== undefined
                 ? services.createContextInferrer(
                     'gemini-2.5-flash',
                     apiKeysResult.value.google,
+                    event.userId,
                     request.log
                   )
                 : undefined;

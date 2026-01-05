@@ -17,8 +17,8 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   private readonly model: string;
   private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, tracker?: LlmUsageTracker) {
-    this.client = createGeminiClient({ apiKey, model });
+  constructor(apiKey: string, model: string, userId: string, tracker?: LlmUsageTracker) {
+    this.client = createGeminiClient({ apiKey, model, userId });
     this.model = model;
     this.tracker = tracker;
   }

@@ -9,6 +9,7 @@ import {
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import type { LLMClient, NormalizedUsage, GenerateResult } from '@intexuraos/llm-contract';
+import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 
 export type ClaudeClient = LLMClient;
@@ -99,24 +100,23 @@ function normalizeUsage(
 
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, usageLogger, userId } = config;
+  const { model, userId } = config;
 
-  function logUsage(
-    method: string,
+  function trackUsage(
+    callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
     errorMessage?: string
   ): void {
-    if (usageLogger === undefined) return;
-    const params = {
-      userId: userId ?? 'unknown',
+    void logUsage({
+      userId,
       provider: 'anthropic',
       model,
-      method,
+      callType,
       usage,
       success,
-    };
-    void usageLogger.log(errorMessage !== undefined ? { ...params, errorMessage } : params);
+      ...(errorMessage !== undefined && { errorMessage }),
+    });
   }
 
   return {
@@ -149,7 +149,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           successParams.webSearchCalls = usage.webSearchCalls;
         }
         await auditContext.success(successParams);
-        logUsage('research', usage, true);
+        trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -161,7 +161,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, errorMsg);
         return err(mapClaudeError(error));
       }
     },
@@ -187,7 +187,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
         });
-        logUsage('generate', usage, true);
+        trackUsage('generate', usage, true);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -199,7 +199,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        logUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg);
         return err(mapClaudeError(error));
       }
     },

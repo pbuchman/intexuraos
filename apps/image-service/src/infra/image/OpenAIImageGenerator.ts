@@ -14,6 +14,7 @@ export interface OpenAIImageGeneratorConfig {
   apiKey: string;
   model: ImageGenerationModel;
   storage: ImageStorage;
+  userId: string;
   generateId?: () => string;
 }
 
@@ -21,12 +22,14 @@ export class OpenAIImageGenerator implements ImageGenerator {
   private readonly apiKey: string;
   private readonly model: ImageGenerationModel;
   private readonly storage: ImageStorage;
+  private readonly userId: string;
   private readonly generateId: () => string;
 
   constructor(config: OpenAIImageGeneratorConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.storage = config.storage;
+    this.userId = config.userId;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -39,6 +42,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     const client = createGptClient({
       apiKey: this.apiKey,
       model: this.model,
+      userId: this.userId,
     });
 
     if (client.generateImage === undefined) {

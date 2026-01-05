@@ -9,8 +9,7 @@ import type { Result } from '@intexuraos/common-core';
 export interface LLMConfig {
   apiKey: string;
   model: string;
-  usageLogger?: UsageLogger;
-  userId?: string;
+  userId: string;
 }
 
 /**
@@ -89,24 +88,6 @@ export type LLMErrorCode =
 export interface LLMError {
   code: LLMErrorCode;
   message: string;
-}
-
-/**
- * Usage logger interface for dependency injection.
- * Clients call this to log usage to database.
- */
-export interface UsageLogger {
-  log(params: UsageLogParams): Promise<void>;
-}
-
-export interface UsageLogParams {
-  userId: string;
-  provider: string;
-  model: string;
-  method: string;
-  usage: NormalizedUsage;
-  success: boolean;
-  errorMessage?: string;
 }
 
 /**

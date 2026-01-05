@@ -15,8 +15,6 @@ export type {
   SynthesisInput,
   LLMErrorCode,
   LLMError,
-  UsageLogger,
-  UsageLogParams,
   LLMClient,
 } from './types.js';
 

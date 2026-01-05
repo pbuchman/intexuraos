@@ -75,6 +75,7 @@ const ALL_LLMS_PATTERNS = [
 
 export interface GeminiClassifierConfig {
   apiKey: string;
+  userId: string;
 }
 
 export function extractSelectedModels(text: string): SupportedModel[] | undefined {
@@ -102,7 +103,11 @@ export function extractSelectedModels(text: string): SupportedModel[] | undefine
 const CLASSIFIER_MODEL = 'gemini-2.5-flash';
 
 export function createGeminiClassifier(config: GeminiClassifierConfig): Classifier {
-  const client = createGeminiClient({ apiKey: config.apiKey, model: CLASSIFIER_MODEL });
+  const client = createGeminiClient({
+    apiKey: config.apiKey,
+    model: CLASSIFIER_MODEL,
+    userId: config.userId,
+  });
 
   return {
     async classify(text: string): Promise<ClassificationResult> {

@@ -92,7 +92,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info({ model, provider: modelConfig.provider }, 'Starting prompt generation');
-      const generator = createPromptGenerator(modelConfig.provider, apiKey, request.log);
+      const generator = createPromptGenerator(modelConfig.provider, apiKey, userId, request.log);
       const result = await generator.generateThumbnailPrompt(text);
 
       if (!result.ok) {
@@ -182,7 +182,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info({ model, provider: modelConfig.provider }, 'Starting image generation');
-      const imageGenerator = createImageGenerator(model as ImageGenerationModel, apiKey);
+      const imageGenerator = createImageGenerator(model as ImageGenerationModel, apiKey, userId);
       const result = await imageGenerator.generate(prompt, { slug });
 
       if (!result.ok) {

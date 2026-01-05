@@ -7,6 +7,7 @@ import { statusRoutes } from './statusRoutes.js';
 import { webhookRoutes } from './webhookRoutes.js';
 import { notificationRoutes } from './notificationRoutes.js';
 import { filterRoutes } from './filterRoutes.js';
+import { internalRoutes } from './internalRoutes.js';
 
 /**
  * Register all routes.
@@ -17,4 +18,5 @@ export const mobileNotificationsRoutes: FastifyPluginAsync = async (app) => {
   await app.register(webhookRoutes);
   await app.register(notificationRoutes);
   await app.register(filterRoutes);
+  await app.register(internalRoutes);
 };

@@ -80,7 +80,7 @@ export function createRetryPendingCommandsUseCase(deps: {
         const apiKey = apiKeysResult.value.google;
 
         try {
-          const classifier = classifierFactory(apiKey);
+          const classifier = classifierFactory(apiKey, command.userId);
           const classification = await classifier.classify(command.text);
 
           logger.info(

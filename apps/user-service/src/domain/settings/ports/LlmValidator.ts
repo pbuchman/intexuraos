@@ -28,7 +28,11 @@ export interface LlmValidator {
    * Validate an API key by making a minimal request to the provider.
    * Returns success if the key is valid, error otherwise.
    */
-  validateKey(provider: LlmProvider, apiKey: string): Promise<Result<void, LlmValidationError>>;
+  validateKey(
+    provider: LlmProvider,
+    apiKey: string,
+    userId: string
+  ): Promise<Result<void, LlmValidationError>>;
 
   /**
    * Make a test request to the provider with a sample prompt.
@@ -37,6 +41,7 @@ export interface LlmValidator {
   testRequest(
     provider: LlmProvider,
     apiKey: string,
-    prompt: string
+    prompt: string,
+    userId: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>>;
 }

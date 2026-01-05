@@ -2,14 +2,12 @@ export type {
   LLMError as PerplexityError,
   ResearchResult,
   GenerateResult,
-  UsageLogger,
 } from '@intexuraos/llm-contract';
 
 export interface PerplexityConfig {
   apiKey: string;
   model: string;
-  usageLogger?: import('@intexuraos/llm-contract').UsageLogger;
-  userId?: string;
+  userId: string;
 }
 
 export type SearchContextSize = 'low' | 'medium' | 'high';

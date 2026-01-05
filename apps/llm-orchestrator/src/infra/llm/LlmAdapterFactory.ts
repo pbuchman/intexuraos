@@ -20,36 +20,38 @@ import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 export function createResearchProvider(
   model: SupportedModel,
   apiKey: string,
+  userId: string,
   tracker?: LlmUsageTracker
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, tracker);
+      return new GeminiAdapter(apiKey, model, userId, tracker);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, tracker);
+      return new ClaudeAdapter(apiKey, model, userId, tracker);
     case 'openai':
-      return new GptAdapter(apiKey, model, tracker);
+      return new GptAdapter(apiKey, model, userId, tracker);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, tracker);
+      return new PerplexityAdapter(apiKey, model, userId, tracker);
   }
 }
 
 export function createSynthesizer(
   model: SupportedModel,
   apiKey: string,
+  userId: string,
   tracker?: LlmUsageTracker
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, tracker);
+      return new GeminiAdapter(apiKey, model, userId, tracker);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, tracker);
+      return new ClaudeAdapter(apiKey, model, userId, tracker);
     case 'openai':
-      return new GptAdapter(apiKey, model, tracker);
+      return new GptAdapter(apiKey, model, userId, tracker);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
   }
@@ -58,16 +60,18 @@ export function createSynthesizer(
 export function createTitleGenerator(
   model: string,
   apiKey: string,
+  userId: string,
   tracker?: LlmUsageTracker
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, tracker);
+  return new GeminiAdapter(apiKey, model, userId, tracker);
 }
 
 export function createContextInferrer(
   model: string,
   apiKey: string,
+  userId: string,
   logger?: Logger,
   tracker?: LlmUsageTracker
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, logger, tracker);
+  return new ContextInferenceAdapter(apiKey, model, userId, logger, tracker);
 }

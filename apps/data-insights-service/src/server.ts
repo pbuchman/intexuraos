@@ -96,6 +96,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       },
       tags: [
         { name: 'data-sources', description: 'Custom data sources management' },
+        { name: 'composite-feeds', description: 'Composite feed management' },
         { name: 'system', description: 'System endpoints' },
       ],
     },

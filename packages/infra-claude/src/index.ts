@@ -5,5 +5,4 @@ export type {
   ResearchResult,
   GenerateResult,
   SynthesisInput,
-  UsageLogger,
 } from './types.js';

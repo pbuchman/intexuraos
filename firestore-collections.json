@@ -59,7 +59,7 @@
       "description": "LLM API call audit logs with token usage and cost tracking"
     },
     "llm_usage_stats": {
-      "owner": "llm-orchestrator",
+      "owner": "llm-pricing",
       "description": "Aggregated LLM usage statistics by provider, model, and call type"
     },
     "commands": {
@@ -73,6 +73,10 @@
     "custom_data_sources": {
       "owner": "data-insights-service",
       "description": "User-created custom data sources for analysis"
+    },
+    "composite_feeds": {
+      "owner": "data-insights-service",
+      "description": "User-created composite feeds aggregating data sources and notifications"
     },
     "generated_images": {
       "owner": "image-service",

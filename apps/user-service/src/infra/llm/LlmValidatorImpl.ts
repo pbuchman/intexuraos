@@ -30,11 +30,16 @@ const VALIDATION_MODELS = {
 export class LlmValidatorImpl implements LlmValidator {
   async validateKey(
     provider: LlmProvider,
-    apiKey: string
+    apiKey: string,
+    userId: string
   ): Promise<Result<void, LlmValidationError>> {
     switch (provider) {
       case 'google': {
-        const client = createGeminiClient({ apiKey, model: VALIDATION_MODELS.google });
+        const client = createGeminiClient({
+          apiKey,
+          model: VALIDATION_MODELS.google,
+          userId,
+        });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
@@ -48,7 +53,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case 'openai': {
-        const client = createGptClient({ apiKey, model: VALIDATION_MODELS.openai });
+        const client = createGptClient({
+          apiKey,
+          model: VALIDATION_MODELS.openai,
+          userId,
+        });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
@@ -62,7 +71,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case 'anthropic': {
-        const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
+        const client = createClaudeClient({
+          apiKey,
+          model: VALIDATION_MODELS.anthropic,
+          userId,
+        });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
@@ -76,7 +89,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok(undefined);
       }
       case 'perplexity': {
-        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
+        const client = createPerplexityClient({
+          apiKey,
+          model: VALIDATION_MODELS.perplexity,
+          userId,
+        });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
           return err({
@@ -95,11 +112,16 @@ export class LlmValidatorImpl implements LlmValidator {
   async testRequest(
     provider: LlmProvider,
     apiKey: string,
-    prompt: string
+    prompt: string,
+    userId: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {
     switch (provider) {
       case 'google': {
-        const client = createGeminiClient({ apiKey, model: VALIDATION_MODELS.google });
+        const client = createGeminiClient({
+          apiKey,
+          model: VALIDATION_MODELS.google,
+          userId,
+        });
         const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
@@ -110,7 +132,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok({ content: result.value.content });
       }
       case 'openai': {
-        const client = createGptClient({ apiKey, model: VALIDATION_MODELS.openai });
+        const client = createGptClient({
+          apiKey,
+          model: VALIDATION_MODELS.openai,
+          userId,
+        });
         const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
@@ -121,7 +147,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok({ content: result.value.content });
       }
       case 'anthropic': {
-        const client = createClaudeClient({ apiKey, model: VALIDATION_MODELS.anthropic });
+        const client = createClaudeClient({
+          apiKey,
+          model: VALIDATION_MODELS.anthropic,
+          userId,
+        });
         const result = await client.generate(prompt);
         if (!result.ok) {
           return err({
@@ -132,7 +162,11 @@ export class LlmValidatorImpl implements LlmValidator {
         return ok({ content: result.value.content });
       }
       case 'perplexity': {
-        const client = createPerplexityClient({ apiKey, model: VALIDATION_MODELS.perplexity });
+        const client = createPerplexityClient({
+          apiKey,
+          model: VALIDATION_MODELS.perplexity,
+          userId,
+        });
         const result = await client.generate(prompt);
         if (!result.ok) {
           return err({

@@ -43,8 +43,8 @@ export function initServices(config: ServiceConfig): void {
     baseUrl: config.actionsAgentUrl,
     internalAuthToken: config.internalAuthToken,
   });
-  const classifierFactory: ClassifierFactory = (apiKey: string) =>
-    createGeminiClassifier({ apiKey });
+  const classifierFactory: ClassifierFactory = (apiKey: string, userId: string) =>
+    createGeminiClassifier({ apiKey, userId });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,

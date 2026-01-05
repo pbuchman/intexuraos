@@ -29,17 +29,18 @@ describe('GeminiAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', mockTracker);
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id', mockTracker);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-2.5-pro');
+      new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'gemini-2.5-pro',
+        userId: 'test-user-id',
       });
     });
 
@@ -49,7 +50,7 @@ describe('GeminiAdapter', () => {
         value: { content: 'Result', sources: [], usage: mockUsage },
       });
 
-      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro');
+      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
       const result = await adapterNoTracker.research('Test');
 
       expect(result.ok).toBe(true);

@@ -14,6 +14,7 @@ export interface GoogleImageGeneratorConfig {
   apiKey: string;
   model: ImageGenerationModel;
   storage: ImageStorage;
+  userId: string;
   generateId?: () => string;
 }
 
@@ -21,12 +22,14 @@ export class GoogleImageGenerator implements ImageGenerator {
   private readonly apiKey: string;
   private readonly model: ImageGenerationModel;
   private readonly storage: ImageStorage;
+  private readonly userId: string;
   private readonly generateId: () => string;
 
   constructor(config: GoogleImageGeneratorConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.storage = config.storage;
+    this.userId = config.userId;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -39,6 +42,7 @@ export class GoogleImageGenerator implements ImageGenerator {
     const client = createGeminiClient({
       apiKey: this.apiKey,
       model: 'gemini-2.5-flash-image',
+      userId: this.userId,
     });
 
     if (client.generateImage === undefined) {

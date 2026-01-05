@@ -246,6 +246,14 @@ export const dataSourceRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
               data: { type: 'object' },
             },
           },
+          409: {
+            description: 'Conflict - source is used by composite feeds',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { $ref: 'ErrorBody#' },
+            },
+          },
         },
       },
     },
@@ -255,7 +263,24 @@ export const dataSourceRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
         return;
       }
 
-      const { dataSourceRepository } = getServices();
+      const { dataSourceRepository, compositeFeedRepository } = getServices();
+
+      const feedsResult = await compositeFeedRepository.findByStaticSourceId(
+        user.userId,
+        request.params.id
+      );
+      if (!feedsResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', feedsResult.error);
+      }
+      if (feedsResult.value.length > 0) {
+        const feedNames = feedsResult.value.map((f) => f.name).join(', ');
+        void reply.status(409);
+        return await reply.fail(
+          'CONFLICT',
+          `Cannot delete: source is used by composite feeds: ${feedNames}`
+        );
+      }
+
       const result = await dataSourceRepository.delete(request.params.id, user.userId);
 
       if (!result.ok) {

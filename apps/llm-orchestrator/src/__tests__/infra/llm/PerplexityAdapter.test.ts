@@ -17,17 +17,18 @@ describe('PerplexityAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new PerplexityAdapter('test-key', 'sonar-pro');
+    adapter = new PerplexityAdapter('test-key', 'sonar-pro', 'test-user-id');
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreatePerplexityClient.mockClear();
-      new PerplexityAdapter('test-key', 'sonar-pro');
+      new PerplexityAdapter('test-key', 'sonar-pro', 'test-user-id');
 
       expect(mockCreatePerplexityClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'sonar-pro',
+        userId: 'test-user-id',
       });
     });
   });

@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildServer } from '../server.js';
 import { setServices, resetServices } from '../services.js';
-import { FakeDataSourceRepository, FakeTitleGenerationService } from './fakes.js';
+import {
+  FakeDataSourceRepository,
+  FakeTitleGenerationService,
+  FakeCompositeFeedRepository,
+  FakeFeedNameGenerationService,
+  FakeMobileNotificationsClient,
+} from './fakes.js';
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -21,19 +27,29 @@ vi.mock('@intexuraos/common-http', async () => {
 describe('dataSourceRoutes', () => {
   let fakeRepo: FakeDataSourceRepository;
   let fakeTitleService: FakeTitleGenerationService;
+  let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
+  let fakeFeedNameService: FakeFeedNameGenerationService;
+  let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
 
   beforeEach(() => {
     fakeRepo = new FakeDataSourceRepository();
     fakeTitleService = new FakeTitleGenerationService();
+    fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
+    fakeFeedNameService = new FakeFeedNameGenerationService();
+    fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
     setServices({
       dataSourceRepository: fakeRepo,
       titleGenerationService: fakeTitleService,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      feedNameGenerationService: fakeFeedNameService,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
     });
   });
 
   afterEach(() => {
     resetServices();
     fakeRepo.clear();
+    fakeCompositeFeedRepo.clear();
   });
 
   describe('POST /data-sources', () => {

@@ -6,6 +6,7 @@ import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/
 
 export interface GeminiPromptAdapterConfig {
   apiKey: string;
+  userId: string;
   model?: string;
 }
 
@@ -13,10 +14,12 @@ const DEFAULT_MODEL = 'gemini-2.5-pro';
 
 export class GeminiPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
+  private readonly userId: string;
   private readonly model: string;
 
   constructor(config: GeminiPromptAdapterConfig) {
     this.apiKey = config.apiKey;
+    this.userId = config.userId;
     this.model = config.model ?? DEFAULT_MODEL;
   }
 
@@ -26,6 +29,7 @@ export class GeminiPromptAdapter implements PromptGenerator {
     const client = createGeminiClient({
       apiKey: this.apiKey,
       model: this.model,
+      userId: this.userId,
     });
 
     const result = await generateThumbnailPrompt(client, text);
