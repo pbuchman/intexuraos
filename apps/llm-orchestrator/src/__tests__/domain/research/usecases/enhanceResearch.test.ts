@@ -293,4 +293,49 @@ describe('enhanceResearch', () => {
       })
     );
   });
+
+  it('omits token and cost data from copied LLM results', async () => {
+    const source = createCompletedResearch({
+      llmResults: [
+        {
+          provider: 'google',
+          model: 'gemini-2.5-pro',
+          status: 'completed',
+          result: 'Google result',
+          inputTokens: 1000,
+          outputTokens: 500,
+          costUsd: 0.05,
+        },
+        {
+          provider: 'openai',
+          model: 'o4-mini-deep-research',
+          status: 'completed',
+          result: 'OpenAI result',
+          inputTokens: 2000,
+          outputTokens: 1000,
+          costUsd: 0.15,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(source));
+    deps.mockRepo.save.mockImplementation((research: Research) => ok(research));
+
+    const params: EnhanceResearchInput = {
+      sourceResearchId: 'source-research-id',
+      userId: 'user-1',
+      synthesisModel: 'claude-opus-4-5-20251101',
+    };
+
+    const result = await enhanceResearch(params, deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Copied results should not have token/cost data
+      for (const llmResult of result.value.llmResults) {
+        expect(llmResult.inputTokens).toBeUndefined();
+        expect(llmResult.outputTokens).toBeUndefined();
+        expect(llmResult.costUsd).toBeUndefined();
+      }
+    }
+  });
 });

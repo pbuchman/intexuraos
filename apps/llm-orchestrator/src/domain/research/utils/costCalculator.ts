@@ -17,9 +17,16 @@ export function calculateCost(
   return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
 }
 
-export function calculateAccurateCost(usage: TokenUsage, pricing: LlmPricing): number {
+export function calculateAccurateCost(
+  usage: TokenUsage & { costUsd?: number },
+  pricing: LlmPricing
+): number {
+  // Check for provider-reported cost (from TokenUsage.providerCost or NormalizedUsage.costUsd)
   if (usage.providerCost !== undefined) {
     return usage.providerCost;
+  }
+  if (usage.costUsd !== undefined) {
+    return usage.costUsd;
   }
 
   const inputPrice = pricing.inputPricePerMillion / 1_000_000;

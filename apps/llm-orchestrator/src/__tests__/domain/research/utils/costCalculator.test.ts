@@ -69,6 +69,43 @@ describe('calculateAccurateCost', () => {
       const cost = calculateAccurateCost(usage, pricing);
       expect(cost).toBe(0.05178);
     });
+
+    it('returns costUsd directly when provided (from NormalizedUsage)', () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.04567,
+      };
+      const pricing: LlmPricing = {
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        inputPricePerMillion: 3,
+        outputPricePerMillion: 15,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      expect(cost).toBe(0.04567);
+    });
+
+    it('prefers providerCost over costUsd when both provided', () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        providerCost: 0.111,
+        costUsd: 0.222,
+      };
+      const pricing: LlmPricing = {
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        inputPricePerMillion: 3,
+        outputPricePerMillion: 15,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      expect(cost).toBe(0.111);
+    });
   });
 
   describe('Anthropic cost calculation', () => {

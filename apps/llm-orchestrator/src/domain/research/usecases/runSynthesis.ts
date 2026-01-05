@@ -196,6 +196,7 @@ export async function runSynthesis(
       synthesisContent,
       userId,
       imageApiKeys,
+      research.synthesisModel,
       logger
     );
     if (imageResult !== null) {
@@ -281,13 +282,29 @@ export async function runSynthesis(
 
 type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
-function selectImageModel(imageApiKeys: ImageApiKeys | undefined): ImageModel | null {
-  if (imageApiKeys?.google !== undefined) {
-    return 'gemini-2.5-flash-image';
+/**
+ * Select image generation model based on available API keys and synthesis model.
+ * When synthesis uses OpenAI (gpt-*), prefer GPT for images for consistency.
+ * Otherwise, prefer Google (gemini) as default.
+ */
+function selectImageModel(
+  imageApiKeys: ImageApiKeys | undefined,
+  synthesisModel?: string
+): ImageModel | null {
+  const hasGoogleKey = imageApiKeys?.google !== undefined;
+  const hasOpenAiKey = imageApiKeys?.openai !== undefined;
+
+  // If synthesis model is OpenAI-based, prefer GPT for images
+  const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
+
+  if (preferOpenAi) {
+    if (hasOpenAiKey) return 'gpt-image-1';
+    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+  } else {
+    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+    if (hasOpenAiKey) return 'gpt-image-1';
   }
-  if (imageApiKeys?.openai !== undefined) {
-    return 'gpt-image-1';
-  }
+
   return null;
 }
 
@@ -296,10 +313,11 @@ async function generateCoverImage(
   synthesizedResult: string,
   userId: string,
   imageApiKeys: ImageApiKeys | undefined,
+  synthesisModel: string | undefined,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
   const promptModel = 'gemini-2.5-pro';
-  const imageModel = selectImageModel(imageApiKeys);
+  const imageModel = selectImageModel(imageApiKeys, synthesisModel);
 
   if (imageModel === null) {
     logger?.info(
