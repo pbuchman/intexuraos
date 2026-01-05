@@ -83,6 +83,28 @@ describe('compositeFeedRoutes', () => {
       expect(body.data.staticSourceIds).toContain(source?.id);
     });
 
+    it('auto-generates filter IDs when not provided', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/composite-feeds',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          purpose: 'Test auto-ID',
+          staticSourceIds: [],
+          notificationFilters: [{ name: 'Filter Without ID', app: ['TestApp'] }],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.payload);
+      expect(body.data.notificationFilters).toHaveLength(1);
+      expect(body.data.notificationFilters[0].id).toBeDefined();
+      expect(body.data.notificationFilters[0].id.length).toBeGreaterThan(0);
+      expect(body.data.notificationFilters[0].name).toBe('Filter Without ID');
+    });
+
     it('requires authentication', async () => {
       const app = await buildServer();
 

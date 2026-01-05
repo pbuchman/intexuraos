@@ -10,7 +10,31 @@ import {
 } from '../domain/compositeFeed/index.js';
 
 /**
- * Schema for notification filter config.
+ * Schema for notification filter config input (id is optional, auto-generated if missing).
+ */
+export const notificationFilterConfigInputSchema = {
+  type: 'object',
+  required: ['name'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    name: { type: 'string', minLength: 1, maxLength: 100 },
+    app: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 20,
+    },
+    source: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 20,
+    },
+    title: { type: 'string', maxLength: 200 },
+  },
+  additionalProperties: false,
+} as const;
+
+/**
+ * Schema for notification filter config output (id is always present).
  */
 export const notificationFilterConfigSchema = {
   type: 'object',
@@ -48,7 +72,7 @@ export const createCompositeFeedBodySchema = {
     },
     notificationFilters: {
       type: 'array',
-      items: notificationFilterConfigSchema,
+      items: notificationFilterConfigInputSchema,
       maxItems: MAX_NOTIFICATION_FILTERS,
     },
   },
@@ -69,7 +93,7 @@ export const updateCompositeFeedBodySchema = {
     },
     notificationFilters: {
       type: 'array',
-      items: notificationFilterConfigSchema,
+      items: notificationFilterConfigInputSchema,
       maxItems: MAX_NOTIFICATION_FILTERS,
     },
   },

@@ -3,6 +3,7 @@
  * CRUD operations for user-created composite feeds.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
@@ -24,16 +25,31 @@ import {
   compositeFeedDataResponseSchema,
 } from './compositeFeedSchemas.js';
 
+interface NotificationFilterInput {
+  id?: string;
+  name: string;
+  app?: string[];
+  source?: string[];
+  title?: string;
+}
+
 interface CreateCompositeFeedBody {
   purpose: string;
   staticSourceIds: string[];
-  notificationFilters: NotificationFilterConfig[];
+  notificationFilters: NotificationFilterInput[];
 }
 
 interface UpdateCompositeFeedBody {
   purpose?: string;
   staticSourceIds?: string[];
-  notificationFilters?: NotificationFilterConfig[];
+  notificationFilters?: NotificationFilterInput[];
+}
+
+function ensureFilterIds(filters: NotificationFilterInput[]): NotificationFilterConfig[] {
+  return filters.map((filter) => ({
+    ...filter,
+    id: filter.id ?? randomUUID(),
+  }));
 }
 
 interface CompositeFeedParams {
@@ -87,7 +103,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
       const createRequest: CreateCompositeFeedRequest = {
         purpose: request.body.purpose,
         staticSourceIds: request.body.staticSourceIds,
-        notificationFilters: request.body.notificationFilters,
+        notificationFilters: ensureFilterIds(request.body.notificationFilters),
       };
 
       const result = await createCompositeFeed(user.userId, createRequest, {
@@ -241,10 +257,24 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
       }
 
       const { compositeFeedRepository } = getServices();
+      const updateData: {
+        purpose?: string;
+        staticSourceIds?: string[];
+        notificationFilters?: NotificationFilterConfig[];
+      } = {};
+      if (request.body.purpose !== undefined) {
+        updateData.purpose = request.body.purpose;
+      }
+      if (request.body.staticSourceIds !== undefined) {
+        updateData.staticSourceIds = request.body.staticSourceIds;
+      }
+      if (request.body.notificationFilters !== undefined) {
+        updateData.notificationFilters = ensureFilterIds(request.body.notificationFilters);
+      }
       const result = await compositeFeedRepository.update(
         request.params.id,
         user.userId,
-        request.body
+        updateData
       );
 
       if (!result.ok) {
