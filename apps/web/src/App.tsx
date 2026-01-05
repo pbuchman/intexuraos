@@ -15,6 +15,8 @@ import { config } from '@/config';
 
 import {
   ApiKeysSettingsPage,
+  CompositeFeedFormPage,
+  CompositeFeedsListPage,
   DataSourceFormPage,
   DataSourcesListPage,
   HomePage,
@@ -186,6 +188,30 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <DataSourceFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/composite-feeds"
+        element={
+          <ProtectedRoute>
+            <CompositeFeedsListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/composite-feeds/new"
+        element={
+          <ProtectedRoute>
+            <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/composite-feeds/:id"
+        element={
+          <ProtectedRoute>
+            <CompositeFeedFormPage />
           </ProtectedRoute>
         }
       />

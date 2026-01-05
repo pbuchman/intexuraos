@@ -5,11 +5,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockResearch = vi.fn();
-const mockGenerate = vi.fn();
 
 const mockCreateClaudeClient = vi.fn().mockReturnValue({
   research: mockResearch,
-  generate: mockGenerate,
 });
 
 vi.mock('@intexuraos/infra-claude', () => ({
@@ -18,35 +16,34 @@ vi.mock('@intexuraos/infra-claude', () => ({
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 
-const mockTracker = {
-  track: vi.fn(),
-};
-
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', mockTracker);
+    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101');
+      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'claude-opus-4-5-20251101',
+        userId: 'test-user-id',
       });
     });
   });
 
   describe('research', () => {
+    const mockUsage = { inputTokens: 100, outputTokens: 50 };
+
     it('delegates to Claude client', async () => {
       mockResearch.mockResolvedValue({
         ok: true,
-        value: { content: 'Research result', sources: ['https://source.com'] },
+        value: { content: 'Research result', sources: ['https://source.com'], usage: mockUsage },
       });
 
       const result = await adapter.research('Test prompt');
@@ -83,109 +80,6 @@ describe('ClaudeAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-  });
-
-  describe('synthesize', () => {
-    it('builds synthesis prompt and calls generate', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: 'Synthesized result',
-      });
-
-      const result = await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT result' }]);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Synthesized result');
-      }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
-    });
-
-    it('includes external reports in synthesis prompt', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
-
-      await adapter.synthesize(
-        'Prompt',
-        [{ model: 'gpt', content: 'GPT' }],
-        [{ content: 'External context' }]
-      );
-
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
-    });
-
-    it('uses synthesis context when provided', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
-
-      await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
-        language: 'en',
-        domain: 'general',
-        mode: 'standard',
-        synthesis_goals: ['merge'],
-        missing_sections: [],
-        detected_conflicts: [],
-        source_preference: {
-          prefer_official_over_aggregators: true,
-          prefer_recent_when_time_sensitive: true,
-        },
-        defaults_applied: [],
-        assumptions: [],
-        output_format: { wants_table: false, wants_actionable_summary: true },
-        safety: { high_stakes: false, required_disclaimers: [] },
-        red_flags: [],
-      });
-
-      expect(mockGenerate).toHaveBeenCalled();
-    });
-
-    it('maps errors correctly', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: false,
-        error: { code: 'TIMEOUT', message: 'Request timed out' },
-      });
-
-      const result = await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }]);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
-      }
-    });
-  });
-
-  describe('generateTitle', () => {
-    it('delegates to generate with title prompt', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: '  Generated Title  ',
-      });
-
-      const result = await adapter.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toBe('Generated Title');
-      }
-      expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
-      );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
-    });
-
-    it('maps errors correctly', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: false,
-        error: { code: 'INVALID_KEY', message: 'Invalid API key' },
-      });
-
-      const result = await adapter.generateTitle('Test prompt');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_KEY');
       }
     });
   });

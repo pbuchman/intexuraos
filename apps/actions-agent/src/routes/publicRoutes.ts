@@ -1,7 +1,7 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import type { ActionStatus } from '../domain/models/action.js';
+import type { ActionStatus, ActionType } from '../domain/models/action.js';
 
 const actionSchema = {
   type: 'object',
@@ -132,9 +132,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     '/router/actions/:actionId',
     {
       schema: {
-        operationId: 'updateActionStatus',
-        summary: 'Update action status',
-        description: 'Update action status (proceed to processing, reject, or archive).',
+        operationId: 'updateAction',
+        summary: 'Update action',
+        description:
+          'Update action status (proceed to processing, reject, or archive) and/or type (for pending/awaiting_approval actions).',
         tags: ['router'],
         params: {
           type: 'object',
@@ -147,8 +148,13 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           type: 'object',
           properties: {
             status: { type: 'string', enum: ['processing', 'rejected', 'archived'] },
+            type: {
+              type: 'string',
+              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'],
+              description: 'New action type (only for pending/awaiting_approval actions)',
+            },
           },
-          required: ['status'],
+          anyOf: [{ required: ['status'] }, { required: ['type'] }],
         },
         response: {
           200: {
@@ -166,6 +172,16 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
             required: ['success', 'data'],
+          },
+          400: {
+            description: 'Bad request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
@@ -197,18 +213,38 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { actionId } = request.params as { actionId: string };
-      const { status } = request.body as { status: 'processing' | 'rejected' | 'archived' };
+      const { status, type: newType } = request.body as {
+        status?: 'processing' | 'rejected' | 'archived';
+        type?: ActionType;
+      };
 
-      const { actionRepository } = getServices();
+      const { actionRepository, changeActionTypeUseCase } = getServices();
       const action = await actionRepository.getById(actionId);
 
       if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
-      action.status = status;
-      action.updatedAt = new Date().toISOString();
-      await actionRepository.update(action);
+      // Handle type change first (logs transition before modifying action)
+      if (newType !== undefined && newType !== action.type) {
+        const result = await changeActionTypeUseCase({
+          actionId,
+          userId: user.userId,
+          newType,
+        });
+        if (!result.ok) {
+          return await reply.fail(result.error.code, result.error.message);
+        }
+        // Refresh action.type after use case updated it
+        action.type = newType;
+      }
+
+      // Handle status change
+      if (status !== undefined) {
+        action.status = status;
+        action.updatedAt = new Date().toISOString();
+        await actionRepository.update(action);
+      }
 
       return await reply.ok({ action });
     }

@@ -128,7 +128,7 @@ export function createProcessCommandUseCase(deps: {
       );
 
       try {
-        const classifier = classifierFactory(apiKey);
+        const classifier = classifierFactory(apiKey, input.userId);
         const classification = await classifier.classify(input.text);
 
         logger.info(

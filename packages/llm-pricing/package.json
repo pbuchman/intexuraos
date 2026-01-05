@@ -1,0 +1,20 @@
+{
+  "name": "@intexuraos/llm-pricing",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*",
+    "@intexuraos/infra-firestore": "*",
+    "@intexuraos/llm-contract": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

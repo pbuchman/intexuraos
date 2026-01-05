@@ -32,6 +32,15 @@
       style="display: none"
     ></div>
     <div id="root"></div>
+    <!-- PWA Share Target redirect for HashRouter compatibility -->
+    <script>
+      (function () {
+        if (window.location.pathname === '/share-target') {
+          var search = window.location.search;
+          window.location.replace('/#/share-target' + search);
+        }
+      })();
+    </script>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>

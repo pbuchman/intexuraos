@@ -8,6 +8,8 @@ import {
   FakeNotificationSender,
   FakeActionRepository,
   FakeActionEventPublisher,
+  FakeActionTransitionRepository,
+  FakeCommandsRouterClient,
   createFakeServices,
   createFakeExecuteResearchActionUseCase,
 } from './fakes.js';
@@ -50,6 +52,8 @@ describe('Research Agent Routes', () => {
   let fakeNotificationSender: FakeNotificationSender;
   let fakeActionRepository: FakeActionRepository;
   let fakeActionEventPublisher: FakeActionEventPublisher;
+  let fakeActionTransitionRepository: FakeActionTransitionRepository;
+  let fakeCommandsRouterClient: FakeCommandsRouterClient;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -59,6 +63,8 @@ describe('Research Agent Routes', () => {
     fakeNotificationSender = new FakeNotificationSender();
     fakeActionRepository = new FakeActionRepository();
     fakeActionEventPublisher = new FakeActionEventPublisher();
+    fakeActionTransitionRepository = new FakeActionTransitionRepository();
+    fakeCommandsRouterClient = new FakeCommandsRouterClient();
 
     setServices(
       createFakeServices({
@@ -67,6 +73,8 @@ describe('Research Agent Routes', () => {
         notificationSender: fakeNotificationSender,
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
+        actionTransitionRepository: fakeActionTransitionRepository,
+        commandsRouterClient: fakeCommandsRouterClient,
       })
     );
 
@@ -783,6 +791,180 @@ describe('Research Agent Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.action.status).toBe('rejected');
+    });
+  });
+
+  describe('PATCH /router/actions/:actionId with type change', () => {
+    const mockToken =
+      'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+    beforeEach(() => {
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('changes type for pending action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { type: 'todo' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { id: string; type: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.type).toBe('todo');
+    });
+
+    it('changes type for awaiting_approval action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test Action',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { type: 'research' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { id: string; type: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.type).toBe('research');
+    });
+
+    it('returns 400 when changing type on processing action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test Action',
+        status: 'processing',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { type: 'todo' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('allows changing both type and status', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { type: 'todo', status: 'rejected' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: { id: string; type: string; status: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action.type).toBe('todo');
+      expect(body.data.action.status).toBe('rejected');
+    });
+
+    it('creates transition record when type changes', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test Action',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeCommandsRouterClient.setCommand('cmd-1', 'Original command text');
+
+      await app.inject({
+        method: 'PATCH',
+        url: '/router/actions/action-1',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { type: 'todo' },
+      });
+
+      const transitions = fakeActionTransitionRepository.getTransitions();
+      expect(transitions).toHaveLength(1);
+      expect(transitions[0]).toMatchObject({
+        userId: 'user-123',
+        actionId: 'action-1',
+        commandId: 'cmd-1',
+        commandText: 'Original command text',
+        originalType: 'note',
+        newType: 'todo',
+      });
     });
   });
 

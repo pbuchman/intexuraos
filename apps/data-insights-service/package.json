@@ -22,8 +22,10 @@
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@intexuraos/infra-gemini": "*",
+    "@intexuraos/llm-contract": "*",
     "fastify": "^5.1.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
     "nock": "^14.0.0"

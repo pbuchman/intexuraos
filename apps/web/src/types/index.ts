@@ -397,3 +397,94 @@ export interface UpdateDataSourceRequest {
 export interface GenerateTitleResponse {
   title: string;
 }
+
+/**
+ * Notification filter configuration for composite feeds.
+ */
+export interface CompositeFeedNotificationFilter {
+  id: string;
+  name: string;
+  app?: string[];
+  source?: string[];
+  title?: string;
+}
+
+/**
+ * Composite feed from data-insights-service.
+ * Aggregates static data sources and notification filters.
+ */
+export interface CompositeFeed {
+  id: string;
+  userId: string;
+  name: string;
+  purpose: string;
+  staticSourceIds: string[];
+  notificationFilters: CompositeFeedNotificationFilter[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a composite feed.
+ */
+export interface CreateCompositeFeedRequest {
+  purpose: string;
+  staticSourceIds: string[];
+  notificationFilters: Omit<CompositeFeedNotificationFilter, 'id'>[];
+}
+
+/**
+ * Request to update a composite feed.
+ */
+export interface UpdateCompositeFeedRequest {
+  purpose?: string;
+  staticSourceIds?: string[];
+  notificationFilters?: Omit<CompositeFeedNotificationFilter, 'id'>[];
+}
+
+/**
+ * Static source data in composite feed response.
+ */
+export interface CompositeFeedStaticSource {
+  id: string;
+  name: string;
+  content: string;
+}
+
+/**
+ * Notification item in composite feed response.
+ */
+export interface CompositeFeedNotificationItem {
+  id: string;
+  app: string;
+  title: string;
+  body: string;
+  timestamp: string;
+  source?: string;
+}
+
+/**
+ * Filtered notifications section in composite feed data.
+ */
+export interface CompositeFeedFilteredNotifications {
+  filterId: string;
+  filterName: string;
+  criteria: {
+    app?: string[];
+    source?: string[];
+    title?: string;
+  };
+  items: CompositeFeedNotificationItem[];
+}
+
+/**
+ * Composite feed data response.
+ */
+export interface CompositeFeedData {
+  feedId: string;
+  feedName: string;
+  purpose: string;
+  generatedAt: string;
+  staticSources: CompositeFeedStaticSource[];
+  notifications: CompositeFeedFilteredNotifications[];
+}

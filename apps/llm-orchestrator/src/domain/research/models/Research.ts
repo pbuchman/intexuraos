@@ -89,6 +89,9 @@ export interface Research {
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCostUsd?: number;
   sourceActionId?: string;
   skipSynthesis?: boolean;
   researchContext?: ResearchContext;
@@ -195,9 +198,10 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   const now = new Date().toISOString();
   const source = params.sourceResearch;
 
-  const completedResults = source.llmResults
+  // Copy completed results but omit usage stats - they'll be recalculated after synthesis
+  const completedResults: LlmResult[] = source.llmResults
     .filter((r) => r.status === 'completed')
-    .map((r) => ({ ...r }));
+    .map(({ inputTokens: _, outputTokens: __, costUsd: ___, ...rest }) => rest);
 
   const existingModels = new Set(completedResults.map((r) => r.model));
   const newModels = (params.additionalModels ?? []).filter((m) => !existingModels.has(m));

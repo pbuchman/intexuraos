@@ -7,7 +7,11 @@
 export type {
   LLMConfig,
   TokenUsage,
+  NormalizedUsage,
   ResearchResult,
+  GenerateResult,
+  ImageGenerationResult,
+  ImageGenerateOptions,
   SynthesisInput,
   LLMErrorCode,
   LLMError,
@@ -24,3 +28,12 @@ export {
 } from './supportedModels.js';
 
 export type { SupportedModel, LlmProvider } from './supportedModels.js';
+
+export { generateThumbnailPrompt } from './helpers.js';
+export type {
+  ThumbnailPrompt,
+  ThumbnailPromptParameters,
+  ThumbnailPromptError,
+  ThumbnailPromptResult,
+  RealismStyle,
+} from './helpers.js';

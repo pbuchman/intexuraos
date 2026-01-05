@@ -13,7 +13,6 @@ export default tseslint.config(
       '**/*.mjs',
       '**/*.cjs',
       'docker/**',
-      'scripts/**',
       'vitest.setup.ts',
       'vitest.config.ts',
       // Test files now linted with same rules as production code
@@ -52,6 +51,7 @@ export default tseslint.config(
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
         { type: 'llm-audit', pattern: ['packages/llm-audit/src/**'], mode: 'folder' },
         { type: 'llm-contract', pattern: ['packages/llm-contract/src/**'], mode: 'folder' },
+        { type: 'llm-pricing', pattern: ['packages/llm-pricing/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
         { type: 'apps', pattern: ['apps/*/src/**'], mode: 'folder' },
       ],
@@ -82,20 +82,22 @@ export default tseslint.config(
             { from: 'infra-pubsub', allow: ['infra-pubsub', 'common-core'] },
             // llm-contract can import from common-core
             { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
-            // infra-gemini can import from common-core, llm-audit, and llm-contract
+            // llm-pricing can import from llm-contract (no common-core needed)
+            { from: 'llm-pricing', allow: ['llm-pricing', 'llm-contract'] },
+            // infra-gemini can import from common-core, llm-audit, llm-contract, and llm-pricing
             {
               from: 'infra-gemini',
-              allow: ['infra-gemini', 'common-core', 'llm-audit', 'llm-contract'],
+              allow: ['infra-gemini', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
             },
-            // infra-claude can import from common-core, llm-audit, and llm-contract
+            // infra-claude can import from common-core, llm-audit, llm-contract, and llm-pricing
             {
               from: 'infra-claude',
-              allow: ['infra-claude', 'common-core', 'llm-audit', 'llm-contract'],
+              allow: ['infra-claude', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
             },
-            // infra-gpt can import from common-core, llm-audit, and llm-contract
+            // infra-gpt can import from common-core, llm-audit, llm-contract, and llm-pricing
             {
               from: 'infra-gpt',
-              allow: ['infra-gpt', 'common-core', 'llm-audit', 'llm-contract'],
+              allow: ['infra-gpt', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
             },
             // llm-audit can import from common-core and infra-firestore
             {
@@ -128,6 +130,7 @@ export default tseslint.config(
                 'infra-gpt',
                 'llm-audit',
                 'llm-contract',
+                'llm-pricing',
                 'http-contracts',
                 'http-server',
                 'apps',
@@ -650,6 +653,90 @@ export default tseslint.config(
       '@typescript-eslint/strict-boolean-expressions': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
+  // Scripts: Relaxed rules for utility scripts
+  {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        program: null,
+        project: false,
+        projectService: false,
+      },
+    },
+    rules: {
+      // Disable all type-aware rules (scripts not in tsconfig)
+      '@typescript-eslint/await-thenable': 'off',
+      '@typescript-eslint/consistent-return': 'off',
+      '@typescript-eslint/consistent-type-exports': 'off',
+      '@typescript-eslint/dot-notation': 'off',
+      '@typescript-eslint/naming-convention': 'off',
+      '@typescript-eslint/no-array-delete': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-deprecated': 'off',
+      '@typescript-eslint/no-duplicate-type-constituents': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-for-in-array': 'off',
+      '@typescript-eslint/no-implied-eval': 'off',
+      '@typescript-eslint/no-meaningless-void-operator': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-misused-spread': 'off',
+      '@typescript-eslint/no-mixed-enums': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-unnecessary-qualifier': 'off',
+      '@typescript-eslint/no-unnecessary-template-expression': 'off',
+      '@typescript-eslint/no-unnecessary-type-arguments': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
+      '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-type-assertion': 'off',
+      '@typescript-eslint/no-unsafe-unary-minus': 'off',
+      '@typescript-eslint/no-useless-default-assignment': 'off',
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
+      '@typescript-eslint/only-throw-error': 'off',
+      '@typescript-eslint/prefer-destructuring': 'off',
+      '@typescript-eslint/prefer-find': 'off',
+      '@typescript-eslint/prefer-includes': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/prefer-optional-chain': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+      '@typescript-eslint/prefer-readonly': 'off',
+      '@typescript-eslint/prefer-readonly-parameter-types': 'off',
+      '@typescript-eslint/prefer-reduce-type-parameter': 'off',
+      '@typescript-eslint/prefer-regexp-exec': 'off',
+      '@typescript-eslint/prefer-return-this-type': 'off',
+      '@typescript-eslint/prefer-string-starts-ends-with': 'off',
+      '@typescript-eslint/promise-function-async': 'off',
+      '@typescript-eslint/related-getter-setter-pairs': 'off',
+      '@typescript-eslint/require-array-sort-compare': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/restrict-plus-operands': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/return-await': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/switch-exhaustiveness-check': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
+      // Keep these enabled to catch issues like unused variables
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      'no-console': 'off', // Scripts can use console
     },
   },
   // Test files: Disable type-aware linting (not in tsconfig by design)

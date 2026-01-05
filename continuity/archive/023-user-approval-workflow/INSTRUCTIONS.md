@@ -106,7 +106,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 - `INTEXURAOS_GCP_PROJECT_ID` - Pub/Sub project
 - `INTEXURAOS_WHATSAPP_SEND_TOPIC` - Pub/Sub topic
 - `INTEXURAOS_USER_SERVICE_URL` - User service URL
-- `INTEXURAOS_ACTIONS_AGENT_URL` - Actions agent URL (frontend)
+- `INTEXURAOS_ACTIONS_AGENT_SERVICE_URL` - Actions agent URL (frontend)
 
 ## Rollback Plan
 

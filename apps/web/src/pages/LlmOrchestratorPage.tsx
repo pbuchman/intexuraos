@@ -47,6 +47,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [showSingleProviderConfirm, setShowSingleProviderConfirm] = useState(false);
   const [pendingResearchId, setPendingResearchId] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
@@ -361,6 +362,22 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     }
   };
 
+  const handleDiscardDraft = async (): Promise<void> => {
+    if (!isEditMode) return;
+
+    setDiscarding(true);
+    try {
+      const token = await getAccessToken();
+      const { deleteResearch } = await import('@/services/llmOrchestratorApi');
+      await deleteResearch(token, draftId);
+      void navigate('/research');
+    } catch {
+      setError('Failed to discard draft');
+      setDiscarding(false);
+      setShowDiscardConfirm(false);
+    }
+  };
+
   const handleSaveDraft = async (): Promise<void> => {
     if (prompt.trim().length === 0) {
       setError('Prompt is required');
@@ -580,6 +597,19 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         </Card>
 
         <div className="flex gap-3">
+          {isEditMode && (
+            <Button
+              type="button"
+              variant="danger"
+              onClick={(): void => {
+                setShowDiscardConfirm(true);
+              }}
+              disabled={submitting || savingDraft || discarding}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Discard Draft
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"
@@ -637,6 +667,43 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               </Button>
               <Button onClick={handleConfirmProceed} disabled={discarding}>
                 Proceed
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showDiscardConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <Trash2 className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Discard Draft?</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  This will permanently delete this draft. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDiscardConfirm(false);
+                }}
+                disabled={discarding}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={(): void => {
+                  void handleDiscardDraft();
+                }}
+                disabled={discarding}
+                isLoading={discarding}
+              >
+                Discard
               </Button>
             </div>
           </div>

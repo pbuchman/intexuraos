@@ -5,6 +5,9 @@
  * Runs pending migrations in order by numeric prefix (001, 002, ...).
  * Tracks applied migrations in the `_migrations` Firestore collection.
  *
+ * Indexes and rules are defined inline in migrations (indexes[], rules{}) and
+ * aggregated into firestore.indexes.json and firestore.rules before deployment.
+ *
  * Usage:
  *   node scripts/migrate.mjs                    # Run pending migrations
  *   node scripts/migrate.mjs --status           # Show applied/pending migrations
@@ -15,7 +18,7 @@
  *   INTEXURAOS_GCP_PROJECT_ID - Target project (if --project not specified)
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -25,6 +28,116 @@ import { getFirestore } from 'firebase-admin/firestore';
 const repoRoot = resolve(import.meta.dirname, '..');
 const migrationsDir = join(repoRoot, 'migrations');
 const MIGRATIONS_COLLECTION = '_migrations';
+
+function aggregateIndexes(migrations) {
+  const allIndexes = [];
+  const seen = new Set();
+
+  for (const migration of migrations) {
+    for (const index of migration.indexes ?? []) {
+      const key = JSON.stringify(index);
+      if (!seen.has(key)) {
+        seen.add(key);
+        allIndexes.push(index);
+      }
+    }
+  }
+
+  return { indexes: allIndexes, fieldOverrides: [] };
+}
+
+function aggregateRules(migrations) {
+  const functions = {};
+  const collections = {};
+
+  for (const migration of migrations) {
+    const rules = migration.rules ?? {};
+    if (rules.functions) {
+      Object.assign(functions, rules.functions);
+    }
+    if (rules.collections) {
+      Object.assign(collections, rules.collections);
+    }
+  }
+
+  return { functions, collections };
+}
+
+function generateRulesFile({ functions, collections }) {
+  const lines = [];
+
+  lines.push("rules_version = '2';");
+  lines.push('');
+  lines.push('service cloud.firestore {');
+  lines.push('  match /databases/{database}/documents {');
+
+  for (const [name, body] of Object.entries(functions)) {
+    const params = body.includes('userId') ? '(userId)' : '()';
+    lines.push(`    function ${name}${params} {`);
+    lines.push(`      ${body}`);
+    lines.push('    }');
+    lines.push('');
+  }
+
+  const collectionEntries = Object.entries(collections);
+  const catchAllIndex = collectionEntries.findIndex(([path]) => path.includes('{document=**}'));
+  if (catchAllIndex > -1) {
+    const [catchAll] = collectionEntries.splice(catchAllIndex, 1);
+    collectionEntries.push(catchAll);
+  }
+
+  for (const [path, rules] of collectionEntries) {
+    if (rules.comment) {
+      lines.push(`    // ${rules.comment}`);
+    }
+    lines.push(`    match /${path} {`);
+
+    if (rules.get) {
+      lines.push(`      allow get: if ${rules.get};`);
+    }
+    if (rules.list) {
+      lines.push('');
+      if (rules.listComment) {
+        lines.push(`      // ${rules.listComment}`);
+      }
+      lines.push(`      allow list: if ${rules.list};`);
+    }
+    if (rules.write && (rules.get || rules.list)) {
+      lines.push('');
+      if (rules.writeComment) {
+        lines.push(`      // ${rules.writeComment}`);
+      }
+      lines.push(`      allow write: if ${rules.write};`);
+    }
+    if (rules.read !== undefined && !rules.get && !rules.list) {
+      lines.push(`      allow read, write: if ${rules.read};`);
+    }
+
+    lines.push('    }');
+    lines.push('');
+  }
+
+  lines.push('  }');
+  lines.push('}');
+
+  return lines.join('\n') + '\n';
+}
+
+function generateFirestoreConfig(migrations) {
+  const indexesData = aggregateIndexes(migrations);
+  const rulesData = aggregateRules(migrations);
+
+  const indexesPath = join(repoRoot, 'firestore.indexes.json');
+  const rulesPath = join(repoRoot, 'firestore.rules');
+
+  writeFileSync(indexesPath, JSON.stringify(indexesData, null, 2) + '\n');
+  writeFileSync(rulesPath, generateRulesFile(rulesData));
+
+  return {
+    indexCount: indexesData.indexes.length,
+    collectionCount: Object.keys(rulesData.collections).length,
+  };
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -97,6 +210,8 @@ async function discoverMigrations() {
       checksum: calculateChecksum(filePath),
       metadata: module.metadata,
       up: module.up,
+      indexes: module.indexes ?? [],
+      rules: module.rules ?? {},
     });
   }
 
@@ -130,7 +245,7 @@ function runFirebaseCli(args, projectId) {
   });
 }
 
-async function runMigration(migration, firestore, projectId, dryRun) {
+async function runMigration(migration, firestore, projectId, dryRun, allMigrations) {
   const startTime = Date.now();
 
   const context = {
@@ -138,6 +253,10 @@ async function runMigration(migration, firestore, projectId, dryRun) {
     projectId,
     repoRoot,
     deployIndexes: async () => {
+      console.log('  Generating firestore.indexes.json from migrations...');
+      const stats = generateFirestoreConfig(allMigrations);
+      console.log(`    Aggregated ${stats.indexCount} indexes`);
+
       if (dryRun) {
         console.log('  [DRY-RUN] Would deploy Firestore indexes');
         return;
@@ -145,6 +264,10 @@ async function runMigration(migration, firestore, projectId, dryRun) {
       await runFirebaseCli(['deploy', '--only', 'firestore:indexes'], projectId);
     },
     deployRules: async () => {
+      console.log('  Generating firestore.rules from migrations...');
+      const stats = generateFirestoreConfig(allMigrations);
+      console.log(`    Aggregated ${stats.collectionCount} collection rules`);
+
       if (dryRun) {
         console.log('  [DRY-RUN] Would deploy Firestore rules');
         return;
@@ -223,6 +346,34 @@ async function main() {
     return;
   }
 
+  const checksumErrors = [];
+  for (const migration of migrations) {
+    const record = applied.get(migration.id);
+    if (record && record.status === 'applied' && record.checksum) {
+      if (record.checksum !== migration.checksum) {
+        checksumErrors.push({
+          id: migration.id,
+          name: migration.name,
+          storedChecksum: record.checksum,
+          currentChecksum: migration.checksum,
+        });
+      }
+    }
+  }
+
+  if (checksumErrors.length > 0) {
+    console.error('\nERROR: Applied migrations have been modified!\n');
+    for (const err of checksumErrors) {
+      console.error(`  ${err.id}_${err.name}`);
+      console.error(`    Stored:  ${err.storedChecksum}`);
+      console.error(`    Current: ${err.currentChecksum}`);
+    }
+    console.error('\nApplied migrations must not be modified. Options:');
+    console.error('  1. Revert the changes to the migration file');
+    console.error('  2. Create a new migration for the intended changes\n');
+    process.exit(1);
+  }
+
   const pending = migrations.filter((m) => {
     const record = applied.get(m.id);
     return !record || record.status !== 'applied';
@@ -238,7 +389,7 @@ async function main() {
   for (const migration of pending) {
     console.log(`Running ${migration.id}_${migration.name}...`);
 
-    const result = await runMigration(migration, firestore, projectId, options.dryRun);
+    const result = await runMigration(migration, firestore, projectId, options.dryRun, migrations);
 
     if (result.success) {
       console.log(`  ✓ Completed in ${result.durationMs}ms\n`);

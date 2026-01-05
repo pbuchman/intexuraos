@@ -247,5 +247,93 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.get(
+    '/internal/router/commands/:commandId',
+    {
+      schema: {
+        operationId: 'getCommandInternal',
+        summary: 'Get command by ID (internal)',
+        description: 'Internal endpoint for service-to-service command lookup.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            commandId: { type: 'string' },
+          },
+          required: ['commandId'],
+        },
+        response: {
+          200: {
+            description: 'Command found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  command: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      text: { type: 'string' },
+                    },
+                    required: ['id', 'text'],
+                  },
+                },
+                required: ['command'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Command not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/router/commands/:commandId',
+        bodyPreviewLength: 0,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for get command');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { commandId } = request.params as { commandId: string };
+      const { commandRepository } = getServices();
+
+      const command = await commandRepository.getById(commandId);
+      if (command === null) {
+        return await reply.fail('NOT_FOUND', 'Command not found');
+      }
+
+      return await reply.ok({
+        command: {
+          id: command.id,
+          text: command.text,
+        },
+      });
+    }
+  );
+
   done();
 };

@@ -41,6 +41,7 @@ export function useResearch(id: string): {
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const firebaseAuthenticatedRef = useRef(false);
   const lastStatusRef = useRef<string | null>(null);
+  const lastLlmStatusesRef = useRef<string | null>(null);
 
   const refresh = useCallback(
     async (showLoading?: boolean): Promise<void> => {
@@ -123,10 +124,16 @@ export function useResearch(id: string): {
             if (snapshot.exists()) {
               const data = snapshot.data();
               const newStatus = data['status'] as string | undefined;
+              const llmResults = data['llmResults'] as { status: string }[] | undefined;
+              const llmStatusesKey = llmResults?.map((r) => r.status).join(',') ?? '';
 
-              // Only fetch full data if status changed
-              if (newStatus !== undefined && newStatus !== lastStatusRef.current) {
-                lastStatusRef.current = newStatus;
+              // Fetch full data if main status OR any LLM result status changed
+              const statusChanged = newStatus !== undefined && newStatus !== lastStatusRef.current;
+              const llmStatusesChanged = llmStatusesKey !== lastLlmStatusesRef.current;
+
+              if (statusChanged || llmStatusesChanged) {
+                lastStatusRef.current = newStatus ?? null;
+                lastLlmStatusesRef.current = llmStatusesKey;
                 void refresh(false);
               }
             }

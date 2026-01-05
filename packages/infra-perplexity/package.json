@@ -15,7 +15,8 @@
   "dependencies": {
     "@intexuraos/common-core": "*",
     "@intexuraos/llm-audit": "*",
-    "@intexuraos/llm-contract": "*"
+    "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*"
   },
   "devDependencies": {
     "nock": "^14.0.0"

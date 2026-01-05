@@ -751,7 +751,8 @@ export function ResearchDetailPage(): React.JSX.Element {
       </Card>
 
       {/* Research Summary - show when we have usage data */}
-      {research.llmResults.some((r) => r.inputTokens !== undefined) ? (
+      {research.totalInputTokens !== undefined ||
+      research.llmResults.some((r) => r.inputTokens !== undefined) ? (
         <Card title="Research Summary" className="mb-6">
           <div className="flex flex-wrap gap-6">
             {research.totalDurationMs !== undefined ? (
@@ -765,23 +766,29 @@ export function ResearchDetailPage(): React.JSX.Element {
             <div>
               <p className="text-sm text-slate-500">Input Tokens</p>
               <p className="text-lg font-semibold">
-                {research.llmResults
-                  .reduce((sum, r) => sum + (r.inputTokens ?? 0), 0)
-                  .toLocaleString()}
+                {(
+                  research.totalInputTokens ??
+                  research.llmResults.reduce((sum, r) => sum + (r.inputTokens ?? 0), 0)
+                ).toLocaleString()}
               </p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Output Tokens</p>
               <p className="text-lg font-semibold">
-                {research.llmResults
-                  .reduce((sum, r) => sum + (r.outputTokens ?? 0), 0)
-                  .toLocaleString()}
+                {(
+                  research.totalOutputTokens ??
+                  research.llmResults.reduce((sum, r) => sum + (r.outputTokens ?? 0), 0)
+                ).toLocaleString()}
               </p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Total Cost</p>
               <p className="text-lg font-semibold text-green-600">
-                ${research.llmResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0).toFixed(4)}
+                $
+                {(
+                  research.totalCostUsd ??
+                  research.llmResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0)
+                ).toFixed(4)}
               </p>
             </div>
           </div>

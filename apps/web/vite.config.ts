@@ -80,7 +80,7 @@ export default defineConfig(({ mode }) => {
             },
           ],
           share_target: {
-            action: '/',
+            action: '/share-target',
             method: 'GET',
             params: {
               title: 'title',
@@ -137,7 +137,9 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/, /^\/share\//],
         },
         devOptions: {
-          enabled: false, // Disable in dev mode to avoid caching issues
+          enabled: true, // Generate manifest in dev mode
+          type: 'module',
+          suppressWarnings: true,
         },
       }),
     ],

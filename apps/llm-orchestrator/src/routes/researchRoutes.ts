@@ -11,7 +11,6 @@
  * POST   /research/:id/enhance - Create enhanced research from completed
  * DELETE /research/:id        - Delete research
  * DELETE /research/:id/share  - Remove public share access
- * GET    /llm/usage-stats     - Get aggregated LLM usage statistics
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -97,16 +96,18 @@ interface ContextWithLabel {
 async function generateContextLabels(
   contexts: ContextWithLabel[],
   googleApiKey: string | undefined,
+  userId: string,
   createTitleGenerator: (
     model: string,
-    apiKey: string
+    apiKey: string,
+    userId: string
   ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> }
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;
   }
 
-  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey);
+  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey, userId);
 
   return await Promise.all(
     contexts.map(async (ctx) => {
@@ -166,6 +167,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         submitParams.inputContexts = contextsWithLabels;
@@ -222,7 +224,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Generate title using Gemini if Google API key is available
       let title: string;
       if (apiKeys.google !== undefined) {
-        const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+        const titleGenerator = createTitleGenerator(
+          'gemini-2.5-flash',
+          apiKeys.google,
+          user.userId
+        );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
       } else {
@@ -249,6 +255,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         const now = new Date().toISOString();
@@ -331,7 +338,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
-          const titleGenerator = createTitleGenerator('gemini-2.5-flash', apiKeys.google);
+          const titleGenerator = createTitleGenerator(
+            'gemini-2.5-flash',
+            apiKeys.google,
+            user.userId
+          );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
         } else {
@@ -353,6 +364,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         const now = new Date().toISOString();
@@ -619,10 +631,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+          const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
           const contextInferrer =
             apiKeysResult.value.google !== undefined
-              ? createContextInferrer('gemini-2.5-flash', apiKeysResult.value.google, request.log)
+              ? createContextInferrer(
+                  'gemini-2.5-flash',
+                  apiKeysResult.value.google,
+                  user.userId,
+                  request.log
+                )
               : undefined;
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
@@ -758,7 +775,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const synthesizer = createSynthesizer(synthesisModel, synthesisKey);
+      const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
 
       const retryResult = await retryFromFailed(id, {
         researchRepo,
@@ -848,6 +865,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const contextsWithLabels = await generateContextLabels(
           body.additionalContexts,
           apiKeys.google,
+          user.userId,
           createTitleGenerator
         );
         enhanceInput.additionalContexts = contextsWithLabels;
@@ -981,57 +999,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(null);
-    }
-  );
-
-  // GET /llm/usage-stats
-  fastify.get(
-    '/llm/usage-stats',
-    {
-      schema: {
-        operationId: 'getLlmUsageStats',
-        summary: 'Get LLM usage statistics',
-        description: 'Get aggregated LLM usage statistics (calls, tokens, costs) per model.',
-        tags: ['llm'],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              data: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    provider: { type: 'string' },
-                    model: { type: 'string' },
-                    period: { type: 'string' },
-                    calls: { type: 'number' },
-                    successfulCalls: { type: 'number' },
-                    failedCalls: { type: 'number' },
-                    inputTokens: { type: 'number' },
-                    outputTokens: { type: 'number' },
-                    totalTokens: { type: 'number' },
-                    costUsd: { type: 'number' },
-                    lastUpdatedAt: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const user = await requireAuth(request, reply);
-      if (user === null) {
-        return;
-      }
-
-      const { usageStatsRepo } = getServices();
-      const stats = await usageStatsRepo.getAllTotals();
-
-      return await reply.ok(stats);
     }
   );
 

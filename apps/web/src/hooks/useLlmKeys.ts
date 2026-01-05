@@ -86,14 +86,23 @@ export function useLlmKeys(): UseLlmKeysResult {
         throw new Error('User not authenticated');
       }
 
-      // Don't set global error for test operations - let component handle it locally
       const token = await getAccessToken();
       const result = await testLlmKey(token, userId, provider);
-      // Refresh keys to get updated test results
-      void refresh();
+
+      setKeys((prev) => {
+        if (prev === null) return prev;
+        return {
+          ...prev,
+          testResults: {
+            ...prev.testResults,
+            [provider]: result,
+          },
+        };
+      });
+
       return result;
     },
-    [user?.sub, getAccessToken, refresh]
+    [user?.sub, getAccessToken]
   );
 
   return { keys, loading, error, setKey, deleteKey, testKey, refresh };

@@ -16,6 +16,7 @@
     "@intexuraos/common-core": "*",
     "@intexuraos/llm-audit": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "@anthropic-ai/sdk": "^0.52.0"
   }
 }

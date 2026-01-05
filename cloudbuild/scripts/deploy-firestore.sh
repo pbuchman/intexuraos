@@ -2,8 +2,8 @@
 # Deploy Firestore via database migrations.
 #
 # Runs pending migrations which handle:
-# - Firestore indexes (firestore.indexes.json)
-# - Firestore security rules (firestore.rules)
+# - Firestore indexes (generated from migrations/*.mjs)
+# - Firestore security rules (generated from migrations/*.mjs)
 # - Data migrations (app_settings, etc.)
 #
 # Prerequisites:
@@ -24,23 +24,12 @@ require_env_vars PROJECT_ID
 log "Running Firestore migrations"
 log "  Project: ${PROJECT_ID}"
 
-# Check required files exist for migrations that deploy indexes/rules
 if [[ ! -f "firebase.json" ]]; then
   log "ERROR: firebase.json not found in repo root"
   exit 1
 fi
 
-if [[ ! -f "firestore.indexes.json" ]]; then
-  log "ERROR: firestore.indexes.json not found in repo root"
-  exit 1
-fi
-
-if [[ ! -f "firestore.rules" ]]; then
-  log "ERROR: firestore.rules not found in repo root"
-  exit 1
-fi
-
-# Run migrations
+# Run migrations (generates firestore.indexes.json and firestore.rules from migrations/*.mjs)
 log "Running pending migrations..."
 node scripts/migrate.mjs --project "${PROJECT_ID}"
 

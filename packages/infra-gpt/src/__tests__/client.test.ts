@@ -31,6 +31,10 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+vi.mock('@intexuraos/llm-pricing', () => ({
+  logUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { createAuditContext } = await import('@intexuraos/llm-audit');
 const { createGptClient } = await import('../index.js');
 
@@ -49,13 +53,17 @@ describe('createGptClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
-        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+        expect(result.value.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
       }
       expect(mockResponsesCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -76,7 +84,11 @@ describe('createGptClient', () => {
         ],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -97,7 +109,11 @@ describe('createGptClient', () => {
         ],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -112,7 +128,11 @@ describe('createGptClient', () => {
         output: [],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -127,7 +147,11 @@ describe('createGptClient', () => {
         output: [{ type: 'web_search_call' }],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -142,7 +166,11 @@ describe('createGptClient', () => {
         output: [{ type: 'web_search_call', results: undefined }],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -162,7 +190,11 @@ describe('createGptClient', () => {
         ],
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -174,7 +206,11 @@ describe('createGptClient', () => {
     it('returns API_ERROR on general failure', async () => {
       mockResponsesCreate.mockRejectedValue(new MockAPIError(500, 'Server error'));
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -186,7 +222,7 @@ describe('createGptClient', () => {
     it('returns INVALID_KEY error on 401', async () => {
       mockResponsesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid API key'));
 
-      const client = createGptClient({ apiKey: 'bad-key', model: TEST_MODEL });
+      const client = createGptClient({ apiKey: 'bad-key', model: TEST_MODEL, userId: 'test-user' });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -198,7 +234,11 @@ describe('createGptClient', () => {
     it('returns RATE_LIMITED error on 429', async () => {
       mockResponsesCreate.mockRejectedValue(new MockAPIError(429, 'Rate limited'));
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -212,7 +252,11 @@ describe('createGptClient', () => {
         new MockAPIError(400, 'Context length exceeded', 'context_length_exceeded')
       );
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -224,7 +268,11 @@ describe('createGptClient', () => {
     it('returns TIMEOUT error on timeout', async () => {
       mockResponsesCreate.mockRejectedValue(new MockAPIError(500, 'Request timeout'));
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -236,7 +284,11 @@ describe('createGptClient', () => {
     it('handles non-APIError exceptions', async () => {
       mockResponsesCreate.mockRejectedValue(new Error('Network failure'));
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -251,14 +303,19 @@ describe('createGptClient', () => {
     it('returns generated content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Generated response' } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated response');
+        expect(result.value.content).toBe('Generated response');
       }
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -270,35 +327,49 @@ describe('createGptClient', () => {
     it('handles empty choices', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [],
+        usage: { prompt_tokens: 100, completion_tokens: 0 },
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
     it('handles null content', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: null } }],
+        usage: { prompt_tokens: 100, completion_tokens: 0 },
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
     it('returns error on failure', async () => {
       mockChatCompletionsCreate.mockRejectedValue(new Error('Network error'));
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -322,7 +393,11 @@ describe('createGptClient', () => {
         error: vi.fn(),
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       await client.research('Test prompt');
 
       expect(createAuditContext).toHaveBeenCalledWith(
@@ -356,18 +431,88 @@ describe('createGptClient', () => {
         error: vi.fn(),
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.cachedTokens).toBe(100);
+        expect(result.value.usage.cacheTokens).toBe(100);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cachedTokens: 100,
-        })
-      );
+    });
+
+    it('handles usage without input_tokens_details', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBeUndefined();
+      }
+    });
+
+    it('handles input_tokens_details without cached_tokens', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 150,
+          output_tokens: 75,
+          input_tokens_details: {},
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBeUndefined();
+      }
+    });
+
+    it('uses default pricing for unknown model', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Response',
+        output: [],
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: 'unknown-model',
+        userId: 'test-user',
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(1000);
+        expect(result.value.usage.costUsd).toBeGreaterThan(0);
+      }
     });
 
     it('includes reasoning tokens when present', async () => {
@@ -387,7 +532,11 @@ describe('createGptClient', () => {
         error: vi.fn(),
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -396,7 +545,8 @@ describe('createGptClient', () => {
       }
       expect(mockSuccess).toHaveBeenCalledWith(
         expect.objectContaining({
-          reasoningTokens: 500,
+          inputTokens: 150,
+          outputTokens: 75,
         })
       );
     });
@@ -418,7 +568,11 @@ describe('createGptClient', () => {
         error: vi.fn(),
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -441,7 +595,11 @@ describe('createGptClient', () => {
         error: mockError,
       });
 
-      const client = createGptClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       await client.research('Test prompt');
 
       expect(mockError).toHaveBeenCalled();

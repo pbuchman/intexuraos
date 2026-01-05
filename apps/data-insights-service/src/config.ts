@@ -28,6 +28,11 @@ const configSchema = z.object({
    * URL for user-service to fetch user's LLM API keys.
    */
   userServiceUrl: z.string().url().optional().default('http://localhost:8110'),
+
+  /**
+   * URL for mobile-notifications-service for composite feed queries.
+   */
+  mobileNotificationsServiceUrl: z.string().url().optional().default('http://localhost:8114'),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -42,6 +47,7 @@ export function loadConfig(): Config {
     host: process.env['HOST'],
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'],
+    mobileNotificationsServiceUrl: process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'],
   });
 }
 

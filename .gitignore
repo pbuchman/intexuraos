@@ -5,6 +5,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
+scripts/test-results/
 
 # IDE - exclude user-specific files but keep project configuration
 .idea/workspace.xml
@@ -50,3 +51,9 @@ speechmatics-js-sdk/
 # Local Firestore export data
 data/firestore-export/
 
+# Generated Firestore config (source of truth: migrations/*.mjs)
+firestore.indexes.json
+firestore.rules
+
+# Local Next.js build output
+apps/web/dev-dist/

@@ -1,12 +1,12 @@
 /**
  * Service wiring for llm-orchestrator.
  * Provides dependency injection for domain adapters.
+ *
+ * Note: LLM usage logging is handled by the clients in packages/infra-*.
  */
 
-import pino from 'pino';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
-import { FirestoreUsageStatsRepository } from './infra/usage/index.js';
 import {
   createContextInferrer,
   createResearchProvider,
@@ -36,16 +36,8 @@ import {
   type ShareStoragePort,
   type SupportedModel,
   type TitleGenerator,
-  type UsageStatsRepository,
 } from './domain/research/index.js';
 import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
-import {
-  createLlmUsageTracker,
-  type LlmUsageTracker,
-  type TrackLlmCallParams,
-} from './domain/research/services/index.js';
-
-export type { LlmUsageTracker, TrackLlmCallParams };
 
 /**
  * Configuration for sharing features.
@@ -61,8 +53,6 @@ export interface ShareConfig {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   pricingRepo: PricingRepository;
-  usageStatsRepo: UsageStatsRepository;
-  llmUsageTracker: LlmUsageTracker;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
@@ -71,12 +61,21 @@ export interface ServiceContainer {
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
-  createResearchProvider: (model: SupportedModel, apiKey: string) => LlmResearchProvider;
-  createSynthesizer: (model: SupportedModel, apiKey: string) => LlmSynthesisProvider;
-  createTitleGenerator: (model: string, apiKey: string) => TitleGenerator;
+  createResearchProvider: (
+    model: SupportedModel,
+    apiKey: string,
+    userId: string
+  ) => LlmResearchProvider;
+  createSynthesizer: (
+    model: SupportedModel,
+    apiKey: string,
+    userId: string
+  ) => LlmSynthesisProvider;
+  createTitleGenerator: (model: string, apiKey: string, userId: string) => TitleGenerator;
   createContextInferrer: (
     model: string,
     apiKey: string,
+    userId: string,
     logger?: Logger
   ) => ContextInferenceProvider;
 }
@@ -164,16 +163,8 @@ function createShareStorageAndConfig(): {
  * Initialize the service container with all dependencies.
  */
 export function initializeServices(): void {
-  const logger = pino({ name: 'llm-orchestrator' });
   const researchRepo = new FirestoreResearchRepository();
   const pricingRepo = new FirestorePricingRepository();
-  const usageStatsRepo = new FirestoreUsageStatsRepository();
-
-  const llmUsageTracker = createLlmUsageTracker({
-    usageStatsRepo,
-    pricingRepo,
-    logger,
-  });
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
@@ -206,8 +197,6 @@ export function initializeServices(): void {
   container = {
     researchRepo,
     pricingRepo,
-    usageStatsRepo,
-    llmUsageTracker,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
@@ -216,13 +205,9 @@ export function initializeServices(): void {
     notificationSender,
     shareStorage,
     shareConfig,
-    createResearchProvider: (model, apiKey): LlmResearchProvider =>
-      createResearchProvider(model, apiKey, llmUsageTracker),
-    createSynthesizer: (model, apiKey): LlmSynthesisProvider =>
-      createSynthesizer(model, apiKey, llmUsageTracker),
-    createTitleGenerator: (model, apiKey): TitleGenerator =>
-      createTitleGenerator(model, apiKey, llmUsageTracker),
-    createContextInferrer: (model, apiKey, logger): ContextInferenceProvider =>
-      createContextInferrer(model, apiKey, logger, llmUsageTracker),
+    createResearchProvider,
+    createSynthesizer,
+    createTitleGenerator,
+    createContextInferrer,
   };
 }

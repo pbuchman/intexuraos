@@ -29,9 +29,14 @@ export interface ServiceContainer {
   createPromptGenerator: (
     provider: 'google' | 'openai',
     apiKey: string,
+    userId: string,
     logger?: LoggerLike
   ) => PromptGenerator;
-  createImageGenerator: (model: ImageGenerationModel, apiKey: string) => ImageGenerator;
+  createImageGenerator: (
+    model: ImageGenerationModel,
+    apiKey: string,
+    userId: string
+  ) => ImageGenerator;
   generateId: () => string;
 }
 
@@ -69,19 +74,24 @@ export function initializeServices(): void {
     createPromptGenerator: (
       provider: 'google' | 'openai',
       apiKey: string,
-      logger?: LoggerLike
+      userId: string,
+      _logger?: LoggerLike
     ): PromptGenerator => {
       if (provider === 'google') {
-        return createGeminiPromptAdapter({ apiKey, logger });
+        return createGeminiPromptAdapter({ apiKey, userId });
       }
-      return createGptPromptAdapter({ apiKey, logger });
+      return createGptPromptAdapter({ apiKey, userId });
     },
-    createImageGenerator: (model: ImageGenerationModel, apiKey: string): ImageGenerator => {
+    createImageGenerator: (
+      model: ImageGenerationModel,
+      apiKey: string,
+      userId: string
+    ): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];
       if (config.provider === 'openai') {
-        return createOpenAIImageGenerator({ apiKey, model, storage });
+        return createOpenAIImageGenerator({ apiKey, model, storage, userId });
       }
-      return createGoogleImageGenerator({ apiKey, model, storage });
+      return createGoogleImageGenerator({ apiKey, model, storage, userId });
     },
     generateId: (): string => randomUUID(),
   };

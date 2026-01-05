@@ -13,4 +13,4 @@ export interface Classifier {
   classify(text: string): Promise<ClassificationResult>;
 }
 
-export type ClassifierFactory = (apiKey: string) => Classifier;
+export type ClassifierFactory = (apiKey: string, userId: string) => Classifier;

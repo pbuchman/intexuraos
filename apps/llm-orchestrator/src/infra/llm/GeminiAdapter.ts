@@ -1,5 +1,6 @@
 /**
  * Gemini adapter implementing LlmResearchProvider and LlmSynthesisProvider.
+ * Usage logging is handled by the client (packages/infra-gemini).
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
@@ -9,47 +10,21 @@ import type {
   LlmResearchProvider,
   LlmResearchResult,
   LlmSynthesisProvider,
+  LlmSynthesisResult,
 } from '../../domain/research/index.js';
-import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GeminiClient;
-  private readonly model: string;
-  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, tracker?: LlmUsageTracker) {
-    this.client = createGeminiClient({ apiKey, model });
-    this.model = model;
-    this.tracker = tracker;
+  constructor(apiKey: string, model: string, userId: string) {
+    this.client = createGeminiClient({ apiKey, model, userId });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
     const result = await this.client.research(prompt);
-
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'research',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'research',
-      success: true,
-      inputTokens: result.value.usage?.inputTokens ?? 0,
-      outputTokens: result.value.usage?.outputTokens ?? 0,
-    });
-
     return result;
   }
 
@@ -58,7 +33,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
     synthesisContext?: SynthesisContext
-  ): Promise<Result<string, LlmError>> {
+  ): Promise<Result<LlmSynthesisResult, LlmError>> {
     const synthesisPrompt =
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
@@ -66,30 +41,20 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'synthesis',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'synthesis',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
-
-    return result;
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        content: result.value.content,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
@@ -118,30 +83,9 @@ Generate title:`;
     const result = await this.client.generate(titlePrompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'title',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'title',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
-
-    return { ok: true, value: result.value.trim() };
+    return { ok: true, value: result.value.content.trim() };
   }
 
   async generateContextLabel(content: string): Promise<Result<string, LlmError>> {
@@ -174,30 +118,9 @@ Generate label:`;
     const result = await this.client.generate(labelPrompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'context_label',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'context_label',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
-
-    return { ok: true, value: result.value.trim() };
+    return { ok: true, value: result.value.content.trim() };
   }
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   ActionDetailModal,
   CommandDetailModal,
@@ -233,6 +234,28 @@ interface ActionItemProps {
 
 function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): React.JSX.Element {
   const { buttons } = useActionConfig(action);
+  const [executionResult, setExecutionResult] = useState<{
+    resource_url?: string;
+    message: string;
+    linkLabel: string;
+  } | null>(null);
+  // Track if action was executed successfully - hide buttons when true
+  const [actionExecuted, setActionExecuted] = useState(false);
+
+  /**
+   * Normalizes resource_url for HashRouter.
+   * Backend returns URLs like "/#/research/..." but HashRouter's Link component
+   * expects just "/research/..." (it handles the # prefix automatically).
+   */
+  const normalizeResourceUrl = (url: string): string => {
+    if (url.startsWith('/#')) {
+      return url.slice(2);
+    }
+    if (url.startsWith('#')) {
+      return url.slice(1);
+    }
+    return url;
+  };
 
   return (
     <div
@@ -261,23 +284,52 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
             <span>{String(Math.round(action.confidence * 100))}% confidence</span>
             <span>{formatDate(action.createdAt)}</span>
           </div>
+          {/* Success notification with link */}
+          {executionResult?.resource_url !== undefined && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm">
+              <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
+              <span className="text-green-700">{executionResult.message}</span>
+              <RouterLink
+                to={executionResult.resource_url}
+                className="ml-1 font-medium text-green-700 underline hover:text-green-800"
+                onClick={(e): void => {
+                  e.stopPropagation();
+                }}
+              >
+                {executionResult.linkLabel}
+              </RouterLink>
+            </div>
+          )}
         </div>
-        <div
-          className="flex shrink-0 gap-1"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          {buttons.map((button) => (
-            <ConfigurableActionButton
-              key={button.id}
-              button={button}
-              onSuccess={(): void => {
-                onActionSuccess(button);
-              }}
-            />
-          ))}
-        </div>
+        {/* Hide buttons after action with resource_url was executed */}
+        {!actionExecuted && (
+          <div
+            className="flex shrink-0 gap-1"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {buttons.map((button) => (
+              <ConfigurableActionButton
+                key={button.id}
+                button={button}
+                onSuccess={(): void => {
+                  onActionSuccess(button);
+                }}
+                onResult={(result, btn): void => {
+                  if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
+                    setExecutionResult({
+                      resource_url: normalizeResourceUrl(result.resource_url),
+                      message: btn.onSuccess.message,
+                      linkLabel: btn.onSuccess.linkLabel,
+                    });
+                    setActionExecuted(true);
+                  }
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -774,8 +826,11 @@ export function InboxPage(): React.JSX.Element {
                     // If action is DELETE, remove from local state
                     if (button.endpoint.method === 'DELETE') {
                       setActions((prev) => prev.filter((a) => a.id !== button.action.id));
-                    } else if (button.endpoint.method === 'PATCH') {
-                      // If PATCH (archive, reject), refresh to get updated status
+                    } else if (
+                      button.endpoint.method === 'PATCH' ||
+                      button.endpoint.method === 'POST'
+                    ) {
+                      // If PATCH (archive, reject) or POST (approve, retry), refresh to get updated status
                       void fetchData(true);
                     }
                   }}
@@ -842,6 +897,12 @@ export function InboxPage(): React.JSX.Element {
             }
             // Close modal after action completes
             setSelectedAction(null);
+          }}
+          onActionUpdated={(updatedAction: Action): void => {
+            // Update action in local state
+            setActions((prev) => prev.map((a) => (a.id === updatedAction.id ? updatedAction : a)));
+            // Update selected action to reflect changes
+            setSelectedAction(updatedAction);
           }}
         />
       )}

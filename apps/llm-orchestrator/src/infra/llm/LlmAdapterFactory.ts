@@ -1,5 +1,6 @@
 /**
  * Factory functions for creating LLM adapters from API keys.
+ * Usage logging is handled by the underlying clients (packages/infra-*).
  */
 
 import type { Logger } from '@intexuraos/common-core';
@@ -10,7 +11,6 @@ import type {
   TitleGenerator,
 } from '../../domain/research/index.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
-import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
@@ -20,36 +20,36 @@ import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 export function createResearchProvider(
   model: SupportedModel,
   apiKey: string,
-  tracker?: LlmUsageTracker
+  userId: string
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, tracker);
+      return new GeminiAdapter(apiKey, model, userId);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, tracker);
+      return new ClaudeAdapter(apiKey, model, userId);
     case 'openai':
-      return new GptAdapter(apiKey, model, tracker);
+      return new GptAdapter(apiKey, model, userId);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, tracker);
+      return new PerplexityAdapter(apiKey, model, userId);
   }
 }
 
 export function createSynthesizer(
   model: SupportedModel,
   apiKey: string,
-  tracker?: LlmUsageTracker
+  userId: string
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, tracker);
+      return new GeminiAdapter(apiKey, model, userId);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, tracker);
+      throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, tracker);
+      return new GptAdapter(apiKey, model, userId);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
   }
@@ -58,16 +58,16 @@ export function createSynthesizer(
 export function createTitleGenerator(
   model: string,
   apiKey: string,
-  tracker?: LlmUsageTracker
+  userId: string
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, tracker);
+  return new GeminiAdapter(apiKey, model, userId);
 }
 
 export function createContextInferrer(
   model: string,
   apiKey: string,
-  logger?: Logger,
-  tracker?: LlmUsageTracker
+  userId: string,
+  logger?: Logger
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, logger, tracker);
+  return new ContextInferenceAdapter(apiKey, model, userId, logger);
 }

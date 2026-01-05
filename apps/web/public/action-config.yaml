@@ -6,29 +6,35 @@ actions:
     endpoint:
       path: /router/actions/{actionId}/execute
       method: POST
-      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
     ui:
       label: Approve
       variant: success
       icon: CheckCircle
       confirmationMessage: 'This will create a research draft. Continue?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
 
   retry:
     endpoint:
       path: /router/actions/{actionId}/execute
       method: POST
-      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
     ui:
       label: Retry
       variant: primary
       icon: Play
       confirmationMessage: 'Retry creating research draft?'
+    onSuccess:
+      message: 'Research draft created!'
+      linkLabel: 'View Draft →'
 
   reject:
     endpoint:
       path: /router/actions/{actionId}
       method: PATCH
-      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
       body:
         status: rejected
     ui:
@@ -40,7 +46,7 @@ actions:
     endpoint:
       path: /router/actions/{actionId}
       method: PATCH
-      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
       body:
         status: archived
     ui:
@@ -52,7 +58,7 @@ actions:
     endpoint:
       path: /router/actions/{actionId}
       method: DELETE
-      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
     ui:
       label: Delete
       variant: secondary

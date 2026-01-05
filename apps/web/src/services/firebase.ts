@@ -13,9 +13,16 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  connectFirestoreEmulator,
   type Firestore,
 } from 'firebase/firestore';
-import { getAuth, signInWithCustomToken, signOut, type Auth } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithCustomToken,
+  signOut,
+  connectAuthEmulator,
+  type Auth,
+} from 'firebase/auth';
 import { config } from '@/config';
 
 let firebaseApp: FirebaseApp | null = null;
@@ -50,6 +57,17 @@ export function initializeFirebase(): void {
   });
 
   firebaseAuth = getAuth(firebaseApp);
+
+  // Connect to emulators when running on localhost
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  if (isLocalhost) {
+    connectFirestoreEmulator(firestoreClient, 'localhost', 8101);
+    connectAuthEmulator(firebaseAuth, 'http://localhost:8104', { disableWarnings: true });
+  }
+
   isInitialized = true;
 }
 

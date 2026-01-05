@@ -26,7 +26,7 @@ interface ConfigurableActionButtonProps {
   onSuccess?: () => void;
   onError?: (error: Error) => void;
   /** Called with execution result when action completes (may include resource_url) */
-  onResult?: (result: ActionExecutionResult) => void;
+  onResult?: (result: ActionExecutionResult, button: ResolvedActionButton) => void;
 }
 
 // Icon mapping for dynamic icon rendering
@@ -96,7 +96,7 @@ export function ConfigurableActionButton({
 
       // Call result callback if available (may include resource_url)
       if (result !== null) {
-        onResult?.(result);
+        onResult?.(result, button);
       }
 
       // Call success callback

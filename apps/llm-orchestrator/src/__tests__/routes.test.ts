@@ -17,12 +17,10 @@ import {
   createFakeSynthesizer,
   createFakeTitleGenerator,
   FakeLlmCallPublisher,
-  FakeLlmUsageTracker,
   FakeNotificationSender,
   FakePricingRepository,
   FakeResearchEventPublisher,
   FakeResearchRepository,
-  FakeUsageStatsRepository,
   FakeUserServiceClient,
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
@@ -71,8 +69,6 @@ describe('Research Routes - Unauthenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
-      llmUsageTracker: new FakeLlmUsageTracker(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -271,8 +267,6 @@ describe('Research Routes - Authenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
-      llmUsageTracker: new FakeLlmUsageTracker(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -1614,8 +1608,6 @@ describe('Research Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
         pricingRepo: new FakePricingRepository(),
-        usageStatsRepo: new FakeUsageStatsRepository(),
-        llmUsageTracker: new FakeLlmUsageTracker(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
@@ -1885,8 +1877,6 @@ describe('Research Routes - Authenticated', () => {
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         pricingRepo: new FakePricingRepository(),
-        usageStatsRepo: new FakeUsageStatsRepository(),
-        llmUsageTracker: new FakeLlmUsageTracker(),
         shareStorage: null,
         shareConfig: null,
         createResearchProvider: () => createFakeLlmResearchProvider(),
@@ -1933,32 +1923,6 @@ describe('Research Routes - Authenticated', () => {
       }
     });
   });
-
-  describe('GET /llm/usage-stats', () => {
-    it('returns 401 without auth', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/llm/usage-stats',
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('returns empty array when no stats exist', async () => {
-      const token = await createToken(TEST_USER_ID);
-
-      const response = await app.inject({
-        method: 'GET',
-        url: '/llm/usage-stats',
-        headers: { authorization: `Bearer ${token}` },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: unknown[] };
-      expect(body.success).toBe(true);
-      expect(body.data).toEqual([]);
-    });
-  });
 });
 
 describe('System Endpoints', () => {
@@ -1978,8 +1942,6 @@ describe('System Endpoints', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
-      llmUsageTracker: new FakeLlmUsageTracker(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -2044,8 +2006,6 @@ describe('Internal Routes', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       pricingRepo: new FakePricingRepository(),
-      usageStatsRepo: new FakeUsageStatsRepository(),
-      llmUsageTracker: new FakeLlmUsageTracker(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -2483,8 +2443,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         pricingRepo: new FakePricingRepository(),
-        usageStatsRepo: new FakeUsageStatsRepository(),
-        llmUsageTracker: new FakeLlmUsageTracker(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -3007,69 +2965,6 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('failed');
       expect(updatedResearch?.synthesisError).toContain('API key required');
-    });
-  });
-
-  describe('GET /internal/llm/usage-stats', () => {
-    it('returns 401 without auth', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/internal/llm/usage-stats',
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('returns empty array when no stats exist with valid auth', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/internal/llm/usage-stats',
-        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: unknown[] };
-      expect(body.success).toBe(true);
-      expect(body.data).toEqual([]);
-    });
-  });
-
-  describe('POST /internal/llm/track-usage', () => {
-    it('returns 401 without auth', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/llm/track-usage',
-        payload: {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
-          callType: 'research',
-          success: true,
-          inputTokens: 100,
-          outputTokens: 200,
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('tracks usage and returns success with valid auth', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/llm/track-usage',
-        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
-        payload: {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
-          callType: 'image_prompt',
-          success: true,
-          inputTokens: 500,
-          outputTokens: 100,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(true);
     });
   });
 });

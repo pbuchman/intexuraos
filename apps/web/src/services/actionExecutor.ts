@@ -22,14 +22,6 @@ interface RequestOptions {
 }
 
 /**
- * API response wrapper from backend.
- */
-interface ApiResponse {
-  success: boolean;
-  data?: ActionExecutionResult;
-}
-
-/**
  * Executes an action using the configured endpoint.
  *
  * Steps:
@@ -63,14 +55,13 @@ export async function executeAction(
     throw new Error('Action execution failed: some required variables are undefined');
   }
 
-  // Execute request
-  const response = await request<ApiResponse>(baseUrl, path, {
+  // Execute request - apiRequest already extracts data.data from the response
+  const result = await request<ActionExecutionResult | undefined>(baseUrl, path, {
     method: endpoint.method,
     body,
   });
 
-  // Extract execution result from response if available
-  return response.data ?? null;
+  return result ?? null;
 }
 
 /**

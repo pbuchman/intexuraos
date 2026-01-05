@@ -159,8 +159,27 @@ export async function runSynthesis(
     return { ok: false, error: synthesisResult.error.message };
   }
 
+  const synthesisContent = synthesisResult.value.content;
+  const synthesisUsage = synthesisResult.value.usage;
+
+  logger?.info(`[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
+
+  // Calculate aggregate totals from all LLM results + synthesis
+  const llmTotals = research.llmResults.reduce(
+    (acc, r) => ({
+      inputTokens: acc.inputTokens + (r.inputTokens ?? 0),
+      outputTokens: acc.outputTokens + (r.outputTokens ?? 0),
+      costUsd: acc.costUsd + (r.costUsd ?? 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+  );
+
+  const totalInputTokens = llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0);
+  const totalOutputTokens = llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0);
+  const totalCostUsd = llmTotals.costUsd + (synthesisUsage?.costUsd ?? 0);
+
   logger?.info(
-    `[4.3.2] Synthesis LLM call succeeded (${String(synthesisResult.value.length)} chars)`
+    `[4.3.3] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)}`
   );
 
   const now = new Date();
@@ -174,9 +193,10 @@ export async function runSynthesis(
     logger?.info('[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
-      synthesisResult.value,
+      synthesisContent,
       userId,
       imageApiKeys,
+      research.synthesisModel,
       logger
     );
     if (imageResult !== null) {
@@ -207,7 +227,7 @@ export async function runSynthesis(
 
     const html = generateShareableHtml({
       title: research.title,
-      synthesizedResult: synthesisResult.value,
+      synthesizedResult: synthesisContent,
       shareUrl,
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
@@ -236,9 +256,12 @@ export async function runSynthesis(
   logger?.info('[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
-    synthesizedResult: synthesisResult.value,
+    synthesizedResult: synthesisContent,
     completedAt: now.toISOString(),
     totalDurationMs,
+    totalInputTokens,
+    totalOutputTokens,
+    totalCostUsd,
     ...(shareInfo !== undefined && { shareInfo }),
   });
 
@@ -259,13 +282,29 @@ export async function runSynthesis(
 
 type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
-function selectImageModel(imageApiKeys: ImageApiKeys | undefined): ImageModel | null {
-  if (imageApiKeys?.google !== undefined) {
-    return 'gemini-2.5-flash-image';
+/**
+ * Select image generation model based on available API keys and synthesis model.
+ * When synthesis uses OpenAI (gpt-*), prefer GPT for images for consistency.
+ * Otherwise, prefer Google (gemini) as default.
+ */
+function selectImageModel(
+  imageApiKeys: ImageApiKeys | undefined,
+  synthesisModel?: string
+): ImageModel | null {
+  const hasGoogleKey = imageApiKeys?.google !== undefined;
+  const hasOpenAiKey = imageApiKeys?.openai !== undefined;
+
+  // If synthesis model is OpenAI-based, prefer GPT for images
+  const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
+
+  if (preferOpenAi) {
+    if (hasOpenAiKey) return 'gpt-image-1';
+    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+  } else {
+    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+    if (hasOpenAiKey) return 'gpt-image-1';
   }
-  if (imageApiKeys?.openai !== undefined) {
-    return 'gpt-image-1';
-  }
+
   return null;
 }
 
@@ -274,10 +313,11 @@ async function generateCoverImage(
   synthesizedResult: string,
   userId: string,
   imageApiKeys: ImageApiKeys | undefined,
+  synthesisModel: string | undefined,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
   const promptModel = 'gemini-2.5-pro';
-  const imageModel = selectImageModel(imageApiKeys);
+  const imageModel = selectImageModel(imageApiKeys, synthesisModel);
 
   if (imageModel === null) {
     logger?.info(

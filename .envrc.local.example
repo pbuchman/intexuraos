@@ -10,6 +10,16 @@
 #   npm run dev
 
 # =============================================================================
+# AUTH (backend services require non-prefixed names)
+# =============================================================================
+# The fastifyAuthPlugin expects AUTH_* without INTEXURAOS_ prefix.
+# Map from the prefixed versions loaded from Secret Manager.
+
+export AUTH_JWKS_URL=$INTEXURAOS_AUTH_JWKS_URL
+export AUTH_ISSUER=$INTEXURAOS_AUTH_ISSUER
+export AUTH_AUDIENCE=$INTEXURAOS_AUTH_AUDIENCE
+
+# =============================================================================
 # EMULATORS
 # =============================================================================
 # Uncomment to use local emulators instead of GCP services.
@@ -33,13 +43,16 @@ export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
 export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
 export INTEXURAOS_LLM_ORCHESTRATOR_URL=http://localhost:8116
 export INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=http://localhost:8117
+export INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=http://localhost:8118
 export INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=http://localhost:8119
+export INTEXURAOS_IMAGE_SERVICE_URL=http://localhost:8120
 
 # =============================================================================
 # GCS BUCKETS (for local fake-gcs-server)
 # =============================================================================
-# Required by whatsapp-service for media storage
+# Required for media storage
 export INTEXURAOS_WHATSAPP_MEDIA_BUCKET=intexuraos-whatsapp-media-local
+export INTEXURAOS_IMAGE_BUCKET=intexuraos-images-local
 
 # =============================================================================
 # PUB/SUB (for local Firebase emulator)
@@ -103,5 +116,11 @@ export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
 # PERSONAL IDENTIFIERS
 # =============================================================================
 # Used by Claude Code for sending WhatsApp messages and other personal actions
-export INTEXURAOS_MY_PHONE_NUMBER=
-export INTEXURAOS_USER_ID="google-oauth2|99999999999999999999"
+export INTEXURAOS_MY_PHONE_NUMBER=00000000000
+export INTEXURAOS_USER_ID="google-oauth2|113131655542389277022"
+
+# =============================================================================
+# LOCAL WEB APP URL
+# =============================================================================
+# Used for redirect URIs in Auth0 SPA configuration during local development
+export INTEXURAOS_WEB_APP_URL="http://localhost:3000"

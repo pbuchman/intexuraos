@@ -109,6 +109,9 @@ export interface Research {
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCostUsd?: number;
   skipSynthesis?: boolean;
 }
 
@@ -147,21 +150,4 @@ export interface ListResearchesResponse {
 export interface ConfirmPartialFailureResponse {
   action: PartialFailureDecision;
   message: string;
-}
-
-/**
- * LLM usage statistics per model.
- */
-export interface LlmUsageStats {
-  provider: LlmProvider;
-  model: string;
-  period: string;
-  calls: number;
-  successfulCalls: number;
-  failedCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  costUsd: number;
-  lastUpdatedAt: string;
 }

@@ -71,7 +71,7 @@ git show <commit-hash>               # See actual diff
 | `terraform/**`                           | Infrastructure (Terraform) |
 | `**/Dockerfile`                          | Docker Configuration       |
 | `.github/workflows/*`                    | CI/CD Pipeline             |
-| `firestore.indexes.json`                 | Database Design            |
+| `migrations/*.mjs`                       | Database Migrations        |
 | `**/vitest.config.ts`, `**/__tests__/**` | Testing Infrastructure     |
 | `scripts/*`                              | Development Tools          |
 

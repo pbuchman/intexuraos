@@ -69,7 +69,11 @@ export function createTitleGenerationService(
       }
 
       const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({ apiKey, model: TITLE_GENERATION_MODEL });
+      const geminiClient = createGeminiClient({
+        apiKey,
+        model: TITLE_GENERATION_MODEL,
+        userId,
+      });
 
       const contentPreview = content.length > 5000 ? content.slice(0, 5000) + '...' : content;
       const prompt = TITLE_PROMPT_TEMPLATE.replace('{CONTENT}', contentPreview);
@@ -83,7 +87,7 @@ export function createTitleGenerationService(
         });
       }
 
-      const title = result.value.trim().slice(0, MAX_TITLE_LENGTH);
+      const title = result.value.content.trim().slice(0, MAX_TITLE_LENGTH);
 
       return ok(title);
     },

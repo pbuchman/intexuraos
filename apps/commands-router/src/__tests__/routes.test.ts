@@ -1347,6 +1347,65 @@ describe('Commands Router Routes', () => {
     });
   });
 
+  describe('GET /internal/router/commands/:commandId', () => {
+    it('returns 401 without internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/router/commands/some-command-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 for non-existent command', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/router/commands/nonexistent',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns command with text for valid request', async () => {
+      app = await buildServer();
+
+      fakeCommandRepo.addCommand({
+        id: 'whatsapp_text:cmd-test',
+        userId: 'user-1',
+        sourceType: 'whatsapp_text',
+        externalId: 'cmd-test',
+        text: 'This is my test command text',
+        timestamp: '2025-01-01T12:00:00.000Z',
+        status: 'classified',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/router/commands/whatsapp_text:cmd-test',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { command: { id: string; text: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.command.id).toBe('whatsapp_text:cmd-test');
+      expect(body.data.command.text).toBe('This is my test command text');
+    });
+  });
+
   //   describe('PATCH /router/actions/:actionId (authenticated)', () => {
   //     it('returns 401 when no auth header', async () => {
   //       app = await buildServer();

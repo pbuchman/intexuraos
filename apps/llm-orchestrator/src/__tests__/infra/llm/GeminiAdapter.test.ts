@@ -18,39 +18,31 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
-const mockTracker = {
-  track: vi.fn(),
-};
+const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', mockTracker);
+    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-2.5-pro');
+      new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'gemini-2.5-pro',
+        userId: 'test-user-id',
       });
     });
 
-    it('works without tracker', async () => {
-      mockResearch.mockResolvedValue({
-        ok: true,
-        value: { content: 'Result', sources: [] },
-      });
-
-      const adapterNoTracker = new GeminiAdapter('test-key', 'gemini-2.5-pro');
-      const result = await adapterNoTracker.research('Test');
-
-      expect(result.ok).toBe(true);
+    it('creates adapter successfully', () => {
+      const testAdapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
+      expect(testAdapter).toBeDefined();
     });
   });
 
@@ -58,7 +50,7 @@ describe('GeminiAdapter', () => {
     it('delegates to Gemini client', async () => {
       mockResearch.mockResolvedValue({
         ok: true,
-        value: { content: 'Research result', sources: ['https://source.com'] },
+        value: { content: 'Research result', sources: ['https://source.com'], usage: mockUsage },
       });
 
       const result = await adapter.research('Test prompt');
@@ -103,21 +95,26 @@ describe('GeminiAdapter', () => {
     it('builds synthesis prompt and calls generate', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Synthesized result',
+        value: { content: 'Synthesized result', usage: mockUsage },
       });
 
       const result = await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT result' }]);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Synthesized result');
+        expect(result.value.content).toBe('Synthesized result');
+        expect(result.value.usage).toEqual({
+          inputTokens: 10,
+          outputTokens: 20,
+          costUsd: 0.001,
+        });
       }
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
     });
 
     it('includes external reports in synthesis prompt', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize(
         'Prompt',
@@ -129,7 +126,7 @@ describe('GeminiAdapter', () => {
     });
 
     it('uses synthesis context when provided', async () => {
-      mockGenerate.mockResolvedValue({ ok: true, value: 'Result' });
+      mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
 
       await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }], undefined, {
         language: 'en',
@@ -171,7 +168,7 @@ describe('GeminiAdapter', () => {
     it('delegates to generate with title prompt', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '  Generated Title  ',
+        value: { content: '  Generated Title  ', usage: mockUsage },
       });
 
       const result = await adapter.generateTitle('Test prompt');
@@ -206,7 +203,7 @@ describe('GeminiAdapter', () => {
     it('generates label for short content', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: '  Context label  ',
+        value: { content: '  Context label  ', usage: mockUsage },
       });
 
       const result = await adapter.generateContextLabel('Short context content');
@@ -224,7 +221,7 @@ describe('GeminiAdapter', () => {
     it('truncates long content to 2000 characters', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
-        value: 'Long content label',
+        value: { content: 'Long content label', usage: mockUsage },
       });
 
       const longContent = 'x'.repeat(3000);

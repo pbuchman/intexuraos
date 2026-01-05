@@ -9,6 +9,10 @@ vi.mock('@intexuraos/llm-audit', (): object => ({
   }),
 }));
 
+vi.mock('@intexuraos/llm-pricing', (): object => ({
+  logUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe('GptPromptAdapter', () => {
   beforeAll(() => {
     nock.disableNetConnect();
@@ -56,7 +60,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('AI technology article');
 
       expect(result.ok).toBe(true);
@@ -79,7 +83,7 @@ describe('GptPromptAdapter', () => {
           ],
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -99,7 +103,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'bad-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'bad-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -120,7 +124,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -132,7 +136,7 @@ describe('GptPromptAdapter', () => {
     it('returns API_ERROR for other errors', async () => {
       nock('https://api.openai.com').post('/v1/chat/completions').replyWithError('Server error');
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -146,7 +150,7 @@ describe('GptPromptAdapter', () => {
         choices: [],
       });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -177,7 +181,11 @@ describe('GptPromptAdapter', () => {
           choices: [{ message: { content: JSON.stringify(validResponse) } }],
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', model: 'gpt-4o' });
+      const adapter = new GptPromptAdapter({
+        apiKey: 'test-key',
+        model: 'gpt-4o',
+        userId: 'test-user',
+      });
       const result = await adapter.generateThumbnailPrompt('Test');
 
       expect(result.ok).toBe(true);

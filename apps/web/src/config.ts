@@ -20,7 +20,7 @@ export function getConfig(): AppConfig {
     mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
     llmOrchestratorUrl: getEnvVar('INTEXURAOS_LLM_ORCHESTRATOR_URL'),
     commandsRouterServiceUrl: getEnvVar('INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL'),
-    actionsAgentUrl: getEnvVar('INTEXURAOS_ACTIONS_AGENT_URL'),
+    actionsAgentUrl: getEnvVar('INTEXURAOS_ACTIONS_AGENT_SERVICE_URL'),
     dataInsightsServiceUrl: getEnvVar('INTEXURAOS_DATA_INSIGHTS_SERVICE_URL'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),

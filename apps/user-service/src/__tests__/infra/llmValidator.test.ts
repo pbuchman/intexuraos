@@ -31,6 +31,8 @@ const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
+  const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+  const testUserId = 'test-user-123';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,16 +43,17 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('google', 'test-api-key');
+        const result = await validator.validateKey('google', 'test-api-key', testUserId);
 
         expect(result.ok).toBe(true);
         expect(createGeminiClient).toHaveBeenCalledWith({
           apiKey: 'test-api-key',
           model: 'gemini-2.0-flash',
+          userId: testUserId,
         });
         expect(mockClient.generate).toHaveBeenCalled();
       });
@@ -61,7 +64,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('google', 'bad-key');
+        const result = await validator.validateKey('google', 'bad-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -78,7 +81,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('google', 'test-key');
+        const result = await validator.validateKey('google', 'test-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -91,16 +94,17 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('openai', 'sk-test-key');
+        const result = await validator.validateKey('openai', 'sk-test-key', testUserId);
 
         expect(result.ok).toBe(true);
         expect(createGptClient).toHaveBeenCalledWith({
           apiKey: 'sk-test-key',
           model: 'gpt-4o-mini',
+          userId: testUserId,
         });
       });
 
@@ -110,7 +114,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('openai', 'bad-key');
+        const result = await validator.validateKey('openai', 'bad-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -125,7 +129,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('openai', 'test-key');
+        const result = await validator.validateKey('openai', 'test-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -138,16 +142,17 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('anthropic', 'sk-ant-key');
+        const result = await validator.validateKey('anthropic', 'sk-ant-key', testUserId);
 
         expect(result.ok).toBe(true);
         expect(createClaudeClient).toHaveBeenCalledWith({
           apiKey: 'sk-ant-key',
           model: 'claude-3-5-haiku-20241022',
+          userId: testUserId,
         });
       });
 
@@ -157,7 +162,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('anthropic', 'bad-key');
+        const result = await validator.validateKey('anthropic', 'bad-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -174,7 +179,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('anthropic', 'test-key');
+        const result = await validator.validateKey('anthropic', 'test-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -187,16 +192,17 @@ describe('LlmValidatorImpl', () => {
     describe('perplexity provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('validated')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('perplexity', 'pplx-test-key');
+        const result = await validator.validateKey('perplexity', 'pplx-test-key', testUserId);
 
         expect(result.ok).toBe(true);
         expect(createPerplexityClient).toHaveBeenCalledWith({
           apiKey: 'pplx-test-key',
           model: 'sonar',
+          userId: testUserId,
         });
       });
 
@@ -206,7 +212,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('perplexity', 'bad-key');
+        const result = await validator.validateKey('perplexity', 'bad-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -221,7 +227,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.validateKey('perplexity', 'test-key');
+        const result = await validator.validateKey('perplexity', 'test-key', testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -238,11 +244,13 @@ describe('LlmValidatorImpl', () => {
     describe('google provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Gemini!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Gemini!', usage: mockUsage })),
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('google', 'test-key', testPrompt);
+        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -257,7 +265,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('google', 'test-key', testPrompt);
+        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -270,11 +278,11 @@ describe('LlmValidatorImpl', () => {
     describe('openai provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from GPT!')),
+          generate: vi.fn().mockResolvedValue(ok({ content: 'Hello from GPT!', usage: mockUsage })),
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('openai', 'sk-key', testPrompt);
+        const result = await validator.testRequest('openai', 'sk-key', testPrompt, testUserId);
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -288,7 +296,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGptClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('openai', 'sk-key', testPrompt);
+        const result = await validator.testRequest('openai', 'sk-key', testPrompt, testUserId);
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -301,11 +309,18 @@ describe('LlmValidatorImpl', () => {
     describe('anthropic provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Claude!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Claude!', usage: mockUsage })),
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('anthropic', 'sk-ant-key', testPrompt);
+        const result = await validator.testRequest(
+          'anthropic',
+          'sk-ant-key',
+          testPrompt,
+          testUserId
+        );
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -319,7 +334,12 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('anthropic', 'sk-ant-key', testPrompt);
+        const result = await validator.testRequest(
+          'anthropic',
+          'sk-ant-key',
+          testPrompt,
+          testUserId
+        );
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -332,11 +352,18 @@ describe('LlmValidatorImpl', () => {
     describe('perplexity provider', () => {
       it('returns content when test succeeds', async () => {
         const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok('Hello from Perplexity!')),
+          generate: vi
+            .fn()
+            .mockResolvedValue(ok({ content: 'Hello from Perplexity!', usage: mockUsage })),
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+        const result = await validator.testRequest(
+          'perplexity',
+          'pplx-key',
+          testPrompt,
+          testUserId
+        );
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -351,7 +378,12 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
 
-        const result = await validator.testRequest('perplexity', 'pplx-key', testPrompt);
+        const result = await validator.testRequest(
+          'perplexity',
+          'pplx-key',
+          testPrompt,
+          testUserId
+        );
 
         expect(result.ok).toBe(false);
         if (!result.ok) {

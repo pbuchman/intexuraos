@@ -265,7 +265,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Validate API key with actual provider (skipped if llmValidator is null, e.g., in tests)
       if (llmValidator !== null) {
-        const validationResult = await llmValidator.validateKey(body.provider, body.apiKey);
+        const validationResult = await llmValidator.validateKey(
+          body.provider,
+          body.apiKey,
+          params.uid
+        );
         if (!validationResult.ok) {
           return await reply.fail('INVALID_REQUEST', validationResult.error.message);
         }
@@ -408,7 +412,8 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const testResult = await llmValidator.testRequest(
         params.provider,
         decrypted.value,
-        testPrompt
+        testPrompt,
+        params.uid
       );
 
       if (!testResult.ok) {

@@ -8,6 +8,10 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+vi.mock('@intexuraos/llm-pricing', () => ({
+  logUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { createAuditContext } = await import('@intexuraos/llm-audit');
 const { createPerplexityClient } = await import('../index.js');
 
@@ -32,13 +36,17 @@ describe('createPerplexityClient', () => {
           },
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Research findings about AI.');
-        expect(result.value.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+        expect(result.value.usage).toMatchObject({ inputTokens: 100, outputTokens: 50 });
       }
     });
 
@@ -49,10 +57,38 @@ describe('createPerplexityClient', () => {
           choices: [{ message: { content: 'Response' } }],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: 'unknown-model' });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: 'unknown-model',
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
+    });
+
+    it('uses default pricing for unknown model', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+          },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: 'unknown-model',
+        userId: 'test-user',
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.costUsd).toBe(0.0015);
+      }
     });
 
     it('handles empty choices array', async () => {
@@ -60,7 +96,11 @@ describe('createPerplexityClient', () => {
         choices: [],
       });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -76,7 +116,11 @@ describe('createPerplexityClient', () => {
           choices: [{ message: {} }],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -93,7 +137,11 @@ describe('createPerplexityClient', () => {
           search_results: [{ url: 'https://source1.com' }, { url: 'https://source2.com' }],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -110,7 +158,11 @@ describe('createPerplexityClient', () => {
           choices: [{ message: { content: 'Content' } }],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -127,7 +179,11 @@ describe('createPerplexityClient', () => {
           search_results: [{ url: 'https://same.com' }, { url: 'https://same.com' }],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -144,7 +200,11 @@ describe('createPerplexityClient', () => {
           search_results: [{ url: 'https://valid.com' }, { title: 'No URL here' }, {}],
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
@@ -156,7 +216,11 @@ describe('createPerplexityClient', () => {
     it('returns INVALID_KEY error on 401', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(401, 'Unauthorized');
 
-      const client = createPerplexityClient({ apiKey: 'bad-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'bad-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -168,7 +232,11 @@ describe('createPerplexityClient', () => {
     it('returns RATE_LIMITED error on 429', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(429, 'Too Many Requests');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -180,7 +248,11 @@ describe('createPerplexityClient', () => {
     it('returns API_ERROR on general failure', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'Server error');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -192,7 +264,11 @@ describe('createPerplexityClient', () => {
     it('returns CONTEXT_LENGTH error when message contains context and length', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(400, 'context length exceeded');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -204,7 +280,11 @@ describe('createPerplexityClient', () => {
     it('returns TIMEOUT error when message contains timeout', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(408, 'Request timeout');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -216,7 +296,11 @@ describe('createPerplexityClient', () => {
     it('returns API_ERROR for non-PerplexityApiError', async () => {
       nock(API_BASE_URL).post('/chat/completions').replyWithError('Network failure');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
@@ -232,14 +316,19 @@ describe('createPerplexityClient', () => {
         .post('/chat/completions')
         .reply(200, {
           choices: [{ message: { content: 'Generated response' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated response');
+        expect(result.value.content).toBe('Generated response');
       }
     });
 
@@ -248,21 +337,30 @@ describe('createPerplexityClient', () => {
         .post('/chat/completions')
         .reply(200, {
           choices: [{ message: {} }],
+          usage: { prompt_tokens: 100, completion_tokens: 0 },
         });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Generate something');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('');
+        expect(result.value.content).toBe('');
       }
     });
 
     it('returns error on failure', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'Error');
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.generate('Test');
 
       expect(result.ok).toBe(false);
@@ -287,7 +385,11 @@ describe('createPerplexityClient', () => {
         error: vi.fn(),
       });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       await client.research('Test prompt');
 
       expect(createAuditContext).toHaveBeenCalledWith(
@@ -324,20 +426,17 @@ describe('createPerplexityClient', () => {
         error: vi.fn(),
       });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage?.providerCost).toBe(0.0123);
+        expect(result.value.usage.costUsd).toBe(0.0123);
       }
-      expect(mockSuccess).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inputTokens: 100,
-          outputTokens: 50,
-          providerCost: 0.0123,
-        })
-      );
     });
 
     it('calls audit context on error', async () => {
@@ -349,7 +448,11 @@ describe('createPerplexityClient', () => {
         error: mockError,
       });
 
-      const client = createPerplexityClient({ apiKey: 'test-key', model: TEST_MODEL });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+      });
       await client.research('Test prompt');
 
       expect(mockError).toHaveBeenCalled();

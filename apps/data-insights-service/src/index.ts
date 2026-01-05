@@ -4,8 +4,11 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
 import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepository.js';
+import { FirestoreCompositeFeedRepository } from './infra/firestore/compositeFeedRepository.js';
 import { createUserServiceClient } from './infra/user/userServiceClient.js';
 import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
+import { createFeedNameGenerationService } from './infra/gemini/feedNameGenerationService.js';
+import { createMobileNotificationsClient } from './infra/http/mobileNotificationsClient.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -27,6 +30,12 @@ async function main(): Promise<void> {
   initServices({
     dataSourceRepository: new FirestoreDataSourceRepository(),
     titleGenerationService: createTitleGenerationService(userServiceClient),
+    compositeFeedRepository: new FirestoreCompositeFeedRepository(),
+    feedNameGenerationService: createFeedNameGenerationService(userServiceClient),
+    mobileNotificationsClient: createMobileNotificationsClient({
+      baseUrl: config.mobileNotificationsServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+    }),
   });
 
   const app = await buildServer();

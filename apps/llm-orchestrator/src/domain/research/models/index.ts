@@ -15,5 +15,3 @@ export {
   createLlmResults,
   createResearch,
 } from './Research.js';
-
-export { type LlmUsageStats, type LlmUsageIncrement } from './LlmUsageStats.js';

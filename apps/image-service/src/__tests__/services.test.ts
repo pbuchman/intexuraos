@@ -70,7 +70,7 @@ describe('services', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator('google', 'test-key');
+      const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id');
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
@@ -80,7 +80,7 @@ describe('services', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'test-key');
+      const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id');
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
@@ -90,7 +90,7 @@ describe('services', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createImageGenerator('gpt-image-1', 'test-key');
+      const generator = services.createImageGenerator('gpt-image-1', 'test-key', 'test-user-id');
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();
@@ -100,7 +100,11 @@ describe('services', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createImageGenerator('gemini-2.5-flash-image', 'test-key');
+      const generator = services.createImageGenerator(
+        'gemini-2.5-flash-image',
+        'test-key',
+        'test-user-id'
+      );
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();

@@ -2,6 +2,8 @@ import type { ActionServiceClient } from './domain/ports/actionServiceClient.js'
 import type { ResearchServiceClient } from './domain/ports/researchServiceClient.js';
 import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
+import type { ActionTransitionRepository } from './domain/ports/actionTransitionRepository.js';
+import type { CommandsRouterClient } from './domain/ports/commandsRouterClient.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -14,11 +16,17 @@ import {
   createRetryPendingActionsUseCase,
   type RetryPendingActionsUseCase,
 } from './domain/usecases/retryPendingActions.js';
+import {
+  createChangeActionTypeUseCase,
+  type ChangeActionTypeUseCase,
+} from './domain/usecases/changeActionType.js';
 import pino from 'pino';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
+import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
+import { createCommandsRouterHttpClient } from './infra/http/commandsRouterHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
@@ -27,11 +35,14 @@ export interface Services {
   researchServiceClient: ResearchServiceClient;
   notificationSender: NotificationSender;
   actionRepository: ActionRepository;
+  actionTransitionRepository: ActionTransitionRepository;
+  commandsRouterClient: CommandsRouterClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
+  changeActionTypeUseCase: ChangeActionTypeUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
 }
@@ -39,6 +50,7 @@ export interface Services {
 export interface ServiceConfig {
   llmOrchestratorUrl: string;
   userServiceUrl: string;
+  commandsRouterUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -49,7 +61,13 @@ let container: Services | null = null;
 
 export function initServices(config: ServiceConfig): void {
   const actionRepository = createFirestoreActionRepository();
+  const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
+
+  const commandsRouterClient = createCommandsRouterHttpClient({
+    baseUrl: config.commandsRouterUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
 
   const researchServiceClient = createLlmOrchestratorClient({
     baseUrl: config.llmOrchestratorUrl,
@@ -90,16 +108,26 @@ export function initServices(config: ServiceConfig): void {
     logger: pino({ name: 'retryPendingActions' }),
   });
 
+  const changeActionTypeUseCase = createChangeActionTypeUseCase({
+    actionRepository,
+    actionTransitionRepository,
+    commandsRouterClient,
+    logger: pino({ name: 'changeActionType' }),
+  });
+
   container = {
     actionServiceClient,
     researchServiceClient,
     notificationSender,
     actionRepository,
+    actionTransitionRepository,
+    commandsRouterClient,
     actionEventPublisher,
     whatsappPublisher,
     handleResearchActionUseCase,
     executeResearchActionUseCase,
     retryPendingActionsUseCase,
+    changeActionTypeUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
   };

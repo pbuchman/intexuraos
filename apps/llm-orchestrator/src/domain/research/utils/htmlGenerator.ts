@@ -8,6 +8,7 @@ export interface LlmResultInput {
   model: string;
   result?: string;
   status: string;
+  sources?: string[];
 }
 
 export interface InputContextInput {
@@ -249,6 +250,41 @@ const PROSE_STYLES = `
   .provider-google { background: #e8f5e9; color: #2e7d32; }
   .provider-openai { background: #e3f2fd; color: #1565c0; }
   .provider-anthropic { background: #fce4ec; color: #c62828; }
+  .provider-perplexity { background: #ede7f6; color: #5e35b1; }
+
+  .sources {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .sources h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin: 0 0 0.5rem 0;
+  }
+
+  .sources ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+
+  .sources li {
+    font-size: 0.8125rem;
+    margin-bottom: 0.25rem;
+    word-break: break-all;
+  }
+
+  .sources a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .sources a:hover {
+    text-decoration: underline;
+  }
 
   footer {
     margin-top: 3rem;
@@ -282,6 +318,20 @@ const PROSE_STYLES = `
     }
   }
 `;
+
+function renderSources(sources: string[] | undefined): string {
+  if (sources === undefined || sources.length === 0) {
+    return '';
+  }
+  return `
+    <div class="sources">
+      <h4>Sources</h4>
+      <ul>
+        ${sources.map((url) => `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a></li>`).join('')}
+      </ul>
+    </div>
+  `;
+}
 
 export function generateShareableHtml(input: HtmlGeneratorInput): string {
   const {
@@ -333,6 +383,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
           </summary>
           <div class="detail-content prose">
             ${marked.parse(r.result ?? '', { async: false })}
+            ${renderSources(r.sources)}
           </div>
         </details>
       `

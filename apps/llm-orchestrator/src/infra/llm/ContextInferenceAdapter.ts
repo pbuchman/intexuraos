@@ -1,5 +1,6 @@
 /**
  * Context inference adapter using Gemini Flash for fast context extraction.
+ * Usage logging is handled by the client (packages/infra-gemini).
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
@@ -18,19 +19,14 @@ import {
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
 import type { Logger } from '@intexuraos/common-core';
-import type { LlmUsageTracker } from '../../domain/research/services/index.js';
 
 export class ContextInferenceAdapter implements ContextInferenceProvider {
   private readonly client: GeminiClient;
-  private readonly model: string;
   private readonly logger: Logger | undefined;
-  private readonly tracker: LlmUsageTracker | undefined;
 
-  constructor(apiKey: string, model: string, logger?: Logger, tracker?: LlmUsageTracker) {
-    this.client = createGeminiClient({ apiKey, model });
-    this.model = model;
+  constructor(apiKey: string, model: string, userId: string, logger?: Logger) {
+    this.client = createGeminiClient({ apiKey, model, userId });
     this.logger = logger;
-    this.tracker = tracker;
   }
 
   async inferResearchContext(
@@ -41,45 +37,14 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     const result = await this.client.generate(prompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'context_inference',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson<ResearchContext>(result.value, isResearchContext);
+    const parsed = parseJson<ResearchContext>(result.value.content, isResearchContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse research context');
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'context_inference',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: { code: 'API_ERROR', message: parsed.error },
-      };
+      return { ok: false, error: { code: 'API_ERROR', message: parsed.error } };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'context_inference',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
 
     return { ok: true, value: parsed.value };
   }
@@ -91,45 +56,14 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     const result = await this.client.generate(prompt);
 
     if (!result.ok) {
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'context_inference',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: mapToLlmError(result.error),
-      };
+      return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson<SynthesisContext>(result.value, isSynthesisContext);
+    const parsed = parseJson<SynthesisContext>(result.value.content, isSynthesisContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse synthesis context');
-      this.tracker?.track({
-        provider: 'google',
-        model: this.model,
-        callType: 'context_inference',
-        success: false,
-        inputTokens: 0,
-        outputTokens: 0,
-      });
-      return {
-        ok: false,
-        error: { code: 'API_ERROR', message: parsed.error },
-      };
+      return { ok: false, error: { code: 'API_ERROR', message: parsed.error } };
     }
-
-    this.tracker?.track({
-      provider: 'google',
-      model: this.model,
-      callType: 'context_inference',
-      success: true,
-      inputTokens: 0,
-      outputTokens: 0,
-    });
 
     return { ok: true, value: parsed.value };
   }

@@ -19,18 +19,15 @@ import type {
   LlmResearchResult,
   LlmResult,
   LlmSynthesisProvider,
-  LlmUsageIncrement,
-  LlmUsageStats,
+  LlmSynthesisResult,
   NotificationError,
   PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
   TitleGenerator,
-  UsageStatsRepository,
 } from '../domain/research/index.js';
 import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
-import type { LlmUsageTracker, TrackLlmCallParams } from '../services.js';
 import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
@@ -326,8 +323,8 @@ export function createFakeSynthesizer(
       _reports: { model: string; content: string }[],
       _additionalSources?: { content: string; label?: string }[],
       _synthesisContext?: SynthesisContext
-    ): Promise<Result<string, LlmError>> {
-      return ok(synthesisResult);
+    ): Promise<Result<LlmSynthesisResult, LlmError>> {
+      return ok({ content: synthesisResult });
     },
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
       return ok(titleResult);
@@ -347,7 +344,7 @@ export function createFailingSynthesizer(
       _reports: { model: string; content: string }[],
       _additionalSources?: { content: string; label?: string }[],
       _synthesisContext?: SynthesisContext
-    ): Promise<Result<string, LlmError>> {
+    ): Promise<Result<LlmSynthesisResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
     async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
@@ -446,60 +443,6 @@ export class FakePricingRepository implements PricingRepository {
 
   clear(): void {
     this.pricing.clear();
-  }
-}
-
-export class FakeUsageStatsRepository implements UsageStatsRepository {
-  private stats = new Map<string, LlmUsageStats>();
-
-  async increment(data: LlmUsageIncrement): Promise<void> {
-    const key = `${data.provider}_${data.model}_${data.callType}_total`;
-    const existing = this.stats.get(key);
-
-    if (existing !== undefined) {
-      this.stats.set(key, {
-        ...existing,
-        calls: existing.calls + 1,
-        successfulCalls: existing.successfulCalls + (data.success ? 1 : 0),
-        failedCalls: existing.failedCalls + (data.success ? 0 : 1),
-        inputTokens: existing.inputTokens + data.inputTokens,
-        outputTokens: existing.outputTokens + data.outputTokens,
-        totalTokens: existing.totalTokens + data.inputTokens + data.outputTokens,
-        costUsd: existing.costUsd + data.costUsd,
-        lastUpdatedAt: new Date().toISOString(),
-      });
-    } else {
-      this.stats.set(key, {
-        provider: data.provider,
-        model: data.model,
-        callType: data.callType,
-        period: 'total',
-        calls: 1,
-        successfulCalls: data.success ? 1 : 0,
-        failedCalls: data.success ? 0 : 1,
-        inputTokens: data.inputTokens,
-        outputTokens: data.outputTokens,
-        totalTokens: data.inputTokens + data.outputTokens,
-        costUsd: data.costUsd,
-        lastUpdatedAt: new Date().toISOString(),
-      });
-    }
-  }
-
-  async getAllTotals(): Promise<LlmUsageStats[]> {
-    return Array.from(this.stats.values()).filter((s) => s.period === 'total');
-  }
-
-  async getByPeriod(period: string): Promise<LlmUsageStats[]> {
-    return Array.from(this.stats.values()).filter((s) => s.period === period);
-  }
-
-  getAll(): LlmUsageStats[] {
-    return Array.from(this.stats.values());
-  }
-
-  clear(): void {
-    this.stats.clear();
   }
 }
 
@@ -602,20 +545,4 @@ export function createFailingContextInferrer(
       return err({ code: 'API_ERROR', message: errorMessage });
     },
   };
-}
-
-export class FakeLlmUsageTracker implements LlmUsageTracker {
-  private trackedCalls: TrackLlmCallParams[] = [];
-
-  track(params: TrackLlmCallParams): void {
-    this.trackedCalls.push(params);
-  }
-
-  getTrackedCalls(): TrackLlmCallParams[] {
-    return [...this.trackedCalls];
-  }
-
-  clear(): void {
-    this.trackedCalls = [];
-  }
 }

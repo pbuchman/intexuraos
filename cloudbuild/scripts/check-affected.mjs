@@ -35,13 +35,7 @@ const COMMON_DEPS = [
 
 const SPECIAL_TARGETS = {
   web: ['apps/web/'],
-  firestore: [
-    'firestore.indexes.json',
-    'firestore.rules',
-    'firebase.json',
-    'migrations/',
-    'scripts/migrate.mjs',
-  ],
+  firestore: ['firebase.json', 'migrations/', 'scripts/migrate.mjs'],
 };
 
 /**
@@ -80,6 +74,11 @@ function getLastSuccessfulBuildCommit() {
     return null;
   }
 
+  const REGION = process.env.REGION || 'europe-central2';
+  console.log(
+    `Querying Cloud Build API (project=${PROJECT_ID}, region=${REGION}, branch=${BRANCH_NAME})`
+  );
+
   try {
     let accessToken;
     try {
@@ -87,16 +86,16 @@ function getLastSuccessfulBuildCommit() {
         'curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | grep -o \'"access_token":"[^"]*\' | cut -d\'"\' -f4',
         { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 }
       ).trim();
-    } catch {
-      console.log('Could not get access token (expected locally)');
+    } catch (err) {
+      console.log(`Could not get access token (expected locally): ${err.message}`);
       return null;
     }
 
     if (!accessToken) {
+      console.log('Access token is empty');
       return null;
     }
 
-    const REGION = process.env.REGION || 'europe-west1';
     const filter = encodeURIComponent(`status="SUCCESS"`);
     const apiUrl = `https://cloudbuild.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/builds?filter=${filter}&pageSize=10`;
 
@@ -109,31 +108,50 @@ function getLastSuccessfulBuildCommit() {
     let data;
     try {
       data = JSON.parse(response);
-    } catch {
+    } catch (parseErr) {
+      console.log(`Failed to parse API response: ${parseErr.message}`);
+      console.log(`Response (first 500 chars): ${response.slice(0, 500)}`);
       return null;
     }
 
-    if (data.error || !data.builds || data.builds.length === 0) {
+    if (data.error) {
+      console.log(`Cloud Build API error: ${JSON.stringify(data.error)}`);
       return null;
     }
 
+    if (!data.builds || data.builds.length === 0) {
+      console.log('No successful builds found in API response');
+      return null;
+    }
+
+    console.log(`Found ${data.builds.length} successful build(s), checking for baseline...`);
     const currentCommit = process.env.COMMIT_SHA;
 
     for (const build of data.builds) {
       const buildCommit = build.substitutions?.COMMIT_SHA;
       const buildBranch = build.substitutions?.BRANCH_NAME;
 
-      if (buildCommit === currentCommit) continue;
-      if (buildBranch && buildBranch !== BRANCH_NAME) continue;
+      if (buildCommit === currentCommit) {
+        console.log(`  Skipping current commit: ${buildCommit}`);
+        continue;
+      }
+      if (buildBranch && buildBranch !== BRANCH_NAME) {
+        console.log(`  Skipping different branch: ${buildBranch} (want ${BRANCH_NAME})`);
+        continue;
+      }
 
       if (buildCommit && buildCommit.length === 40) {
         console.log(`Found last successful build: ${buildCommit}`);
         return buildCommit;
+      } else {
+        console.log(`  Build missing COMMIT_SHA substitution`);
       }
     }
 
+    console.log('No matching baseline commit found after checking all builds');
     return null;
-  } catch {
+  } catch (err) {
+    console.log(`Unexpected error querying Cloud Build API: ${err.message}`);
     return null;
   }
 }

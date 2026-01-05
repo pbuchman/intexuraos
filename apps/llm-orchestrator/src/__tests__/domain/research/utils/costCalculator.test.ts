@@ -69,6 +69,43 @@ describe('calculateAccurateCost', () => {
       const cost = calculateAccurateCost(usage, pricing);
       expect(cost).toBe(0.05178);
     });
+
+    it('returns costUsd directly when provided (from NormalizedUsage)', () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.04567,
+      };
+      const pricing: LlmPricing = {
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        inputPricePerMillion: 3,
+        outputPricePerMillion: 15,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      expect(cost).toBe(0.04567);
+    });
+
+    it('prefers providerCost over costUsd when both provided', () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        providerCost: 0.111,
+        costUsd: 0.222,
+      };
+      const pricing: LlmPricing = {
+        provider: 'perplexity',
+        model: 'sonar-pro',
+        inputPricePerMillion: 3,
+        outputPricePerMillion: 15,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      expect(cost).toBe(0.111);
+    });
   });
 
   describe('Anthropic cost calculation', () => {
@@ -245,6 +282,77 @@ describe('calculateAccurateCost', () => {
       // Input: 1000 * $3/M = $0.003
       // Output: 500 * $15/M = $0.0075
       expect(cost).toBe(0.0105);
+    });
+  });
+
+  describe('default multipliers when not provided in pricing', () => {
+    it('uses default cache multipliers for Anthropic when not specified', () => {
+      const usage: TokenUsage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 400,
+        cacheCreationTokens: 200,
+        webSearchCalls: 1,
+      };
+      const pricing: LlmPricing = {
+        provider: 'anthropic',
+        model: 'claude-3-opus',
+        inputPricePerMillion: 15,
+        outputPricePerMillion: 75,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      // Regular input: (1000 - 400) * $15/M = $0.009
+      // Cache read: 400 * $15/M * 0.1 (default) = $0.0006
+      // Cache creation: 200 * $15/M * 1.25 (default) = $0.00375
+      // Output: 500 * $75/M = $0.0375
+      // Web search: 1 * $0.01 (default) = $0.01
+      expect(cost).toBe(0.06085);
+    });
+
+    it('uses default cache multiplier for OpenAI when not specified', () => {
+      const usage: TokenUsage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        cachedTokens: 600,
+        webSearchCalls: 1,
+      };
+      const pricing: LlmPricing = {
+        provider: 'openai',
+        model: 'gpt-4',
+        inputPricePerMillion: 10,
+        outputPricePerMillion: 30,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      // Regular input: (1000 - 600) * $10/M = $0.004
+      // Cached: 600 * $10/M * 0.25 (default) = $0.0015
+      // Output: 500 * $30/M = $0.015
+      // Web search: 1 * $0.01 (default) = $0.01
+      expect(cost).toBe(0.0305);
+    });
+
+    it('uses default grounding cost for Google when not specified', () => {
+      const usage: TokenUsage = {
+        inputTokens: 1000,
+        outputTokens: 500,
+        groundingEnabled: true,
+      };
+      const pricing: LlmPricing = {
+        provider: 'google',
+        model: 'gemini-pro',
+        inputPricePerMillion: 1.25,
+        outputPricePerMillion: 5,
+        updatedAt: '2024-01-01T00:00:00Z',
+      };
+
+      const cost = calculateAccurateCost(usage, pricing);
+      // Input: 1000 * $1.25/M = $0.00125
+      // Output: 500 * $5/M = $0.0025
+      // Grounding: $0.035 (default)
+      expect(cost).toBe(0.03875);
     });
   });
 });

@@ -4,6 +4,11 @@
  */
 import type { DataSourceRepository } from './domain/dataSource/index.js';
 import type { TitleGenerationService } from './infra/gemini/titleGenerationService.js';
+import type {
+  CompositeFeedRepository,
+  FeedNameGenerationService,
+  MobileNotificationsClient,
+} from './domain/compositeFeed/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -11,6 +16,9 @@ import type { TitleGenerationService } from './infra/gemini/titleGenerationServi
 export interface ServiceContainer {
   dataSourceRepository: DataSourceRepository;
   titleGenerationService: TitleGenerationService;
+  compositeFeedRepository: CompositeFeedRepository;
+  feedNameGenerationService: FeedNameGenerationService;
+  mobileNotificationsClient: MobileNotificationsClient;
 }
 
 let container: ServiceContainer | null = null;

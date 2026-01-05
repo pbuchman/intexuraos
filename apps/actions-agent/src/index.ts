@@ -9,6 +9,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_LLM_ORCHESTRATOR_URL',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_COMMANDS_ROUTER_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   initServices({
     llmOrchestratorUrl: process.env['INTEXURAOS_LLM_ORCHESTRATOR_URL'] as string,
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
+    commandsRouterUrl: process.env['INTEXURAOS_COMMANDS_ROUTER_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
     whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] as string,

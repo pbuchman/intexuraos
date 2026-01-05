@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Database, Plus, Trash2 } from 'lucide-react';
+import { Database, Layers, Plus, Trash2 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useDataSources } from '@/hooks';
 import type { DataSource } from '@/types';
@@ -23,12 +23,36 @@ function truncateContent(content: string, maxLength = 150): string {
   return content.slice(0, maxLength).trim() + '...';
 }
 
+function DataInsightsTabs(): React.JSX.Element {
+  return (
+    <div className="mb-6 border-b border-slate-200">
+      <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+        <Link
+          to="/data-insights"
+          className="border-b-2 border-blue-500 px-1 py-4 text-sm font-medium text-blue-600"
+        >
+          <Database className="mr-2 inline h-4 w-4" />
+          Static Sources
+        </Link>
+        <Link
+          to="/data-insights/composite-feeds"
+          className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700"
+        >
+          <Layers className="mr-2 inline h-4 w-4" />
+          Composite Feeds
+        </Link>
+      </nav>
+    </div>
+  );
+}
+
 export function DataSourcesListPage(): React.JSX.Element {
   const { dataSources, loading, error, deleteDataSource } = useDataSources();
 
   if (loading) {
     return (
       <Layout>
+        <DataInsightsTabs />
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
@@ -38,6 +62,8 @@ export function DataSourcesListPage(): React.JSX.Element {
 
   return (
     <Layout>
+      <DataInsightsTabs />
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Data Sources</h2>
