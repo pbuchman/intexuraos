@@ -123,3 +123,7 @@ Ensure actions-agent has the commands-router URL in its environment.
 - [ ] HTTP client handles 404 gracefully
 - [ ] Client registered in services container
 - [ ] Env var documented and configured
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

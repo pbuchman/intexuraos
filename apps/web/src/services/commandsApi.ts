@@ -46,10 +46,13 @@ export async function getActions(
   return await apiRequest<ActionsResponse>(config.actionsAgentUrl, path, accessToken);
 }
 
-export async function updateActionStatus(
+export async function updateAction(
   accessToken: string,
   actionId: string,
-  status: 'processing' | 'rejected'
+  updates: {
+    status?: 'processing' | 'rejected' | 'archived';
+    type?: Action['type'];
+  }
 ): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
     config.actionsAgentUrl,
@@ -57,7 +60,7 @@ export async function updateActionStatus(
     accessToken,
     {
       method: 'PATCH',
-      body: { status },
+      body: updates,
     }
   );
   return response.action;

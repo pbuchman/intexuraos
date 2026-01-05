@@ -122,3 +122,7 @@ Requires:
 - [ ] Handler calls `changeActionTypeUseCase` when type provided
 - [ ] Returns 400 if type change attempted on wrong status
 - [ ] Returns 400 if type change without commandText
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

@@ -84,3 +84,7 @@ Add entry:
 - [ ] Firestore adapter implements port
 - [ ] Collection registered in firestore-collections.json
 - [ ] `npm run verify:firestore` passes
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

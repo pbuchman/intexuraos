@@ -4,16 +4,27 @@ import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
+import type { ActionTransitionRepository } from '../domain/ports/actionTransitionRepository.js';
+import type {
+  CommandsRouterClient,
+  CommandWithText,
+} from '../domain/ports/commandsRouterClient.js';
 import type { Action } from '../domain/models/action.js';
+import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import type { SupportedModel } from '@intexuraos/llm-contract';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
 } from '../domain/usecases/handleResearchAction.js';
+import {
+  createChangeActionTypeUseCase,
+  type ChangeActionTypeUseCase,
+} from '../domain/usecases/changeActionType.js';
 import type { Services } from '../services.js';
 import type { PublishError, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
+import pino from 'pino';
 
 export class FakeActionServiceClient implements ActionServiceClient {
   private statusUpdates = new Map<string, string>();
@@ -261,6 +272,60 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   }
 }
 
+export class FakeActionTransitionRepository implements ActionTransitionRepository {
+  private transitions: ActionTransition[] = [];
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getTransitions(): ActionTransition[] {
+    return this.transitions;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async save(transition: ActionTransition): Promise<void> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    this.transitions.push(transition);
+  }
+
+  async listByUserId(userId: string): Promise<ActionTransition[]> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    return this.transitions.filter((t) => t.userId === userId);
+  }
+}
+
+export class FakeCommandsRouterClient implements CommandsRouterClient {
+  private commands = new Map<string, CommandWithText>();
+  private failNext = false;
+  private failError: Error | null = null;
+
+  setCommand(id: string, text: string): void {
+    this.commands.set(id, { id, text });
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async getCommand(commandId: string): Promise<CommandWithText | null> {
+    if (this.failNext) {
+      this.failNext = false;
+      throw this.failError ?? new Error('Simulated failure');
+    }
+    return this.commands.get(commandId) ?? null;
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type {
   RetryResult,
@@ -311,12 +376,19 @@ export function createFakeServices(deps: {
   researchServiceClient: FakeResearchServiceClient;
   notificationSender: FakeNotificationSender;
   actionRepository?: FakeActionRepository;
+  actionTransitionRepository?: FakeActionTransitionRepository;
+  commandsRouterClient?: FakeCommandsRouterClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
+  changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
+  const actionRepository = deps.actionRepository ?? new FakeActionRepository();
+  const actionTransitionRepository =
+    deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
+  const commandsRouterClient = deps.commandsRouterClient ?? new FakeCommandsRouterClient();
 
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
@@ -325,11 +397,22 @@ export function createFakeServices(deps: {
       webAppUrl: 'http://test.app',
     });
 
+  const changeActionTypeUseCase: ChangeActionTypeUseCase =
+    deps.changeActionTypeUseCase ??
+    createChangeActionTypeUseCase({
+      actionRepository,
+      actionTransitionRepository,
+      commandsRouterClient,
+      logger: pino({ level: 'silent' }),
+    });
+
   return {
     actionServiceClient: deps.actionServiceClient,
     researchServiceClient: deps.researchServiceClient,
     notificationSender: deps.notificationSender,
-    actionRepository: deps.actionRepository ?? new FakeActionRepository(),
+    actionRepository,
+    actionTransitionRepository,
+    commandsRouterClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
@@ -337,6 +420,7 @@ export function createFakeServices(deps: {
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
+    changeActionTypeUseCase,
     research: handleResearchActionUseCase,
   };
 }

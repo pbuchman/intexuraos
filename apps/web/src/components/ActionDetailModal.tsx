@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import type { Action, Command, CommandType } from '@/types';
 import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
@@ -11,6 +11,7 @@ import {
   FileText,
   HelpCircle,
   Link,
+  Loader2,
   ListTodo,
   Search,
   X,
@@ -18,13 +19,26 @@ import {
 import { useActionConfig } from '@/hooks/useActionConfig';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
 import { Button } from './ui/Button';
+import { useAuth } from '@/context/AuthContext';
+import { updateAction } from '@/services/commandsApi';
 
 interface ActionDetailModalProps {
   action: Action;
   command: Command | undefined;
   onClose: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
+  onActionUpdated?: (action: Action) => void;
 }
+
+// Types that can be selected (excludes 'unclassified')
+const ACTION_TYPES: Exclude<CommandType, 'unclassified'>[] = [
+  'todo',
+  'research',
+  'note',
+  'link',
+  'calendar',
+  'reminder',
+];
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
   const iconClass = 'h-5 w-5';
@@ -66,9 +80,39 @@ export function ActionDetailModal({
   command,
   onClose,
   onActionSuccess,
+  onActionUpdated,
 }: ActionDetailModalProps): React.JSX.Element {
   const { buttons, isLoading } = useActionConfig(action);
+  const { getAccessToken } = useAuth();
   const [executionResult, setExecutionResult] = useState<ActionExecutionResult | null>(null);
+  const [selectedType, setSelectedType] = useState<CommandType>(action.type);
+  const [isChangingType, setIsChangingType] = useState(false);
+  const [typeChangeError, setTypeChangeError] = useState<string | null>(null);
+
+  const canChangeType = action.status === 'pending' || action.status === 'awaiting_approval';
+
+  const handleTypeChange = useCallback(
+    async (newType: CommandType): Promise<void> => {
+      if (newType === selectedType) return;
+      if (newType === 'unclassified') return; // Can't select unclassified
+
+      setIsChangingType(true);
+      setTypeChangeError(null);
+      try {
+        const token = await getAccessToken();
+        const updatedAction = await updateAction(token, action.id, { type: newType });
+        setSelectedType(newType);
+        onActionUpdated?.(updatedAction);
+      } catch (error) {
+        setTypeChangeError(error instanceof Error ? error.message : 'Failed to change type');
+        // Revert selection
+        setSelectedType(action.type);
+      } finally {
+        setIsChangingType(false);
+      }
+    },
+    [getAccessToken, action.id, action.type, onActionUpdated, selectedType]
+  );
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent): void => {
@@ -103,15 +147,40 @@ export function ActionDetailModal({
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-200 p-4">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 rounded-lg bg-slate-100 p-2">{getTypeIcon(action.type)}</div>
+            <div className="mt-0.5 rounded-lg bg-slate-100 p-2">{getTypeIcon(selectedType)}</div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">{action.title}</h2>
               <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-                  {getTypeLabel(action.type)}
-                </span>
+                {canChangeType ? (
+                  <div className="relative inline-flex items-center">
+                    <select
+                      value={selectedType}
+                      onChange={(e): void => {
+                        void handleTypeChange(e.target.value as CommandType);
+                      }}
+                      disabled={isChangingType}
+                      className="appearance-none rounded-full border border-slate-200 bg-slate-100 py-0.5 pl-2 pr-6 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {ACTION_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {getTypeLabel(t)}
+                        </option>
+                      ))}
+                    </select>
+                    {isChangingType && (
+                      <Loader2 className="absolute right-1.5 h-3 w-3 animate-spin text-slate-400" />
+                    )}
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                    {getTypeLabel(selectedType)}
+                  </span>
+                )}
                 <span>{String(Math.round(action.confidence * 100))}% confidence</span>
               </div>
+              {typeChangeError !== null && (
+                <p className="mt-1 text-xs text-red-600">{typeChangeError}</p>
+              )}
             </div>
           </div>
           <button
@@ -188,7 +257,7 @@ export function ActionDetailModal({
           <div className="border-t border-slate-200 p-4">
             <div className="rounded-lg border border-green-200 bg-green-50 p-4">
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
                 <div className="flex-1">
                   <h4 className="font-medium text-green-800">Action completed successfully</h4>
                   <p className="mt-1 text-sm text-green-700">

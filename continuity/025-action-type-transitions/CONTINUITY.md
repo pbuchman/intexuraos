@@ -6,21 +6,21 @@ Enable action type changes before dispatch, with transition logging for future c
 
 ## Status
 
-- **Done**: Planning
-- **Now**: Not started
-- **Next**: 1-0-domain-model
+- **Done**: Planning, 1-0-domain-model, 1-1-change-type-usecase, 1-2-extend-patch-endpoint, 1-3-commands-router-internal-endpoint, 2-0-web-ui-dropdown, 3-0-test-coverage, 3-1-final-verification
+- **Now**: Complete - Ready for archive
+- **Next**: N/A
 
 ## Subtasks
 
-| ID  | Title                             | Status  |
-| --- | --------------------------------- | ------- |
-| 1-0 | Domain model & repository         | pending |
-| 1-1 | Change type use case              | pending |
-| 1-2 | Extend PATCH endpoint             | pending |
-| 1-3 | Commands router internal endpoint | pending |
-| 2-0 | Web UI dropdown                   | pending |
-| 3-0 | Test coverage                     | pending |
-| 3-1 | Final verification                | pending |
+| ID  | Title                             | Status |
+| --- | --------------------------------- | ------ |
+| 1-0 | Domain model & repository         | done   |
+| 1-1 | Change type use case              | done   |
+| 1-2 | Extend PATCH endpoint             | done   |
+| 1-3 | Commands router internal endpoint | done   |
+| 2-0 | Web UI dropdown                   | done   |
+| 3-0 | Test coverage                     | done   |
+| 3-1 | Final verification                | done   |
 
 ## Key Decisions
 

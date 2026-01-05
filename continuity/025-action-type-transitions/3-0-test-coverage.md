@@ -97,3 +97,7 @@ Add to test fakes:
 - [ ] `npm run test` passes
 - [ ] Coverage report shows ≥95% for new files
 - [ ] No coverage threshold violations
+
+## Continuation
+
+**DO NOT STOP.** After completing this task and committing, immediately proceed to the next task without waiting for user input.

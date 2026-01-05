@@ -843,6 +843,12 @@ export function InboxPage(): React.JSX.Element {
             // Close modal after action completes
             setSelectedAction(null);
           }}
+          onActionUpdated={(updatedAction: Action): void => {
+            // Update action in local state
+            setActions((prev) => prev.map((a) => (a.id === updatedAction.id ? updatedAction : a)));
+            // Update selected action to reflect changes
+            setSelectedAction(updatedAction);
+          }}
         />
       )}
 
