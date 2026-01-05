@@ -385,7 +385,7 @@ module "secret_manager" {
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
     "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
-    "INTEXURAOS_ACTIONS_AGENT_URL"                = "Actions Agent Cloud Run URL for commands-router"
+    "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"                = "Actions Agent Cloud Run URL for commands-router"
     "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
@@ -948,7 +948,7 @@ module "commands_router" {
     INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_ACTIONS_AGENT_URL   = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_URL"]
+    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL   = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"]
   }
 
   env_vars = {

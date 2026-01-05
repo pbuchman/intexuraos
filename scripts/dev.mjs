@@ -188,8 +188,8 @@ const COMMON_SERVICE_ENV = {
 const SERVICE_ENV_MAPPINGS = {
   'commands-router': {
     INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTEXURAOS_ACTIONS_AGENT_URL:
-      process.env.INTEXURAOS_ACTIONS_AGENT_URL ?? 'http://localhost:8118',
+    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL:
+      process.env.INTEXURAOS_ACTIONS_AGENT_SERVICE_URL ?? 'http://localhost:8118',
   },
   'llm-orchestrator': {
     INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',

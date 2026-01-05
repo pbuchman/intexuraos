@@ -84,7 +84,13 @@ export function ActionDetailModal({
 }: ActionDetailModalProps): React.JSX.Element {
   const { buttons, isLoading } = useActionConfig(action);
   const { getAccessToken } = useAuth();
-  const [executionResult, setExecutionResult] = useState<ActionExecutionResult | null>(null);
+  const [executionResult, setExecutionResult] = useState<{
+    actionId: string;
+    status: 'completed' | 'failed';
+    resource_url?: string;
+    message?: string;
+    linkLabel?: string;
+  } | null>(null);
   const [selectedType, setSelectedType] = useState<CommandType>(action.type);
   const [isChangingType, setIsChangingType] = useState(false);
   const [typeChangeError, setTypeChangeError] = useState<string | null>(null);
@@ -126,9 +132,18 @@ export function ActionDetailModal({
     };
   }, [onClose]);
 
-  const handleResult = (result: ActionExecutionResult): void => {
+  const handleResult = (result: ActionExecutionResult, button: ResolvedActionButton): void => {
     if (result.resource_url !== undefined) {
-      setExecutionResult(result);
+      const newResult: typeof executionResult = {
+        actionId: result.actionId,
+        status: result.status,
+        resource_url: result.resource_url,
+      };
+      if (button.onSuccess !== undefined) {
+        newResult.message = button.onSuccess.message;
+        newResult.linkLabel = button.onSuccess.linkLabel;
+      }
+      setExecutionResult(newResult);
     }
   };
 
@@ -259,17 +274,16 @@ export function ActionDetailModal({
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
                 <div className="flex-1">
-                  <h4 className="font-medium text-green-800">Action completed successfully</h4>
-                  <p className="mt-1 text-sm text-green-700">
-                    Your {action.type} has been created and is ready.
-                  </p>
+                  <h4 className="font-medium text-green-800">
+                    {executionResult.message ?? 'Action completed successfully'}
+                  </h4>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <RouterLink
                       to={executionResult.resource_url ?? '#'}
                       className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
                     >
                       <ExternalLink className="h-4 w-4" />
-                      Open {action.type}
+                      {executionResult.linkLabel ?? `Open ${action.type}`}
                     </RouterLink>
                     <Button variant="secondary" onClick={onClose}>
                       Close

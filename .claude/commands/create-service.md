@@ -403,12 +403,6 @@ echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE
 echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
 ```
 
-Also add to `.envrc.local.example` for local development:
-
-```bash
-# <Service Name> Service
-export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
-```
 
 ### 12. Add to Root tsconfig.json
 
@@ -434,14 +428,19 @@ const SERVICES = [
 ];
 ```
 
-Choose an unused port in range 8110-8119 and an ANSI color code.
+Choose next unused port in range 8110-* and an ANSI color code.
 
-If service needs additional env vars, add them to `.envrc.local.example`:
+**Also add to `.envrc.local.example`** for local development (use the same port):
 
 ```bash
-# In the appropriate section
-export INTEXURAOS_<SERVICE>_SOME_VAR=local-value
+# <Service Name> Service
+export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
+
+# Add any service-specific environment variables
+# export INTEXURAOS_<SERVICE_NAME>_API_KEY=your-local-key
 ```
+
+This ensures developers can run the service locally with proper configuration.
 
 ### 14. Run Verification
 
