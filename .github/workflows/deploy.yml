@@ -42,4 +42,4 @@ jobs:
           gcloud builds triggers run intexuraos-dev-deploy \
             --branch="${GITHUB_REF_NAME}" \
             --region=europe-central2 \
-            --substitutions="_FORCE_DEPLOY=${{ inputs.force_deploy || 'false' }}"
+            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME},_FORCE_DEPLOY=${{ inputs.force_deploy || 'false' }}"

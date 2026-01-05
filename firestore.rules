@@ -23,6 +23,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Commands for real-time inbox updates
+    match /commands/{commandId} {
+      allow get: if isOwner(resource.data.userId);
+
+      // 💰 CostGuard: Query limit max 100 docs
+      allow list: if isAuthenticated()
+                  && request.query.limit <= 100
+                  && resource.data.userId == request.auth.uid;
+
+      // Client cannot write (backend-only)
+      allow write: if false;
+    }
+
     // Research documents for real-time status updates
     match /researches/{researchId} {
       allow get: if isOwner(resource.data.userId);
