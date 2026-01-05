@@ -83,7 +83,7 @@ Docs: [docs/architecture/service-to-service-communication.md](../docs/architectu
 
 ### Firestore Composite Indexes
 
-**RULE:** Multi-field queries require indexes in `firestore.indexes.json`. Queries fail in production without them.
+**RULE:** Multi-field queries require composite indexes. Define them in migrations (`migrations/*.mjs`) using `indexes` export. Queries fail in production without them.
 
 ---
 

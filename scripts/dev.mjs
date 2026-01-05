@@ -24,6 +24,7 @@ import { createInterface } from 'node:readline';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
@@ -74,6 +75,18 @@ async function checkDockerRunning() {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function generateFirestoreConfig() {
+  logOrchestrator('Generating Firestore config from migrations...');
+  const generatorPath = join(ROOT_DIR, 'scripts', 'generate-firestore-config.mjs');
+  const module = await import(pathToFileURL(generatorPath).href);
+  if (module.generate) {
+    const stats = await module.generate(true);
+    logOrchestrator(
+      `Generated ${stats.indexCount} indexes, ${stats.collectionCount} collection rules`
+    );
   }
 }
 
@@ -426,6 +439,7 @@ async function main() {
   validateEnvVars();
 
   try {
+    await generateFirestoreConfig();
     await startEmulators();
 
     if (!emulatorsOnly) {

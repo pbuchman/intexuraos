@@ -51,3 +51,7 @@ speechmatics-js-sdk/
 # Local Firestore export data
 data/firestore-export/
 
+# Generated Firestore config (source of truth: migrations/*.mjs)
+firestore.indexes.json
+firestore.rules
+

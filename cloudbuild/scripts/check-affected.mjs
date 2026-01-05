@@ -35,13 +35,7 @@ const COMMON_DEPS = [
 
 const SPECIAL_TARGETS = {
   web: ['apps/web/'],
-  firestore: [
-    'firestore.indexes.json',
-    'firestore.rules',
-    'firebase.json',
-    'migrations/',
-    'scripts/migrate.mjs',
-  ],
+  firestore: ['firebase.json', 'migrations/', 'scripts/migrate.mjs'],
 };
 
 /**
