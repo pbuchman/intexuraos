@@ -80,7 +80,7 @@ export default defineConfig(({ mode }) => {
             },
           ],
           share_target: {
-            action: '/',
+            action: '/share-target',
             method: 'GET',
             params: {
               title: 'title',
