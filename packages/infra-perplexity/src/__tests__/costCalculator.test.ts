@@ -16,6 +16,16 @@ describe('infra-perplexity costCalculator', () => {
       expect(calculateTextCost(usage, basePricing, 0.12)).toBe(0.12);
     });
 
+    it('uses usage.providerCost when pricing flag is false', () => {
+      const pricingNoFlag: ModelPricing = {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+        useProviderCost: false,
+      };
+      const usage = { inputTokens: 100, outputTokens: 100, providerCost: 0.08 };
+      expect(calculateTextCost(usage, pricingNoFlag, undefined)).toBe(0.08);
+    });
+
     it('falls back to calculation with request fee if provider cost missing', () => {
       const usage = { inputTokens: 1000, outputTokens: 500 };
       expect(calculateTextCost(usage, basePricing, undefined)).toBeCloseTo(0.0155, 6);

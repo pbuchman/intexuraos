@@ -160,5 +160,216 @@ describe('createClaudeClientV2', () => {
         // expect(result.value.usage.costUsd).toBeCloseTo(0.001125, 6);
       }
     });
+
+    it('extracts sources from web_search_tool_result blocks', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [
+          {
+            type: 'web_search_tool_result',
+            content: [
+              { url: 'https://example.com/page1' },
+              { url: 'https://example.com/page2' },
+            ],
+          },
+          { type: 'text', text: 'Result with source https://example.com/page3' },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toContain('https://example.com/page1');
+        expect(result.value.sources).toContain('https://example.com/page2');
+        expect(result.value.sources).toContain('https://example.com/page3');
+      }
+    });
+
+    it('returns error on API failure', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'bad-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
+
+    it('handles rate limit error', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(429, 'Rate limited'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+      }
+    });
+
+    it('handles overloaded error', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(529, 'Overloaded'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('OVERLOADED');
+      }
+    });
+
+    it('handles timeout error', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Request timeout'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('handles generic API error', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Internal error'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('handles non-APIError exceptions', async () => {
+      mockMessagesCreate.mockRejectedValue(new Error('Network failure'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('Network failure');
+      }
+    });
+  });
+
+  describe('generate', () => {
+    it('returns generated content with usage', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Generated text output.' }],
+        usage: { input_tokens: 200, output_tokens: 100 },
+      });
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.generate('Generate something');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('Generated text output.');
+        // Input: 200 * 3.0 = 600, Output: 100 * 15.0 = 1500
+        // Total: 2100 / 1M = 0.0021
+        expect(result.value.usage.costUsd).toBeCloseTo(0.0021, 6);
+      }
+    });
+
+    it('handles cache tokens in generate', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'Cached response' }],
+        usage: {
+          input_tokens: 200,
+          output_tokens: 100,
+          cache_read_input_tokens: 50,
+          cache_creation_input_tokens: 25,
+        },
+      });
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBe(75); // 50 + 25
+      }
+    });
+
+    it('returns error on API failure in generate', async () => {
+      mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
+
+      const pricing = createTestPricing();
+      const client = createClaudeClientV2({
+        apiKey: 'bad-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_KEY');
+      }
+    });
   });
 });

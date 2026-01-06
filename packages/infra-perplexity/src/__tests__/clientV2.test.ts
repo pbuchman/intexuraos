@@ -261,6 +261,23 @@ describe('createPerplexityClientV2', () => {
       );
     });
 
+    it('handles network error in research', async () => {
+      nock(API_BASE_URL).post('/chat/completions').replyWithError({ message: 'Network failure' });
+
+      const client = createPerplexityClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
     it('handles empty choices array', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
@@ -470,6 +487,58 @@ describe('createPerplexityClientV2', () => {
       if (result.ok) {
         // Falls back to token calculation: (100/1M * 3.0) + (50/1M * 15.0) = 0.00105
         expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 6);
+      }
+    });
+
+    it('handles undefined usage in response', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+        });
+
+      const client = createPerplexityClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage).toEqual({
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        });
+      }
+    });
+
+    it('handles undefined usage in generate response', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Response' } }],
+        });
+
+      const client = createPerplexityClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage).toEqual({
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costUsd: 0,
+        });
       }
     });
   });
