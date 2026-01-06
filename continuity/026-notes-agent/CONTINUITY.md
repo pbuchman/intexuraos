@@ -1,8 +1,8 @@
-# Continuity Ledger — 026 Notes Service
+# Continuity Ledger — 026 Notes Agent
 
 ## Goal
 
-Create `notes-service` with user-authenticated CRUD and internal POST endpoint.
+Create `notes-agent` with user-authenticated CRUD and internal POST endpoint.
 
 ## Success Criteria
 

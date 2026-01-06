@@ -186,7 +186,7 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    notes_service = {
+    notes_agent = {
       name      = "intexuraos-notes-agent"
       app_path  = "apps/notes-agent"
       port      = 8080
@@ -872,7 +872,7 @@ module "api_docs_hub" {
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
-    INTEXURAOS_NOTES_SERVICE_OPENAPI_URL                = "${module.notes_service.service_url}/openapi.json"
+    INTEXURAOS_NOTES_AGENT_OPENAPI_URL                = "${module.notes_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -888,7 +888,7 @@ module "api_docs_hub" {
     module.actions_agent,
     module.data_insights_service,
     module.image_service,
-    module.notes_service,
+    module.notes_agent,
   ]
 }
 
@@ -1093,18 +1093,18 @@ module "image_service" {
   ]
 }
 
-# Notes Service - User-scoped notes CRUD
-module "notes_service" {
+# Notes Agent - User-scoped notes CRUD
+module "notes_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.notes_service.name
-  service_account = module.iam.service_accounts["notes_service"]
-  port            = local.services.notes_service.port
-  min_scale       = local.services.notes_service.min_scale
-  max_scale       = local.services.notes_service.max_scale
+  service_name    = local.services.notes_agent.name
+  service_account = module.iam.service_accounts["notes_agent"]
+  port            = local.services.notes_agent.port
+  min_scale       = local.services.notes_agent.min_scale
+  max_scale       = local.services.notes_agent.max_scale
   labels          = local.common_labels
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notes-agent:latest"
@@ -1477,8 +1477,8 @@ output "github_wif_provider" {
   value       = module.github_wif.workload_identity_provider
 }
 
-output "notes_service_url" {
-  description = "Notes Service URL"
-  value       = module.notes_service.service_url
+output "notes_agent_url" {
+  description = "Notes Agent URL"
+  value       = module.notes_agent.service_url
 }
 

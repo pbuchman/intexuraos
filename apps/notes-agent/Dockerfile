@@ -1,4 +1,4 @@
-# IntexuraOS Notes Service Dockerfile
+# IntexuraOS Notes Agent Dockerfile
 # Multi-stage build with esbuild bundling.
 
 # Stage 1: Build

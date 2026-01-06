@@ -1,14 +1,14 @@
-# 026 — Notes Service
+# 026 — Notes Agent
 
 ## Goal
 
-Create a new `notes-service` for CRUD operations on user-scoped notes with tagging support.
+Create a new `notes-agent` for CRUD operations on user-scoped notes with tagging support.
 
 ## Scope
 
 ### In Scope
 
-- New service: `apps/notes-service`
+- New service: `apps/notes-agent`
 - Domain model: `Note` entity with user scoping, tags, source tracking
 - User-authenticated endpoints (JWT):
   - `GET /notes` — list user's notes
@@ -49,7 +49,7 @@ interface Note {
 
 - Follow `/create-service` checklist exactly
 - No browsing unrelated code
-- Firestore collection `notes` owned by `notes-service`
+- Firestore collection `notes` owned by `notes-agent`
 - Composite index: `userId` + `createdAt` for listing
 
 ## Success Criteria

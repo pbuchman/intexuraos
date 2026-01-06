@@ -96,7 +96,7 @@ describe('config', () => {
       process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] = 'prod-secret';
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/jwks';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
-      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'notes-service';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'notes-agent';
 
       const config = loadConfig();
 
@@ -107,7 +107,7 @@ describe('config', () => {
         auth: {
           jwksUrl: 'https://auth.example.com/jwks',
           issuer: 'https://auth.example.com/',
-          audience: 'notes-service',
+          audience: 'notes-agent',
         },
       });
     });
