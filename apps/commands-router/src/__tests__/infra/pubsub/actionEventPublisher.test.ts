@@ -2,30 +2,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionEventPublisher } from '../../../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
 
-const mockPublishMessage = vi.fn();
+const mockPublishToTopic = vi.fn();
 
-vi.mock('@google-cloud/pubsub', () => {
-  class MockTopic {
-    publishMessage = mockPublishMessage;
-  }
+vi.mock('@intexuraos/infra-pubsub', () => ({
+  BasePubSubPublisher: class {
+    protected projectId: string;
+    protected loggerName: string;
 
-  class MockPubSub {
-    topic(): MockTopic {
-      return new MockTopic();
+    constructor(config: { projectId: string; loggerName?: string }) {
+      this.projectId = config.projectId;
+      this.loggerName = config.loggerName ?? 'test';
     }
-  }
 
-  return {
-    PubSub: MockPubSub,
-  };
-});
+    async publishToTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToTopic(topicName, data, attributes);
+    }
+  },
+}));
 
 describe('ActionEventPublisher', () => {
   let publisher: ActionEventPublisher;
 
   beforeEach(() => {
-    mockPublishMessage.mockReset();
-    mockPublishMessage.mockResolvedValue('message-id-123');
+    mockPublishToTopic.mockReset();
+    mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
     process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'] = 'test-research-topic';
     publisher = new ActionEventPublisher({ projectId: 'test-project' });
   });
@@ -55,8 +62,9 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-research-topic', event, {
+        actionId: 'action-123',
+        actionType: 'research',
       });
     });
 
@@ -78,7 +86,10 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+        actionId: 'action-123',
+        actionType: 'todo',
+      });
     });
 
     it('skips publish for note action type', async () => {
@@ -99,11 +110,17 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+        actionId: 'action-123',
+        actionType: 'note',
+      });
     });
 
     it('returns error when publish fails', async () => {
-      mockPublishMessage.mockRejectedValue(new Error('Pub/Sub unavailable'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub unavailable' },
+      });
 
       const event: ActionCreatedEvent = {
         type: 'action.created',
@@ -147,10 +164,9 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalled();
 
-      const callArg = mockPublishMessage.mock.calls[0]?.[0] as { data: Buffer };
-      const publishedData = JSON.parse(callArg.data.toString()) as ActionCreatedEvent;
+      const [, publishedData] = mockPublishToTopic.mock.calls[0] as [string, ActionCreatedEvent];
       expect(publishedData.payload.selectedModels).toEqual([
         'gemini-2.5-pro',
         'o4-mini-deep-research',
