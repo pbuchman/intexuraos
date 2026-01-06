@@ -1,48 +1,33 @@
-/**
- * Cost calculator for Gemini models.
- * Uses pricing configuration passed from app-settings-service.
- */
+import type { TokenUsage, NormalizedUsage, ModelPricing, ImageSize } from '@intexuraos/llm-contract';
 
-import type { TokenUsage, NormalizedUsage } from '@intexuraos/llm-contract';
-import type { ModelPricing, ImageSize } from '@intexuraos/llm-contract';
-
-/**
- * Calculate text generation cost based on token usage and pricing.
- */
 export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number {
-  const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPricePerMillion;
-  const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPricePerMillion;
-  const groundingCost =
-    usage.groundingEnabled === true && pricing.groundingCostPerRequest !== undefined
-      ? pricing.groundingCostPerRequest
-      : 0;
-  return Math.round((inputCost + outputCost + groundingCost) * 1_000_000) / 1_000_000;
+  const inputPrice = pricing.inputPricePerMillion;
+  const outputPrice = pricing.outputPricePerMillion;
+  const groundingPrice = pricing.groundingCostPerRequest ?? 0;
+
+  const inputCost = usage.inputTokens * inputPrice;
+  const outputCost = usage.outputTokens * outputPrice;
+
+  // Safe Math: Calculate Grounding Scaled
+  const groundingCostScaled = (usage.groundingEnabled === true ? groundingPrice : 0) * 1_000_000;
+
+  const totalScaledCost = inputCost + outputCost + groundingCostScaled;
+
+  return Math.round(totalScaledCost) / 1_000_000;
 }
 
-/**
- * Calculate image generation cost based on size and pricing.
- */
 export function calculateImageCost(size: ImageSize, pricing: ModelPricing): number {
-  if (pricing.imagePricing === undefined) {
-    return 0;
-  }
+  if (!pricing.imagePricing) return 0;
   return pricing.imagePricing[size] ?? 0;
 }
 
-/**
- * Normalize raw token usage to standardized format with cost.
- */
 export function normalizeUsageV2(
   inputTokens: number,
   outputTokens: number,
   groundingEnabled: boolean,
   pricing: ModelPricing
 ): NormalizedUsage {
-  const usage: TokenUsage = {
-    inputTokens,
-    outputTokens,
-    groundingEnabled,
-  };
+  const usage: TokenUsage = { inputTokens, outputTokens, groundingEnabled };
   return {
     inputTokens,
     outputTokens,
