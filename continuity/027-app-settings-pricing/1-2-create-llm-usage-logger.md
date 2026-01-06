@@ -23,6 +23,7 @@ Stary pakiet pozostaje (cleanup later).
 ## Decision
 
 V2 clients import directly from @intexuraos/llm-pricing:
+
 ```typescript
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 ```

@@ -14,7 +14,7 @@ Obecna struktura `app_settings/llm_pricing` jest flat — jeden dokument z wszys
 
 ## Note
 
-Migracja ma numer 011 (nie 012) - była początkowo utworzona jako 012 ale przywrócona do 011 
+Migracja ma numer 011 (nie 012) - była początkowo utworzona jako 012 ale przywrócona do 011
 ponieważ to jest sekwencyjny numer w tym branchu.
 
 ## Scope

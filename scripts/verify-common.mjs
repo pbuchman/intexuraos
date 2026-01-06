@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Verify that packages/common contains only cross-cutting utilities.
+ * Verify that packages/common-core contains only cross-cutting utilities.
  * Fails if domain-specific keywords are detected (common dumping prevention).
  *
  * This is a conservative heuristic check. False positives are acceptable
@@ -11,26 +11,30 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const commonSrcDir = join(repoRoot, 'packages', 'common', 'src');
+const commonSrcDir = join(repoRoot, 'packages', 'common-core', 'src');
 
-// Keywords that indicate domain leakage into common
-// These are domain-specific concepts that should NOT be in common
+// Keywords that indicate domain leakage into common-core
+// These are domain-specific concepts that should NOT be in common-core
 // Note: Infrastructure clients (Firestore, Notion) are allowed as reusable utilities
 const FORBIDDEN_KEYWORDS = [
-  // Domain models
-  'User',
-  'Action',
-  'Prompt',
-  'PromptVault',
-  'Identity',
-  // External services that should be in app-specific infra
+  // Domain models from apps
+  'Action', // actions-agent domain
+  'Command', // commands-router domain
+  'Research', // llm-orchestrator domain
+  'Notification', // mobile-notifications-service domain
+  'Note', // notes-agent domain
+  'Feed', // data-insights-service domain
+  'DataSource', // data-insights-service domain
+  'Message', // whatsapp-service domain
+  'Webhook', // whatsapp-service domain
+  // External service specific
   'Auth0',
+  'WhatsApp',
+  'Notion',
   // Domain-specific concepts
+  'PromptVault',
   'Workspace',
-  // 'Database' - removed: generic term used in infrastructure
   'Block',
-  // 'Page' - removed: generic term
-  // 'Token' - removed: generic term used in auth utilities
   'Session',
   'Permission',
   'Role',
@@ -135,7 +139,7 @@ for (const file of files) {
 if (allViolations.length > 0) {
   console.error('❌ COMMON DUMPING DETECTED\n');
   console.error('The following files contain domain-specific keywords that');
-  console.error('should NOT be in packages/common:\n');
+  console.error('should NOT be in packages/common-core:\n');
 
   for (const { file, violations } of allViolations) {
     console.error(`  ${file}:`);

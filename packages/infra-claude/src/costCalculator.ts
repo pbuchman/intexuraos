@@ -17,18 +17,24 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
   const cacheReadTokens = usage.cacheReadTokens ?? 0;
   const cacheCreationTokens = usage.cacheCreationTokens ?? 0;
 
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.inputPricePerMillion * cacheReadMultiplier;
-  const cacheCreationCost = (cacheCreationTokens / 1_000_000) * pricing.inputPricePerMillion * cacheWriteMultiplier;
+  const cacheReadCost =
+    (cacheReadTokens / 1_000_000) * pricing.inputPricePerMillion * cacheReadMultiplier;
+  const cacheCreationCost =
+    (cacheCreationTokens / 1_000_000) * pricing.inputPricePerMillion * cacheWriteMultiplier;
 
   const regularInputTokens = usage.inputTokens - cacheReadTokens - cacheCreationTokens;
   const regularInputCost = (regularInputTokens / 1_000_000) * pricing.inputPricePerMillion;
 
   const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPricePerMillion;
 
-  const webSearchCost =
-    (usage.webSearchCalls ?? 0) * (pricing.webSearchCostPerCall ?? 0);
+  const webSearchCost = (usage.webSearchCalls ?? 0) * (pricing.webSearchCostPerCall ?? 0);
 
-  return Math.round((regularInputCost + cacheReadCost + cacheCreationCost + outputCost + webSearchCost) * 1_000_000) / 1_000_000;
+  return (
+    Math.round(
+      (regularInputCost + cacheReadCost + cacheCreationCost + outputCost + webSearchCost) *
+        1_000_000
+    ) / 1_000_000
+  );
 }
 
 /**
@@ -60,4 +66,3 @@ export function normalizeUsageV2(
     ...(webSearchCalls > 0 && { webSearchCalls }),
   };
 }
-

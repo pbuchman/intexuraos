@@ -55,4 +55,3 @@ export function normalizeUsageV2(
     costUsd: calculateTextCost(usage, pricing, providerCost),
   };
 }
-

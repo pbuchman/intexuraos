@@ -226,4 +226,3 @@ function countWebSearchCalls(response: Anthropic.Message): number {
   }
   return count;
 }
-

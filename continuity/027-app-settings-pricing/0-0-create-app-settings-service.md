@@ -62,8 +62,8 @@ Użyj .claude/commands/create-service.md jako template.
 - apps/app-settings-service/src/domain/ports/index.ts
 - apps/app-settings-service/src/infra/firestore/index.ts (FirestorePricingRepository)
 - apps/app-settings-service/src/routes/internalRoutes.ts
-- apps/app-settings-service/src/__tests__/routes/internalRoutes.test.ts
-- apps/app-settings-service/src/__tests__/infra/FirestorePricingRepository.test.ts
+- apps/app-settings-service/src/**tests**/routes/internalRoutes.test.ts
+- apps/app-settings-service/src/**tests**/infra/FirestorePricingRepository.test.ts
 - cloudbuild/scripts/deploy-app-settings-service.sh
 - terraform/environments/dev/main.tf (updated)
 

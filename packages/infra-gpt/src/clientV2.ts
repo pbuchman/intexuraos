@@ -73,7 +73,12 @@ export function createGptClientV2(config: GptConfigV2): GptClientV2 {
 
   function extractUsageDetails(
     usage: OpenAI.Responses.ResponseUsage | OpenAI.CompletionUsage | undefined
-  ): { inputTokens: number; outputTokens: number; cachedTokens: number; reasoningTokens: number | undefined } {
+  ): {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    reasoningTokens: number | undefined;
+  } {
     if (usage === undefined) {
       return { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: undefined };
     }
@@ -200,12 +205,13 @@ export function createGptClientV2(config: GptConfigV2): GptClientV2 {
 
       try {
         const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
+        // Note: gpt-image-1 does not support response_format parameter
+        // It returns b64_json by default
         const response = await client.images.generate({
           model: IMAGE_MODEL,
           prompt,
           n: 1,
           size,
-          response_format: 'b64_json',
         });
 
         const b64Data = response.data?.[0]?.b64_json;
@@ -288,4 +294,3 @@ function countWebSearchCalls(response: OpenAI.Responses.Response): number {
   }
   return count;
 }
-

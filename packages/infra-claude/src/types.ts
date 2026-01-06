@@ -21,4 +21,3 @@ export interface ClaudeConfigV2 {
   userId: string;
   pricing: import('@intexuraos/llm-contract').ModelPricing;
 }
-
