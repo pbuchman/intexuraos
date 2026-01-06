@@ -36,7 +36,7 @@ describe('infra-gemini costCalculator', () => {
       const pricingWithImage: ModelPricing = {
         inputPricePerMillion: 0.1,
         outputPricePerMillion: 0.4,
-        imagePricing: { '1024x1024': 0.04, '512x512': 0.02 },
+        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.06 },
       };
       expect(calculateImageCost('1024x1024', pricingWithImage)).toBe(0.04);
     });
@@ -53,7 +53,7 @@ describe('infra-gemini costCalculator', () => {
       const pricingWithImage: ModelPricing = {
         inputPricePerMillion: 0.1,
         outputPricePerMillion: 0.4,
-        imagePricing: { '512x512': 0.02 },
+        imagePricing: { '1536x1024': 0.06 },
       };
       expect(calculateImageCost('1024x1024', pricingWithImage)).toBe(0);
     });
