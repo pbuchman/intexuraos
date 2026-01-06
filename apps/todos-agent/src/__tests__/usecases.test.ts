@@ -574,7 +574,7 @@ describe('reorderTodoItems', () => {
     }
   });
 
-  it('returns INVALID_OPERATION for mismatched items', async () => {
+  it('returns INVALID_OPERATION for mismatched item id', async () => {
     const createResult = await todoRepository.create({
       userId: 'user-1',
       title: 'Test',
@@ -596,6 +596,36 @@ describe('reorderTodoItems', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('INVALID_OPERATION');
+    }
+  });
+
+  it('returns INVALID_OPERATION for item count mismatch', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }, { title: 'Item 2' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const firstItemId = createResult.value.items[0]?.id;
+    expect(firstItemId).toBeDefined();
+    if (firstItemId === undefined) return;
+
+    const result = await reorderTodoItems(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { itemIds: [firstItemId] }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_OPERATION');
+      expect(result.error.message).toBe('Item count mismatch');
     }
   });
 });
@@ -690,6 +720,893 @@ describe('unarchiveTodo', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.archived).toBe(false);
+    }
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await unarchiveTodo(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await unarchiveTodo(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'other-user'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns success when todo is already unarchived', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await unarchiveTodo(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.archived).toBe(false);
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await unarchiveTodo(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'completed';
+    todo.archived = true;
+    await todoRepository.update(todo.id, todo);
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await unarchiveTodo(
+      { todoRepository, logger: mockLogger },
+      todo.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('addTodoItem - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1',
+      { title: 'New Item' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'other-user',
+      { title: 'New Item' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1',
+      { title: 'New Item' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { title: 'New Item' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('archiveTodo - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'completed';
+    await todoRepository.update(todo.id, todo);
+
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      todo.id,
+      'other-user'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns success when todo is already archived', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'completed';
+    todo.archived = true;
+    await todoRepository.update(todo.id, todo);
+
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      todo.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.archived).toBe(true);
+    }
+  });
+
+  it('archives cancelled todo', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'cancelled';
+    await todoRepository.update(todo.id, todo);
+
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      todo.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.archived).toBe(true);
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'completed';
+    await todoRepository.update(todo.id, todo);
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await archiveTodo(
+      { todoRepository, logger: mockLogger },
+      todo.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('getTodo - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns error on storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await getTodo(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('updateTodo - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await updateTodo(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1',
+      { title: 'Updated' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await updateTodo(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1',
+      { title: 'Updated' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await updateTodo(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { title: 'Updated' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('deleteTodo - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await deleteTodo(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await deleteTodo(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on delete storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    todoRepository.simulateMethodError('delete', { code: 'STORAGE_ERROR', message: 'Delete failed' });
+
+    const result = await deleteTodo(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('listTodos - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns error on storage failure', async () => {
+    todoRepository.simulateMethodError('findByUserId', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await listTodos(
+      { todoRepository, logger: mockLogger },
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('updateTodoItem - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'item-id',
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'other-user',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns error on storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'item-id',
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('updates item title and priority', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { title: 'Updated Title', priority: 'high' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items[0]?.title).toBe('Updated Title');
+      expect(result.value.items[0]?.priority).toBe('high');
+    }
+  });
+
+  it('sets in_progress when item marked in_progress', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }, { title: 'Item 2' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { status: 'in_progress' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('in_progress');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('deleteTodoItem - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await deleteTodoItem(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'item-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await deleteTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'other-user'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns NOT_FOUND for non-existent item', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await deleteTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'non-existent-item',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await deleteTodoItem(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'item-id',
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await deleteTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('reorderTodoItems - additional coverage', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await reorderTodoItems(
+      { todoRepository, logger: mockLogger },
+      'non-existent',
+      'user-1',
+      { itemIds: [] }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await reorderTodoItems(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'other-user',
+      { itemIds: [] }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await reorderTodoItems(
+      { todoRepository, logger: mockLogger },
+      'any-id',
+      'user-1',
+      { itemIds: [] }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }, { title: 'Item 2' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const items = createResult.value.items;
+    const itemIds = items.map((item) => item.id);
+
+    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+
+    const result = await reorderTodoItems(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { itemIds }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
     }
   });
 });
