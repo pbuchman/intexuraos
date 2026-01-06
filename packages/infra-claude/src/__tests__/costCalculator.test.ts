@@ -26,6 +26,40 @@ describe('infra-claude costCalculator', () => {
       // Total: 6975 / 1M = 0.006975
       expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.006975, 6);
     });
+
+    it('uses default multipliers when not provided', () => {
+      const minimalPricing: ModelPricing = {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+      };
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 100,
+        cachedTokens: 2000,
+        cacheCreationTokens: 500,
+      };
+      // Default: cacheReadMultiplier=0.1, cacheWriteMultiplier=1.25
+      // Same calculation as above: 0.006975
+      expect(calculateTextCost(usage, minimalPricing)).toBeCloseTo(0.006975, 6);
+    });
+
+    it('handles undefined cache tokens', () => {
+      const usage = { inputTokens: 1000, outputTokens: 100 };
+      // Regular: 1000 * 3 = 3000
+      // Output: 100 * 15 = 1500
+      // Total: 4500 / 1M = 0.0045
+      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0045, 6);
+    });
+
+    it('handles web search cost when undefined in pricing', () => {
+      const pricingWithoutSearch: ModelPricing = {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+      };
+      const usage = { inputTokens: 1000, outputTokens: 100, webSearchCalls: 5 };
+      // Search cost defaults to 0
+      expect(calculateTextCost(usage, pricingWithoutSearch)).toBeCloseTo(0.0045, 6);
+    });
   });
 
   describe('normalizeUsageV2', () => {

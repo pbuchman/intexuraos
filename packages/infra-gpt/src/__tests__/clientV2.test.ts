@@ -506,5 +506,75 @@ describe('createGptClientV2', () => {
         })
       );
     });
+
+    it('handles URL-based image response', async () => {
+      const fakeImageData = Buffer.from('url-fetched-image-data');
+      const mockFetch = vi.fn().mockResolvedValue({
+        arrayBuffer: () => Promise.resolve(fakeImageData.buffer),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      mockImagesGenerate.mockResolvedValue({
+        data: [{ url: 'https://example.com/image.png' }],
+      });
+
+      const client = createGptClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.imageData).toBeInstanceOf(Buffer);
+      }
+      expect(mockFetch).toHaveBeenCalledWith('https://example.com/image.png');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('handles API error during image generation', async () => {
+      mockImagesGenerate.mockRejectedValue(new MockAPIError(500, 'Internal server error'));
+
+      const client = createGptClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+  });
+
+  describe('extractUsageDetails edge cases', () => {
+    it('handles undefined usage', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Response' } }],
+        usage: undefined,
+      });
+
+      const client = createGptClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(0);
+        expect(result.value.usage.outputTokens).toBe(0);
+      }
+    });
   });
 });

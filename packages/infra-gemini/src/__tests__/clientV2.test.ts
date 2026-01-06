@@ -519,5 +519,23 @@ describe('createGeminiClientV2', () => {
         })
       );
     });
+
+    it('handles API error during image generation', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('Internal server error'));
+
+      const client = createGeminiClientV2({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
   });
 });

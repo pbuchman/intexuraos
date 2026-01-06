@@ -70,5 +70,34 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(401);
     });
+
+    it('returns error when note creation fails', async () => {
+      ctx.noteRepository.simulateMethodError('create', {
+        code: 'STORAGE_ERROR',
+        message: 'Database write failed',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notes/notes',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-id',
+          title: 'Note',
+          content: 'Content',
+          tags: [],
+          source: 'test',
+          sourceId: 'src-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Database write failed');
+    });
   });
 });
