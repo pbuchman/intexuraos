@@ -9,10 +9,11 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
   const cacheWriteMultiplier = pricing.cacheWriteMultiplier ?? 1.25;
 
   const regularInput = usage.inputTokens;
+  // Fallback to 0 if undefined
   const cacheRead = usage.cachedTokens ?? 0;
   const cacheWrite = usage.cacheCreationTokens ?? 0;
 
-  // Scaled Math
+  // Scaled Math for Precision
   const regularCost = regularInput * inputPrice;
   const readCost = cacheRead * inputPrice * cacheReadMultiplier;
   const writeCost = cacheWrite * inputPrice * cacheWriteMultiplier;
@@ -29,7 +30,7 @@ export function normalizeUsageV2(
   outputTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number,
-  webSearchCalls: number, // Added to match client call
+  webSearchCalls: number,
   pricing: ModelPricing
 ): NormalizedUsage {
   const usage: TokenUsage = {
@@ -40,13 +41,16 @@ export function normalizeUsageV2(
     webSearchCalls,
   };
 
+  // Aggregate cache tokens to satisfy the shared contract
+  const totalCacheTokens = cacheReadTokens + cacheWriteTokens;
+
   return {
     inputTokens,
     outputTokens,
-    totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+    totalTokens: inputTokens + outputTokens + totalCacheTokens,
     costUsd: calculateTextCost(usage, pricing),
-    ...(cacheReadTokens > 0 && { cacheReadTokens }),
-    ...(cacheWriteTokens > 0 && { cacheWriteTokens }),
+    // Map both Read and Write into the single standard field
+    ...(totalCacheTokens > 0 && { cacheTokens: totalCacheTokens }),
     ...(webSearchCalls > 0 && { webSearchCalls }),
   };
 }
