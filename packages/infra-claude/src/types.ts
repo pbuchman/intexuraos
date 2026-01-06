@@ -6,16 +6,10 @@ export type {
   ModelPricing,
 } from '@intexuraos/llm-contract';
 
-export interface ClaudeConfig {
-  apiKey: string;
-  model: string;
-  userId: string;
-}
-
 /**
- * V2 configuration with explicit pricing (no hardcoded values).
+ * Claude client configuration with explicit pricing.
  */
-export interface ClaudeConfigV2 {
+export interface ClaudeConfig {
   apiKey: string;
   model: string;
   userId: string;

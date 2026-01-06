@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
-import { LlmValidatorImpl } from '../../infra/llm/LlmValidatorImpl.js';
+import { LlmValidatorImpl, type ValidationPricing } from '../../infra/llm/LlmValidatorImpl.js';
 
 // Mock the infra packages
 vi.mock('@intexuraos/infra-gemini', () => ({
@@ -29,6 +29,13 @@ const { createGptClient } = await import('@intexuraos/infra-gpt');
 const { createClaudeClient } = await import('@intexuraos/infra-claude');
 const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 
+const testPricing: ValidationPricing = {
+  google: { inputPricePerMillion: 0.1, outputPricePerMillion: 0.4 },
+  openai: { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
+  anthropic: { inputPricePerMillion: 0.8, outputPricePerMillion: 4.0 },
+  perplexity: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
+};
+
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
   const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
@@ -36,7 +43,7 @@ describe('LlmValidatorImpl', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    validator = new LlmValidatorImpl();
+    validator = new LlmValidatorImpl(testPricing);
   });
 
   describe('validateKey', () => {
@@ -54,6 +61,7 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'test-api-key',
           model: 'gemini-2.0-flash',
           userId: testUserId,
+          pricing: testPricing.google,
         });
         expect(mockClient.generate).toHaveBeenCalled();
       });
@@ -105,6 +113,7 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'sk-test-key',
           model: 'gpt-4o-mini',
           userId: testUserId,
+          pricing: testPricing.openai,
         });
       });
 
@@ -153,6 +162,7 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'sk-ant-key',
           model: 'claude-3-5-haiku-20241022',
           userId: testUserId,
+          pricing: testPricing.anthropic,
         });
       });
 
@@ -203,6 +213,7 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'pplx-test-key',
           model: 'sonar',
           userId: testUserId,
+          pricing: testPricing.perplexity,
         });
       });
 

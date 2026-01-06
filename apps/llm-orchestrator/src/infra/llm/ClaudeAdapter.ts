@@ -4,6 +4,7 @@
  */
 
 import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
@@ -14,8 +15,8 @@ import type {
 export class ClaudeAdapter implements LlmResearchProvider {
   private readonly client: ClaudeClient;
 
-  constructor(apiKey: string, model: string, userId: string) {
-    this.client = createClaudeClient({ apiKey, model, userId });
+  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+    this.client = createClaudeClient({ apiKey, model, userId, pricing });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

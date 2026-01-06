@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 
@@ -16,23 +17,29 @@ vi.mock('@intexuraos/infra-claude', () => ({
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 5.0,
+  outputPricePerMillion: 25.0,
+};
+
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
+    adapter = new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id');
+      new ClaudeAdapter('test-key', 'claude-opus-4-5-20251101', 'test-user-id', testPricing);
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'claude-opus-4-5-20251101',
         userId: 'test-user-id',
+        pricing: testPricing,
       });
     });
   });

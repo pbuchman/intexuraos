@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTextCost, normalizeUsageV2 } from '../costCalculator.js';
+import { calculateTextCost, normalizeUsage } from '../costCalculator.js';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
 describe('infra-perplexity costCalculator', () => {
@@ -32,9 +32,9 @@ describe('infra-perplexity costCalculator', () => {
     });
   });
 
-  describe('normalizeUsageV2', () => {
+  describe('normalizeUsage', () => {
     it('normalizes usage using provider cost priority', () => {
-      const result = normalizeUsageV2(1000, 500, 0.05, basePricing);
+      const result = normalizeUsage(1000, 500, 0.05, basePricing);
       expect(result.costUsd).toBe(0.05);
       expect(result.totalTokens).toBe(1500);
     });

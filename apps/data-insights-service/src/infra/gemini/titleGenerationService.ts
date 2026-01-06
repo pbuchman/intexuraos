@@ -6,6 +6,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
 
@@ -45,7 +46,8 @@ Title:`;
  * Create a title generation service.
  */
 export function createTitleGenerationService(
-  userServiceClient: UserServiceClient
+  userServiceClient: UserServiceClient,
+  pricing: ModelPricing
 ): TitleGenerationService {
   return {
     async generateTitle(
@@ -73,6 +75,7 @@ export function createTitleGenerationService(
         apiKey,
         model: TITLE_GENERATION_MODEL,
         userId,
+        pricing,
       });
 
       const contentPreview = content.length > 5000 ? content.slice(0, 5000) + '...' : content;

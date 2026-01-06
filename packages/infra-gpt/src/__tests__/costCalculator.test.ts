@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTextCost, calculateImageCost, normalizeUsageV2 } from '../costCalculator.js';
+import { calculateTextCost, calculateImageCost, normalizeUsage } from '../costCalculator.js';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
 describe('infra-gpt costCalculator', () => {
@@ -74,26 +74,26 @@ describe('infra-gpt costCalculator', () => {
     });
   });
 
-  describe('normalizeUsageV2', () => {
+  describe('normalizeUsage', () => {
     it('returns normalized structure', () => {
-      const result = normalizeUsageV2(1000, 500, 200, 1, undefined, basePricing);
+      const result = normalizeUsage(1000, 500, 200, 1, undefined, basePricing);
       expect(result.costUsd).toBeCloseTo(0.00725 + 0.01, 6);
       expect(result.cacheTokens).toBe(200);
       expect(result.webSearchCalls).toBe(1);
     });
 
     it('includes reasoningTokens when provided', () => {
-      const result = normalizeUsageV2(1000, 500, 0, 0, 150, basePricing);
+      const result = normalizeUsage(1000, 500, 0, 0, 150, basePricing);
       expect(result.reasoningTokens).toBe(150);
     });
 
     it('omits reasoningTokens when zero', () => {
-      const result = normalizeUsageV2(1000, 500, 0, 0, 0, basePricing);
+      const result = normalizeUsage(1000, 500, 0, 0, 0, basePricing);
       expect(result.reasoningTokens).toBeUndefined();
     });
 
     it('omits optional fields when zero', () => {
-      const result = normalizeUsageV2(1000, 500, 0, 0, undefined, basePricing);
+      const result = normalizeUsage(1000, 500, 0, 0, undefined, basePricing);
       expect(result.cacheTokens).toBeUndefined();
       expect(result.webSearchCalls).toBeUndefined();
       expect(result.reasoningTokens).toBeUndefined();
