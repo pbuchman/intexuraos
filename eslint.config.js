@@ -205,6 +205,14 @@ export default tseslint.config(
               group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
+            {
+              group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
           ],
         },
       ],
@@ -268,6 +276,14 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
@@ -404,6 +420,14 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
             {
@@ -547,6 +571,14 @@ export default tseslint.config(
             },
             {
               group: ['@intexuraos/llm-orchestrator', '@intexuraos/llm-orchestrator/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/notes-agent', '@intexuraos/notes-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/todos-agent', '@intexuraos/todos-agent/**'],
               message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
             },
           ],
