@@ -33,7 +33,7 @@ export function calculateTextCost(
   return Math.round(inputCost + outputCost + requestCostScaled) / 1_000_000;
 }
 
-export function normalizeUsageV2(
+export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
   providerCost: number | undefined,

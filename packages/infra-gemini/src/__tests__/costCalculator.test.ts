@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTextCost, calculateImageCost, normalizeUsageV2 } from '../costCalculator.js';
+import { calculateTextCost, calculateImageCost, normalizeUsage } from '../costCalculator.js';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
 describe('infra-gemini costCalculator', () => {
@@ -59,9 +59,9 @@ describe('infra-gemini costCalculator', () => {
     });
   });
 
-  describe('normalizeUsageV2', () => {
+  describe('normalizeUsage', () => {
     it('returns normalized usage with cost', () => {
-      const result = normalizeUsageV2(1000, 500, true, basePricing);
+      const result = normalizeUsage(1000, 500, true, basePricing);
       expect(result).toEqual({
         inputTokens: 1000,
         outputTokens: 500,
@@ -72,7 +72,7 @@ describe('infra-gemini costCalculator', () => {
     });
 
     it('omits groundingEnabled when false', () => {
-      const result = normalizeUsageV2(1000, 500, false, basePricing);
+      const result = normalizeUsage(1000, 500, false, basePricing);
       expect(result).toEqual({
         inputTokens: 1000,
         outputTokens: 500,

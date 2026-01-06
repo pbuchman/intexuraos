@@ -8,16 +8,10 @@ export type {
   ModelPricing,
 } from '@intexuraos/llm-contract';
 
-export interface GeminiConfig {
-  apiKey: string;
-  model: string;
-  userId: string;
-}
-
 /**
- * V2 configuration with explicit pricing (no hardcoded values).
+ * Gemini client configuration with explicit pricing.
  */
-export interface GeminiConfigV2 {
+export interface GeminiConfig {
   apiKey: string;
   model: string;
   userId: string;

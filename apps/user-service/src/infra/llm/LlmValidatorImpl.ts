@@ -7,6 +7,7 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -24,10 +25,26 @@ const VALIDATION_MODELS = {
 } as const;
 
 /**
+ * Pricing configuration for validation models.
+ */
+export interface ValidationPricing {
+  google: ModelPricing;
+  openai: ModelPricing;
+  anthropic: ModelPricing;
+  perplexity: ModelPricing;
+}
+
+/**
  * Implementation of LlmValidator that delegates to infra packages.
  * Uses cheap/fast models for validation to minimize costs.
  */
 export class LlmValidatorImpl implements LlmValidator {
+  private readonly pricing: ValidationPricing;
+
+  constructor(pricing: ValidationPricing) {
+    this.pricing = pricing;
+  }
+
   async validateKey(
     provider: LlmProvider,
     apiKey: string,
@@ -39,6 +56,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.google,
           userId,
+          pricing: this.pricing.google,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -57,6 +75,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.openai,
           userId,
+          pricing: this.pricing.openai,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -75,6 +94,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.anthropic,
           userId,
+          pricing: this.pricing.anthropic,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -93,6 +113,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.perplexity,
           userId,
+          pricing: this.pricing.perplexity,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -121,6 +142,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.google,
           userId,
+          pricing: this.pricing.google,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -136,6 +158,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.openai,
           userId,
+          pricing: this.pricing.openai,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -151,6 +174,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.anthropic,
           userId,
+          pricing: this.pricing.anthropic,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -166,6 +190,7 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS.perplexity,
           userId,
+          pricing: this.pricing.perplexity,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {

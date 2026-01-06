@@ -25,7 +25,7 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
   return Math.round(regularCost + readCost + writeCost + outputCost + searchCostScaled) / 1_000_000;
 }
 
-export function normalizeUsageV2(
+export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
   cacheReadTokens: number,
