@@ -5,8 +5,8 @@ import type {
   TodoItem,
   CreateTodoInput,
   TodoFilters,
-} from '../../domain/models/todo.js';
-import type { TodoRepository, TodoError } from '../../domain/ports/todoRepository.js';
+} from '../domain/models/todo.js';
+import type { TodoRepository, TodoError } from '../domain/ports/todoRepository.js';
 
 type MethodName = 'create' | 'findById' | 'findByUserId' | 'update' | 'delete';
 
