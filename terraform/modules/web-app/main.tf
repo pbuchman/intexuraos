@@ -241,7 +241,7 @@ data "google_secret_manager_secret_version" "ssl_key" {
 # Self-managed SSL certificate (used when use_custom_certificate = true)
 resource "google_compute_ssl_certificate" "custom" {
   count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
-  name        = "intexuraos-web-${var.environment}-cert"
+  name_prefix = "intexuraos-web-${var.environment}-cert-"
   project     = var.project_id
   certificate = file(var.ssl_certificate_path)
   private_key = data.google_secret_manager_secret_version.ssl_key[0].secret_data
