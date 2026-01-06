@@ -8,7 +8,7 @@ describe('infra-claude costCalculator', () => {
     outputPricePerMillion: 15.0,
     cacheReadMultiplier: 0.1,
     cacheWriteMultiplier: 1.25,
-    webSearchCostPerCall: 0.03
+    webSearchCostPerCall: 0.03,
   };
 
   describe('calculateTextCost', () => {
@@ -16,8 +16,8 @@ describe('infra-claude costCalculator', () => {
       const usage = {
         inputTokens: 1000,
         outputTokens: 100,
-        cachedTokens: 2000,       // Read
-        cacheCreationTokens: 500  // Write
+        cachedTokens: 2000, // Read
+        cacheCreationTokens: 500, // Write
       };
       // Regular: 1000 * 3 = 3000
       // Read: 2000 * 3 * 0.1 = 600
@@ -37,7 +37,10 @@ describe('infra-claude costCalculator', () => {
       expect(result.cacheTokens).toBe(2500); // 2000 + 500
 
       // Cost calculation remains precise:
-      expect(result.costUsd).toBeCloseTo(0.034 + 0.006975, 5); // Approx check
+      // Token Cost (from cache test): 0.006975
+      // Search Cost (1 call * 0.03): 0.03
+      // Total: 0.036975
+      expect(result.costUsd).toBeCloseTo(0.036975, 6);
     });
   });
 });
