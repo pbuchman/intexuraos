@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { FakeTodoRepository } from '../infra/firestore/fakeTodoRepository.js';
+import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
 import { getTodo } from '../domain/usecases/getTodo.js';
 import { listTodos } from '../domain/usecases/listTodos.js';

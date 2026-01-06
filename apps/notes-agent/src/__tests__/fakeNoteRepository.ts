@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Result } from '@intexuraos/common-core';
-import type { Note, CreateNoteInput, UpdateNoteInput } from '../../domain/models/note.js';
-import type { NoteRepository, NoteError } from '../../domain/ports/noteRepository.js';
+import type { Note, CreateNoteInput, UpdateNoteInput } from '../domain/models/note.js';
+import type { NoteRepository, NoteError } from '../domain/ports/noteRepository.js';
 
 type MethodName = 'create' | 'findById' | 'findByUserId' | 'update' | 'delete';
 
