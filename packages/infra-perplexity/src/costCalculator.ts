@@ -21,13 +21,12 @@ export function calculateTextCost(
   const inputPrice = pricing.inputPricePerMillion;
   const outputPrice = pricing.outputPricePerMillion;
 
-  // Perplexity Request Fee (e.g., $0.005 for Sonar)
+  // Perplexity Request Fee
   const requestFee = pricing.webSearchCostPerCall ?? 0;
 
   const inputCost = usage.inputTokens * inputPrice;
   const outputCost = usage.outputTokens * outputPrice;
 
-  // Assume 1 request if tracking logic isn't explicit, or use webSearchCalls
   const requests = usage.webSearchCalls ?? 1;
   const requestCostScaled = requests * requestFee * 1_000_000;
 
@@ -52,5 +51,6 @@ export function normalizeUsageV2(
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUsd: calculateTextCost(usage, pricing, providerCost),
+    webSearchCalls: 1
   };
 }

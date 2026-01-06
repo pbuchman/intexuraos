@@ -8,7 +8,6 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
   // Split Input into Regular and Cached
   const totalInput = usage.inputTokens;
   const cachedCount = usage.cachedTokens ?? 0;
-  // Safety clamp to prevent negative regular tokens
   const regularInputCount = Math.max(0, totalInput - cachedCount);
 
   const cacheMultiplier = pricing.cacheReadMultiplier ?? 0.5;
