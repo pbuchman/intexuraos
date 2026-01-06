@@ -18,12 +18,7 @@ const ALLOWED_CLIENT_FILES = [
   'packages/infra-gemini/src/client.ts',
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
-  'packages/infra-perplexity/src/client.ts',
-  // V2 clients with pricing parameter
-  'packages/infra-gemini/src/clientV2.ts',
-  'packages/infra-gpt/src/clientV2.ts',
-  'packages/infra-claude/src/clientV2.ts',
-  'packages/infra-perplexity/src/clientV2.ts',
+  'packages/infra-perplexity/src/client.ts'
 ];
 
 interface Violation {
