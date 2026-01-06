@@ -43,9 +43,10 @@ const SERVICES = [
   { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
   { name: 'image-service', port: 8120, color: '\x1b[91m' },
   { name: 'notes-agent', port: 8121, color: '\x1b[37m' },
+  { name: 'app-settings-service', port: 8122, color: '\x1b[95m' },
 ];
 
-const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
+const WEB_APP = { name: 'web', port: 3000, color: '\x1b[97m' };
 
 const DOCKER_LOG_SERVICES = [
   { name: 'pubsub-ui', container: 'docker-pubsub-ui-1', color: '\x1b[90m' },

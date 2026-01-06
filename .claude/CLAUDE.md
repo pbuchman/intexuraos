@@ -85,6 +85,10 @@ Docs: [docs/architecture/service-to-service-communication.md](../docs/architectu
 
 **RULE:** Multi-field queries require composite indexes. Define them in migrations (`migrations/*.mjs`) using `indexes` export. Queries fail in production without them.
 
+### Migrations
+
+**RULE:** Migrations are IMMUTABLE. Never modify or delete existing migration files. Only create new migrations with the next sequential number. If a migration has a bug, create a new migration to fix it.
+
 ---
 
 ## Apps (`apps/**`)
