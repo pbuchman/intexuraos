@@ -263,4 +263,3 @@ function extractSourcesFromResponse(response: PerplexityResponse): string[] {
   }
   return [...new Set(sources)];
 }
-

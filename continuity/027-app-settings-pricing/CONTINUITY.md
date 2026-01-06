@@ -2,13 +2,13 @@
 
 ## Goal
 
-Centralizacja LLM pricing w `app-settings-service`. Eliminacja hardcoded cen z klientów infra-*.
+Centralizacja LLM pricing w `app-settings-service`. Eliminacja hardcoded cen z klientów infra-\*.
 
 ## Success Criteria
 
 - [x] app-settings-service created (structure, Dockerfile, Terraform, CloudBuild)
 - [x] Migration 011 created (new pricing structure)
-- [x] 4x infra-* clientsV2 implemented
+- [x] 4x infra-\* clientsV2 implemented
 - [x] packages/llm-contract pricing types created
 - [x] llm-orchestrator PricingClient created (HTTP client to app-settings-service)
 - [x] npm run ci passes

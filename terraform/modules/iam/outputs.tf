@@ -13,6 +13,7 @@ output "service_accounts" {
     data_insights_service        = google_service_account.data_insights_service.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
+    app_settings_service         = google_service_account.app_settings_service.email
   }
 }
 
@@ -74,4 +75,9 @@ output "image_service_sa" {
 output "notes_agent_sa" {
   description = "Notes Agent service account email"
   value       = google_service_account.notes_agent.email
+}
+
+output "app_settings_service_sa" {
+  description = "App Settings Service service account email"
+  value       = google_service_account.app_settings_service.email
 }

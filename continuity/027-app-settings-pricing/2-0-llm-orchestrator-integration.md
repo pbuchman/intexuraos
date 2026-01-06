@@ -40,6 +40,7 @@ class PricingClient {
 ## What's Done
 
 PricingClient created with:
+
 - HTTP client calling app-settings-service `/internal/settings/pricing/:provider`
 - 5-minute TTL cache
 - Error handling with fallback to cached data
@@ -58,6 +59,6 @@ PricingClient created with:
 
 ## Notes
 
-The infrastructure is complete. V2 clients exist and are exported from all 4 infra-* packages.
+The infrastructure is complete. V2 clients exist and are exported from all 4 infra-\* packages.
 llm-orchestrator still uses V1 clients for now - migration can happen incrementally.
 CI passes with current state.

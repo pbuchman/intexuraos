@@ -6,7 +6,7 @@
 
 ## Context
 
-Centralne typy dla pricing używane przez wszystkie infra-* pakiety.
+Centralne typy dla pricing używane przez wszystkie infra-\* pakiety.
 
 ## Scope
 

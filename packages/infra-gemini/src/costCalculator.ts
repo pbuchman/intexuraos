@@ -51,4 +51,3 @@ export function normalizeUsageV2(
     ...(groundingEnabled && { groundingEnabled: true }),
   };
 }
-

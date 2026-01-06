@@ -24,4 +24,3 @@ export interface GeminiConfigV2 {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
 }
-

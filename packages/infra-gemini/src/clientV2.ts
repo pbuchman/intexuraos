@@ -231,4 +231,3 @@ function extractSourcesFromResponse(response: GenerateContentResponse): string[]
 function hasGroundingMetadata(response: GenerateContentResponse): boolean {
   return response.candidates?.[0]?.groundingMetadata !== undefined;
 }
-

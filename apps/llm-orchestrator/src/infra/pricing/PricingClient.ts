@@ -48,7 +48,8 @@ export class PricingClient {
         if (response.status === 404) {
           return null;
         }
-        throw new Error(`Failed to fetch pricing: ${String(response.status)}`);
+        // Non-404 error: return cached data if available (even if expired), otherwise null
+        return cached?.data ?? null;
       }
 
       const data = (await response.json()) as ProviderPricing;
@@ -59,7 +60,7 @@ export class PricingClient {
 
       return data;
     } catch {
-      // Return cached data if available (even if expired), otherwise null
+      // Network error: return cached data if available (even if expired), otherwise null
       return cached?.data ?? null;
     }
   }
@@ -86,4 +87,3 @@ export class PricingClient {
 export function createPricingClient(config: PricingClientConfig): PricingClient {
   return new PricingClient(config);
 }
-

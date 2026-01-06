@@ -18,8 +18,7 @@ export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): num
   const inputCost = (effectiveInputTokens / 1_000_000) * pricing.inputPricePerMillion;
   const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPricePerMillion;
 
-  const webSearchCost =
-    (usage.webSearchCalls ?? 0) * (pricing.webSearchCostPerCall ?? 0);
+  const webSearchCost = (usage.webSearchCalls ?? 0) * (pricing.webSearchCostPerCall ?? 0);
 
   return Math.round((inputCost + outputCost + webSearchCost) * 1_000_000) / 1_000_000;
 }
@@ -62,4 +61,3 @@ export function normalizeUsageV2(
     ...(webSearchCalls > 0 && { webSearchCalls }),
   };
 }
-

@@ -40,8 +40,8 @@ Endpoint `/internal/settings/pricing/:provider` w app-settings-service.
 
 - apps/app-settings-service/src/routes/internalRoutes.ts
 - apps/app-settings-service/src/infra/firestore/index.ts
-- apps/app-settings-service/src/__tests__/routes/internalRoutes.test.ts
-- apps/app-settings-service/src/__tests__/infra/FirestorePricingRepository.test.ts
+- apps/app-settings-service/src/**tests**/routes/internalRoutes.test.ts
+- apps/app-settings-service/src/**tests**/infra/FirestorePricingRepository.test.ts
 
 ## Verification
 
