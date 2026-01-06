@@ -37,3 +37,5 @@ export type {
   ThumbnailPromptResult,
   RealismStyle,
 } from './helpers.js';
+
+export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';

@@ -37,13 +37,12 @@ Pricing data verified as of: **2026-01-04**
 
 ### Image Generation Pricing
 
-| Provider | Model    | Size      | Quality  | Price/Image | Notes                |
-| -------- | -------- | --------- | -------- | ----------- | -------------------- |
-| OpenAI   | DALL-E 3 | 1024x1024 | standard | $0.040      | Cover images         |
-| OpenAI   | DALL-E 3 | 1024x1024 | hd       | $0.080      | High quality         |
-| OpenAI   | DALL-E 3 | 1792x1024 | standard | $0.080      | Wide format          |
-| OpenAI   | DALL-E 3 | 1792x1024 | hd       | $0.120      | Wide HD              |
-| Google   | Imagen 3 | 1024x1024 | -        | $0.050      | Alternative provider |
+| Provider | Model       | Size      | Quality  | Price/Image | Notes            |
+| -------- | ----------- | --------- | -------- | ----------- |------------------|
+| OpenAI   | gpt-image-1 | 1024x1024 | standard | $0.040      | Cover images     |
+| OpenAI   | gpt-image-1 | 1536x1024 | standard | $0.080      | Wide format      |
+| OpenAI   | gpt-image-1 | 1024x1536 | standard | $0.080      | Tall format      |
+| Google   | Imagen 3    | 1024x1024 | -        | $0.050      | Primary provider |
 
 ### Additional Pricing Factors
 
@@ -173,7 +172,7 @@ Pricing data verified as of: **2026-01-04**
 | Context inference  | Google      | gemini-2.5-flash | `generate()`      | `ContextInferenceAdapter` |
 | API key validation | Each        | Provider basic   | `evaluate()`      | `LlmValidatorImpl.ts`     |
 | Image prompt       | Google      | gemini-2.5-pro   | `generate()`      | `GptPromptAdapter.ts`     |
-| Image generation   | OpenAI      | dall-e-3         | `generateImage()` | `OpenAIImageGenerator.ts` |
+| Image generation   | OpenAI      | gpt-image-1      | `generateImage()` | `OpenAIImageGenerator.ts` |
 
 ### Execution Points
 
@@ -194,7 +193,7 @@ Pricing data verified as of: **2026-01-04**
 | llm-orchestrator | `infra/llm/ContextInferenceAdapter.ts` | `inferSynthesisContext()` | Synthesis context     |
 | user-service     | `infra/llm/LlmValidatorImpl.ts`        | `validateKey()`           | API key validation    |
 | image-service    | `infra/GptPromptAdapter.ts`            | `generatePrompt()`        | Image prompt creation |
-| image-service    | `infra/OpenAIImageGenerator.ts`        | `generateImage()`         | DALL-E image gen      |
+| image-service    | `infra/OpenAIImageGenerator.ts`        | `generateImage()`         | gpt-image-1 image gen |
 
 ## Cost Calculation in Code
 
@@ -369,13 +368,12 @@ cost = (input_tokens - cached_tokens) * input_price
 cost = response.usage.cost.total_cost  // Already calculated!
 ```
 
-**OpenAI DALL-E (Image Generation):**
+**OpenAI gpt-image-1 (Image Generation):**
 
 ```
 cost = images_count * price_per_image
 where price_per_image depends on:
-  - size: 1024x1024, 1024x1792, 1792x1024
-  - quality: standard, hd
+  - size: 1024x1024, 1536x1024, 1024x1536
 ```
 
 ## Image Generation in Codebase
@@ -395,7 +393,7 @@ where price_per_image depends on:
 
 1. User requests cover image for research
 2. Prompt adapter generates image description from research content
-3. Image generator creates image using DALL-E or Gemini Image
+3. Image generator creates image using gpt-image-1 or Gemini Image
 4. Image stored in Cloud Storage
 5. Audit logged with `image_prompt` and `image_generation` call types
 

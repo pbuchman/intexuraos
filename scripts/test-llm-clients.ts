@@ -1,23 +1,23 @@
 #!/usr/bin/env npx tsx
 /**
- * Test script for verifying all LLM clients work correctly with real API keys.
+ * Test script for verifying all LLM V2 clients work correctly with real API keys.
  *
  * Usage:
  *   npx tsx scripts/test-llm-clients.ts <userId>
  *
  * This script:
  * 1. Fetches API keys from user-service (internal endpoint)
- * 2. Tests each provider's research(), generate(), and generateImage() methods
- * 3. Logs usage via console.error
+ * 2. Tests each provider's V2 client research(), generate(), and generateImage() methods
+ * 3. Displays usage information from each call
  * 4. Saves results as JSON files in test-results/
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { createGptClient } from '@intexuraos/infra-gpt';
-import { createClaudeClient } from '@intexuraos/infra-claude';
-import { createPerplexityClient } from '@intexuraos/infra-perplexity';
-import type { LLMClient, UsageLogger } from '@intexuraos/llm-contract';
+import { createGeminiClientV2 } from '@intexuraos/infra-gemini';
+import { createGptClientV2 } from '@intexuraos/infra-gpt';
+import { createClaudeClientV2 } from '@intexuraos/infra-claude';
+import { createPerplexityClientV2 } from '@intexuraos/infra-perplexity';
+import type { LLMClient, ModelPricing, NormalizedUsage } from '@intexuraos/llm-contract';
 
 const MODELS = {
   google: 'gemini-2.0-flash',
@@ -25,6 +25,42 @@ const MODELS = {
   anthropic: 'claude-3-5-haiku-20241022',
   perplexity: 'sonar',
 } as const;
+
+// Default pricing for testing - these should match production values
+const DEFAULT_PRICING: Record<string, ModelPricing> = {
+  google: {
+    inputPricePerMillion: 0.075,
+    outputPricePerMillion: 0.3,
+    groundingCostPerRequest: 0.035,
+    imagePricing: {
+      '1024x1024': 0.02,
+      '1536x1024': 0.04,
+      '1024x1536': 0.04,
+    },
+  },
+  openai: {
+    inputPricePerMillion: 0.15,
+    outputPricePerMillion: 0.6,
+    cacheReadMultiplier: 0.5,
+    webSearchCostPerCall: 0.03,
+    imagePricing: {
+      '1024x1024': 0.04,
+      '1536x1024': 0.08,
+      '1024x1536': 0.08,
+    },
+  },
+  anthropic: {
+    inputPricePerMillion: 0.8,
+    outputPricePerMillion: 4.0,
+    cacheReadMultiplier: 0.1,
+    cacheWriteMultiplier: 1.25,
+  },
+  perplexity: {
+    inputPricePerMillion: 1.0,
+    outputPricePerMillion: 1.0,
+    useProviderCost: true,
+  },
+};
 
 const RESEARCH_PROMPT = `Zbadaj, na podstawie tego jak wyglądały trendy w ostatnich 3 latach, jakie języki programowania będą najpopularniejsze w przeciągu najbliższych 3 lat. Odpowiedź krótko, 2-3 zdania.`;
 
@@ -39,16 +75,29 @@ interface ApiKeys {
   perplexity: string | null;
 }
 
-const consoleUsageLogger: UsageLogger = {
-  async log(params) {
-    console.error('\n[USAGE LOG]', JSON.stringify(params, null, 2));
-  },
-};
-
 function maskKey(key: string | null): string {
   if (key === null) return '(not configured)';
   if (key.length < 8) return '***';
   return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
+}
+
+function formatUsage(usage: NormalizedUsage): string {
+  const parts = [
+    `Input: ${usage.inputTokens}`,
+    `Output: ${usage.outputTokens}`,
+    `Total: ${usage.totalTokens}`,
+    `Cost: $${usage.costUsd.toFixed(6)}`,
+  ];
+  if (usage.cacheTokens !== undefined && usage.cacheTokens > 0) {
+    parts.push(`Cache: ${usage.cacheTokens}`);
+  }
+  if (usage.webSearchCalls !== undefined && usage.webSearchCalls > 0) {
+    parts.push(`WebSearchCalls: ${usage.webSearchCalls}`);
+  }
+  if (usage.groundingEnabled === true) {
+    parts.push(`Grounding: enabled`);
+  }
+  return parts.join(' | ');
 }
 
 async function fetchUserApiKeys(userId: string): Promise<ApiKeys> {
@@ -79,22 +128,22 @@ async function fetchUserApiKeys(userId: string): Promise<ApiKeys> {
   return (await response.json()) as ApiKeys;
 }
 
-function createClient(
+function createClientV2(
   provider: string,
   apiKey: string,
   model: string,
   userId: string,
-  usageLogger: UsageLogger
+  pricing: ModelPricing
 ): LLMClient {
   switch (provider) {
     case 'google':
-      return createGeminiClient({ apiKey, model, usageLogger, userId });
+      return createGeminiClientV2({ apiKey, model, userId, pricing });
     case 'openai':
-      return createGptClient({ apiKey, model, usageLogger, userId });
+      return createGptClientV2({ apiKey, model, userId, pricing });
     case 'anthropic':
-      return createClaudeClient({ apiKey, model, usageLogger, userId });
+      return createClaudeClientV2({ apiKey, model, userId, pricing });
     case 'perplexity':
-      return createPerplexityClient({ apiKey, model, usageLogger, userId });
+      return createPerplexityClientV2({ apiKey, model, userId, pricing });
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
@@ -121,14 +170,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log('\n=== LLM Clients Test Script ===\n');
+  console.log('\n=== LLM V2 Clients Test Script ===\n');
 
   const keys = await fetchUserApiKeys(userId);
 
   console.log(`\nUser: ${userId}`);
-  console.log(`Google key:    ${maskKey(keys.google)}`);
-  console.log(`OpenAI key:    ${maskKey(keys.openai)}`);
-  console.log(`Anthropic key: ${maskKey(keys.anthropic)}`);
+  console.log(`Google key:     ${maskKey(keys.google)}`);
+  console.log(`OpenAI key:     ${maskKey(keys.openai)}`);
+  console.log(`Anthropic key:  ${maskKey(keys.anthropic)}`);
   console.log(`Perplexity key: ${maskKey(keys.perplexity)}`);
 
   const hasAnyKey =
@@ -150,9 +199,15 @@ async function main(): Promise<void> {
       continue;
     }
 
-    console.log(`\n━━━ Testing ${provider.toUpperCase()} (${model}) ━━━`);
+    const pricing = DEFAULT_PRICING[provider];
+    if (pricing === undefined) {
+      console.log(`\n⚠️  Skipping ${provider} - no pricing configured`);
+      continue;
+    }
 
-    const client = createClient(provider, apiKey, model, userId, consoleUsageLogger);
+    console.log(`\n━━━ Testing ${provider.toUpperCase()} V2 (${model}) ━━━`);
+
+    const client = createClientV2(provider, apiKey, model, userId, pricing);
 
     // Test research()
     console.log(`\n🔬 Testing ${provider}.research()...`);
@@ -161,6 +216,7 @@ async function main(): Promise<void> {
       saveResult(`${provider}_research`, researchResult);
       if (researchResult.ok) {
         console.log(`   ✓ Success: ${researchResult.value.content.substring(0, 100)}...`);
+        console.log(`   📊 Usage: ${formatUsage(researchResult.value.usage)}`);
       } else {
         console.log(`   ✗ Error: ${researchResult.error.message}`);
       }
@@ -176,6 +232,7 @@ async function main(): Promise<void> {
       saveResult(`${provider}_generate`, generateResult);
       if (generateResult.ok) {
         console.log(`   ✓ Success: ${generateResult.value.content.substring(0, 100)}...`);
+        console.log(`   📊 Usage: ${formatUsage(generateResult.value.usage)}`);
       } else {
         console.log(`   ✗ Error: ${generateResult.error.message}`);
       }
@@ -195,6 +252,7 @@ async function main(): Promise<void> {
           writeFileSync(imagePath, imageData);
           console.log(`   ✓ Success: Generated image saved to ${imagePath}`);
           console.log(`   → Size: ${imageData.length} bytes`);
+          console.log(`   📊 Usage: Cost: $${imageResult.value.usage.costUsd.toFixed(6)}`);
           saveResult(`${provider}_image_metadata`, {
             ok: true,
             model: imageResult.value.model,

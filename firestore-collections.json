@@ -90,6 +90,10 @@
       "owner": "notes-agent",
       "description": "User-scoped notes with tags and source tracking"
     },
+    "settings": {
+      "owner": "app-settings-service",
+      "description": "Application settings including LLM pricing per provider"
+    },
     "todos": {
       "owner": "todos-agent",
       "description": "User-scoped todos with items, priority, and due dates"

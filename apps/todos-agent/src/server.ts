@@ -19,12 +19,12 @@ import { todoRoutes } from './routes/todoRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 
 const SERVICE_NAME = 'todos-agent';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 const REQUIRED_SECRETS: string[] = [];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const servers = [{ url: 'http://localhost:8122', description: 'Local' }];
+  const servers = [{ url: 'http://localhost:8123', description: 'Local' }];
 
   return {
     openapi: {

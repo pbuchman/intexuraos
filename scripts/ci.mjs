@@ -57,12 +57,48 @@ async function runPhase(phase) {
   console.log(`\n=== ${phase.name} ===\n`);
 
   if (phase.parallel) {
-    const processes = phase.commands.map((cmd) => runCommand(cmd));
-    await Promise.all(processes);
+    await runParallel(phase.commands);
   } else {
     for (const cmd of phase.commands) {
       await runCommand(cmd);
     }
+  }
+}
+
+// Run commands in parallel with cleanup on first failure
+async function runParallel(commands) {
+  const activeProcesses = [];
+
+  const promises = commands.map((cmd) => {
+    return new Promise((resolve, reject) => {
+      const proc = spawn('npm', ['run', cmd], {
+        stdio: 'inherit',
+      });
+
+      activeProcesses.push(proc);
+
+      proc.on('close', (code) => {
+        // Remove from active list
+        const idx = activeProcesses.indexOf(proc);
+        if (idx !== -1) activeProcesses.splice(idx, 1);
+
+        if (code !== 0) {
+          reject(new Error(`${cmd} failed with code ${code}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+  });
+
+  try {
+    await Promise.all(promises);
+  } catch (error) {
+    // Kill remaining processes on failure
+    for (const proc of activeProcesses) {
+      proc.kill('SIGTERM');
+    }
+    throw error;
   }
 }
 

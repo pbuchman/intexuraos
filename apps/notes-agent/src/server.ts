@@ -19,7 +19,7 @@ import { noteRoutes } from './routes/noteRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 
 const SERVICE_NAME = 'notes-agent';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 const REQUIRED_SECRETS: string[] = [];
 

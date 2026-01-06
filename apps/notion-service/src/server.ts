@@ -22,7 +22,7 @@ import { notionRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
 
 const SERVICE_NAME = 'notion-service';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 // Required secrets for this service
 const REQUIRED_SECRETS = [

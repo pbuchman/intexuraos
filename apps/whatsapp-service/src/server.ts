@@ -15,7 +15,7 @@ import { type Config, validateConfigEnv } from './config.js';
 import { initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 /**
  * Check required secrets using service-specific validation.
