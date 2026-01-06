@@ -12,6 +12,7 @@ output "service_accounts" {
     actions_agent                = google_service_account.actions_agent.email
     data_insights_service        = google_service_account.data_insights_service.email
     image_service                = google_service_account.image_service.email
+    notes_agent                  = google_service_account.notes_agent.email
   }
 }
 
@@ -70,3 +71,7 @@ output "image_service_sa" {
   value       = google_service_account.image_service.email
 }
 
+output "notes_agent_sa" {
+  description = "Notes Agent service account email"
+  value       = google_service_account.notes_agent.email
+}
