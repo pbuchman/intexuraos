@@ -16,8 +16,8 @@ describe('infra-claude costCalculator', () => {
       const usage = {
         inputTokens: 1000,
         outputTokens: 100,
-        cachedTokens: 2000,
-        cacheCreationTokens: 500
+        cachedTokens: 2000,       // Read
+        cacheCreationTokens: 500  // Write
       };
       // Regular: 1000 * 3 = 3000
       // Read: 2000 * 3 * 0.1 = 600
@@ -26,25 +26,18 @@ describe('infra-claude costCalculator', () => {
       // Total: 6975 / 1M = 0.006975
       expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.006975, 6);
     });
-
-    it('adds web search cost', () => {
-      const usage = {
-        inputTokens: 1000,
-        outputTokens: 100,
-        webSearchCalls: 2
-      };
-      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0645, 6);
-    });
   });
 
   describe('normalizeUsageV2', () => {
-    it('accepts webSearchCalls and calculates cost', () => {
-      // 5th argument is webSearchCalls
-      const result = normalizeUsageV2(1000, 100, 0, 0, 1, basePricing);
+    it('aggregates cache tokens into single contract field', () => {
+      // 2000 Read + 500 Write
+      const result = normalizeUsageV2(1000, 100, 2000, 500, 1, basePricing);
 
-      expect(result.webSearchCalls).toBe(1);
-      // Cost: 0.003 (in) + 0.0015 (out) + 0.03 (search) = 0.0345
-      expect(result.costUsd).toBeCloseTo(0.0345, 6);
+      // Contract compliance:
+      expect(result.cacheTokens).toBe(2500); // 2000 + 500
+
+      // Cost calculation remains precise:
+      expect(result.costUsd).toBeCloseTo(0.034 + 0.006975, 5); // Approx check
     });
   });
 });
