@@ -48,6 +48,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL',
     displayName: 'Image Service API',
   },
+  {
+    key: 'INTEXURAOS_NOTES_SERVICE_OPENAPI_URL',
+    displayName: 'Notes Service API',
+  },
 ];
 
 /**

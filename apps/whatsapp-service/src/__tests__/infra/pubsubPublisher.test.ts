@@ -1,29 +1,35 @@
 /**
  * Tests for GCP Pub/Sub Publisher adapter.
- * Mocks @google-cloud/pubsub SDK.
+ * Mocks @intexuraos/infra-pubsub to test the publisher implementation.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GcpPubSubPublisher, getLogLevel } from '../../infra/pubsub/index.js';
 
-// Create mock functions that persist
-const mockPublishMessage = vi.fn();
+const mockPublishToTopic = vi.fn();
 
-// Mock the module before any imports
-vi.mock('@google-cloud/pubsub', () => {
-  const mockTopicInstance = {
-    publishMessage: (args: unknown): Promise<string> => mockPublishMessage(args) as Promise<string>,
-  };
+vi.mock('@intexuraos/infra-pubsub', () => ({
+  BasePubSubPublisher: class {
+    protected projectId: string;
+    protected loggerName: string;
 
-  class MockPubSub {
-    topic(): typeof mockTopicInstance {
-      return mockTopicInstance;
+    constructor(config: { projectId: string; loggerName?: string }) {
+      this.projectId = config.projectId;
+      this.loggerName = config.loggerName ?? 'test';
     }
-  }
 
-  return {
-    PubSub: MockPubSub,
-  };
-});
+    async publishToTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToTopic(topicName, data, attributes);
+    }
+  },
+  getLogLevel: (env: string | undefined): string => (env === 'test' ? 'silent' : 'info'),
+}));
 
 describe('getLogLevel', () => {
   it('returns silent for test environment', () => {
@@ -41,33 +47,41 @@ describe('GcpPubSubPublisher', () => {
   let publisher: GcpPubSubPublisher;
 
   beforeEach(() => {
-    mockPublishMessage.mockReset();
+    mockPublishToTopic.mockReset();
+    mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
     });
   });
 
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('publishMediaCleanup', () => {
     it('publishes event successfully', async () => {
-      mockPublishMessage.mockResolvedValue('message-id-123');
-
-      const result = await publisher.publishMediaCleanup({
-        type: 'whatsapp.media.cleanup',
+      const event = {
+        type: 'whatsapp.media.cleanup' as const,
         messageId: 'msg-123',
         userId: 'user-456',
         gcsPaths: ['whatsapp/user-456/msg-123/media.ogg'],
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      const result = await publisher.publishMediaCleanup(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('media-cleanup-topic', event, {
+        messageId: 'msg-123',
       });
     });
 
     it('returns error when publish fails', async () => {
-      mockPublishMessage.mockRejectedValue(new Error('Pub/Sub unavailable'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub unavailable' },
+      });
 
       const result = await publisher.publishMediaCleanup({
         type: 'whatsapp.media.cleanup',
@@ -87,17 +101,19 @@ describe('GcpPubSubPublisher', () => {
 
   describe('publishCommandIngest', () => {
     it('skips publish when topic is not configured', async () => {
-      const result = await publisher.publishCommandIngest({
-        type: 'command.ingest',
+      const event = {
+        type: 'command.ingest' as const,
         userId: 'user-123',
-        sourceType: 'whatsapp_text',
+        sourceType: 'whatsapp_text' as const,
         externalId: 'wamid.abc',
         text: 'Test command',
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      const result = await publisher.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { externalId: 'wamid.abc' });
     });
 
     it('publishes event when topic is configured', async () => {
@@ -106,20 +122,21 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         commandsIngestTopic: 'commands-ingest-topic',
       });
-      mockPublishMessage.mockResolvedValue('message-id-456');
 
-      const result = await publisherWithTopic.publishCommandIngest({
-        type: 'command.ingest',
+      const event = {
+        type: 'command.ingest' as const,
         userId: 'user-123',
-        sourceType: 'whatsapp_voice',
+        sourceType: 'whatsapp_voice' as const,
         externalId: 'wamid.voice123',
         text: 'Voice transcription text',
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      const result = await publisherWithTopic.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
+        externalId: 'wamid.voice123',
       });
     });
 
@@ -129,7 +146,10 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         commandsIngestTopic: 'commands-ingest-topic',
       });
-      mockPublishMessage.mockRejectedValue(new Error('Topic unavailable'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Topic unavailable' },
+      });
 
       const result = await publisherWithTopic.publishCommandIngest({
         type: 'command.ingest',
@@ -150,16 +170,18 @@ describe('GcpPubSubPublisher', () => {
 
   describe('publishWebhookProcess', () => {
     it('skips publish when topic is not configured', async () => {
-      const result = await publisher.publishWebhookProcess({
-        type: 'whatsapp.webhook.process',
+      const event = {
+        type: 'whatsapp.webhook.process' as const,
         eventId: 'event-123',
         payload: '{}',
         phoneNumberId: 'phone-456',
         receivedAt: new Date().toISOString(),
-      });
+      };
+
+      const result = await publisher.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { eventId: 'event-123' });
     });
 
     it('publishes event when topic is configured', async () => {
@@ -168,19 +190,20 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
       });
-      mockPublishMessage.mockResolvedValue('message-id-789');
 
-      const result = await publisherWithTopic.publishWebhookProcess({
-        type: 'whatsapp.webhook.process',
+      const event = {
+        type: 'whatsapp.webhook.process' as const,
         eventId: 'event-123',
         payload: '{"test": true}',
         phoneNumberId: 'phone-456',
         receivedAt: new Date().toISOString(),
-      });
+      };
+
+      const result = await publisherWithTopic.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
+        eventId: 'event-123',
       });
     });
 
@@ -190,7 +213,10 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
       });
-      mockPublishMessage.mockRejectedValue(new Error('Connection failed'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Connection failed' },
+      });
 
       const result = await publisherWithTopic.publishWebhookProcess({
         type: 'whatsapp.webhook.process',
@@ -210,8 +236,8 @@ describe('GcpPubSubPublisher', () => {
 
   describe('publishTranscribeAudio', () => {
     it('skips publish when topic is not configured', async () => {
-      const result = await publisher.publishTranscribeAudio({
-        type: 'whatsapp.audio.transcribe',
+      const event = {
+        type: 'whatsapp.audio.transcribe' as const,
         messageId: 'msg-123',
         userId: 'user-456',
         gcsPath: 'path/to/audio.ogg',
@@ -219,10 +245,12 @@ describe('GcpPubSubPublisher', () => {
         userPhoneNumber: '+1234567890',
         originalWaMessageId: 'wamid.abc',
         phoneNumberId: 'phone-789',
-      });
+      };
+
+      const result = await publisher.publishTranscribeAudio(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { messageId: 'msg-123' });
     });
 
     it('publishes event when topic is configured', async () => {
@@ -231,10 +259,9 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         transcriptionTopic: 'transcription-topic',
       });
-      mockPublishMessage.mockResolvedValue('message-id-audio');
 
-      const result = await publisherWithTopic.publishTranscribeAudio({
-        type: 'whatsapp.audio.transcribe',
+      const event = {
+        type: 'whatsapp.audio.transcribe' as const,
         messageId: 'msg-123',
         userId: 'user-456',
         gcsPath: 'path/to/audio.ogg',
@@ -242,11 +269,13 @@ describe('GcpPubSubPublisher', () => {
         userPhoneNumber: '+1234567890',
         originalWaMessageId: 'wamid.abc',
         phoneNumberId: 'phone-789',
-      });
+      };
+
+      const result = await publisherWithTopic.publishTranscribeAudio(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('transcription-topic', event, {
+        messageId: 'msg-123',
       });
     });
 
@@ -256,7 +285,10 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         transcriptionTopic: 'transcription-topic',
       });
-      mockPublishMessage.mockRejectedValue(new Error('Publish timeout'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Publish timeout' },
+      });
 
       const result = await publisherWithTopic.publishTranscribeAudio({
         type: 'whatsapp.audio.transcribe',
@@ -279,15 +311,17 @@ describe('GcpPubSubPublisher', () => {
 
   describe('publishExtractLinkPreviews', () => {
     it('skips publish when topic is not configured', async () => {
-      const result = await publisher.publishExtractLinkPreviews({
-        type: 'whatsapp.linkpreview.extract',
+      const event = {
+        type: 'whatsapp.linkpreview.extract' as const,
         messageId: 'msg-123',
         userId: 'user-456',
         text: 'Check out https://example.com',
-      });
+      };
+
+      const result = await publisher.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
+      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { messageId: 'msg-123' });
     });
 
     it('publishes event when topic is configured', async () => {
@@ -296,18 +330,19 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
       });
-      mockPublishMessage.mockResolvedValue('message-id-link');
 
-      const result = await publisherWithTopic.publishExtractLinkPreviews({
-        type: 'whatsapp.linkpreview.extract',
+      const event = {
+        type: 'whatsapp.linkpreview.extract' as const,
         messageId: 'msg-123',
         userId: 'user-456',
         text: 'Check out https://example.com',
-      });
+      };
+
+      const result = await publisherWithTopic.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishMessage).toHaveBeenCalledWith({
-        data: expect.any(Buffer) as Buffer,
+      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
+        messageId: 'msg-123',
       });
     });
 
@@ -317,7 +352,10 @@ describe('GcpPubSubPublisher', () => {
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
       });
-      mockPublishMessage.mockRejectedValue(new Error('Network error'));
+      mockPublishToTopic.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Network error' },
+      });
 
       const result = await publisherWithTopic.publishExtractLinkPreviews({
         type: 'whatsapp.linkpreview.extract',

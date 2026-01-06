@@ -32,7 +32,7 @@ steps:
         if [[ "${_FORCE_DEPLOY}" == "true" ]]; then
           echo "Force deploy - marking all services as affected"
           mkdir -p /workspace/.affected
-          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service web firestore; do
+          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service notes-agent web firestore; do
             touch "/workspace/.affected/$svc"
           done
         else
@@ -517,6 +517,49 @@ steps:
           bash cloudbuild/scripts/deploy-image-service.sh
         else
           echo "image-service not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== notes-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notes-agent'
+    waitFor: ['check-all-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/notes-agent ]]; then
+          echo "=== Building notes-agent ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+            -f apps/notes-agent/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest
+        else
+          echo "notes-agent not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notes-agent'
+    waitFor: ['build-push-notes-agent']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/notes-agent ]]; then
+          bash cloudbuild/scripts/deploy-notes-agent.sh
+        else
+          echo "notes-agent not affected, skipping deploy."
         fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
