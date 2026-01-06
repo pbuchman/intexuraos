@@ -205,8 +205,7 @@ export function createGptClientV2(config: GptConfigV2): GptClientV2 {
 
       try {
         const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
-        // Note: gpt-image-1 does not support response_format parameter
-        // It returns b64_json by default
+        // gpt-image-1 returns base64 data in response.data[0].b64_json by default
         const response = await client.images.generate({
           model: IMAGE_MODEL,
           prompt,
@@ -214,14 +213,30 @@ export function createGptClientV2(config: GptConfigV2): GptClientV2 {
           size,
         });
 
-        const b64Data = response.data?.[0]?.b64_json;
+        // gpt-image-1 returns b64_json in the response
+        const imageData = response.data?.[0];
+        const b64Data = imageData?.b64_json ?? imageData?.url;
+
         if (b64Data === undefined) {
           const errorMsg = 'No image data in response';
           await auditContext.error({ error: errorMsg });
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
-        const imageBuffer = Buffer.from(b64Data, 'base64');
+        // If we got a URL, fetch the image data
+        let imageBuffer: Buffer;
+        if (imageData?.b64_json !== undefined) {
+          imageBuffer = Buffer.from(imageData.b64_json, 'base64');
+        } else if (imageData?.url !== undefined) {
+          const imageResponse = await fetch(imageData.url);
+          const arrayBuffer = await imageResponse.arrayBuffer();
+          imageBuffer = Buffer.from(arrayBuffer);
+        } else {
+          const errorMsg = 'No image data in response';
+          await auditContext.error({ error: errorMsg });
+          return err({ code: 'API_ERROR', message: errorMsg });
+        }
+
         const pricingConfig = imagePricing ?? pricing;
         const imageCost = calculateImageCost(size, pricingConfig);
 

@@ -12,19 +12,26 @@ describe('infra-gpt costCalculator', () => {
     it('calculates basic cost without cache', () => {
       const usage = { inputTokens: 1000, outputTokens: 500 };
       const cost = calculateTextCost(usage, basePricing);
-      // input: (1000/1M) * 2.5 = 0.0025, output: (500/1M) * 10 = 0.005
+      // Input: 1000 * 2.5 = 2500
+      // Output: 500 * 10 = 5000
+      // Total: 7500 / 1M = 0.0075
       expect(cost).toBeCloseTo(0.0075, 6);
     });
 
     it('applies cache multiplier (default 0.5)', () => {
       const usage = {
-        inputTokens: 1000,
+        inputTokens: 1000, // Total input reported by API
         outputTokens: 500,
-        cachedTokens: 200,
+        cachedTokens: 200, // Part of input that was cached
       };
       const cost = calculateTextCost(usage, basePricing);
-      // effectiveInput: 1000 - 200 * (1 - 0.5) = 1000 - 100 = 900
-      // input: (900/1M) * 2.5 = 0.00225, output: (500/1M) * 10 = 0.005
+
+      // New Logic Split:
+      // Regular Input: 1000 - 200 = 800 tokens
+      // Regular Cost: 800 * 2.5 = 2000
+      // Cached Cost: 200 * 2.5 * 0.5 (default multiplier) = 250
+      // Output Cost: 500 * 10.0 = 5000
+      // Total: (2000 + 250 + 5000) / 1M = 0.00725
       expect(cost).toBeCloseTo(0.00725, 6);
     });
 
@@ -39,8 +46,12 @@ describe('infra-gpt costCalculator', () => {
         cachedTokens: 400,
       };
       const cost = calculateTextCost(usage, pricing);
-      // effectiveInput: 1000 - 400 * (1 - 0.25) = 1000 - 300 = 700
-      // input: (700/1M) * 2.5 = 0.00175, output: (500/1M) * 10 = 0.005
+
+      // Regular Input: 1000 - 400 = 600 tokens
+      // Regular Cost: 600 * 2.5 = 1500
+      // Cached Cost: 400 * 2.5 * 0.25 = 250
+      // Output Cost: 500 * 10.0 = 5000
+      // Total: (1500 + 250 + 5000) / 1M = 0.00675
       expect(cost).toBeCloseTo(0.00675, 6);
     });
 
@@ -55,7 +66,9 @@ describe('infra-gpt costCalculator', () => {
         webSearchCalls: 2,
       };
       const cost = calculateTextCost(usage, pricing);
-      // base: 0.0075, webSearch: 2 * 0.025 = 0.05
+      // Base tokens cost: 0.0075
+      // Search cost: 2 * 0.025 = 0.05
+      // Total: 0.0575
       expect(cost).toBeCloseTo(0.0575, 6);
     });
 
@@ -63,6 +76,22 @@ describe('infra-gpt costCalculator', () => {
       const usage = { inputTokens: 0, outputTokens: 0 };
       const cost = calculateTextCost(usage, basePricing);
       expect(cost).toBe(0);
+    });
+
+    it('safeguards against cachedTokens > inputTokens (prevents negative regular cost)', () => {
+      // API anomaly edge case
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 0,
+        cachedTokens: 150, // More than total input
+      };
+      const cost = calculateTextCost(usage, basePricing);
+
+      // Logic should clamp regular tokens to 0 (Math.max(0, 100-150))
+      // Regular Cost: 0 * 2.5 = 0
+      // Cached Cost: 150 * 2.5 * 0.5 = 187.5
+      // Total: 187.5 / 1M = 0.0001875
+      expect(cost).toBeCloseTo(0.0001875, 7);
     });
 
     it('handles missing optional fields gracefully', () => {
@@ -102,6 +131,8 @@ describe('infra-gpt costCalculator', () => {
   });
 
   describe('normalizeUsageV2', () => {
+    // Signature: (input, output, cached, webSearch, reasoning, pricing)
+
     it('returns normalized usage with calculated cost', () => {
       const result = normalizeUsageV2(1000, 500, 0, 0, undefined, basePricing);
       expect(result).toEqual({
@@ -115,6 +146,7 @@ describe('infra-gpt costCalculator', () => {
     it('includes cacheTokens when present', () => {
       const result = normalizeUsageV2(1000, 500, 200, 0, undefined, basePricing);
       expect(result.cacheTokens).toBe(200);
+      // Cost verification handled in calculateTextCost tests
     });
 
     it('excludes cacheTokens when zero', () => {

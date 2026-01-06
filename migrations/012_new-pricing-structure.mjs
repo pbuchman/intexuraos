@@ -62,8 +62,8 @@ export async function up(context) {
     provider: 'openai',
     models: {
       'o4-mini-deep-research': {
-        inputPricePerMillion: 1.1,
-        outputPricePerMillion: 4.4,
+        inputPricePerMillion: 2.0,
+        outputPricePerMillion: 8.0,
         cacheReadMultiplier: 0.25,
         webSearchCostPerCall: 0.01,
       },
