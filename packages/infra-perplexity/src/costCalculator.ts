@@ -1,42 +1,39 @@
-/**
- * Cost calculator for Perplexity models.
- * Uses pricing configuration passed from app-settings-service.
- *
- * Priority: Use provider cost from API when useProviderCost is true.
- * Fallback: Calculate from tokens when no provider cost available.
- */
-
-import type { TokenUsage, NormalizedUsage } from '@intexuraos/llm-contract';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { TokenUsage, NormalizedUsage, ModelPricing } from '@intexuraos/llm-contract';
 
 /**
  * Calculate text generation cost based on token usage and pricing.
- * For Perplexity, prioritizes provider cost if useProviderCost is enabled.
+ * Prioritizes direct provider cost. Falls back to calculation with request fees.
  */
 export function calculateTextCost(
   usage: TokenUsage,
   pricing: ModelPricing,
   providerCost: number | undefined
 ): number {
-  // If useProviderCost is true and API returned a cost, use it
+  // 1. Direct Provider Cost (Priority)
   if (pricing.useProviderCost === true && providerCost !== undefined) {
     return providerCost;
   }
-
-  // Also use providerCost from usage if available (V1 compatibility)
   if (usage.providerCost !== undefined) {
     return usage.providerCost;
   }
 
-  // Fallback: calculate from tokens
-  const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPricePerMillion;
-  const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPricePerMillion;
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
+  // 2. Fallback Calculation
+  const inputPrice = pricing.inputPricePerMillion;
+  const outputPrice = pricing.outputPricePerMillion;
+
+  // Perplexity Request Fee (e.g., $0.005 for Sonar)
+  const requestFee = pricing.webSearchCostPerCall ?? 0;
+
+  const inputCost = usage.inputTokens * inputPrice;
+  const outputCost = usage.outputTokens * outputPrice;
+
+  // Assume 1 request if tracking logic isn't explicit, or use webSearchCalls
+  const requests = usage.webSearchCalls ?? 1;
+  const requestCostScaled = requests * requestFee * 1_000_000;
+
+  return Math.round(inputCost + outputCost + requestCostScaled) / 1_000_000;
 }
 
-/**
- * Normalize raw token usage to standardized format with cost.
- */
 export function normalizeUsageV2(
   inputTokens: number,
   outputTokens: number,
@@ -47,7 +44,9 @@ export function normalizeUsageV2(
     inputTokens,
     outputTokens,
     ...(providerCost !== undefined && { providerCost }),
+    webSearchCalls: 1 // Default to 1 call for Perplexity normalization
   };
+
   return {
     inputTokens,
     outputTokens,

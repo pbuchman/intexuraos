@@ -1,68 +1,46 @@
-/**
- * Cost calculator for Anthropic Claude models.
- * Uses pricing configuration passed from app-settings-service.
- */
+import type { TokenUsage, NormalizedUsage, ModelPricing } from '@intexuraos/llm-contract';
 
-import type { TokenUsage, NormalizedUsage } from '@intexuraos/llm-contract';
-import type { ModelPricing } from '@intexuraos/llm-contract';
-
-/**
- * Calculate text generation cost based on token usage and pricing.
- * Handles Anthropic-specific: cache read/write multipliers, web search.
- */
 export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number {
+  const inputPrice = pricing.inputPricePerMillion;
+  const outputPrice = pricing.outputPricePerMillion;
+
   const cacheReadMultiplier = pricing.cacheReadMultiplier ?? 0.1;
   const cacheWriteMultiplier = pricing.cacheWriteMultiplier ?? 1.25;
 
-  const cacheReadTokens = usage.cacheReadTokens ?? 0;
-  const cacheCreationTokens = usage.cacheCreationTokens ?? 0;
+  // Usage components
+  const regularInput = usage.inputTokens;
+  const cacheRead = usage.cachedTokens ?? 0;
+  const cacheWrite = usage.cacheCreationTokens ?? 0;
 
-  const cacheReadCost =
-    (cacheReadTokens / 1_000_000) * pricing.inputPricePerMillion * cacheReadMultiplier;
-  const cacheCreationCost =
-    (cacheCreationTokens / 1_000_000) * pricing.inputPricePerMillion * cacheWriteMultiplier;
+  // Scaled Math
+  const regularCost = regularInput * inputPrice;
+  const readCost = cacheRead * inputPrice * cacheReadMultiplier;
+  const writeCost = cacheWrite * inputPrice * cacheWriteMultiplier;
+  const outputCost = usage.outputTokens * outputPrice;
 
-  const regularInputTokens = usage.inputTokens - cacheReadTokens - cacheCreationTokens;
-  const regularInputCost = (regularInputTokens / 1_000_000) * pricing.inputPricePerMillion;
-
-  const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPricePerMillion;
-
-  const webSearchCost = (usage.webSearchCalls ?? 0) * (pricing.webSearchCostPerCall ?? 0);
-
-  return (
-    Math.round(
-      (regularInputCost + cacheReadCost + cacheCreationCost + outputCost + webSearchCost) *
-        1_000_000
-    ) / 1_000_000
-  );
+  return Math.round(regularCost + readCost + writeCost + outputCost) / 1_000_000;
 }
 
-/**
- * Normalize raw token usage to standardized format with cost.
- */
 export function normalizeUsageV2(
   inputTokens: number,
   outputTokens: number,
   cacheReadTokens: number,
-  cacheCreationTokens: number,
-  webSearchCalls: number,
+  cacheWriteTokens: number,
   pricing: ModelPricing
 ): NormalizedUsage {
   const usage: TokenUsage = {
     inputTokens,
     outputTokens,
-    cacheReadTokens,
-    cacheCreationTokens,
-    webSearchCalls,
+    cachedTokens: cacheReadTokens,
+    cacheCreationTokens: cacheWriteTokens,
   };
+
   return {
     inputTokens,
     outputTokens,
-    totalTokens: inputTokens + outputTokens,
+    totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
     costUsd: calculateTextCost(usage, pricing),
-    ...(cacheReadTokens + cacheCreationTokens > 0 && {
-      cacheTokens: cacheReadTokens + cacheCreationTokens,
-    }),
-    ...(webSearchCalls > 0 && { webSearchCalls }),
+    ...(cacheReadTokens > 0 && { cacheReadTokens }),
+    ...(cacheWriteTokens > 0 && { cacheWriteTokens }),
   };
 }
