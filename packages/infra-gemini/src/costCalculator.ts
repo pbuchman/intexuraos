@@ -21,7 +21,7 @@ export function calculateImageCost(size: ImageSize, pricing: ModelPricing): numb
   return pricing.imagePricing[size] ?? 0;
 }
 
-export function normalizeUsageV2(
+export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
   groundingEnabled: boolean,

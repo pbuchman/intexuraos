@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger, ResearchContext, SynthesisContext } from '@intexuraos/common-core';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 
 const mockGenerate = vi.fn();
 
@@ -18,6 +19,11 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 const { ContextInferenceAdapter } = await import('../../../infra/llm/ContextInferenceAdapter.js');
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 0.1,
+  outputPricePerMillion: 0.4,
+};
 
 const validResearchContext: ResearchContext = {
   language: 'en',
@@ -84,18 +90,19 @@ describe('ContextInferenceAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLogger = createMockLogger();
-    adapter = new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user', mockLogger);
+    adapter = new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user');
+      new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user', testPricing);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'gemini-2.0-flash',
         userId: 'test-user',
+        pricing: testPricing,
       });
     });
   });
@@ -222,7 +229,7 @@ describe('ContextInferenceAdapter', () => {
     });
 
     it('works without logger', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user');
+      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'invalid json', usage: mockUsage },
@@ -303,7 +310,7 @@ describe('ContextInferenceAdapter', () => {
     });
 
     it('works without logger on parse failure', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user');
+      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ invalid }', usage: mockUsage },

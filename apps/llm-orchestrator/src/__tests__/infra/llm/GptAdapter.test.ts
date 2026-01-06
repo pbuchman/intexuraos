@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -18,23 +19,29 @@ vi.mock('@intexuraos/infra-gpt', () => ({
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 2.0,
+  outputPricePerMillion: 8.0,
+};
+
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id');
+    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id');
+      new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id', testPricing);
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: 'o4-mini-deep-research',
         userId: 'test-user-id',
+        pricing: testPricing,
       });
     });
   });

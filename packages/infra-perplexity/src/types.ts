@@ -5,16 +5,10 @@ export type {
   ModelPricing,
 } from '@intexuraos/llm-contract';
 
-export interface PerplexityConfig {
-  apiKey: string;
-  model: string;
-  userId: string;
-}
-
 /**
- * V2 configuration with explicit pricing (no hardcoded values).
+ * Perplexity client configuration with explicit pricing.
  */
-export interface PerplexityConfigV2 {
+export interface PerplexityConfig {
   apiKey: string;
   model: string;
   userId: string;

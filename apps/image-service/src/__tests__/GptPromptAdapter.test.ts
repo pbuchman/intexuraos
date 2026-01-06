@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import { GptPromptAdapter } from '../infra/llm/GptPromptAdapter.js';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
@@ -12,6 +13,11 @@ vi.mock('@intexuraos/llm-audit', (): object => ({
 vi.mock('@intexuraos/llm-pricing', (): object => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
 }));
+
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 1.75,
+  outputPricePerMillion: 14.0,
+};
 
 describe('GptPromptAdapter', () => {
   beforeAll(() => {
@@ -60,7 +66,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('AI technology article');
 
       expect(result.ok).toBe(true);
@@ -83,7 +89,7 @@ describe('GptPromptAdapter', () => {
           ],
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -124,7 +130,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -136,7 +142,7 @@ describe('GptPromptAdapter', () => {
     it('returns API_ERROR for other errors', async () => {
       nock('https://api.openai.com').post('/v1/chat/completions').replyWithError('Server error');
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -150,7 +156,7 @@ describe('GptPromptAdapter', () => {
         choices: [],
       });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -185,6 +191,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         model: 'gpt-4o',
         userId: 'test-user',
+        pricing: testPricing,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

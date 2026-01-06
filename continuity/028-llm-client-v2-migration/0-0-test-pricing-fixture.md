@@ -1,6 +1,6 @@
 # 0-0: Create Shared Test Pricing Fixture
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 0 (Setup)
 
@@ -76,16 +76,16 @@ export function getTestPricing(provider: 'google' | 'openai' | 'anthropic' | 'pe
 
 ## Steps
 
-- [ ] Create `packages/llm-contract/src/__tests__/fixtures/` directory
-- [ ] Create `pricing.ts` with all provider pricing maps
-- [ ] Create `index.ts` re-exporting fixtures
-- [ ] Verify TypeScript compiles
+- [x] Create `packages/llm-contract/src/__tests__/fixtures/` directory
+- [x] Create `pricing.ts` with all provider pricing maps
+- [x] Create `index.ts` re-exporting fixtures
+- [x] Verify TypeScript compiles
 
 ## Definition of Done
 
-- [ ] Fixture file exists with all 4 providers
-- [ ] Types match `ModelPricing` interface
-- [ ] Values match migration 012/013
+- [x] Fixture file exists with all 4 providers
+- [x] Types match `ModelPricing` interface
+- [x] Values match migration 012/013
 
 ## Verification
 

@@ -1,3 +1,10 @@
+/**
+ * Perplexity Client - with parameterized pricing.
+ *
+ * No hardcoded pricing - all costs calculated from passed ModelPricing config.
+ * Original createPerplexityClient() remains for backwards compatibility.
+ */
+
 import { randomUUID } from 'node:crypto';
 import {
   buildResearchPrompt,
@@ -18,6 +25,7 @@ import type {
   ResearchResult,
   SearchContextSize,
 } from './types.js';
+import { normalizeUsage } from './costCalculator.js';
 
 export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
 
@@ -27,12 +35,6 @@ const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
   sonar: 'low',
   'sonar-pro': 'medium',
   'sonar-deep-research': 'high',
-};
-
-const PERPLEXITY_PRICING: Record<string, { input: number; output: number }> = {
-  sonar: { input: 1.0, output: 1.0 },
-  'sonar-pro': { input: 3.0, output: 15.0 },
-  'sonar-deep-research': { input: 2.0, output: 8.0 },
 };
 
 function createRequestContext(
@@ -52,38 +54,18 @@ function createRequestContext(
   return { requestId, startTime, auditContext };
 }
 
-function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = PERPLEXITY_PRICING[model] ?? { input: 1.0, output: 1.0 };
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-}
-
-function normalizeUsage(model: string, usage: PerplexityUsage | undefined): NormalizedUsage {
-  if (usage === undefined) {
-    return {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      costUsd: 0,
-    };
+class PerplexityApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'PerplexityApiError';
   }
-
-  const inputTokens = usage.prompt_tokens;
-  const outputTokens = usage.completion_tokens;
-  const providerCost = usage.cost?.total_cost;
-  const costUsd = providerCost ?? calculateCost(model, inputTokens, outputTokens);
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
-    costUsd,
-  };
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId } = config;
+  const { apiKey, model, userId, pricing } = config;
 
   function trackUsage(
     callType: CallType,
@@ -100,6 +82,18 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       success,
       ...(errorMessage !== undefined && { errorMessage }),
     });
+  }
+
+  function extractUsage(usage: PerplexityUsage | undefined): NormalizedUsage {
+    if (usage === undefined) {
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
+    }
+    return normalizeUsage(
+      usage.prompt_tokens,
+      usage.completion_tokens,
+      usage.cost?.total_cost,
+      pricing
+    );
   }
 
   return {
@@ -152,7 +146,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         const data = (await response.json()) as PerplexityResponse;
         const content = data.choices[0]?.message.content ?? '';
         const sources = extractSourcesFromResponse(data);
-        const usage = normalizeUsage(model, data.usage);
+        const usage = extractUsage(data.usage);
 
         await auditContext.success({
           response: content,
@@ -218,12 +212,13 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
         const data = (await response.json()) as PerplexityResponse;
         const content = data.choices[0]?.message.content ?? '';
-        const usage = normalizeUsage(model, data.usage);
+        const usage = extractUsage(data.usage);
 
         await auditContext.success({
           response: content,
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
+          providerCost: usage.costUsd,
         });
         trackUsage('generate', usage, true);
 
@@ -244,34 +239,22 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
   };
 }
 
-class PerplexityApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string
-  ) {
-    super(message);
-    this.name = 'PerplexityApiError';
-  }
-}
-
 function mapPerplexityError(error: unknown): PerplexityError {
   if (error instanceof PerplexityApiError) {
     const message = error.message;
     if (error.status === 401) return { code: 'INVALID_KEY', message };
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
-    if (message.includes('context') && message.includes('length')) {
-      return { code: 'CONTEXT_LENGTH', message };
-    }
-    if (message.includes('timeout')) return { code: 'TIMEOUT', message };
+    if (error.status === 503) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
   }
   const message = getErrorMessage(error);
+  if (message.includes('timeout')) return { code: 'TIMEOUT', message };
   return { code: 'API_ERROR', message };
 }
 
 function extractSourcesFromResponse(response: PerplexityResponse): string[] {
   const sources: string[] = [];
-  if (response.search_results !== undefined) {
+  if (response.search_results !== undefined && Array.isArray(response.search_results)) {
     for (const result of response.search_results) {
       if (result.url !== undefined) {
         sources.push(result.url);

@@ -1,6 +1,6 @@
 # 1-3: Clean Up infra-perplexity Package
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 1 (Package-level)
 
