@@ -32,7 +32,7 @@ steps:
         if [[ "${_FORCE_DEPLOY}" == "true" ]]; then
           echo "Force deploy - marking all services as affected"
           mkdir -p /workspace/.affected
-          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service notes-agent web firestore; do
+          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service notes-agent app-settings-service web firestore; do
             touch "/workspace/.affected/$svc"
           done
         else
@@ -560,6 +560,49 @@ steps:
           bash cloudbuild/scripts/deploy-notes-agent.sh
         else
           echo "notes-agent not affected, skipping deploy."
+        fi
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== app-settings-service =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-app-settings-service'
+    waitFor: ['check-all-affected']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/app-settings-service ]]; then
+          echo "=== Building app-settings-service ==="
+          docker pull ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest || true
+          docker build \
+            --cache-from=${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA \
+            -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+            -f apps/app-settings-service/Dockerfile .
+          docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA
+          docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest
+        else
+          echo "app-settings-service not affected, skipping."
+        fi
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-app-settings-service'
+    waitFor: ['build-push-app-settings-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [[ -f /workspace/.affected/app-settings-service ]]; then
+          bash cloudbuild/scripts/deploy-app-settings-service.sh
+        else
+          echo "app-settings-service not affected, skipping deploy."
         fi
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'

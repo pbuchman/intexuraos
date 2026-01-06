@@ -7,7 +7,7 @@ import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 /**
  * Check service configuration (config.openApiSources must be non-empty).

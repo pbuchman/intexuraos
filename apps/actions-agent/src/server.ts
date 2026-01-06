@@ -13,7 +13,7 @@ import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
 import { registerRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'actions-agent';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [

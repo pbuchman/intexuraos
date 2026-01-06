@@ -18,7 +18,7 @@ import {
 import { internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'image-service';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 const REQUIRED_SECRETS: string[] = [];
 

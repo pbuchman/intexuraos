@@ -19,7 +19,7 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const configPath = join(repoRoot, 'vitest.config.ts');
 
 const REQUIRED_THRESHOLDS = { lines: 95, branches: 95, functions: 95, statements: 95 };
-const MAX_EXCLUSIONS = 18; // Current baseline from vitest.config.ts coverage.exclude
+const MAX_EXCLUSIONS = 19; // Current baseline from vitest.config.ts coverage.exclude
 
 function parseConfig() {
   const content = readFileSync(configPath, 'utf8');

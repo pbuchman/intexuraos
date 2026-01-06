@@ -35,7 +35,7 @@ apps/<service-name>/
 ```json
 {
   "name": "@intexuraos/<service-name>",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {

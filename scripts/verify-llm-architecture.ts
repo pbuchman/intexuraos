@@ -3,7 +3,7 @@
  * LLM Architecture Verification Script
  *
  * Verifies the LLM client architecture:
- * 1. Only 4 allowed LLMClient implementations exist (in packages/infra-*)
+ * 1. Only allowed LLMClient implementations exist (in packages/infra-*)
  * 2. Each implementation accepts usageLogger and calls it for logging
  * 3. No hardcoded cost values in apps/ (should be calculated in clients)
  */
@@ -14,10 +14,16 @@ import { join, relative } from 'node:path';
 const ROOT = process.cwd();
 
 const ALLOWED_CLIENT_FILES = [
+  // Legacy clients (v1)
   'packages/infra-gemini/src/client.ts',
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
   'packages/infra-perplexity/src/client.ts',
+  // V2 clients with pricing parameter
+  'packages/infra-gemini/src/clientV2.ts',
+  'packages/infra-gpt/src/clientV2.ts',
+  'packages/infra-claude/src/clientV2.ts',
+  'packages/infra-perplexity/src/clientV2.ts',
 ];
 
 interface Violation {
@@ -178,8 +184,6 @@ function main(): void {
 
   console.log('Rule 3: Checking for hardcoded cost values in apps/...');
   checkRule3_NoHardcodedCosts();
-
-  console.log('\n=== Results ===\n');
 
   if (violations.length === 0) {
     console.log('All checks passed! No violations found.');
