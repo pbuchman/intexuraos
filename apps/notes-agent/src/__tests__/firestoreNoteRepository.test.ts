@@ -333,4 +333,57 @@ describe('FirestoreNoteRepository', () => {
       }
     });
   });
+  describe('error handling', () => {
+    it('returns STORAGE_ERROR when create fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Connection failed') });
+      const result = await repository.create(createTestInput());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('STORAGE_ERROR');
+        expect(result.error.message).toContain('Connection failed');
+      }
+    });
+    it('returns STORAGE_ERROR when findById fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+      const result = await repository.findById('some-id');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('STORAGE_ERROR');
+        expect(result.error.message).toContain('Read failed');
+      }
+    });
+    it('returns STORAGE_ERROR when findByUserId fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+      const result = await repository.findByUserId('user-123');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('STORAGE_ERROR');
+        expect(result.error.message).toContain('Query failed');
+      }
+    });
+    it('returns STORAGE_ERROR when update fails due to Firestore error', async () => {
+      const createResult = await repository.create(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+      const result = await repository.update(createResult.value.id, { title: 'New Title' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('STORAGE_ERROR');
+        expect(result.error.message).toContain('Update failed');
+      }
+    });
+    it('returns STORAGE_ERROR when delete fails due to Firestore error', async () => {
+      const createResult = await repository.create(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+      fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
+      const result = await repository.delete(createResult.value.id);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('STORAGE_ERROR');
+        expect(result.error.message).toContain('Delete failed');
+      }
+    });
+  });
 });
