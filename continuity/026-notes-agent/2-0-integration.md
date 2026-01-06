@@ -16,9 +16,9 @@ Final integration steps and verification.
 - [ ] Update api-docs-hub with actual Cloud Run URL
 - [ ] Create service URL secret:
   ```bash
-  SERVICE_URL=$(gcloud run services describe intexuraos-notes-service \
+  SERVICE_URL=$(gcloud run services describe intexuraos-notes-agent \
     --region=europe-central2 --format='value(status.url)')
-  echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_NOTES_SERVICE_URL --data-file=-
+  echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_NOTES_AGENT_URL --data-file=-
   ```
 
 ## Checklist from /create-service

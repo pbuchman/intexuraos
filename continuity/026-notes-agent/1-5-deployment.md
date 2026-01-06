@@ -7,7 +7,7 @@ Configure infrastructure and CI/CD for the service.
 - [ ] Add service account to IAM module
 - [ ] Create Cloud Run module in `terraform/environments/dev/main.tf`
 - [ ] Add CloudBuild trigger in `cloudbuild/cloudbuild.yaml`
-- [ ] Create `cloudbuild/scripts/deploy-notes-service.sh`
+- [ ] Create `cloudbuild/scripts/deploy-notes-agent.sh`
 - [ ] Add to `scripts/dev.mjs` (pick next port, e.g., 8113)
 - [ ] Add to `.envrc.local.example`
 - [ ] Run `terraform fmt -recursive && terraform validate`
@@ -15,15 +15,15 @@ Configure infrastructure and CI/CD for the service.
 ## Terraform Module
 
 ```hcl
-module "notes_service" {
+module "notes_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id    = var.project_id
   region        = var.region
-  service_name  = "intexuraos-notes-service"
-  image         = "${var.region}-docker.pkg.dev/${var.project_id}/intexuraos/intexuraos-notes-service:latest"
+  service_name  = "intexuraos-notes-agent"
+  image         = "${var.region}-docker.pkg.dev/${var.project_id}/intexuraos/intexuraos-notes-agent:latest"
 
-  service_account_email = module.iam.service_accounts["notes-service"]
+  service_account_email = module.iam.service_accounts["notes-agent"]
 
   env_vars = {
     NODE_ENV = "production"

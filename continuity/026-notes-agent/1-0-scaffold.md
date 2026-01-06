@@ -4,7 +4,7 @@ Create the basic service skeleton following `/create-service` checklist.
 
 ## Tasks
 
-- [ ] Create `apps/notes-service/` directory structure
+- [ ] Create `apps/notes-agent/` directory structure
 - [ ] Create `package.json` with dependencies
 - [ ] Create `Dockerfile`
 - [ ] Create `src/index.ts` entry point
