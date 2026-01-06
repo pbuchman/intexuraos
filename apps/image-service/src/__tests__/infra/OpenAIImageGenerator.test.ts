@@ -60,7 +60,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -100,7 +100,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -128,7 +128,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -183,7 +183,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -300,7 +300,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
