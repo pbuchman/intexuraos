@@ -1,6 +1,6 @@
 # 1-0: Clean Up infra-gemini Package
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 1 (Package-level)
 

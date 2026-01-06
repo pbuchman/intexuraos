@@ -8,16 +8,10 @@ export type {
   ModelPricing,
 } from '@intexuraos/llm-contract';
 
-export interface GptConfig {
-  apiKey: string;
-  model: string;
-  userId: string;
-}
-
 /**
- * V2 configuration with explicit pricing (no hardcoded values).
+ * GPT client configuration with explicit pricing.
  */
-export interface GptConfigV2 {
+export interface GptConfig {
   apiKey: string;
   model: string;
   userId: string;

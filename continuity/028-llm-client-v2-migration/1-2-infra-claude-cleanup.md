@@ -1,6 +1,6 @@
 # 1-2: Clean Up infra-claude Package
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 1 (Package-level)
 

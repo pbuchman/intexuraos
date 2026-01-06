@@ -1,6 +1,6 @@
 # 2-0: Migrate llm-orchestrator Adapters
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 2 (Service-level)
 

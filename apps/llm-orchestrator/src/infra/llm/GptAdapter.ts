@@ -4,6 +4,7 @@
  */
 
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import { buildSynthesisPrompt, type Result, type SynthesisContext } from '@intexuraos/common-core';
 import type {
   LlmError,
@@ -16,8 +17,8 @@ import type {
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
 
-  constructor(apiKey: string, model: string, userId: string) {
-    this.client = createGptClient({ apiKey, model, userId });
+  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+    this.client = createGptClient({ apiKey, model, userId, pricing });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

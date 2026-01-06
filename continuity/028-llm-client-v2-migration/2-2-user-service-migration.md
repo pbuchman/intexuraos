@@ -1,6 +1,6 @@
 # 2-2: Migrate user-service LlmValidatorImpl
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 2 (Service-level)
 

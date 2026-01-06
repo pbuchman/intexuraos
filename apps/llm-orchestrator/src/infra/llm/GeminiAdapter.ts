@@ -4,6 +4,7 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import { buildSynthesisPrompt, type Result, type SynthesisContext } from '@intexuraos/common-core';
 import type {
   LlmError,
@@ -16,8 +17,8 @@ import type {
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GeminiClient;
 
-  constructor(apiKey: string, model: string, userId: string) {
-    this.client = createGeminiClient({ apiKey, model, userId });
+  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+    this.client = createGeminiClient({ apiKey, model, userId, pricing });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

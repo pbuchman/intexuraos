@@ -1,6 +1,6 @@
 # 2-3: Migrate data-insights-service
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 2 (Service-level)
 

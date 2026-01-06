@@ -1,6 +1,6 @@
 # 2-1: Migrate image-service
 
-## Status: TODO
+## Status: ✅ DONE
 
 ## Tier: 2 (Service-level)
 

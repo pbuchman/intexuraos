@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
   GoogleImageGenerator,
   createGoogleImageGenerator,
@@ -22,6 +23,17 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
 }));
+
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 0.3,
+  outputPricePerMillion: 2.5,
+};
+
+const testImagePricing: ModelPricing = {
+  inputPricePerMillion: 0,
+  outputPricePerMillion: 0,
+  imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
+};
 
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
@@ -78,6 +90,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -113,6 +127,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       await generator.generate(testPrompt);
@@ -141,6 +157,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -165,6 +183,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -198,6 +218,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -219,6 +241,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -239,6 +263,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -259,6 +285,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -281,6 +309,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -310,6 +340,8 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -331,6 +363,8 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);

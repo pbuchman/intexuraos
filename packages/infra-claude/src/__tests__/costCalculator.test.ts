@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTextCost, normalizeUsageV2 } from '../costCalculator.js';
+import { calculateTextCost, normalizeUsage } from '../costCalculator.js';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
 describe('infra-claude costCalculator', () => {
@@ -62,10 +62,10 @@ describe('infra-claude costCalculator', () => {
     });
   });
 
-  describe('normalizeUsageV2', () => {
+  describe('normalizeUsage', () => {
     it('aggregates cache tokens into single contract field', () => {
       // 2000 Read + 500 Write
-      const result = normalizeUsageV2(1000, 100, 2000, 500, 1, basePricing);
+      const result = normalizeUsage(1000, 100, 2000, 500, 1, basePricing);
 
       // Contract compliance:
       expect(result.cacheTokens).toBe(2500); // 2000 + 500

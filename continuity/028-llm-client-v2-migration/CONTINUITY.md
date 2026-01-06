@@ -32,9 +32,15 @@ Goal: cut over completely to V2, remove all V1 code.
 
 ## State
 
-- Done: (none)
-- Now: Planning complete, awaiting execution
-- Next: 0-0 — Create shared test pricing fixture
+- Done: 0-0 test pricing fixture, 1-0 infra-gemini, 1-1 infra-gpt, 1-2 infra-claude, 1-3 infra-perplexity, 2-0 llm-orchestrator, 2-1 image-service, 2-2 user-service, 2-3 data-insights-service, 3-0 final cleanup
+- Now: Complete ✅
+- Next: Archive task
+
+**Final verification passed:**
+- All V1 client files deleted
+- All V2 client files renamed to client.ts (with non-V2 function names)
+- All V2 test files renamed to client.test.ts (with updated imports/function names)
+- `npm run ci` passes (202 test files, 3035 tests, TypeScript OK, ESLint OK)
 
 ## Open Questions
 
