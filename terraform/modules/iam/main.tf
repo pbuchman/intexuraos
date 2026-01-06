@@ -78,6 +78,13 @@ resource "google_service_account" "image_service" {
   description  = "Service account for image-service Cloud Run deployment"
 }
 
+# Service account for notes-agent
+resource "google_service_account" "notes_agent" {
+  account_id   = "intexuraos-notes-svc-${var.environment}"
+  display_name = "IntexuraOS Notes Agent (${var.environment})"
+  description  = "Service account for notes-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -169,6 +176,15 @@ resource "google_secret_manager_secret_iam_member" "image_service_secrets" {
   member    = "serviceAccount:${google_service_account.image_service.email}"
 }
 
+# Notes Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "notes_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.notes_agent.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -252,6 +268,13 @@ resource "google_project_iam_member" "image_service_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.image_service.email}"
+}
+
+# Notes Agent: Firestore access
+resource "google_project_iam_member" "notes_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.notes_agent.email}"
 }
 
 

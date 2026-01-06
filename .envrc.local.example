@@ -46,6 +46,7 @@ export INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=http://localhost:8117
 export INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=http://localhost:8118
 export INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=http://localhost:8119
 export INTEXURAOS_IMAGE_SERVICE_URL=http://localhost:8120
+export INTEXURAOS_NOTES_AGENT_URL=http://localhost:8121
 
 # =============================================================================
 # GCS BUCKETS (for local fake-gcs-server)

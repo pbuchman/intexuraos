@@ -186,6 +186,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    notes_agent = {
+      name      = "intexuraos-notes-agent"
+      app_path  = "apps/notes-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -385,7 +392,7 @@ module "secret_manager" {
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
     "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
-    "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"                = "Actions Agent Cloud Run URL for commands-router"
+    "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"        = "Actions Agent Cloud Run URL for commands-router"
     "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
@@ -865,6 +872,7 @@ module "api_docs_hub" {
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
+    INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -880,6 +888,7 @@ module "api_docs_hub" {
     module.actions_agent,
     module.data_insights_service,
     module.image_service,
+    module.notes_agent,
   ]
 }
 
@@ -946,11 +955,11 @@ module "commands_router" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-router:latest"
 
   secrets = {
-    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL   = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"]
+    INTEXURAOS_AUTH_JWKS_URL             = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER               = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE             = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN       = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL = module.secret_manager.secret_ids["INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"]
   }
 
   env_vars = {
@@ -1081,6 +1090,40 @@ module "image_service" {
     module.secret_manager,
     module.user_service,
     module.generated_images_bucket,
+  ]
+}
+
+# Notes Agent - User-scoped notes CRUD
+module "notes_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.notes_agent.name
+  service_account = module.iam.service_accounts["notes_agent"]
+  port            = local.services.notes_agent.port
+  min_scale       = local.services.notes_agent.min_scale
+  max_scale       = local.services.notes_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/notes-agent:latest"
+
+  secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
   ]
 }
 
@@ -1432,5 +1475,10 @@ output "pubsub_llm_analytics_topic" {
 output "github_wif_provider" {
   description = "Workload Identity Provider for GitHub Actions authentication"
   value       = module.github_wif.workload_identity_provider
+}
+
+output "notes_agent_url" {
+  description = "Notes Agent URL"
+  value       = module.notes_agent.service_url
 }
 

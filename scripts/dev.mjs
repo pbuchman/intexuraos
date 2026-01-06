@@ -42,6 +42,7 @@ const SERVICES = [
   { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
   { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
   { name: 'image-service', port: 8120, color: '\x1b[91m' },
+  { name: 'notes-agent', port: 8121, color: '\x1b[37m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[95m' };
@@ -271,6 +272,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
   INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
+  INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
 };
 
 const COMMON_SERVICE_ENV = {

@@ -99,6 +99,35 @@ verify_directory() {
     log_success "Found apps/ directory"
 }
 
+# Verify gcloud authentication
+verify_gcloud_auth() {
+    log_info "Checking gcloud authentication..."
+
+    # Check if gcloud is installed
+    if ! command -v gcloud &>/dev/null; then
+        log_error "gcloud CLI is not installed. Install it from: https://cloud.google.com/sdk/docs/install"
+        exit 1
+    fi
+
+    # Check if user is authenticated
+    local account
+    account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null || true)
+
+    if [[ -z "$account" ]]; then
+        log_error "Not authenticated with gcloud."
+        log_error "Run: gcloud auth login"
+        exit 1
+    fi
+
+    log_success "Authenticated as: ${account}"
+
+    # Check if Docker is configured for Artifact Registry
+    if ! gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet 2>/dev/null; then
+        log_warning "Docker may not be configured for Artifact Registry."
+        log_info "Run: gcloud auth configure-docker ${REGION}-docker.pkg.dev"
+    fi
+}
+
 # Get project ID from environment
 get_project_id() {
     local project_id="${PROJECT_ID:-}"
@@ -182,6 +211,9 @@ main() {
 
     # Verify directory
     verify_directory
+
+    # Verify gcloud authentication
+    verify_gcloud_auth
 
     # Get project ID
     local project_id

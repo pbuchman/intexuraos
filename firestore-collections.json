@@ -85,6 +85,10 @@
     "generated_images": {
       "owner": "image-service",
       "description": "Generated thumbnail images and their metadata"
+    },
+    "notes": {
+      "owner": "notes-agent",
+      "description": "User-scoped notes with tags and source tracking"
     }
   }
 }
