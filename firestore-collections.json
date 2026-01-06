@@ -89,6 +89,10 @@
     "notes": {
       "owner": "notes-agent",
       "description": "User-scoped notes with tags and source tracking"
+    },
+    "todos": {
+      "owner": "todos-agent",
+      "description": "User-scoped todos with items, priority, and due dates"
     }
   }
 }
