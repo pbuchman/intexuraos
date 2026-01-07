@@ -25,10 +25,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
-                  google: { $ref: '#/components/schemas/ProviderPricing' },
-                  openai: { $ref: '#/components/schemas/ProviderPricing' },
-                  anthropic: { $ref: '#/components/schemas/ProviderPricing' },
-                  perplexity: { $ref: '#/components/schemas/ProviderPricing' },
+                  google: { $ref: 'ProviderPricing#' },
+                  openai: { $ref: 'ProviderPricing#' },
+                  anthropic: { $ref: 'ProviderPricing#' },
+                  perplexity: { $ref: 'ProviderPricing#' },
                 },
                 required: ['google', 'openai', 'anthropic', 'perplexity'],
               },
@@ -39,14 +39,14 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', const: false },
-              error: { $ref: '#/components/schemas/ErrorBody' },
+              error: { $ref: 'ErrorBody#' },
             },
           },
           500: {
             type: 'object',
             properties: {
               success: { type: 'boolean', const: false },
-              error: { $ref: '#/components/schemas/ErrorBody' },
+              error: { $ref: 'ErrorBody#' },
             },
           },
         },
@@ -86,15 +86,13 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      if (google === null || openai === null || anthropic === null || perplexity === null) {
-        return await reply.fail('INTERNAL_ERROR', 'Unexpected null pricing');
-      }
-
+      // At this point all providers are non-null (missing.length === 0 check above)
+      // TypeScript doesn't narrow after array push checks, so we use non-null assertions
       const totalModels =
-        Object.keys(google.models).length +
-        Object.keys(openai.models).length +
-        Object.keys(anthropic.models).length +
-        Object.keys(perplexity.models).length;
+        Object.keys(google!.models).length +
+        Object.keys(openai!.models).length +
+        Object.keys(anthropic!.models).length +
+        Object.keys(perplexity!.models).length;
 
       request.log.info(
         { userId: user.userId, totalModels },
@@ -102,10 +100,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       return await reply.ok({
-        google,
-        openai,
-        anthropic,
-        perplexity,
+        google: google!,
+        openai: openai!,
+        anthropic: anthropic!,
+        perplexity: perplexity!,
       });
     }
   );
