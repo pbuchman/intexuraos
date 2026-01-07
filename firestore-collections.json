@@ -97,6 +97,10 @@
     "todos": {
       "owner": "todos-agent",
       "description": "User-scoped todos with items, priority, and due dates"
+    },
+    "bookmarks": {
+      "owner": "bookmarks-agent",
+      "description": "User-scoped bookmarks with OG metadata, AI summaries, and tags"
     }
   }
 }
