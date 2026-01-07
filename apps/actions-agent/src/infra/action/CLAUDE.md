@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #384 | 11:46 PM | 🔵 | Actions-Agent Internal Routes Handle PubSub Events and Service-to-Service Calls | ~492 |
-| #363 | 11:45 PM | 🔵 | Actions Agent Public Routes Support Calendar Action Type in CRUD Operations | ~419 |
+| #387 | 11:46 PM | 🔵 | Local Action Service Client Demonstrates In-Process Repository Access Pattern | ~426 |
 </claude-mem-context>
