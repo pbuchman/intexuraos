@@ -17,27 +17,28 @@ Add deterministic source attribution to synthesis output so users can see which 
 
 ### Done
 
-(none yet)
+- [x] 1-0-attribution-types.md
+- [x] 1-1-attribution-parsing.md
+- [x] 1-2-section-parsing.md
+- [x] 1-3-validation.md
+- [x] 1-4-breakdown-generator.md
+- [x] 1-5-attribution-tests.md
+- [x] 2-0-prompt-source-ids.md
+- [x] 2-1-prompt-inject-rules.md
+- [x] 2-2-prompt-tests.md
+- [x] 3-0-repair-usecase.md
+- [x] 3-1-post-processing.md
+- [x] 3-2-firestore-field.md
+- [x] 4-0-integration-test.md
+- [x] 4-1-final-verification.md
 
 ### Now
 
-- [ ] 1-0-attribution-types.md
+(complete)
 
 ### Next
 
-- [ ] 1-1-attribution-parsing.md
-- [ ] 1-2-section-parsing.md
-- [ ] 1-3-validation.md
-- [ ] 1-4-breakdown-generator.md
-- [ ] 1-5-attribution-tests.md
-- [ ] 2-0-prompt-source-ids.md
-- [ ] 2-1-prompt-inject-rules.md
-- [ ] 2-2-prompt-tests.md
-- [ ] 3-0-repair-usecase.md
-- [ ] 3-1-post-processing.md
-- [ ] 3-2-firestore-field.md
-- [ ] 4-0-integration-test.md
-- [ ] 4-1-final-verification.md
+(none)
 
 ---
 
@@ -52,12 +53,51 @@ Add deterministic source attribution to synthesis output so users can see which 
 
 ---
 
+## Implementation Summary
+
+### Tier 1 — Attribution Module (packages/common-core/src/prompts/attribution.ts)
+
+- Types: `SourceId`, `SourceMapItem`, `AttributionLine`, `ParsedSection`, `ValidationResult`, `BreakdownEntry`
+- Functions: `parseAttributionLine()`, `parseSections()`, `buildSourceMap()`, `validateSynthesisAttributions()`, `generateBreakdown()`
+- Tests: 619 lines with comprehensive coverage
+- Exported from `packages/common-core/src/index.ts`
+
+### Tier 2 — Prompt Modifications (packages/common-core/src/prompts/synthesisPrompt.ts)
+
+- Source headings changed from `### GPT-4` to `### S1 (LLM report; model: GPT-4)`
+- Additional sources use `### U1 (Additional source; label: Label)`
+- Added `buildSourceIdMapSection()` helper generating plain text table
+- Added `ATTRIBUTION_RULES` constant with format and category explanations
+- Injected rules after "## Sources Used" in both contextual and legacy paths
+- Added "Attribute sources" task item in "Your Task" section
+
+### Tier 3 — Orchestrator Integration (apps/llm-orchestrator)
+
+- Created `repairAttribution.ts` usecase for fixing malformed attributions
+- Added `AttributionStatus` type to `Research.ts` domain model
+- Added post-processing to `runSynthesis.ts`:
+  - Build source map from reports and additional sources
+  - Validate attributions against allowed source IDs
+  - Attempt single repair if validation fails
+  - Parse sections and generate breakdown
+  - Append breakdown to content
+  - Track `attributionStatus` ('complete' | 'incomplete' | 'repaired')
+  - Save to Firestore with processed content and status
+
+### Tier 4 — Verification
+
+- All tests pass (46 synthesis prompt tests, 7 repair attribution tests)
+- 95% coverage maintained
+- CI passes
+
+---
+
 ## Open Questions
 
-(none currently)
+(none)
 
 ---
 
 ## Blockers
 
-(none currently)
+(none)

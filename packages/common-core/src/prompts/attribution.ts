@@ -236,31 +236,34 @@ function extractAttributionFromLines(
 /**
  * Build a source map from reports and additional sources.
  * Maps to neutral IDs: S1..Sn for reports, U1..Um for additional sources.
+ * Handles sparse arrays by assigning sequential IDs to defined elements only.
  */
 export function buildSourceMap(
-  reports: readonly { model: string }[],
-  additionalSources?: readonly { label?: string }[]
+  reports: readonly ({ model: string } | undefined)[],
+  additionalSources?: readonly ({ label?: string } | undefined)[]
 ): SourceMapItem[] {
   const sourceMap: SourceMapItem[] = [];
 
-  for (let i = 0; i < reports.length; i++) {
-    const report = reports[i];
+  let llmCounter = 0;
+  for (const report of reports) {
     if (report === undefined) continue;
+    llmCounter++;
     sourceMap.push({
-      id: `S${String(i + 1)}` as SourceId,
+      id: `S${String(llmCounter)}` as SourceId,
       kind: 'llm',
       displayName: report.model,
     });
   }
 
   if (additionalSources !== undefined) {
-    for (let i = 0; i < additionalSources.length; i++) {
-      const source = additionalSources[i];
+    let userCounter = 0;
+    for (const source of additionalSources) {
       if (source === undefined) continue;
+      userCounter++;
       sourceMap.push({
-        id: `U${String(i + 1)}` as SourceId,
+        id: `U${String(userCounter)}` as SourceId,
         kind: 'user',
-        displayName: source.label ?? `Source ${String(i + 1)}`,
+        displayName: source.label ?? `Source ${String(userCounter)}`,
       });
     }
   }

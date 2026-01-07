@@ -253,12 +253,13 @@ describe('runSynthesis', () => {
     expect(result).toEqual({ ok: true });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'completed',
-      synthesizedResult: 'Synthesized result',
+      synthesizedResult: expect.stringContaining('Synthesized result'),
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalCostUsd: 0,
+      attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
     });
   });
 
@@ -688,7 +689,8 @@ describe('runSynthesis', () => {
 
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
@@ -749,7 +751,8 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
@@ -791,7 +794,7 @@ describe('runSynthesis', () => {
 
       expect(result).toEqual({ ok: true });
       expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
-        'Synthesized result',
+        expect.stringContaining('Synthesized result'),
         LlmModels.Gemini25Pro,
         'user-1'
       );
@@ -803,7 +806,8 @@ describe('runSynthesis', () => {
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
@@ -911,7 +915,8 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
@@ -951,7 +956,8 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
@@ -989,7 +995,8 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
         totalInputTokens: 0,
