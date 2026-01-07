@@ -5,14 +5,15 @@ import type {
   CreateTodoRequest,
   CreateTodoResponse,
 } from '../../domain/ports/todosServiceClient.js';
-import pino from 'pino';
+import pino, { type Logger } from 'pino';
 
 export interface TodosServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
+  logger?: Logger;
 }
 
-const logger = pino({
+const defaultLogger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'todosServiceHttpClient',
 });
@@ -31,6 +32,8 @@ interface ApiResponse {
 export function createTodosServiceHttpClient(
   config: TodosServiceHttpClientConfig
 ): TodosServiceClient {
+  const logger = config.logger ?? defaultLogger;
+
   return {
     async createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>> {
       const url = `${config.baseUrl}/internal/todos/todos`;

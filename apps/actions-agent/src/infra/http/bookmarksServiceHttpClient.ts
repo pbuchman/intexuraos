@@ -5,14 +5,15 @@ import type {
   CreateBookmarkRequest,
   CreateBookmarkResponse,
 } from '../../domain/ports/bookmarksServiceClient.js';
-import pino from 'pino';
+import pino, { type Logger } from 'pino';
 
 export interface BookmarksServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
+  logger?: Logger;
 }
 
-const logger = pino({
+const defaultLogger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'bookmarksServiceHttpClient',
 });
@@ -31,6 +32,8 @@ interface ApiResponse {
 export function createBookmarksServiceHttpClient(
   config: BookmarksServiceHttpClientConfig
 ): BookmarksServiceClient {
+  const logger = config.logger ?? defaultLogger;
+
   return {
     async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {
       const url = `${config.baseUrl}/internal/bookmarks/bookmarks`;

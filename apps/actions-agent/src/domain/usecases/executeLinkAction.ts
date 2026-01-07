@@ -24,6 +24,11 @@ export type ExecuteLinkActionUseCase = (
   actionId: string
 ) => Promise<Result<ExecuteLinkActionResult>>;
 
+// Matches http/https URLs, excluding characters that are:
+// - Whitespace (\s) - URL terminator
+// - HTML/XML delimiters (<>) - prevents matching into markup
+// - Quotes ("") - prevents matching into quoted attributes
+// - URI unsafe chars ({}|\\^`[]) - per RFC 3986, these must be percent-encoded
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
 
 function extractUrl(text: string): string | null {
