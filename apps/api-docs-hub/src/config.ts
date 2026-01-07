@@ -52,6 +52,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL',
     displayName: 'Notes Agent API',
   },
+  {
+    key: 'INTEXURAOS_TODOS_AGENT_OPENAPI_URL',
+    displayName: 'Todos Agent API',
+  },
 ];
 
 /**

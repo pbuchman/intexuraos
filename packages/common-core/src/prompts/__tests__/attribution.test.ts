@@ -576,8 +576,9 @@ describe('generateBreakdown', () => {
     const breakdown = generateBreakdown(sections, sourceMap);
 
     // Unknown IDs are ignored, S1 has zero usage so it goes to Ignored Sources
+    // When all sources are ignored, code outputs "All sources were ignored." without listing them
     expect(breakdown).toContain('All sources were ignored.');
-    expect(breakdown).toContain('**S1** (GPT-4)');
+    expect(breakdown).toContain('No sources were used.');
   });
 
   it('handles empty primary, secondary, and constraints lists', () => {

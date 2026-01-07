@@ -193,6 +193,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    todos_agent = {
+      name      = "intexuraos-todos-agent"
+      app_path  = "apps/todos-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
     app_settings_service = {
       name      = "intexuraos-app-settings-service"
       app_path  = "apps/app-settings-service"
@@ -1137,6 +1144,41 @@ module "notes_agent" {
   ]
 }
 
+
+# todos Agent - User-scoped todos CRUD
+module "todos_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.todos_agent.name
+  service_account = module.iam.service_accounts["todos_agent"]
+  port            = local.services.todos_agent.port
+  min_scale       = local.services.todos_agent.min_scale
+  max_scale       = local.services.todos_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/todos-agent:latest"
+
+  secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # App Settings Service - Centralized configuration management (pricing, etc.)
 module "app_settings_service" {
   source = "../../modules/cloud-run-service"
@@ -1523,3 +1565,7 @@ output "notes_agent_url" {
   value       = module.notes_agent.service_url
 }
 
+output "todos_agent_url" {
+  description = "Todos Agent URL"
+  value       = module.todos_agent.service_url
+}
