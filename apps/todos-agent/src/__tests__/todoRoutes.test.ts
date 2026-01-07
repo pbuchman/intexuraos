@@ -70,6 +70,22 @@ describe('Todo Routes', () => {
 
       expect(response.statusCode).toBe(401);
     });
+
+    it('returns 500 on storage error', async () => {
+      ctx.todoRepository.simulateMethodError('findByUserId', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 
   describe('POST /todos', () => {
@@ -135,6 +151,28 @@ describe('Todo Routes', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('returns 500 on storage error', async () => {
+      ctx.todoRepository.simulateNextError({ code: 'STORAGE_ERROR', message: 'DB error' });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: {
+          title: 'New Todo',
+          tags: [],
+          source: 'web',
+          sourceId: 'src-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 
   describe('GET /todos/:id', () => {
@@ -191,6 +229,22 @@ describe('Todo Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 500 on storage error', async () => {
+      ctx.todoRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos/any-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 
@@ -309,6 +363,41 @@ describe('Todo Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.items[0].status).toBe('completed');
     });
+
+    it('returns 500 on storage error', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        items: [{ title: 'Item 1' }],
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const itemId = createResult.value.items[0]?.id;
+      expect(itemId).toBeDefined();
+      if (itemId === undefined) return;
+
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 
   describe('DELETE /todos/:id/items/:itemId', () => {
@@ -338,6 +427,37 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.items).toHaveLength(1);
+    });
+
+    it('returns 500 on storage error', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        items: [{ title: 'Item 1' }],
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const itemId = createResult.value.items[0]?.id;
+      expect(itemId).toBeDefined();
+      if (itemId === undefined) return;
+
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 

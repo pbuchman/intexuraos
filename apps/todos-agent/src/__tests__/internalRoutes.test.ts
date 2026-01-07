@@ -140,5 +140,27 @@ describe('Internal Routes', () => {
       expect(body.data.priority).toBe('urgent');
       expect(body.data.dueDate).toBe(dueDate.toISOString());
     });
+
+    it('returns 500 on storage error', async () => {
+      ctx.todoRepository.simulateNextError({ code: 'STORAGE_ERROR', message: 'DB error' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Test',
+          tags: [],
+          source: 'actions-agent',
+          sourceId: 'action-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
   });
 });
