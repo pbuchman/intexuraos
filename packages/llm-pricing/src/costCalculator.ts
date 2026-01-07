@@ -3,7 +3,7 @@
  * Calculates accurate costs based on token usage and pricing.
  */
 
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmPricing } from './types.js';
 
 const DEFAULT_WEB_SEARCH_COST = 0.03;

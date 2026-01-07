@@ -32,7 +32,7 @@ import {
   submitResearch,
   unshareResearch,
 } from '../domain/research/index.js';
-import { getProviderForModel } from '@intexuraos/llm-contract';
+import { getProviderForModel, LlmModels, type Gemini25Flash } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   approveResearchResponseSchema,
@@ -98,7 +98,7 @@ async function generateContextLabels(
   googleApiKey: string | undefined,
   userId: string,
   createTitleGenerator: (
-    model: LlmModels.Gemini25Flash,
+    model: Gemini25Flash,
     apiKey: string,
     userId: string,
     pricing: import('@intexuraos/llm-contract').ModelPricing

@@ -3,10 +3,7 @@ import { ok, err } from '@intexuraos/common-core';
 import type { GeminiError } from '@intexuraos/infra-gemini';
 import type { GenerateResult } from '@intexuraos/llm-contract';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { TEST_PRICING } from '@intexuraos/llm-pricing';
 import { extractSelectedModels } from '../../infra/gemini/classifier.js';
-
-const testPricing = TEST_PRICING;
 
 const mockGenerate = vi.fn();
 
@@ -16,11 +13,18 @@ vi.mock('@intexuraos/infra-gemini', () => ({
   }),
 }));
 
-vi.mock('@intexuraos/llm-pricing', () => ({
-  logUsage: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@intexuraos/llm-pricing')>();
+  return {
+    ...actual,
+    logUsage: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
+const { TEST_PRICING } = await import('@intexuraos/llm-pricing');
+
+const testPricing = TEST_PRICING;
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
@@ -378,21 +382,21 @@ describe('extractSelectedModels', () => {
 
     it('extracts claude-sonnet model for "claude"', () => {
       expect(extractSelectedModels('use claude for research')).toEqual([
-        LlmModels.ClaudeSonnet4520250929,
+        LlmModels.ClaudeSonnet45,
       ]);
     });
 
     it('extracts multiple models', () => {
       const result = extractSelectedModels('use gpt and claude for this');
       expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
+      expect(result).toContain(LlmModels.ClaudeSonnet45);
     });
 
     it('extracts multiple models when mentioned', () => {
       const result = extractSelectedModels('compare gemini, gpt and claude');
       expect(result).toContain(LlmModels.Gemini25Flash);
       expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
+      expect(result).toContain(LlmModels.ClaudeSonnet45);
     });
   });
 

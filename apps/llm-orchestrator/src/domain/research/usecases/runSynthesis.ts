@@ -4,7 +4,7 @@
  * Triggered when all LLMs complete OR when user confirms 'proceed' with partial failure.
  */
 
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
 import type {
   LlmSynthesisProvider,
   NotificationSender,
@@ -281,7 +281,7 @@ export async function runSynthesis(
   return { ok: true };
 }
 
-type ImageModel = LlmModels.GPTImage1 | LlmModels.Gemini25FlashImage;
+type ImageModel = GPTImage1 | Gemini25FlashImage;
 
 /**
  * Select image generation model based on available API keys and synthesis model.

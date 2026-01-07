@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import type { ProviderPricing } from '@intexuraos/llm-contract';
+import { type ProviderPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { PricingClient, createPricingClient } from '../../../infra/pricing/PricingClient.js';
 
 describe('PricingClient', () => {
@@ -19,7 +19,7 @@ describe('PricingClient', () => {
         outputPricePerMillion: 10.0,
         cacheReadMultiplier: 0.5,
       },
-      LlmModels.GPT4oMini: {
+      [LlmModels.GPT4oMini]: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
       },
@@ -30,7 +30,7 @@ describe('PricingClient', () => {
   const mockGooglePricing: ProviderPricing = {
     provider: LlmProviders.Google,
     models: {
-      LlmModels.Gemini25Flash: {
+      [LlmModels.Gemini25Flash]: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
         groundingCostPerRequest: 0.035,

@@ -5,15 +5,6 @@
 import type {
   LlmProvider as ContractLlmProvider,
   ResearchModel,
-  Gemini25Pro,
-  Gemini25Flash,
-  ClaudeOpus45,
-  ClaudeSonnet45,
-  O4MiniDeepResearch,
-  GPT52,
-  Sonar,
-  SonarPro,
-  SonarDeepResearch,
 } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
