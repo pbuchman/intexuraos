@@ -1032,6 +1032,9 @@ module "actions_agent" {
     INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
     INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
     INTEXURAOS_COMMANDS_ROUTER_URL           = module.commands_router.service_url
+    INTEXURAOS_TODOS_AGENT_URL               = module.todos_agent.service_url
+    INTEXURAOS_NOTES_AGENT_URL               = module.notes_agent.service_url
+    INTEXURAOS_BOOKMARKS_AGENT_URL           = module.bookmarks_agent.service_url
     INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
@@ -1044,6 +1047,9 @@ module "actions_agent" {
     module.llm_orchestrator,
     module.user_service,
     module.commands_router,
+    module.todos_agent,
+    module.notes_agent,
+    module.bookmarks_agent,
   ]
 }
 

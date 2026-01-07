@@ -1,28 +1,28 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isOk, isErr } from '@intexuraos/common-core';
-import { createExecuteResearchActionUseCase } from '../domain/usecases/executeResearchAction.js';
+import { createExecuteTodoActionUseCase } from '../domain/usecases/executeTodoAction.js';
 import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
-  FakeResearchServiceClient,
+  FakeTodosServiceClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
 import pino from 'pino';
 
 const silentLogger = pino({ level: 'silent' });
 
-describe('executeResearchAction usecase', () => {
+describe('executeTodoAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
-  let fakeResearchClient: FakeResearchServiceClient;
+  let fakeTodosClient: FakeTodosServiceClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
     id: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',
-    type: 'research',
-    confidence: 0.95,
-    title: 'Test Research',
+    type: 'todo',
+    confidence: 0.9,
+    title: 'Buy groceries',
     status: 'awaiting_approval',
     payload: {},
     createdAt: '2025-01-01T12:00:00.000Z',
@@ -32,14 +32,14 @@ describe('executeResearchAction usecase', () => {
 
   beforeEach(() => {
     fakeActionRepo = new FakeActionRepository();
-    fakeResearchClient = new FakeResearchServiceClient();
+    fakeTodosClient = new FakeTodosServiceClient();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
   });
 
   it('returns error when action not found', async () => {
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -56,13 +56,13 @@ describe('executeResearchAction usecase', () => {
   it('returns completed status for already completed action', async () => {
     const action = createAction({
       status: 'completed',
-      payload: { resource_url: '/#/research/existing' },
+      payload: { resource_url: '/#/todos/existing-todo' },
     });
     await fakeActionRepo.save(action);
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -73,7 +73,7 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/existing');
+      expect(result.value.resource_url).toBe('/#/todos/existing-todo');
     }
   });
 
@@ -81,9 +81,9 @@ describe('executeResearchAction usecase', () => {
     const action = createAction({ status: 'processing' });
     await fakeActionRepo.save(action);
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -97,14 +97,17 @@ describe('executeResearchAction usecase', () => {
     }
   });
 
-  it('executes research and updates action to completed on success', async () => {
-    const action = createAction({ status: 'awaiting_approval' });
+  it('creates todo and updates action to completed on success', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { prompt: 'Milk, eggs, bread' },
+    });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('research-new-123');
+    fakeTodosClient.setNextTodoId('todo-new-123');
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -115,22 +118,22 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/research-new-123');
+      expect(result.value.resource_url).toBe('/#/todos/todo-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['researchId']).toBe('research-new-123');
+    expect(updatedAction?.payload['todoId']).toBe('todo-new-123');
   });
 
-  it('updates action to failed when research creation fails', async () => {
+  it('updates action to failed when todo creation fails', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setFailNext(true, new Error('Research service unavailable'));
+    fakeTodosClient.setFailNext(true, new Error('Todos service unavailable'));
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -141,7 +144,7 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Research service unavailable');
+      expect(result.value.error).toBe('Todos service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -151,11 +154,11 @@ describe('executeResearchAction usecase', () => {
   it('allows execution from failed status (retry)', async () => {
     const action = createAction({ status: 'failed' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('retry-research-123');
+    fakeTodosClient.setNextTodoId('retry-todo-123');
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -172,11 +175,11 @@ describe('executeResearchAction usecase', () => {
   it('publishes WhatsApp notification on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('notified-research-123');
+    fakeTodosClient.setNextTodoId('notified-todo-123');
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -187,8 +190,8 @@ describe('executeResearchAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('research draft is ready');
-    expect(messages[0]?.message).toContain('https://app.test.com/#/research/notified-research-123');
+    expect(messages[0]?.message).toContain('Todo created');
+    expect(messages[0]?.message).toContain('https://app.test.com/#/todos/notified-todo-123');
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -199,9 +202,9 @@ describe('executeResearchAction usecase', () => {
       message: 'WhatsApp unavailable',
     });
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -215,17 +218,16 @@ describe('executeResearchAction usecase', () => {
     }
   });
 
-  it('uses payload.prompt as research prompt when available', async () => {
-    const originalMessage = 'This is the full original message from WhatsApp';
+  it('passes correct parameters to todos service', async () => {
     const action = createAction({
       status: 'awaiting_approval',
-      payload: { prompt: originalMessage },
+      payload: { prompt: 'Milk, eggs, bread' },
     });
     await fakeActionRepo.save(action);
 
-    const usecase = createExecuteResearchActionUseCase({
+    const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
+      todosServiceClient: fakeTodosClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -233,29 +235,15 @@ describe('executeResearchAction usecase', () => {
 
     await usecase('action-123');
 
-    const params = fakeResearchClient.getLastCreateDraftParams();
-    expect(params?.prompt).toBe(originalMessage);
-    expect(params?.title).toBe('Test Research');
-  });
-
-  it('falls back to title when payload.prompt is missing', async () => {
-    const action = createAction({
-      status: 'awaiting_approval',
-      payload: {},
+    const createdTodos = fakeTodosClient.getCreatedTodos();
+    expect(createdTodos).toHaveLength(1);
+    expect(createdTodos[0]).toEqual({
+      userId: 'user-456',
+      title: 'Buy groceries',
+      description: 'Milk, eggs, bread',
+      tags: [],
+      source: 'actions-agent',
+      sourceId: 'action-123',
     });
-    await fakeActionRepo.save(action);
-
-    const usecase = createExecuteResearchActionUseCase({
-      actionRepository: fakeActionRepo,
-      researchServiceClient: fakeResearchClient,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
-    });
-
-    await usecase('action-123');
-
-    const params = fakeResearchClient.getLastCreateDraftParams();
-    expect(params?.prompt).toBe('Test Research');
   });
 });

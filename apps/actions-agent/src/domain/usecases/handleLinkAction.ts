@@ -4,20 +4,18 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 
-export interface HandleResearchActionDeps {
+export interface HandleLinkActionDeps {
   actionServiceClient: ActionServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
 }
 
-export interface HandleResearchActionUseCase {
+export interface HandleLinkActionUseCase {
   execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
 }
 
-export function createHandleResearchActionUseCase(
-  deps: HandleResearchActionDeps
-): HandleResearchActionUseCase {
+export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): HandleLinkActionUseCase {
   const { actionServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
 
   return {
@@ -30,7 +28,7 @@ export function createHandleResearchActionUseCase(
           title: event.title,
           actionType: event.actionType,
         },
-        'Setting action to awaiting_approval'
+        'Setting link action to awaiting_approval'
       );
 
       const result = await actionServiceClient.updateActionStatus(
@@ -44,25 +42,25 @@ export function createHandleResearchActionUseCase(
             actionId: event.actionId,
             error: getErrorMessage(result.error),
           },
-          'Failed to set action to awaiting_approval'
+          'Failed to set link action to awaiting_approval'
         );
         return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
       }
 
-      logger.info({ actionId: event.actionId }, 'Action set to awaiting_approval');
+      logger.info({ actionId: event.actionId }, 'Link action set to awaiting_approval');
 
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
+      const message = `New link ready to save: "${event.title}". Review it here: ${actionLink}`;
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },
-        'Sending WhatsApp approval notification'
+        'Sending WhatsApp approval notification for link'
       );
 
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: event.userId,
         message,
-        correlationId: `action-approval-${event.actionId}`,
+        correlationId: `action-link-approval-${event.actionId}`,
       });
 
       if (!publishResult.ok) {
@@ -74,9 +72,8 @@ export function createHandleResearchActionUseCase(
           },
           'Failed to publish WhatsApp message (non-fatal)'
         );
-        /* Best-effort notification - don't fail the action if notification fails */
       } else {
-        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent');
+        logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent for link');
       }
 
       return ok({ actionId: event.actionId });
