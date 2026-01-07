@@ -1,37 +1,36 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
+import type { NotesServiceClient } from '../ports/notesServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Logger } from 'pino';
 
-export interface ExecuteResearchActionDeps {
+export interface ExecuteNoteActionDeps {
   actionRepository: ActionRepository;
-  researchServiceClient: ResearchServiceClient;
+  notesServiceClient: NotesServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
 }
 
-export interface ExecuteResearchActionResult {
+export interface ExecuteNoteActionResult {
   status: 'completed' | 'failed';
   resource_url?: string;
   error?: string;
 }
 
-export type ExecuteResearchActionUseCase = (
+export type ExecuteNoteActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteResearchActionResult>>;
+) => Promise<Result<ExecuteNoteActionResult>>;
 
-export function createExecuteResearchActionUseCase(
-  deps: ExecuteResearchActionDeps
-): ExecuteResearchActionUseCase {
-  const { actionRepository, researchServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+export function createExecuteNoteActionUseCase(
+  deps: ExecuteNoteActionDeps
+): ExecuteNoteActionUseCase {
+  const { actionRepository, notesServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
 
-  return async (actionId: string): Promise<Result<ExecuteResearchActionResult>> => {
-    logger.info({ actionId }, 'Executing research action');
+  return async (actionId: string): Promise<Result<ExecuteNoteActionResult>> => {
+    logger.info({ actionId }, 'Executing note action');
 
     const action = await actionRepository.getById(actionId);
     if (action === null) {
@@ -69,27 +68,27 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    const selectedModels: ResearchModel[] = [LlmModels.ClaudeOpus45];
     const prompt =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
 
     logger.info(
-      { actionId, userId: action.userId, title: action.title, models: selectedModels },
-      'Creating research draft via llm-orchestrator'
+      { actionId, userId: action.userId, title: action.title },
+      'Creating note via notes-agent'
     );
 
-    const result = await researchServiceClient.createDraft({
+    const result = await notesServiceClient.createNote({
       userId: action.userId,
       title: action.title,
-      prompt,
-      selectedModels,
-      sourceActionId: action.id,
+      content: prompt,
+      tags: [],
+      source: 'actions-agent',
+      sourceId: action.id,
     });
 
     if (!result.ok) {
       logger.error(
         { actionId, error: getErrorMessage(result.error) },
-        'Failed to create research draft via llm-orchestrator'
+        'Failed to create note via notes-agent'
       );
       const failedAction: Action = {
         ...action,
@@ -108,34 +107,34 @@ export function createExecuteResearchActionUseCase(
       });
     }
 
-    const researchId = result.value.id;
-    const resourceUrl = `/#/research/${researchId}`;
+    const noteId = result.value.id;
+    const resourceUrl = `/#/notes/${noteId}`;
 
-    logger.info({ actionId, researchId }, 'Research draft created successfully');
+    logger.info({ actionId, noteId }, 'Note created successfully');
 
     const completedAction: Action = {
       ...action,
       status: 'completed',
       payload: {
         ...action.payload,
-        researchId,
+        noteId,
         resource_url: resourceUrl,
       },
       updatedAt: new Date().toISOString(),
     };
     await actionRepository.update(completedAction);
 
-    logger.info({ actionId, researchId, status: 'completed' }, 'Action marked as completed');
+    logger.info({ actionId, noteId, status: 'completed' }, 'Action marked as completed');
 
     const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
+    const message = `Note created: "${action.title}". View it here: ${fullUrl}`;
 
     logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
     const publishResult = await whatsappPublisher.publishSendMessage({
       userId: action.userId,
       message,
-      correlationId: `research-complete-${researchId}`,
+      correlationId: `note-complete-${noteId}`,
     });
 
     if (!publishResult.ok) {
@@ -148,8 +147,8 @@ export function createExecuteResearchActionUseCase(
     }
 
     logger.info(
-      { actionId, researchId, resourceUrl, status: 'completed' },
-      'Research action execution completed successfully'
+      { actionId, noteId, resourceUrl, status: 'completed' },
+      'Note action execution completed successfully'
     );
 
     return ok({

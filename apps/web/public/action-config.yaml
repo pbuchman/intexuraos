@@ -16,6 +16,48 @@ actions:
       message: 'Research draft created!'
       linkLabel: 'View Draft →'
 
+  approve_todo:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Create Todo
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this todo?'
+    onSuccess:
+      message: 'Todo created!'
+      linkLabel: 'View Todo →'
+
+  approve_note:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Create Note
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this note?'
+    onSuccess:
+      message: 'Note created!'
+      linkLabel: 'View Note →'
+
+  approve_link:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Save Link
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Save this link?'
+    onSuccess:
+      message: 'Link saved!'
+      linkLabel: 'View Bookmark →'
+
   retry:
     endpoint:
       path: /actions/{actionId}/execute
@@ -29,6 +71,48 @@ actions:
     onSuccess:
       message: 'Research draft created!'
       linkLabel: 'View Draft →'
+
+  retry_todo:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating todo?'
+    onSuccess:
+      message: 'Todo created!'
+      linkLabel: 'View Todo →'
+
+  retry_note:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating note?'
+    onSuccess:
+      message: 'Note created!'
+      linkLabel: 'View Note →'
+
+  retry_link:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_SERVICE_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry saving link?'
+    onSuccess:
+      message: 'Link saved!'
+      linkLabel: 'View Bookmark →'
 
   reject:
     endpoint:
@@ -96,4 +180,88 @@ types:
           value: [completed, failed, rejected]
 
       # Delete - available for all statuses
+      - action: delete
+
+  todo:
+    actions:
+      - action: approve_todo
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_todo
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  note:
+    actions:
+      - action: approve_note
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_note
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  link:
+    actions:
+      - action: approve_link
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_link
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
       - action: delete
