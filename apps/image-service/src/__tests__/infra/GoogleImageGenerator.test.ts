@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import {
   GoogleImageGenerator,
   createGoogleImageGenerator,
@@ -54,7 +54,7 @@ function createMockStorage(): ImageStorage & {
 
 describe('GoogleImageGenerator', () => {
   const testApiKey = 'test-api-key';
-  const testModel = 'gemini-2.5-flash-image' as const;
+  const testModel = LlmModels.Gemini25FlashImage;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
 
@@ -72,7 +72,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -114,7 +114,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -144,7 +144,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -203,7 +203,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -328,7 +328,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import {
   OpenAIImageGenerator,
   createOpenAIImageGenerator,
@@ -54,7 +54,7 @@ function createMockStorage(): ImageStorage & {
 
 describe('OpenAIImageGenerator', () => {
   const testApiKey = 'test-api-key';
-  const testModel = 'gpt-image-1' as const;
+  const testModel = LlmModels.GPTImage1;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
 
@@ -72,7 +72,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -114,7 +114,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -144,7 +144,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -203,7 +203,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -330,7 +330,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
