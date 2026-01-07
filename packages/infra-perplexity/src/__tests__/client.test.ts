@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({

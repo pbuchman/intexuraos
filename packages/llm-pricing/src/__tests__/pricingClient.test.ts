@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import type { ProviderPricing } from '@intexuraos/llm-contract';
+import { type ProviderPricing, type Gemini25Pro } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { PricingContext, createPricingContext, fetchAllPricing, type AllPricingResponse } from '../pricingClient.js';
 
@@ -7,22 +7,22 @@ describe('pricingClient', () => {
   const mockGooglePricing: ProviderPricing = {
     provider: LlmProviders.Google,
     models: {
-      LlmModels.Gemini25Pro: {
+      [LlmModels.Gemini25Pro]: {
         inputPricePerMillion: 1.25,
         outputPricePerMillion: 10.0,
         groundingCostPerRequest: 0.035,
       },
-      LlmModels.Gemini25Flash: {
+      [LlmModels.Gemini25Flash]: {
         inputPricePerMillion: 0.3,
         outputPricePerMillion: 2.5,
         groundingCostPerRequest: 0.035,
       },
-      LlmModels.Gemini20Flash: {
+      [LlmModels.Gemini20Flash]: {
         inputPricePerMillion: 0.1,
         outputPricePerMillion: 0.4,
         groundingCostPerRequest: 0.035,
       },
-      LlmModels.Gemini25FlashImage: {
+      [LlmModels.Gemini25FlashImage]: {
         inputPricePerMillion: 0,
         outputPricePerMillion: 0,
         imagePricing: { '1024x1024': 0.03 },
@@ -34,23 +34,23 @@ describe('pricingClient', () => {
   const mockOpenaiPricing: ProviderPricing = {
     provider: LlmProviders.OpenAI,
     models: {
-      LlmModels.O4MiniDeepResearch: {
+      [LlmModels.O4MiniDeepResearch]: {
         inputPricePerMillion: 2.0,
         outputPricePerMillion: 8.0,
         cacheReadMultiplier: 0.25,
         webSearchCostPerCall: 0.01,
       },
-      LlmModels.GPT52: {
+      [LlmModels.GPT52]: {
         inputPricePerMillion: 1.75,
         outputPricePerMillion: 14.0,
         cacheReadMultiplier: 0.1,
       },
-      LlmModels.GPT4oMini: {
+      [LlmModels.GPT4oMini]: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
         cacheReadMultiplier: 0.5,
       },
-      LlmModels.GPTImage1: {
+      [LlmModels.GPTImage1]: {
         inputPricePerMillion: 0,
         outputPricePerMillion: 0,
         imagePricing: { '1024x1024': 0.04 },
@@ -62,21 +62,21 @@ describe('pricingClient', () => {
   const mockAnthropicPricing: ProviderPricing = {
     provider: LlmProviders.Anthropic,
     models: {
-      LlmModels.ClaudeOpus45: {
+      [LlmModels.ClaudeOpus45]: {
         inputPricePerMillion: 5.0,
         outputPricePerMillion: 25.0,
         cacheReadMultiplier: 0.1,
         cacheWriteMultiplier: 1.25,
         webSearchCostPerCall: 0.03,
       },
-      LlmModels.ClaudeSonnet45: {
+      [LlmModels.ClaudeSonnet45]: {
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
         cacheReadMultiplier: 0.1,
         cacheWriteMultiplier: 1.25,
         webSearchCostPerCall: 0.03,
       },
-      LlmModels.ClaudeHaiku35: {
+      [LlmModels.ClaudeHaiku35]: {
         inputPricePerMillion: 0.8,
         outputPricePerMillion: 4.0,
         cacheReadMultiplier: 0.1,
@@ -89,17 +89,17 @@ describe('pricingClient', () => {
   const mockPerplexityPricing: ProviderPricing = {
     provider: LlmProviders.Perplexity,
     models: {
-      sonar: {
+      [LlmModels.Sonar]: {
         inputPricePerMillion: 1.0,
         outputPricePerMillion: 1.0,
         useProviderCost: true,
       },
-      LlmModels.SonarPro: {
+      [LlmModels.SonarPro]: {
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
         useProviderCost: true,
       },
-      LlmModels.SonarDeepResearch: {
+      [LlmModels.SonarDeepResearch]: {
         inputPricePerMillion: 2.0,
         outputPricePerMillion: 8.0,
         useProviderCost: true,
@@ -251,7 +251,7 @@ describe('pricingClient', () => {
     it('throws when getting pricing for unknown model', () => {
       const context = new PricingContext(completeAllPricing);
 
-      expect(() => context.getPricing('unknown-model' as LlmModels.Gemini25Pro)).toThrow('Pricing not found');
+      expect(() => context.getPricing('unknown-model' as Gemini25Pro)).toThrow('Pricing not found');
     });
 
     it('validates that specified models have pricing', () => {
@@ -329,7 +329,7 @@ describe('pricingClient', () => {
         google: {
           provider: LlmProviders.Google,
           models: {
-            LlmModels.Gemini25Flash: geminiFlashPricing,
+            [LlmModels.Gemini25Flash]: geminiFlashPricing,
           },
           updatedAt: '',
         },

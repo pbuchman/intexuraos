@@ -1,4 +1,4 @@
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmPricing } from '../ports/pricingRepository.js';
 
 const DEFAULT_WEB_SEARCH_COST = 0.01;

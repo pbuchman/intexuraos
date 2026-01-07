@@ -1,4 +1,4 @@
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders, type Google, type OpenAI, type Anthropic } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
 import { Layout, StatusWidget } from '@/components';
 import { useAuth } from '@/context';
@@ -183,7 +183,7 @@ export function SystemHealthPage(): React.JSX.Element {
     );
   };
 
-  const getLlmStatus = (provider: LlmProviders.Google | LlmProviders.OpenAI | LlmProviders.Anthropic): StatusState => {
+  const getLlmStatus = (provider: Google | OpenAI | Anthropic): StatusState => {
     if (llmLoading) {
       return { status: 'loading', description: 'Loading...' };
     }
@@ -211,7 +211,7 @@ export function SystemHealthPage(): React.JSX.Element {
 
   const renderLlmWidget = (
     title: string,
-    provider: LlmProviders.Google | LlmProviders.OpenAI | LlmProviders.Anthropic
+    provider: Google | OpenAI | Anthropic
   ): React.JSX.Element => {
     const state = getLlmStatus(provider);
     const details = state.details;

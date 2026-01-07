@@ -70,7 +70,7 @@ describe('usageLogger', () => {
 
   const baseParams = {
     userId: 'user-123',
-    provider: LlmProviders.Google as const,
+    provider: LlmProviders.Google,
     model: LlmModels.Gemini25Flash,
     callType: 'research' as const,
     usage: {

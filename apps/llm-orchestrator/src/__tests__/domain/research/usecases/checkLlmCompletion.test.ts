@@ -233,7 +233,7 @@ describe('checkLlmCompletion', () => {
 
   it('handles multiple failed providers', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
         {
           provider: LlmProviders.Google,
@@ -244,7 +244,7 @@ describe('checkLlmCompletion', () => {
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error 1' },
         {
           provider: LlmProviders.Anthropic,
-          model: LlmModels.ClaudeOpus4520251101,
+          model: LlmModels.ClaudeOpus45,
           status: 'failed',
           error: 'Error 2',
         },
@@ -256,7 +256,7 @@ describe('checkLlmCompletion', () => {
 
     expect(result).toEqual({
       type: 'partial_failure',
-      failedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
+      failedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
     });
   });
 
@@ -271,7 +271,7 @@ describe('checkLlmCompletion', () => {
           result: 'Google Result',
         },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
-        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus4520251101, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

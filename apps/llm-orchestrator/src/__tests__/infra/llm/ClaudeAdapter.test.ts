@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 

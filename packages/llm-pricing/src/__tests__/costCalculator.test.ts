@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calculateCost, calculateAccurateCost } from '../costCalculator.js';
 import type { LlmPricing } from '../types.js';
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 describe('costCalculator', () => {
   describe('calculateCost', () => {

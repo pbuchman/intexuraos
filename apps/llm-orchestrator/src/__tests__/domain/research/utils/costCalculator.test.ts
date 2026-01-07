@@ -4,7 +4,7 @@ import {
   calculateAccurateCost,
 } from '../../../../domain/research/utils/costCalculator.js';
 import type { LlmPricing } from '../../../../domain/research/ports/pricingRepository.js';
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 describe('calculateCost', () => {
   const basePricing: LlmPricing = {
