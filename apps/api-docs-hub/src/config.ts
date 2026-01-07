@@ -57,7 +57,7 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     displayName: 'Todos Agent API',
   },
   {
-    key: 'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+    key: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL',
     displayName: 'Application Settings API',
   },
 ];
