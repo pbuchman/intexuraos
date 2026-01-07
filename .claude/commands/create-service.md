@@ -30,6 +30,16 @@ apps/<service-name>/
     └── routes/           # HTTP transport layer
 ```
 
+### Route Naming Convention
+
+When creating routes for your service:
+
+- **Public routes:** `/{resource-name}` (e.g., `/todos`, `/bookmarks/:id`)
+- **Internal routes:** `/internal/{resource-name}` (e.g., `/internal/todos`, `/internal/bookmarks/:id`)
+- **HTTP methods:** Use `PATCH` for partial updates, `PUT` for full replacement
+
+Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/todos`.
+
 ### 2. Create package.json
 
 ```json
