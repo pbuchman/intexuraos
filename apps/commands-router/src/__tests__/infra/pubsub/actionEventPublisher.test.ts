@@ -1,6 +1,9 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActionEventPublisher } from '../../../infra/pubsub/actionEventPublisher.js';
+import {
+  ActionEventPublisher,
+  createActionEventPublisher,
+} from '../../../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
 
 const mockPublishToTopic = vi.fn();
@@ -173,6 +176,32 @@ describe('ActionEventPublisher', () => {
         LlmModels.O4MiniDeepResearch,
         LlmModels.ClaudeOpus45,
       ]);
+    });
+  });
+
+  describe('createActionEventPublisher', () => {
+    it('creates an ActionEventPublisher instance', async () => {
+      const publisher = createActionEventPublisher({ projectId: 'test-project' });
+
+      expect(publisher).toBeInstanceOf(ActionEventPublisher);
+      expect(publisher.publishActionCreated).toBeDefined();
+
+      const event: ActionCreatedEvent = {
+        type: 'action.created',
+        actionId: 'action-factory-test',
+        userId: 'user-123',
+        commandId: 'cmd-456',
+        actionType: 'research',
+        title: 'Factory test',
+        payload: {
+          prompt: 'Test prompt',
+          confidence: 0.9,
+        },
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+
+      const result = await publisher.publishActionCreated(event);
+      expect(result.ok).toBe(true);
     });
   });
 });
