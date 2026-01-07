@@ -7,5 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #319 | 11:31 PM | 🔵 | Token Encryption Uses AES-256-GCM with IV and Auth Tag | ~452 |
+| #207 | 11:09 PM | 🔵 | Firestore Token Repository Implementation with Encryption | ~386 |
 </claude-mem-context>

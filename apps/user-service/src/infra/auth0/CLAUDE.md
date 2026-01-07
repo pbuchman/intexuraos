@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #198 | 11:09 PM | 🔵 | Auth0 Client Implementation Shows OAuth2 Token Refresh Pattern | ~363 |
 </claude-mem-context>

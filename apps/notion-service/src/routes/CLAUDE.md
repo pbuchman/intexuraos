@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #241 | 11:14 PM | 🔵 | Integration Routes Pattern with Auth, Validation, and Use Case Delegation | ~475 |
 </claude-mem-context>
