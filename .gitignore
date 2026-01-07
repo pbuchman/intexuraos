@@ -60,3 +60,4 @@ firestore.rules
 apps/web/dev-dist/
 # Local Next.js build output
 apps/web/dev-dist/
+apps/\*
