@@ -1595,7 +1595,7 @@ function CollapsibleInputContext({
           {showFull ? (
             <MarkdownContent content={ctx.content} />
           ) : (
-            <p className="text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
+            <p className="break-all text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
           )}
         </div>
       ) : null}

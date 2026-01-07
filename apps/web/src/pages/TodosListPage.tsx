@@ -225,7 +225,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
         <ItemStatusIcon status={item.status} />
       </button>
       <div className="min-w-0 flex-1">
-        <p className={`text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+        <p className={`break-all text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
           {item.title}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -485,7 +485,7 @@ function TodoModal({
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start gap-2">
-                <h3 className="text-xl font-semibold text-slate-900">{currentTodo.title}</h3>
+                <h3 className="break-all text-xl font-semibold text-slate-900">{currentTodo.title}</h3>
                 {currentTodo.archived ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
                     <Archive className="h-3 w-3" />
@@ -517,7 +517,7 @@ function TodoModal({
                 </div>
               ) : null}
               {currentTodo.description !== null && currentTodo.description !== '' ? (
-                <div className="whitespace-pre-wrap text-slate-700">{currentTodo.description}</div>
+                <div className="whitespace-pre-wrap break-all text-slate-700">{currentTodo.description}</div>
               ) : null}
               <div className="text-xs text-slate-400">
                 <span>Created: {formatDate(currentTodo.createdAt)}</span>
