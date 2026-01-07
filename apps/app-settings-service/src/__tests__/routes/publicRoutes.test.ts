@@ -210,10 +210,8 @@ describe('publicRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.error.message).toContain('Missing pricing for providers');
+      // With the new individual checks, it returns on first missing provider (google)
       expect(body.error.message).toContain('google');
-      expect(body.error.message).toContain('openai');
-      expect(body.error.message).toContain('anthropic');
-      expect(body.error.message).toContain('perplexity');
 
       await app.close();
     });

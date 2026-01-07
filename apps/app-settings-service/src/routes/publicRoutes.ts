@@ -72,27 +72,30 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
-      const missing: string[] = [];
-      if (google === null) missing.push(LlmProviders.Google);
-      if (openai === null) missing.push(LlmProviders.OpenAI);
-      if (anthropic === null) missing.push(LlmProviders.Anthropic);
-      if (perplexity === null) missing.push(LlmProviders.Perplexity);
-
-      if (missing.length > 0) {
-        request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
-        return await reply.fail(
-          'INTERNAL_ERROR',
-          `Missing pricing for providers: ${missing.join(', ')}`
-        );
+      // Check if any provider is missing - need individual null checks for TypeScript narrowing
+      if (google === null) {
+        request.log.error({ missingProviders: [LlmProviders.Google] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Google}`);
+      }
+      if (openai === null) {
+        request.log.error({ missingProviders: [LlmProviders.OpenAI] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.OpenAI}`);
+      }
+      if (anthropic === null) {
+        request.log.error({ missingProviders: [LlmProviders.Anthropic] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Anthropic}`);
+      }
+      if (perplexity === null) {
+        request.log.error({ missingProviders: [LlmProviders.Perplexity] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Perplexity}`);
       }
 
-      // At this point all providers are non-null (missing.length === 0 check above)
-      // TypeScript doesn't narrow after array push checks, so we use non-null assertions
+      // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
-        Object.keys(google!.models).length +
-        Object.keys(openai!.models).length +
-        Object.keys(anthropic!.models).length +
-        Object.keys(perplexity!.models).length;
+        Object.keys(google.models).length +
+        Object.keys(openai.models).length +
+        Object.keys(anthropic.models).length +
+        Object.keys(perplexity.models).length;
 
       request.log.info(
         { userId: user.userId, totalModels },
@@ -100,10 +103,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       return await reply.ok({
-        google: google!,
-        openai: openai!,
-        anthropic: anthropic!,
-        perplexity: perplexity!,
+        google,
+        openai,
+        anthropic,
+        perplexity,
       });
     }
   );

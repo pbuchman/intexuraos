@@ -74,36 +74,44 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
-      // Check if any provider is missing
-      const missing: string[] = [];
-      if (google === null) missing.push('google');
-      if (openai === null) missing.push('openai');
-      if (anthropic === null) missing.push('anthropic');
-      if (perplexity === null) missing.push('perplexity');
-
-      if (missing.length > 0) {
-        request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
+      // Check if any provider is missing - need individual null checks for TypeScript narrowing
+      if (google === null) {
+        request.log.error({ missingProviders: ['google'] }, 'Missing pricing for providers');
         reply.status(500);
-        return { error: `Missing pricing for providers: ${missing.join(', ')}` };
+        return { error: 'Missing pricing for providers: google' };
+      }
+      if (openai === null) {
+        request.log.error({ missingProviders: ['openai'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: openai' };
+      }
+      if (anthropic === null) {
+        request.log.error({ missingProviders: ['anthropic'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: anthropic' };
+      }
+      if (perplexity === null) {
+        request.log.error({ missingProviders: ['perplexity'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: perplexity' };
       }
 
-      // At this point all providers are non-null (missing.length === 0 check above)
-      // TypeScript doesn't narrow after array push checks, so we use non-null assertions
+      // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
-        Object.keys(google!.models).length +
-        Object.keys(openai!.models).length +
-        Object.keys(anthropic!.models).length +
-        Object.keys(perplexity!.models).length;
+        Object.keys(google.models).length +
+        Object.keys(openai.models).length +
+        Object.keys(anthropic.models).length +
+        Object.keys(perplexity.models).length;
 
       request.log.info({ totalModels }, 'Returning pricing for all providers');
 
       return {
         success: true,
         data: {
-          google: google!,
-          openai: openai!,
-          anthropic: anthropic!,
-          perplexity: perplexity!,
+          google,
+          openai,
+          anthropic,
+          perplexity,
         },
       };
     }
