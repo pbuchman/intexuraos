@@ -889,7 +889,9 @@ module "api_docs_hub" {
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
+    INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL         = "${module.app_settings_service.service_url}/openapi.json"
     INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
+    INTEXURAOS_TODOS_AGENT_OPENAPI_URL                  = "${module.todos_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -906,6 +908,7 @@ module "api_docs_hub" {
     module.data_insights_service,
     module.image_service,
     module.notes_agent,
+    module.todos_agent,
   ]
 }
 

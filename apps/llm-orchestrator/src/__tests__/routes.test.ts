@@ -16,6 +16,7 @@ import {
   createFakeContextInferrer,
   createFailingSynthesizer,
   createFakeLlmResearchProvider,
+  createFailingLlmResearchProvider,
   createFakeSynthesizer,
   createFakeTitleGenerator,
   FakeLlmCallPublisher,
@@ -2976,6 +2977,100 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('failed');
       expect(updatedResearch?.synthesisError).toContain('API key required');
+    });
+
+    it('handles all_failed completion action when LLM call fails', async () => {
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
+
+      // Override createResearchProvider to return a failing provider
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFailingLlmResearchProvider('LLM API error'),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults[0];
+      expect(result?.status).toBe('failed');
+      expect(result?.error).toBe('LLM API error');
+
+      // Verify notification was sent for the failure
+      const failures = fakeNotificationSender.getSentFailures();
+      expect(failures.length).toBe(1);
+      expect(failures[0]?.model).toBe(LlmModels.Gemini25Pro);
+    });
+
+    it('handles unexpected exception during LLM call processing', async () => {
+      const research = createResearchWithLlmResults();
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+      });
+
+      // Configure repository to throw an exception during updateLlmResult
+      fakeRepo.setFailNextUpdateLlmResult(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; error?: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toContain('Unexpected repository error');
+
+      // Verify the LLM result was updated to failed status
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults.find((r) => r.model === LlmModels.Gemini25Pro);
+      expect(result?.status).toBe('failed');
+      expect(result?.error).toContain('Unexpected repository error');
     });
   });
 });
