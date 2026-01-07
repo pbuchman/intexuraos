@@ -140,7 +140,7 @@ describe('processResearch', () => {
   });
 
   it('uses synthesizer for title generation when titleGenerator not provided', async () => {
-    const research = createTestResearch({ synthesisModel: LlmModels.ClaudeOpus4520251101 });
+    const research = createTestResearch({ synthesisModel: LlmModels.ClaudeOpus45 });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     const mockSynthesizer = {
@@ -161,7 +161,7 @@ describe('processResearch', () => {
 
     expect(mockSynthesizer.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Synthesizer Title' });
-    expect(mockReportSuccess).toHaveBeenCalledWith(LlmModels.ClaudeOpus4520251101);
+    expect(mockReportSuccess).toHaveBeenCalledWith(LlmModels.ClaudeOpus45);
   });
 
   it('does not update title when title generation fails', async () => {
@@ -182,11 +182,11 @@ describe('processResearch', () => {
 
   it('publishes LLM call for each pending provider', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
         { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'pending' },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
-        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet420250514, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet45, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -212,16 +212,16 @@ describe('processResearch', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      model: LlmModels.ClaudeSonnet420250514,
+      model: LlmModels.ClaudeSonnet45,
       prompt: 'Test research prompt',
     });
   });
 
   it('publishes in order of llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.ClaudeSonnet4520250929, LlmModels.Gemini25Flash],
+      selectedModels: [LlmModels.ClaudeSonnet45, LlmModels.Gemini25Flash],
       llmResults: [
-        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet4520250929, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet45, status: 'pending' },
         { provider: LlmProviders.Google, model: LlmModels.Gemini25Flash, status: 'pending' },
       ],
     });
@@ -230,17 +230,17 @@ describe('processResearch', () => {
     await processResearch('research-1', deps);
 
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
-    expect(calls[0]?.[0].model).toBe(LlmModels.ClaudeSonnet4520250929);
+    expect(calls[0]?.[0].model).toBe(LlmModels.ClaudeSonnet45);
     expect(calls[1]?.[0].model).toBe(LlmModels.Gemini25Flash);
   });
 
   it('skips already completed llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
         { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Existing' },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
-        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet420250514, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet45, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -255,7 +255,7 @@ describe('processResearch', () => {
       expect.objectContaining({ model: LlmModels.O4MiniDeepResearch })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
-      expect.objectContaining({ model: LlmModels.ClaudeSonnet420250514 })
+      expect.objectContaining({ model: LlmModels.ClaudeSonnet45 })
     );
   });
 
