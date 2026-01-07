@@ -18,6 +18,6 @@ export function loadConfig(): Config {
       issuer: process.env['INTEXURAOS_AUTH_ISSUER'] ?? '',
       audience: process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '',
     },
-    internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] ?? '',
+    internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
   };
 }
