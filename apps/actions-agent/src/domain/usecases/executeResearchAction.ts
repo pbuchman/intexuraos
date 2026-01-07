@@ -1,6 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
@@ -53,7 +53,8 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    const selectedModels: ResearchModel[] = [LlmModels.ClaudeOpus45];
+    // No default models - user must select before approving the research draft
+    const selectedModels: ResearchModel[] = [];
     const prompt =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
     const result = await researchServiceClient.createDraft({

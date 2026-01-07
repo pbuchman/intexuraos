@@ -45,12 +45,15 @@ async function loadPricing(): Promise<PricingContext> {
   const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
+  process.stdout.write(`Fetching pricing from ${appSettingsUrl}\n`);
   const pricingResult = await fetchAllPricing(appSettingsUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  return createPricingContext(pricingResult.value, REQUIRED_MODELS);
+  const context = createPricingContext(pricingResult.value, REQUIRED_MODELS);
+  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
+  return context;
 }
 
 async function main(): Promise<void> {

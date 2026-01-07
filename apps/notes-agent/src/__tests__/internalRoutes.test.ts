@@ -4,11 +4,11 @@ describe('internalRoutes', () => {
   const ctx = setupTestContext();
   const TEST_INTERNAL_TOKEN = 'test-internal-token';
 
-  describe('POST /internal/notes/notes', () => {
+  describe('POST /internal/notes', () => {
     it('creates a note with valid internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/notes/notes',
+        url: '/internal/notes',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -33,7 +33,7 @@ describe('internalRoutes', () => {
     it('returns 401 with invalid internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/notes/notes',
+        url: '/internal/notes',
         headers: {
           'x-internal-auth': 'wrong-key',
           'content-type': 'application/json',
@@ -54,7 +54,7 @@ describe('internalRoutes', () => {
     it('returns 401 with missing internal auth header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/notes/notes',
+        url: '/internal/notes',
         headers: {
           'content-type': 'application/json',
         },
@@ -79,7 +79,7 @@ describe('internalRoutes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/notes/notes',
+        url: '/internal/notes',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',

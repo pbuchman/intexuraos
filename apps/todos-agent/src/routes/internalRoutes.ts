@@ -125,7 +125,7 @@ function parseDate(dateStr: string | null | undefined): Date | null {
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: CreateTodoBody }>(
-    '/internal/todos/todos',
+    '/internal/todos',
     {
       schema: {
         operationId: 'createTodoInternal',
@@ -147,7 +147,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Body: CreateTodoBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to POST /internal/todos/todos',
+        message: 'Received request to POST /internal/todos',
       });
 
       const authResult = validateInternalAuth(request);
