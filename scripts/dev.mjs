@@ -45,6 +45,7 @@ const SERVICES = [
   { name: 'notes-agent', port: 8121, color: '\x1b[37m' },
   { name: 'app-settings-service', port: 8122, color: '\x1b[95m' },
   { name: 'todos-agent', port: 8123, color: '\x1b[38;5;208m' },
+  { name: 'bookmarks-agent', port: 8124, color: '\x1b[38;5;141m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[97m' };
@@ -277,6 +278,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122/openapi.json',
   INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
+  INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
 };
 
 const COMMON_SERVICE_ENV = {

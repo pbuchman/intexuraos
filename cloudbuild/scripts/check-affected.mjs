@@ -239,6 +239,7 @@ const ALL_SERVICES = [
   'image-service',
   'notes-agent',
   'todos-agent',
+  'bookmarks-agent',
   'app-settings-service',
   'web',
   'firestore',
