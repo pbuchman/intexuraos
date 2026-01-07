@@ -219,7 +219,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+        getServices();
 
       // Get user's API keys to generate title
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -313,7 +314,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as { id: string };
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+        getServices();
 
       // Get existing research
       const existingResult = await researchRepo.findById(id);

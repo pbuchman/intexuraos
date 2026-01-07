@@ -11,12 +11,15 @@ Remove V1 client, rename V2 to be the only client. Simplify exports and types.
 ## Scope
 
 **Files to DELETE:**
+
 - packages/infra-gpt/src/client.ts
 
 **Files to RENAME:**
+
 - packages/infra-gpt/src/clientV2.ts → packages/infra-gpt/src/client.ts
 
 **Files to MODIFY:**
+
 - packages/infra-gpt/src/client.ts (renamed): change `createGptClientV2` → `createGptClient`, `GptClientV2` → `GptClient`
 - packages/infra-gpt/src/types.ts: remove `GptConfig`, rename `GptConfigV2` → `GptConfig`
 - packages/infra-gpt/src/index.ts: remove V2 exports, update to new names
@@ -71,4 +74,3 @@ npx tsc --noEmit -p packages/infra-gpt/tsconfig.json
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 1-2-infra-claude-cleanup.md.
-

@@ -75,7 +75,12 @@ export interface ServiceContainer {
     userId: string,
     pricing: ModelPricing
   ) => LlmSynthesisProvider;
-  createTitleGenerator: (model: FastModel, apiKey: string, userId: string, pricing: ModelPricing) => TitleGenerator;
+  createTitleGenerator: (
+    model: FastModel,
+    apiKey: string,
+    userId: string,
+    pricing: ModelPricing
+  ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
     apiKey: string,

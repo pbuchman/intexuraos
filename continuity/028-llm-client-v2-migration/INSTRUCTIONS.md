@@ -7,7 +7,7 @@ Migrate all LLM client usages from V1 (`createXxxClient`) to V2 (`createXxxClien
 ## Success Criteria
 
 1. All services use `createXxxClientV2` with pricing from Firestore
-2. All V1 client files (`client.ts`) deleted from infra-* packages
+2. All V1 client files (`client.ts`) deleted from infra-\* packages
 3. V2 clients renamed: `clientV2.ts` → `client.ts`, exports simplified
 4. All tests updated and passing
 5. `npm run ci` passes
@@ -36,26 +36,80 @@ Based on migration 012 (with DALL-E 3 removed per migration 013):
 // packages/llm-contract/src/__tests__/fixtures/pricing.ts
 export const TEST_PRICING = {
   google: {
-    'gemini-2.5-pro': { inputPricePerMillion: 1.25, outputPricePerMillion: 10.0, groundingCostPerRequest: 0.035 },
-    'gemini-2.5-flash': { inputPricePerMillion: 0.3, outputPricePerMillion: 2.5, groundingCostPerRequest: 0.035 },
-    'gemini-2.0-flash': { inputPricePerMillion: 0.1, outputPricePerMillion: 0.4, groundingCostPerRequest: 0.035 },
-    'gemini-2.5-flash-image': { inputPricePerMillion: 0, outputPricePerMillion: 0, imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 } },
+    'gemini-2.5-pro': {
+      inputPricePerMillion: 1.25,
+      outputPricePerMillion: 10.0,
+      groundingCostPerRequest: 0.035,
+    },
+    'gemini-2.5-flash': {
+      inputPricePerMillion: 0.3,
+      outputPricePerMillion: 2.5,
+      groundingCostPerRequest: 0.035,
+    },
+    'gemini-2.0-flash': {
+      inputPricePerMillion: 0.1,
+      outputPricePerMillion: 0.4,
+      groundingCostPerRequest: 0.035,
+    },
+    'gemini-2.5-flash-image': {
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+      imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
+    },
   },
   openai: {
-    'o4-mini-deep-research': { inputPricePerMillion: 2.0, outputPricePerMillion: 8.0, cacheReadMultiplier: 0.25, webSearchCostPerCall: 0.01 },
-    'gpt-5.2': { inputPricePerMillion: 1.75, outputPricePerMillion: 14.0, cacheReadMultiplier: 0.1 },
-    'gpt-4o-mini': { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6, cacheReadMultiplier: 0.5 },
-    'gpt-image-1': { inputPricePerMillion: 0, outputPricePerMillion: 0, imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 } },
+    'o4-mini-deep-research': {
+      inputPricePerMillion: 2.0,
+      outputPricePerMillion: 8.0,
+      cacheReadMultiplier: 0.25,
+      webSearchCostPerCall: 0.01,
+    },
+    'gpt-5.2': {
+      inputPricePerMillion: 1.75,
+      outputPricePerMillion: 14.0,
+      cacheReadMultiplier: 0.1,
+    },
+    'gpt-4o-mini': {
+      inputPricePerMillion: 0.15,
+      outputPricePerMillion: 0.6,
+      cacheReadMultiplier: 0.5,
+    },
+    'gpt-image-1': {
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+      imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
+    },
   },
   anthropic: {
-    'claude-opus-4-5-20251101': { inputPricePerMillion: 5.0, outputPricePerMillion: 25.0, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25, webSearchCostPerCall: 0.03 },
-    'claude-sonnet-4-5-20250929': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25, webSearchCostPerCall: 0.03 },
-    'claude-3-5-haiku-20241022': { inputPricePerMillion: 0.8, outputPricePerMillion: 4.0, cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 },
+    'claude-opus-4-5-20251101': {
+      inputPricePerMillion: 5.0,
+      outputPricePerMillion: 25.0,
+      cacheReadMultiplier: 0.1,
+      cacheWriteMultiplier: 1.25,
+      webSearchCostPerCall: 0.03,
+    },
+    'claude-sonnet-4-5-20250929': {
+      inputPricePerMillion: 3.0,
+      outputPricePerMillion: 15.0,
+      cacheReadMultiplier: 0.1,
+      cacheWriteMultiplier: 1.25,
+      webSearchCostPerCall: 0.03,
+    },
+    'claude-3-5-haiku-20241022': {
+      inputPricePerMillion: 0.8,
+      outputPricePerMillion: 4.0,
+      cacheReadMultiplier: 0.1,
+      cacheWriteMultiplier: 1.25,
+    },
   },
   perplexity: {
-    'sonar': { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
+    sonar: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
     'sonar-pro': { inputPricePerMillion: 3.0, outputPricePerMillion: 15.0, useProviderCost: true },
-    'sonar-deep-research': { inputPricePerMillion: 2.0, outputPricePerMillion: 8.0, useProviderCost: true },
+    'sonar-deep-research': {
+      inputPricePerMillion: 2.0,
+      outputPricePerMillion: 8.0,
+      useProviderCost: true,
+    },
   },
 };
 ```
@@ -79,4 +133,3 @@ export const TEST_PRICING = {
 2. Check "Now" and "Next" fields
 3. Continue from the current task
 4. Update ledger after each step
-

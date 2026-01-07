@@ -363,7 +363,12 @@ describe('FirestoreResearchRepository', () => {
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'failed',
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Rate limit' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Rate limit',
+          },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -399,7 +404,12 @@ describe('FirestoreResearchRepository', () => {
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'retrying',
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Rate limit' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Rate limit',
+          },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -434,7 +444,9 @@ describe('FirestoreResearchRepository', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'processing',
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' },
+        ],
         startedAt: '2024-01-01T00:00:00Z',
       };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });
@@ -470,7 +482,9 @@ describe('FirestoreResearchRepository', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'processing',
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' },
+        ],
         startedAt: '2024-01-01T00:00:00Z',
       };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });

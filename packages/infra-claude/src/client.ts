@@ -14,7 +14,12 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import { LlmProviders, type LLMClient, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
+import {
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type GenerateResult,
+} from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';

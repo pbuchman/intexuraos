@@ -153,7 +153,8 @@ describe('usageLogger', () => {
 
       const setCalls = mockBatch.set.mock.calls;
       const modelSetCall = setCalls.find(
-        (call) => call[1]?.model === LlmModels.Gemini25Flash && call[1]?.provider === LlmProviders.Google
+        (call) =>
+          call[1]?.model === LlmModels.Gemini25Flash && call[1]?.provider === LlmProviders.Google
       );
       expect(modelSetCall).toBeDefined();
       expect(modelSetCall?.[1]).toMatchObject({

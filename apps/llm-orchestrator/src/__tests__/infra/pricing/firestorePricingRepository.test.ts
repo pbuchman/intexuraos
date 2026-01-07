@@ -38,7 +38,10 @@ describe('FirestorePricingRepository', () => {
     it('returns null when document does not exist', async () => {
       mockDocGet.mockResolvedValueOnce({ exists: false });
 
-      const result = await repository.findByProviderAndModel(LlmProviders.Google, LlmModels.Gemini20Flash);
+      const result = await repository.findByProviderAndModel(
+        LlmProviders.Google,
+        LlmModels.Gemini20Flash
+      );
 
       expect(result).toBeNull();
       expect(mockCollection).toHaveBeenCalledWith('app_settings');
@@ -61,7 +64,10 @@ describe('FirestorePricingRepository', () => {
         }),
       });
 
-      const result = await repository.findByProviderAndModel(LlmProviders.Google, LlmModels.Gemini20Flash);
+      const result = await repository.findByProviderAndModel(
+        LlmProviders.Google,
+        LlmModels.Gemini20Flash
+      );
 
       expect(result).toBeNull();
     });

@@ -28,7 +28,10 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   // Fetch pricing from app-settings-service
-  const pricingResult = await fetchAllPricing(config.appSettingsServiceUrl, config.internalAuthToken);
+  const pricingResult = await fetchAllPricing(
+    config.appSettingsServiceUrl,
+    config.internalAuthToken
+  );
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }

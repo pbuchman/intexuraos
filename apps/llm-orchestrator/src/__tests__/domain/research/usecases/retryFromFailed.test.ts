@@ -167,8 +167,18 @@ describe('retryFromFailed', () => {
       const research = createTestResearch({
         status: 'failed',
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
-          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result',
+          },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -242,9 +252,18 @@ describe('retryFromFailed', () => {
 
     it('handles multiple failed providers', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
+        selectedModels: [
+          LlmModels.Gemini25Pro,
+          LlmModels.O4MiniDeepResearch,
+          LlmModels.ClaudeOpus45,
+        ],
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
           {
             provider: LlmProviders.OpenAI,
             model: LlmModels.O4MiniDeepResearch,
@@ -284,7 +303,12 @@ describe('retryFromFailed', () => {
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Synthesis failed: rate limit',
       });
@@ -306,7 +330,12 @@ describe('retryFromFailed', () => {
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Previous error',
       });
@@ -327,7 +356,12 @@ describe('retryFromFailed', () => {
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Previous error',
       });
@@ -344,7 +378,12 @@ describe('retryFromFailed', () => {
       const research = createTestResearch({
         status: 'failed',
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
           { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'failed', error: 'LLM Error' },
         ],
         synthesisError: 'Synthesis also failed',

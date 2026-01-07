@@ -9,6 +9,7 @@ Create integration tests for the full attribution flow in llm-orchestrator.
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - 95% coverage required
 - No external deps in tests (use fakes, nock for HTTP)
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
@@ -21,16 +22,17 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Test the end-to-end attribution flow:
+
 1. Synthesis with valid attributions → status complete
 2. Synthesis with missing attributions → repair attempt → status repaired/incomplete
 3. Breakdown appended correctly
 
 ## Files to Create/Modify
 
-| File | Action |
-|------|--------|
-| `apps/llm-orchestrator/src/domain/research/usecases/__tests__/runSynthesis.test.ts` | **MODIFY** or **CREATE** |
-| `apps/llm-orchestrator/src/domain/research/usecases/__tests__/repairAttribution.test.ts` | **CREATE** |
+| File                                                                                     | Action                   |
+| ---------------------------------------------------------------------------------------- | ------------------------ |
+| `apps/llm-orchestrator/src/domain/research/usecases/__tests__/runSynthesis.test.ts`      | **MODIFY** or **CREATE** |
+| `apps/llm-orchestrator/src/domain/research/usecases/__tests__/repairAttribution.test.ts` | **CREATE**               |
 
 ## Files to Read First
 

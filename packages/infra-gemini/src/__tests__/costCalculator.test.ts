@@ -6,7 +6,7 @@ describe('infra-gemini costCalculator', () => {
   const basePricing: ModelPricing = {
     inputPricePerMillion: 0.1,
     outputPricePerMillion: 0.4,
-    groundingCostPerRequest: 0.035
+    groundingCostPerRequest: 0.035,
   };
 
   describe('calculateTextCost', () => {
@@ -67,7 +67,7 @@ describe('infra-gemini costCalculator', () => {
         outputTokens: 500,
         totalTokens: 1500,
         costUsd: expect.closeTo(0.0353, 6),
-        groundingEnabled: true
+        groundingEnabled: true,
       });
     });
 

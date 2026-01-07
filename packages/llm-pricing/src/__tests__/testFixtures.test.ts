@@ -97,12 +97,12 @@ describe('testFixtures', () => {
       const customImagePricing = {
         inputPricePerMillion: 0,
         outputPricePerMillion: 0,
-        imagePricing: { '1024x1024': 0.10 },
+        imagePricing: { '1024x1024': 0.1 },
       };
       const context = new FakePricingContext(TEST_PRICING, customImagePricing);
 
       const pricing = context.getPricing(LlmModels.GPTImage1);
-      expect(pricing.imagePricing?.['1024x1024']).toBe(0.10);
+      expect(pricing.imagePricing?.['1024x1024']).toBe(0.1);
     });
   });
 
@@ -136,4 +136,3 @@ describe('testFixtures', () => {
     });
   });
 });
-

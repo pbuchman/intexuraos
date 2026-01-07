@@ -270,7 +270,12 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { todoRepository } = getServices();
       const filters = {
         status: request.query.status,
-        archived: request.query.archived === 'true' ? true : request.query.archived === 'false' ? false : undefined,
+        archived:
+          request.query.archived === 'true'
+            ? true
+            : request.query.archived === 'false'
+              ? false
+              : undefined,
         priority: request.query.priority,
         tags: request.query.tags !== undefined ? request.query.tags.split(',') : undefined,
       };

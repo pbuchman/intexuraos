@@ -9,6 +9,7 @@ Inject the Source ID Map and Attribution Rules sections into the synthesis promp
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Backward compatibility required
 - Both legacy and contextual paths need updates
 
@@ -27,8 +28,8 @@ Add two new sections to the synthesis prompt:
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                                  | Action     |
+| ----------------------------------------------------- | ---------- |
 | `packages/common-core/src/prompts/synthesisPrompt.ts` | **MODIFY** |
 
 ## Files to Read First
@@ -115,6 +116,7 @@ ${ATTRIBUTION_RULES}
 ### Add to "Your Task" section
 
 In both paths, add to the task list:
+
 ```
 6. **Attribute sources**: End each ## section with an Attribution line (see Attribution Rules)
 ```

@@ -7,8 +7,9 @@
 ## Context
 
 image-service has 3 places using LLM clients:
+
 1. `OpenAIImageGenerator` — uses `createGptClient` for image generation
-2. `GoogleImageGenerator` — uses `createGeminiClient` for image generation  
+2. `GoogleImageGenerator` — uses `createGeminiClient` for image generation
 3. `GptPromptAdapter` — uses `createGptClient` for thumbnail prompt generation
 
 All need `pricing` parameter (and `imagePricing` for image generators).
@@ -16,17 +17,20 @@ All need `pricing` parameter (and `imagePricing` for image generators).
 ## Scope
 
 **Files to MODIFY:**
+
 - apps/image-service/src/infra/image/OpenAIImageGenerator.ts
 - apps/image-service/src/infra/image/GoogleImageGenerator.ts
 - apps/image-service/src/infra/llm/GptPromptAdapter.ts
 
 **Tests to MODIFY:**
-- apps/image-service/src/__tests__/infra/OpenAIImageGenerator.test.ts
-- apps/image-service/src/__tests__/infra/GoogleImageGenerator.test.ts
+
+- apps/image-service/src/**tests**/infra/OpenAIImageGenerator.test.ts
+- apps/image-service/src/**tests**/infra/GoogleImageGenerator.test.ts
 
 ## OpenAIImageGenerator Changes
 
 ### Current:
+
 ```typescript
 export interface OpenAIImageGeneratorConfig {
   apiKey: string;
@@ -45,6 +49,7 @@ const client = createGptClient({
 ```
 
 ### Target:
+
 ```typescript
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
@@ -53,8 +58,8 @@ export interface OpenAIImageGeneratorConfig {
   model: ImageGenerationModel;
   storage: ImageStorage;
   userId: string;
-  pricing: ModelPricing;        // text pricing
-  imagePricing: ModelPricing;   // image pricing (with imagePricing field)
+  pricing: ModelPricing; // text pricing
+  imagePricing: ModelPricing; // image pricing (with imagePricing field)
   generateId?: () => string;
 }
 
@@ -75,6 +80,7 @@ Same pattern as OpenAIImageGenerator but using `createGeminiClient`.
 ## GptPromptAdapter Changes
 
 ### Current:
+
 ```typescript
 export interface GptPromptAdapterConfig {
   apiKey: string;
@@ -90,6 +96,7 @@ const client = createGptClient({
 ```
 
 ### Target:
+
 ```typescript
 import type { ModelPricing } from '@intexuraos/llm-contract';
 
@@ -111,29 +118,34 @@ const client = createGptClient({
 ## Steps
 
 ### OpenAIImageGenerator:
+
 - [ ] Add `ModelPricing` import
 - [ ] Add `pricing` and `imagePricing` to config interface
 - [ ] Store in constructor
 - [ ] Pass to `createGptClient`
 
 ### GoogleImageGenerator:
+
 - [ ] Add `ModelPricing` import
 - [ ] Add `pricing` and `imagePricing` to config interface
 - [ ] Store in constructor
 - [ ] Pass to `createGeminiClient`
 
 ### GptPromptAdapter:
+
 - [ ] Add `ModelPricing` import
 - [ ] Add `pricing` to config interface
 - [ ] Store in constructor
 - [ ] Pass to `createGptClient`
 
 ### Tests:
+
 - [ ] Update `OpenAIImageGenerator.test.ts` mock config with pricing
 - [ ] Update `GoogleImageGenerator.test.ts` mock config with pricing
 - [ ] Use test fixtures for pricing values
 
 ### Bootstrap/Factory:
+
 - [ ] Locate where generators/adapters are instantiated
 - [ ] Add pricing fetch from Firestore
 - [ ] Pass pricing to constructors
@@ -157,4 +169,3 @@ npm run lint -w @intexuraos/image-service
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 2-2-user-service-migration.md.
-

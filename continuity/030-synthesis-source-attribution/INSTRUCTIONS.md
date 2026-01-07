@@ -61,12 +61,12 @@ Format: `[tier]-[sequence]-[title].md`
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `packages/common-core/src/prompts/synthesisPrompt.ts` | Prompt builder to modify |
-| `packages/common-core/src/prompts/index.ts` | Re-exports for new module |
-| `apps/llm-orchestrator/src/domain/research/usecases/runSynthesis.ts` | Central orchestrator |
-| `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts` | Synthesizer (for repair calls) |
+| File                                                                 | Purpose                        |
+| -------------------------------------------------------------------- | ------------------------------ |
+| `packages/common-core/src/prompts/synthesisPrompt.ts`                | Prompt builder to modify       |
+| `packages/common-core/src/prompts/index.ts`                          | Re-exports for new module      |
+| `apps/llm-orchestrator/src/domain/research/usecases/runSynthesis.ts` | Central orchestrator           |
+| `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts`               | Synthesizer (for repair calls) |
 
 ## Definition of Done
 

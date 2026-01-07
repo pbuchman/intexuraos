@@ -49,7 +49,9 @@ describe('supportedModels', () => {
   describe('MODEL_PROVIDER_MAP', () => {
     it('maps every model to a provider', () => {
       for (const model of ALL_LLM_MODELS) {
-        expect(['google', 'openai', 'anthropic', 'perplexity']).toContain(MODEL_PROVIDER_MAP[model]);
+        expect(['google', 'openai', 'anthropic', 'perplexity']).toContain(
+          MODEL_PROVIDER_MAP[model]
+        );
       }
     });
 
@@ -150,4 +152,3 @@ describe('supportedModels', () => {
     });
   });
 });
-

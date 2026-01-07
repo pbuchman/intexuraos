@@ -43,7 +43,7 @@ export function normalizeUsage(
     inputTokens,
     outputTokens,
     ...(providerCost !== undefined && { providerCost }),
-    webSearchCalls: 1 // Default to 1 call for Perplexity normalization
+    webSearchCalls: 1, // Default to 1 call for Perplexity normalization
   };
 
   return {
@@ -51,6 +51,6 @@ export function normalizeUsage(
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUsd: calculateTextCost(usage, pricing, providerCost),
-    webSearchCalls: 1
+    webSearchCalls: 1,
   };
 }

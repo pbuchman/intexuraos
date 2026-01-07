@@ -86,7 +86,12 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are still in pending state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed', result: 'Result' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'completed',
+          result: 'Result',
+        },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
       ],
     });
@@ -101,8 +106,17 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are in processing state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed', result: 'Result' },
-        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'processing' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'completed',
+          result: 'Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'processing',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -141,7 +155,12 @@ describe('checkLlmCompletion', () => {
   it('returns all_failed and updates research when all LLMs failed', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'failed', error: 'API Error' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'failed',
+          error: 'API Error',
+        },
         {
           provider: LlmProviders.OpenAI,
           model: LlmModels.O4MiniDeepResearch,
@@ -183,7 +202,10 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedModels: [LlmModels.O4MiniDeepResearch] });
+    expect(result).toEqual({
+      type: 'partial_failure',
+      failedModels: [LlmModels.O4MiniDeepResearch],
+    });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
@@ -220,7 +242,10 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedModels: [LlmModels.O4MiniDeepResearch] });
+    expect(result).toEqual({
+      type: 'partial_failure',
+      failedModels: [LlmModels.O4MiniDeepResearch],
+    });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
@@ -241,7 +266,12 @@ describe('checkLlmCompletion', () => {
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error 1' },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error 1',
+        },
         {
           provider: LlmProviders.Anthropic,
           model: LlmModels.ClaudeOpus45,

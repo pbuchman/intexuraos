@@ -2,10 +2,7 @@ import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type { Note, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 
-export async function createNote(
-  accessToken: string,
-  request: CreateNoteRequest
-): Promise<Note> {
+export async function createNote(accessToken: string, request: CreateNoteRequest): Promise<Note> {
   return await apiRequest<Note>(config.notesAgentUrl, '/notes', accessToken, {
     method: 'POST',
     body: request,

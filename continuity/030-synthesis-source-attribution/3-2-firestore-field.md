@@ -9,6 +9,7 @@ Add the `attributionStatus` field to the Research model and Firestore repository
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Each Firestore collection owned by ONE service
 - Check `firestore-collections.json` for ownership
 
@@ -19,15 +20,16 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 The `attributionStatus` field needs to be:
+
 1. Added to the Research model type
 2. Accepted in the repository update method
 3. Stored in Firestore
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
-| `apps/llm-orchestrator/src/domain/research/models/Research.ts` | **MODIFY** |
+| File                                                                      | Action                 |
+| ------------------------------------------------------------------------- | ---------------------- |
+| `apps/llm-orchestrator/src/domain/research/models/Research.ts`            | **MODIFY**             |
 | `apps/llm-orchestrator/src/infra/research/FirestoreResearchRepository.ts` | **MODIFY** (if needed) |
 
 ## Files to Read First

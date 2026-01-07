@@ -9,6 +9,7 @@ Parse the `Attribution:` line format that the LLM will output at the end of each
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Strict TypeScript patterns
 - No obvious comments
 
@@ -21,11 +22,13 @@ Read `.claude/CLAUDE.md`:
 Implement a function to parse Attribution lines from synthesis output.
 
 **Input format:**
+
 ```
 Attribution: Primary=S1,S2; Secondary=U1; Constraints=; UNK=false
 ```
 
 **Parsing requirements:**
+
 - Multi-digit IDs supported: `S10`, `U12` (use `\d+` not `\d`)
 - Whitespace tolerant: `Primary = S1 , S2` is valid
 - Empty lists allowed: `Constraints=;`
@@ -34,8 +37,8 @@ Attribution: Primary=S1,S2; Secondary=U1; Constraints=; UNK=false
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                              | Action                    |
+| ------------------------------------------------- | ------------------------- |
 | `packages/common-core/src/prompts/attribution.ts` | **MODIFY** (add function) |
 
 ## Files to Read First

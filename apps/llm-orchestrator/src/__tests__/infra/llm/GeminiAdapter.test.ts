@@ -48,7 +48,12 @@ describe('GeminiAdapter', () => {
     });
 
     it('creates adapter successfully', () => {
-      const testAdapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
+      const testAdapter = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        testPricing
+      );
       expect(testAdapter).toBeDefined();
     });
   });

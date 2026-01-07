@@ -1,4 +1,9 @@
-import type { TokenUsage, NormalizedUsage, ModelPricing, ImageSize } from '@intexuraos/llm-contract';
+import type {
+  TokenUsage,
+  NormalizedUsage,
+  ModelPricing,
+  ImageSize,
+} from '@intexuraos/llm-contract';
 
 export function calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number {
   const inputPrice = pricing.inputPricePerMillion;

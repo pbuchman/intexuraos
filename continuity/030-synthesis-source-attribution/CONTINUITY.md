@@ -43,12 +43,12 @@ Add deterministic source attribution to synthesis output so users can see which 
 
 ## Key Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| Store `attributionStatus` as Firestore field | User chose this over JSON wrapper |
-| Use GeminiAdapter for repair | Reuse existing synthesizer |
-| Append breakdown only (no structured storage) | Simpler, matches user preference |
-| Non-`##` heading for injected sections | Avoids parser confusion if model echoes prompt |
+| Decision                                      | Rationale                                      |
+| --------------------------------------------- | ---------------------------------------------- |
+| Store `attributionStatus` as Firestore field  | User chose this over JSON wrapper              |
+| Use GeminiAdapter for repair                  | Reuse existing synthesizer                     |
+| Append breakdown only (no structured storage) | Simpler, matches user preference               |
+| Non-`##` heading for injected sections        | Avoids parser confusion if model echoes prompt |
 
 ---
 

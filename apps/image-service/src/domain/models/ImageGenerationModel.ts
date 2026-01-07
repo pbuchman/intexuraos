@@ -10,7 +10,10 @@ export interface ImageGenerationModelConfig {
 
 export const IMAGE_GENERATION_MODELS: Record<ImageGenerationModel, ImageGenerationModelConfig> = {
   [LlmModels.GPTImage1]: { provider: LlmProviders.OpenAI, modelId: LlmModels.GPTImage1 },
-  [LlmModels.Gemini25FlashImage]: { provider: LlmProviders.Google, modelId: LlmModels.Gemini25FlashImage },
+  [LlmModels.Gemini25FlashImage]: {
+    provider: LlmProviders.Google,
+    modelId: LlmModels.Gemini25FlashImage,
+  },
 };
 
 export function isValidImageGenerationModel(model: string): model is ImageGenerationModel {

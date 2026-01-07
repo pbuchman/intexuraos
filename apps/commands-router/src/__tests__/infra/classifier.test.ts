@@ -47,7 +47,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('todo', 0.95, 'Buy groceries')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('I need to buy groceries');
 
       expect(classificationResult.type).toBe('todo');
@@ -60,7 +64,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('research', 0.88, 'AI trends research')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('What are the latest AI trends?');
 
       expect(classificationResult.type).toBe('research');
@@ -72,7 +80,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('unclassified', 0, 'Unclassified')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('random gibberish');
 
       expect(classificationResult.type).toBe('unclassified');
@@ -87,7 +99,11 @@ describe('GeminiClassifier', () => {
       };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: API rate limit exceeded'
@@ -101,7 +117,11 @@ describe('GeminiClassifier', () => {
       };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier({ apiKey: 'bad-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'bad-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Invalid API key provided'
@@ -113,7 +133,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('note', 0.9, 'Meeting notes')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('Meeting notes from today');
 
       expect(classificationResult.type).toBe('note');
@@ -123,7 +147,11 @@ describe('GeminiClassifier', () => {
     it('passes prompt containing the text to generate', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, 'Test'))));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       await classifier.classify('test message');
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('test message'));
@@ -134,7 +162,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('calendar', 0.85, 'Team meeting')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       await classifier.classify('Team meeting tomorrow at 3pm');
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('command classifier'));
@@ -147,7 +179,11 @@ describe('GeminiClassifier', () => {
       };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Request timed out'
@@ -161,7 +197,11 @@ describe('GeminiClassifier', () => {
       };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Server error'
@@ -171,7 +211,11 @@ describe('GeminiClassifier', () => {
     it('returns unclassified for invalid JSON response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult('This is not valid JSON')));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('unclassified');
@@ -182,7 +226,11 @@ describe('GeminiClassifier', () => {
     it('returns unclassified for unknown type in response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('unknown_type', 0.9, 'Test'))));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('unclassified');
@@ -191,7 +239,11 @@ describe('GeminiClassifier', () => {
     it('clamps confidence to valid range', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 1.5, 'Test'))));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.confidence).toBe(1);
@@ -200,7 +252,11 @@ describe('GeminiClassifier', () => {
     it('clamps negative confidence to zero', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', -0.5, 'Test'))));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.confidence).toBe(0);
@@ -211,7 +267,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(`Here is the classification: ${jsonResponse('todo', 0.9, 'Test')} done.`))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('todo');
@@ -225,7 +285,11 @@ describe('GeminiClassifier', () => {
       try {
         mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
 
-        const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+        const classifier = createGeminiClassifier({
+          apiKey: 'test-key',
+          userId: 'test-user',
+          pricing: testPricing,
+        });
         const classificationResult = await classifier.classify('test');
 
         expect(classificationResult.type).toBe('unclassified');
@@ -238,7 +302,11 @@ describe('GeminiClassifier', () => {
     it('uses defaults for missing confidence, title, and reasoning', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('todo');
@@ -251,7 +319,11 @@ describe('GeminiClassifier', () => {
       const longTitle = 'A'.repeat(200);
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, longTitle))));
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.title).toBe('A'.repeat(100));
@@ -263,7 +335,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('todo', 0.9, 'Test', longReasoning)))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.reasoning).toBe('B'.repeat(500));
@@ -274,7 +350,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult('{"type": "todo", "confidence": 0.9, "title": 123}'))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.title).toBe('Unknown');
@@ -287,7 +367,11 @@ describe('GeminiClassifier', () => {
         )
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.reasoning).toBe('No reasoning provided');
@@ -298,7 +382,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult('{"type": "todo", "confidence": "high", "title": "Test"}'))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.confidence).toBe(0.5);
@@ -309,7 +397,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('Research this using only gemini');
 
       expect(classificationResult.selectedModels).toEqual([LlmModels.Gemini25Flash]);
@@ -320,7 +412,11 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
       );
 
-      const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
+      const classifier = createGeminiClassifier({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const classificationResult = await classifier.classify('Research this topic');
 
       expect(classificationResult.selectedModels).toBeUndefined();
@@ -381,9 +477,7 @@ describe('extractSelectedModels', () => {
     });
 
     it('extracts claude-sonnet model for "claude"', () => {
-      expect(extractSelectedModels('use claude for research')).toEqual([
-        LlmModels.ClaudeSonnet45,
-      ]);
+      expect(extractSelectedModels('use claude for research')).toEqual([LlmModels.ClaudeSonnet45]);
     });
 
     it('extracts multiple models', () => {

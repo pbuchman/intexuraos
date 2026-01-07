@@ -54,7 +54,9 @@ describe('parseAttributionLine', () => {
   });
 
   it('returns null for unknown ID format', () => {
-    const result = parseAttributionLine('Attribution: Primary=X1; Secondary=U1; Constraints=; UNK=false');
+    const result = parseAttributionLine(
+      'Attribution: Primary=X1; Secondary=U1; Constraints=; UNK=false'
+    );
     expect(result).toBe(null);
   });
 
@@ -99,7 +101,9 @@ describe('parseAttributionLine', () => {
   });
 
   it('returns null when key is present but value is missing', () => {
-    const result = parseAttributionLine('Attribution: Primary=; Secondary; Constraints=; UNK=false');
+    const result = parseAttributionLine(
+      'Attribution: Primary=; Secondary; Constraints=; UNK=false'
+    );
     expect(result).toBe(null);
   });
 
@@ -298,7 +302,11 @@ describe('buildSourceMap', () => {
   });
 
   it('handles sparse arrays gracefully', () => {
-    const reports: ({ model: string } | undefined)[] = [{ model: 'GPT-4' }, undefined, { model: 'Claude' }];
+    const reports: ({ model: string } | undefined)[] = [
+      { model: 'GPT-4' },
+      undefined,
+      { model: 'Claude' },
+    ];
     const sourceMap = buildSourceMap(reports as readonly { model: string }[]);
 
     expect(sourceMap).toHaveLength(2);
@@ -308,7 +316,11 @@ describe('buildSourceMap', () => {
 
   it('handles sparse additionalSources arrays', () => {
     const reports = [{ model: 'GPT-4' }];
-    const additionalSources: ({ label?: string } | undefined)[] = [{ label: 'Wikipedia' }, undefined, { label: 'Custom' }];
+    const additionalSources: ({ label?: string } | undefined)[] = [
+      { label: 'Wikipedia' },
+      undefined,
+      { label: 'Custom' },
+    ];
     const sourceMap = buildSourceMap(reports, additionalSources as readonly { label?: string }[]);
 
     expect(sourceMap).toHaveLength(3);
@@ -453,7 +465,9 @@ describe('generateBreakdown', () => {
     expect(breakdown).toContain('### Per-Source Usage');
     expect(breakdown).toContain('**S1** (GPT-4): Primary in: Overview, Details');
     expect(breakdown).toContain('**S2** (Claude): Primary in: Overview. Secondary in: Details');
-    expect(breakdown).toContain('**U1** (Wikipedia): Primary in: —. Secondary in: Overview. Constraints in: Details');
+    expect(breakdown).toContain(
+      '**U1** (Wikipedia): Primary in: —. Secondary in: Overview. Constraints in: Details'
+    );
   });
 
   it('identifies ignored sources', () => {
@@ -506,7 +520,9 @@ describe('generateBreakdown', () => {
     const sourceMap = createTestSourceMap();
     const breakdown = generateBreakdown(sections, sourceMap);
 
-    expect(breakdown).toContain('_Attribution data derived from parsed markers. No interpretation applied._');
+    expect(breakdown).toContain(
+      '_Attribution data derived from parsed markers. No interpretation applied._'
+    );
   });
 
   it('handles section with UNK=true', () => {
@@ -570,9 +586,7 @@ describe('generateBreakdown', () => {
         endLine: 5,
       },
     ];
-    const sourceMap: SourceMapItem[] = [
-      { id: 'S1', kind: 'llm', displayName: 'GPT-4' },
-    ];
+    const sourceMap: SourceMapItem[] = [{ id: 'S1', kind: 'llm', displayName: 'GPT-4' }];
     const breakdown = generateBreakdown(sections, sourceMap);
 
     // Unknown IDs are ignored, S1 has zero usage so it goes to Ignored Sources
@@ -602,4 +616,3 @@ describe('generateBreakdown', () => {
     expect(breakdown).toContain('All sources were ignored.');
   });
 });
-

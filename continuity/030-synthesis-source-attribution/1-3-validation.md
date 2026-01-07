@@ -9,6 +9,7 @@ Validate that synthesis output has proper Attribution lines for all sections.
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Return Result types for operations that can fail (but here ValidationResult is fine)
 - Strict TypeScript patterns
 
@@ -21,14 +22,15 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Validate that:
+
 1. Every section has an Attribution line
 2. All Attribution lines are well-formed
 3. All referenced source IDs exist in the source map
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                              | Action                     |
+| ------------------------------------------------- | -------------------------- |
 | `packages/common-core/src/prompts/attribution.ts` | **MODIFY** (add functions) |
 
 ## Files to Read First
@@ -72,9 +74,9 @@ export function validateSynthesisAttributions(
 
 ```typescript
 // Examples of error messages:
-'Section "Overview" is missing Attribution line'
-'Section "Details" has malformed Attribution line'
-'Section "Pricing" references unknown source ID: S99'
+'Section "Overview" is missing Attribution line';
+'Section "Details" has malformed Attribution line';
+'Section "Pricing" references unknown source ID: S99';
 ```
 
 ## buildSourceMap Logic

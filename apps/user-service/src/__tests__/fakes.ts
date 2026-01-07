@@ -3,8 +3,9 @@
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */
-import type { EncryptedValue, Encryptor, Result } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
+import type { EncryptedValue, Encryptor } from '@intexuraos/common-core/encryption';
 import type {
   Auth0Client,
   AuthError,

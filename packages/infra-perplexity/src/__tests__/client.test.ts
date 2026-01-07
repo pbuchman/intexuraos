@@ -542,4 +542,92 @@ describe('createPerplexityClient', () => {
       }
     });
   });
+
+  describe('edge cases', () => {
+    it('uses default medium search context for unknown model', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          return body.messages[0].content.includes('medium');
+        })
+        .reply(200, {
+          choices: [{ message: { content: 'Research result' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: 'unknown-model' as (typeof LlmModels)[keyof typeof LlmModels],
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles timeout error in research', async () => {
+      nock(API_BASE_URL).post('/chat/completions').replyWithError(new Error('Request timeout'));
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('handles timeout error in generate', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .replyWithError(new Error('Connection timeout occurred'));
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('handles search results with missing URLs', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Content' } }],
+          search_results: [
+            { url: 'https://example.com' },
+            { title: 'No URL here' },
+            { url: 'https://example2.com' },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toHaveLength(2);
+        expect(result.value.sources).toContain('https://example.com');
+        expect(result.value.sources).toContain('https://example2.com');
+      }
+    });
+  });
 });

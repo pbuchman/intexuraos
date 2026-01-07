@@ -8,7 +8,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
-import type { EncryptedValue } from '@intexuraos/common-core';
+import type { EncryptedValue } from '@intexuraos/common-core/encryption';
 import { getServices } from '../services.js';
 import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
 

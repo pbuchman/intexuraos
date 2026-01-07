@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { type ProviderPricing, type Gemini25Pro } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { PricingContext, createPricingContext, fetchAllPricing, type AllPricingResponse } from '../pricingClient.js';
+import {
+  PricingContext,
+  createPricingContext,
+  fetchAllPricing,
+  type AllPricingResponse,
+} from '../pricingClient.js';
 
 describe('pricingClient', () => {
   const mockGooglePricing: ProviderPricing = {
@@ -146,10 +151,9 @@ describe('pricingClient', () => {
         expect(result.value.openai).toEqual(completeAllPricing.openai);
       }
 
-      expect(fetch).toHaveBeenCalledWith(
-        `${mockBaseUrl}/internal/settings/pricing`,
-        { headers: { 'X-Internal-Auth': mockAuthToken } }
-      );
+      expect(fetch).toHaveBeenCalledWith(`${mockBaseUrl}/internal/settings/pricing`, {
+        headers: { 'X-Internal-Auth': mockAuthToken },
+      });
     });
 
     it('returns API_ERROR when response is not ok', async () => {
@@ -173,7 +177,9 @@ describe('pricingClient', () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: false,
         status: 404,
-        text: async () => { throw new Error('Body read failed'); },
+        text: async () => {
+          throw new Error('Body read failed');
+        },
       } as unknown as Response);
 
       const result = await fetchAllPricing(mockBaseUrl, mockAuthToken);
@@ -257,9 +263,7 @@ describe('pricingClient', () => {
     it('validates that specified models have pricing', () => {
       const context = new PricingContext(completeAllPricing);
 
-      expect(() =>
-        context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])
-      ).not.toThrow();
+      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])).not.toThrow();
     });
 
     it('throws when validating models with missing pricing', () => {
@@ -339,10 +343,7 @@ describe('pricingClient', () => {
       };
 
       // Should not throw when only validating gemini-2.5-flash
-      expect(() =>
-        createPricingContext(partialPricing, [LlmModels.Gemini25Flash])
-      ).not.toThrow();
+      expect(() => createPricingContext(partialPricing, [LlmModels.Gemini25Flash])).not.toThrow();
     });
   });
 });
-

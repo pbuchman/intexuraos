@@ -69,7 +69,11 @@ describe('LlmCallPublisher', () => {
       topicName: 'test-topic',
     });
 
-    const models = [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45] as const;
+    const models = [
+      LlmModels.Gemini25Pro,
+      LlmModels.O4MiniDeepResearch,
+      LlmModels.ClaudeOpus45,
+    ] as const;
 
     for (const model of models) {
       const result = await publisher.publishLlmCall({

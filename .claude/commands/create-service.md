@@ -371,7 +371,7 @@ gcloud run deploy "$CLOUD_RUN_SERVICE" \
 
 Also modify `cloudbuild/scripts/check-affected.mjs` to include the new service for affected builds.
 
-```bash
+````bash
 
 ### 10. Register in API Docs Hub
 
@@ -386,7 +386,7 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     openapiUrl: 'https://intexuraos-<service-name>-xyz.run.app/openapi.json',
   },
 ];
-```
+````
 
 Note: Get the actual Cloud Run URL after first deployment.
 

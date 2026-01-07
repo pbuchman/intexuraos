@@ -521,7 +521,9 @@ describe('Research Routes - Authenticated', () => {
         id: 'draft-456',
         status: 'draft',
         selectedModels: [LlmModels.Gemini25Pro],
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(draft);
 
@@ -1504,7 +1506,12 @@ describe('Research Routes - Authenticated', () => {
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'awaiting_confirmation',
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
         ],
         startedAt: new Date().toISOString(),
       };
@@ -1615,7 +1622,7 @@ describe('Research Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
         pricingRepo: new FakePricingRepository(),
-      pricingContext: fakePricingContext,
+        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
@@ -1758,7 +1765,12 @@ describe('Research Routes - Authenticated', () => {
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Synthesis failed',
       });
@@ -1885,7 +1897,7 @@ describe('Research Routes - Authenticated', () => {
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         pricingRepo: new FakePricingRepository(),
-      pricingContext: fakePricingContext,
+        pricingContext: fakePricingContext,
         shareStorage: null,
         shareConfig: null,
         createResearchProvider: () => createFakeLlmResearchProvider(),
@@ -1907,7 +1919,12 @@ describe('Research Routes - Authenticated', () => {
               status: 'completed',
               result: 'Result 1',
             },
-            { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
+            {
+              provider: LlmProviders.OpenAI,
+              model: 'o4-mini',
+              status: 'completed',
+              result: 'Result 2',
+            },
           ],
           synthesisError: 'Previous failure',
         });
@@ -2062,7 +2079,10 @@ describe('Internal Routes', () => {
       expect(body.data.userId).toBe(TEST_USER_ID);
       expect(body.data.title).toBe('Test Draft Research');
       expect(body.data.status).toBe('draft');
-      expect(body.data.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch]);
+      expect(body.data.selectedModels).toEqual([
+        LlmModels.Gemini25Pro,
+        LlmModels.O4MiniDeepResearch,
+      ]);
     });
 
     it('creates draft research with sourceActionId', async () => {
@@ -2454,7 +2474,7 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         pricingRepo: new FakePricingRepository(),
-      pricingContext: fakePricingContext,
+        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -2744,7 +2764,9 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
 
       const updatedResearch = fakeRepo.getAll()[0];
-      const googleResult = updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.Google);
+      const googleResult = updatedResearch?.llmResults.find(
+        (r) => r.provider === LlmProviders.Google
+      );
       expect(googleResult?.status).toBe('completed');
       expect(googleResult?.result).toBeDefined();
     });
@@ -2755,7 +2777,9 @@ describe('Internal Routes', () => {
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.Gemini25Pro,
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
         inputContexts: [{ id: 'ctx-1', content: 'Input context', addedAt: '2024-01-01T10:00:00Z' }],
       });
       fakeRepo.addResearch(research);
@@ -2789,7 +2813,9 @@ describe('Internal Routes', () => {
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.Gemini25Pro,
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2822,7 +2848,9 @@ describe('Internal Routes', () => {
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.Gemini25Pro,
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2850,7 +2878,9 @@ describe('Internal Routes', () => {
         id: 'research-123',
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
@@ -2880,7 +2910,12 @@ describe('Internal Routes', () => {
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed', result: 'Done' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Done',
+          },
           { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         ],
       });
@@ -2943,9 +2978,9 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
       expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.Gemini25Pro);
-      expect(updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.OpenAI)?.status).toBe(
-        'completed'
-      );
+      expect(
+        updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.OpenAI)?.status
+      ).toBe('completed');
     });
 
     it('fails synthesis when synthesis API key missing after LLM completion', async () => {
@@ -2954,7 +2989,9 @@ describe('Internal Routes', () => {
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: LlmModels.ClaudeOpus45,
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2984,7 +3021,9 @@ describe('Internal Routes', () => {
         id: 'research-123',
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
-        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });

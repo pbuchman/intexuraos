@@ -7,7 +7,7 @@ describe('infra-perplexity costCalculator', () => {
     inputPricePerMillion: 3.0,
     outputPricePerMillion: 15.0,
     webSearchCostPerCall: 0.005, // Request Fee
-    useProviderCost: true
+    useProviderCost: true,
   };
 
   describe('calculateTextCost', () => {

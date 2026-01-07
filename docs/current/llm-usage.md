@@ -38,7 +38,7 @@ Pricing data verified as of: **2026-01-04**
 ### Image Generation Pricing
 
 | Provider | Model       | Size      | Quality  | Price/Image | Notes            |
-| -------- | ----------- | --------- | -------- | ----------- |------------------|
+| -------- | ----------- | --------- | -------- | ----------- | ---------------- |
 | OpenAI   | gpt-image-1 | 1024x1024 | standard | $0.040      | Cover images     |
 | OpenAI   | gpt-image-1 | 1536x1024 | standard | $0.080      | Wide format      |
 | OpenAI   | gpt-image-1 | 1024x1536 | standard | $0.080      | Tall format      |

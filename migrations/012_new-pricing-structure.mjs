@@ -16,7 +16,8 @@
 export const metadata = {
   id: '012',
   name: 'new-pricing-structure',
-  description: 'Create new settings/llm_pricing/providers/{provider} structure with per-size image pricing',
+  description:
+    'Create new settings/llm_pricing/providers/{provider} structure with per-size image pricing',
   createdAt: '2026-01-05',
 };
 

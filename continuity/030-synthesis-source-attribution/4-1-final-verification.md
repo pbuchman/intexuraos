@@ -9,6 +9,7 @@ Run full CI verification and confirm all acceptance criteria are met.
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - `npm run ci` MUST pass before task completion
 - 95% coverage required
 - Never modify coverage thresholds
@@ -20,6 +21,7 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Final verification that:
+
 1. All tests pass
 2. Coverage thresholds met
 3. Linting passes
@@ -54,6 +56,7 @@ npm run test -- packages/common-core/src/prompts/__tests__/synthesisPrompt.test.
 ```
 
 Verify output shows tests for:
+
 - S#/U# heading format
 - Source ID Map presence
 - Attribution Rules presence
@@ -67,6 +70,7 @@ npm run test -- apps/llm-orchestrator/src/domain/research/usecases/
 ```
 
 Verify tests for:
+
 - Attribution validation
 - Repair flow
 - Breakdown generation
@@ -79,6 +83,7 @@ npm run test -- --coverage
 ```
 
 Verify:
+
 - `packages/common-core/src/prompts/attribution.ts` ≥95%
 - `apps/llm-orchestrator/src/domain/research/usecases/repairAttribution.ts` ≥95%
 - Overall coverage maintained
@@ -86,6 +91,7 @@ Verify:
 ### Step 6: Manual Smoke Test (Optional)
 
 If possible, run a local synthesis and verify:
+
 1. Output contains Attribution lines
 2. Breakdown section appended
 3. attributionStatus field in Firestore

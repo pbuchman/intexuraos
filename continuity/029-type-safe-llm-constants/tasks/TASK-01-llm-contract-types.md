@@ -11,6 +11,7 @@ Add individual type aliases for each model and provider, then compose category t
 ### 1. `packages/llm-contract/src/supportedModels.ts`
 
 **Current state (lines ~1-50):**
+
 ```typescript
 export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
@@ -19,6 +20,7 @@ export type ResearchModel = ...
 ```
 
 **Target state:**
+
 ```typescript
 // ============================================
 // Individual Provider Types
@@ -121,4 +123,3 @@ npm run typecheck -w @intexuraos/llm-contract
 - [ ] LLMModel union uses individual types
 - [ ] LlmProvider union uses individual types
 - [ ] Typecheck passes
-

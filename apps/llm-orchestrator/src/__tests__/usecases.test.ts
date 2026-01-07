@@ -71,7 +71,11 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
+        selectedModels: [
+          LlmModels.Gemini25Pro,
+          LlmModels.O4MiniDeepResearch,
+          LlmModels.ClaudeOpus45,
+        ],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {

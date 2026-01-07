@@ -9,6 +9,7 @@ Change source headings in the synthesis prompt to use neutral IDs (S1, S2, U1, U
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Backward compatibility required (no signature changes)
 - Both legacy and contextual paths need updates
 
@@ -19,6 +20,7 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Currently, source headings look like:
+
 ```markdown
 ### GPT-4
 
@@ -30,6 +32,7 @@ Currently, source headings look like:
 ```
 
 Change to:
+
 ```markdown
 ### S1 (LLM report; model: GPT-4)
 
@@ -41,6 +44,7 @@ Change to:
 ```
 
 And for additional sources:
+
 ```markdown
 ### U1 (Additional source; label: Wikipedia)
 
@@ -49,8 +53,8 @@ And for additional sources:
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                                  | Action     |
+| ----------------------------------------------------- | ---------- |
 | `packages/common-core/src/prompts/synthesisPrompt.ts` | **MODIFY** |
 
 ## Files to Read First
@@ -63,11 +67,13 @@ And for additional sources:
 ### In `buildContextualSynthesisPrompt` (line ~81)
 
 **Before:**
+
 ```typescript
 const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
 ```
 
 **After:**
+
 ```typescript
 const formattedReports = reports
   .map((r, idx) => `### S${idx + 1} (LLM report; model: ${r.model})\n\n${r.content}`)
@@ -77,12 +83,14 @@ const formattedReports = reports
 ### In `buildContextualSynthesisPrompt` (lines ~86-88)
 
 **Before:**
+
 ```typescript
 const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
 return `### ${sourceLabel}\n\n${source.content}`;
 ```
 
 **After:**
+
 ```typescript
 const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
 return `### U${idx + 1} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
@@ -91,11 +99,13 @@ return `### U${idx + 1} (Additional source; label: ${sourceLabel})\n\n${source.c
 ### In legacy path (line ~216)
 
 **Before:**
+
 ```typescript
 const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
 ```
 
 **After:**
+
 ```typescript
 const formattedReports = reports
   .map((r, idx) => `### S${idx + 1} (LLM report; model: ${r.model})\n\n${r.content}`)
@@ -105,12 +115,14 @@ const formattedReports = reports
 ### In legacy path (lines ~221-223)
 
 **Before:**
+
 ```typescript
 const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
 return `### ${sourceLabel}\n\n${source.content}`;
 ```
 
 **After:**
+
 ```typescript
 const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
 return `### U${idx + 1} (Additional source; label: ${sourceLabel})\n\n${source.content}`;

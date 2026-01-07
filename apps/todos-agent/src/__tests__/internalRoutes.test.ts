@@ -46,10 +46,7 @@ describe('Internal Routes', () => {
           tags: [],
           source: 'actions-agent',
           sourceId: 'action-123',
-          items: [
-            { title: 'Task 1' },
-            { title: 'Task 2', priority: 'high' },
-          ],
+          items: [{ title: 'Task 1' }, { title: 'Task 2', priority: 'high' }],
         },
       });
 
@@ -161,6 +158,116 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    it('creates todo with items that have priority and dueDate', async () => {
+      const itemDueDate = new Date('2025-06-15T12:00:00Z');
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Todo with detailed items',
+          tags: [],
+          source: 'actions-agent',
+          sourceId: 'action-789',
+          items: [
+            { title: 'Item with priority', priority: 'high' },
+            { title: 'Item with due date', dueDate: itemDueDate.toISOString() },
+            { title: 'Item with both', priority: 'urgent', dueDate: itemDueDate.toISOString() },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.data.items).toHaveLength(3);
+      expect(body.data.items[0].priority).toBe('high');
+      expect(body.data.items[1].dueDate).toBe(itemDueDate.toISOString());
+      expect(body.data.items[2].priority).toBe('urgent');
+      expect(body.data.items[2].dueDate).toBe(itemDueDate.toISOString());
+    });
+
+    it('creates todo with all optional fields', async () => {
+      const dueDate = new Date('2025-09-01T00:00:00Z');
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Complete Todo',
+          description: 'A detailed description',
+          tags: ['work', 'important'],
+          priority: 'high',
+          dueDate: dueDate.toISOString(),
+          source: 'actions-agent',
+          sourceId: 'action-999',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.data.description).toBe('A detailed description');
+      expect(body.data.priority).toBe('high');
+      expect(body.data.dueDate).toBe(dueDate.toISOString());
+    });
+
+    it('creates todo without optional fields', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Minimal Todo',
+          tags: [],
+          source: 'actions-agent',
+          sourceId: 'action-minimal',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.data.description).toBeNull();
+      expect(body.data.priority).toBe('medium');
+      expect(body.data.dueDate).toBeNull();
+      expect(body.data.items).toHaveLength(0);
+    });
+
+    it('creates todo with null optional fields explicitly', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Todo with nulls',
+          description: null,
+          tags: [],
+          dueDate: null,
+          source: 'actions-agent',
+          sourceId: 'action-null',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.data.description).toBeNull();
+      expect(body.data.dueDate).toBeNull();
     });
   });
 });

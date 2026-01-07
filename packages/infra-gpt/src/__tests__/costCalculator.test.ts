@@ -7,7 +7,7 @@ describe('infra-gpt costCalculator', () => {
     inputPricePerMillion: 2.5,
     outputPricePerMillion: 10.0,
     webSearchCostPerCall: 0.01,
-    cacheReadMultiplier: 0.5
+    cacheReadMultiplier: 0.5,
   };
 
   describe('calculateTextCost', () => {

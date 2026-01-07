@@ -17,6 +17,7 @@ npx tsx scripts/verify-llm-architecture.ts
 ```
 
 Expected output:
+
 ```
 === LLM Architecture Verification ===
 
@@ -40,4 +41,3 @@ npm run ci
 - [ ] `npm run ci` passes completely
 - [ ] All tests pass
 - [ ] Typecheck passes
-

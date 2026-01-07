@@ -362,11 +362,7 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
   return (
     <Card>
       <div className="flex items-start justify-between gap-4">
-        <button
-          onClick={onOpen}
-          className="flex-1 min-w-0 text-left"
-          type="button"
-        >
+        <button onClick={onOpen} className="flex-1 min-w-0 text-left" type="button">
           <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors">
             {note.title}
           </h3>

@@ -117,7 +117,11 @@ describe('createImageServiceClient', () => {
         .reply(200, { success: true, data: mockImageData });
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generateImage('A beautiful sunset', LlmModels.GPTImage1, 'user-1');
+      const result = await client.generateImage(
+        'A beautiful sunset',
+        LlmModels.GPTImage1,
+        'user-1'
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {

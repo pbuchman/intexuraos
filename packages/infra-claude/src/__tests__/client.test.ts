@@ -166,10 +166,7 @@ describe('createClaudeClient', () => {
         content: [
           {
             type: 'web_search_tool_result',
-            content: [
-              { url: 'https://example.com/page1' },
-              { url: 'https://example.com/page2' },
-            ],
+            content: [{ url: 'https://example.com/page1' }, { url: 'https://example.com/page2' }],
           },
           { type: 'text', text: 'Result with source https://example.com/page3' },
         ],
