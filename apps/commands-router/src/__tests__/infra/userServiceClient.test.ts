@@ -133,6 +133,26 @@ describe('UserServiceClient', () => {
       }
     });
 
+    it('returns API_ERROR without error details when body read fails', async () => {
+      // Use empty body to trigger empty errorDetails path
+      nock(INTEXURAOS_USER_SERVICE_URL)
+        .get('/internal/users/user-empty-body/llm-keys')
+        .reply(400, '');
+
+      const client = createUserServiceClient({
+        baseUrl: INTEXURAOS_USER_SERVICE_URL,
+        internalAuthToken: INTERNAL_AUTH_TOKEN,
+      });
+
+      const result = await client.getApiKeys('user-empty-body');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('HTTP 400');
+      }
+    });
+
     it('returns NETWORK_ERROR on connection failure', async () => {
       nock(INTEXURAOS_USER_SERVICE_URL)
         .get('/internal/users/user-123/llm-keys')
