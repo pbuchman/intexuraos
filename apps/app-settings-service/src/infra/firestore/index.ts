@@ -1,6 +1,6 @@
 /**
  * Firestore implementation of PricingRepository.
- * Reads from settings/llm_pricing/{provider} collection.
+ * Reads from settings/llm_pricing/providers/{provider} collection.
  */
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
@@ -17,7 +17,9 @@ interface ProviderPricingDoc {
 }
 
 export class FirestorePricingRepository implements PricingRepository {
-  private readonly collectionPath = 'settings/llm_pricing';
+  // Path structure: settings/llm_pricing/providers/{provider}
+  // (collection/document/collection/document - must have even number of components)
+  private readonly collectionPath = 'settings/llm_pricing/providers';
 
   async getByProvider(provider: LlmProvider): Promise<ProviderPricing | null> {
     const db = getFirestore();

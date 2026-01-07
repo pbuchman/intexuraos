@@ -42,7 +42,7 @@ describe('FirestorePricingRepository', () => {
     expect(result?.provider).toBe(LlmProviders.Google);
     const geminiPricing = result?.models[LlmModels.Gemini25Pro];
     expect(geminiPricing?.inputPricePerMillion).toBe(1.25);
-    expect(mockDoc).toHaveBeenCalledWith(`settings/llm_pricing/${LlmProviders.Google}`);
+    expect(mockDoc).toHaveBeenCalledWith(`settings/llm_pricing/providers/${LlmProviders.Google}`);
   });
 
   it('returns null for non-existing provider', async () => {
