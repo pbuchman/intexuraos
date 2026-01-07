@@ -11,7 +11,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
    * Used by apps at startup to load pricing into PricingContext.
    */
   fastify.get(
-    '/internal/settings/pricing',
+    '/settings/pricing',
     {
       schema: {
         operationId: 'getAllPricing',
@@ -26,10 +26,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
-                  google: { $ref: '#/components/schemas/ProviderPricing' },
-                  openai: { $ref: '#/components/schemas/ProviderPricing' },
-                  anthropic: { $ref: '#/components/schemas/ProviderPricing' },
-                  perplexity: { $ref: '#/components/schemas/ProviderPricing' },
+                  google: { $ref: 'ProviderPricing#' },
+                  openai: { $ref: 'ProviderPricing#' },
+                  anthropic: { $ref: 'ProviderPricing#' },
+                  perplexity: { $ref: 'ProviderPricing#' },
                 },
                 required: ['google', 'openai', 'anthropic', 'perplexity'],
               },
@@ -74,27 +74,29 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
-      // Check if any provider is missing
-      const missing: string[] = [];
-      if (google === null) missing.push('google');
-      if (openai === null) missing.push('openai');
-      if (anthropic === null) missing.push('anthropic');
-      if (perplexity === null) missing.push('perplexity');
-
-      if (missing.length > 0) {
-        request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
+      // Check if any provider is missing - need individual null checks for TypeScript narrowing
+      if (google === null) {
+        request.log.error({ missingProviders: ['google'] }, 'Missing pricing for providers');
         reply.status(500);
-        return { error: `Missing pricing for providers: ${missing.join(', ')}` };
+        return { error: 'Missing pricing for providers: google' };
+      }
+      if (openai === null) {
+        request.log.error({ missingProviders: ['openai'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: openai' };
+      }
+      if (anthropic === null) {
+        request.log.error({ missingProviders: ['anthropic'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: anthropic' };
+      }
+      if (perplexity === null) {
+        request.log.error({ missingProviders: ['perplexity'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: perplexity' };
       }
 
-      // At this point all providers are non-null (missing.length === 0 check above)
-      // TypeScript doesn't narrow after array push checks, so we do explicit checks
-      if (google === null || openai === null || anthropic === null || perplexity === null) {
-        // This should never happen given the checks above
-        reply.status(500);
-        return { error: 'Unexpected null pricing' };
-      }
-
+      // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
         Object.keys(google.models).length +
         Object.keys(openai.models).length +

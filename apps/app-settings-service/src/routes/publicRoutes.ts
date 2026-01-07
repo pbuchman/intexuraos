@@ -25,10 +25,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
-                  google: { $ref: '#/components/schemas/ProviderPricing' },
-                  openai: { $ref: '#/components/schemas/ProviderPricing' },
-                  anthropic: { $ref: '#/components/schemas/ProviderPricing' },
-                  perplexity: { $ref: '#/components/schemas/ProviderPricing' },
+                  google: { $ref: 'ProviderPricing#' },
+                  openai: { $ref: 'ProviderPricing#' },
+                  anthropic: { $ref: 'ProviderPricing#' },
+                  perplexity: { $ref: 'ProviderPricing#' },
                 },
                 required: ['google', 'openai', 'anthropic', 'perplexity'],
               },
@@ -39,14 +39,14 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', const: false },
-              error: { $ref: '#/components/schemas/ErrorBody' },
+              error: { $ref: 'ErrorBody#' },
             },
           },
           500: {
             type: 'object',
             properties: {
               success: { type: 'boolean', const: false },
-              error: { $ref: '#/components/schemas/ErrorBody' },
+              error: { $ref: 'ErrorBody#' },
             },
           },
         },
@@ -72,24 +72,25 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
-      const missing: string[] = [];
-      if (google === null) missing.push(LlmProviders.Google);
-      if (openai === null) missing.push(LlmProviders.OpenAI);
-      if (anthropic === null) missing.push(LlmProviders.Anthropic);
-      if (perplexity === null) missing.push(LlmProviders.Perplexity);
-
-      if (missing.length > 0) {
-        request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
-        return await reply.fail(
-          'INTERNAL_ERROR',
-          `Missing pricing for providers: ${missing.join(', ')}`
-        );
+      // Check if any provider is missing - need individual null checks for TypeScript narrowing
+      if (google === null) {
+        request.log.error({ missingProviders: [LlmProviders.Google] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Google}`);
+      }
+      if (openai === null) {
+        request.log.error({ missingProviders: [LlmProviders.OpenAI] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.OpenAI}`);
+      }
+      if (anthropic === null) {
+        request.log.error({ missingProviders: [LlmProviders.Anthropic] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Anthropic}`);
+      }
+      if (perplexity === null) {
+        request.log.error({ missingProviders: [LlmProviders.Perplexity] }, 'Missing pricing for providers');
+        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Perplexity}`);
       }
 
-      if (google === null || openai === null || anthropic === null || perplexity === null) {
-        return await reply.fail('INTERNAL_ERROR', 'Unexpected null pricing');
-      }
-
+      // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
         Object.keys(google.models).length +
         Object.keys(openai.models).length +

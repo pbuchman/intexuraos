@@ -8,7 +8,23 @@ vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: vi.fn(),
 }));
 
-describe('internalRoutes', () => {
+// Mock common-http to control authentication
+vi.mock('@intexuraos/common-http', async () => {
+  const actual = await vi.importActual('@intexuraos/common-http');
+  return {
+    ...actual,
+    requireAuth: vi.fn().mockImplementation(async (request, reply) => {
+      const authHeader = request.headers.authorization;
+      if (authHeader === 'Bearer valid-token') {
+        return { userId: 'user-123' };
+      }
+      await reply.fail('UNAUTHORIZED', 'Missing or invalid Authorization header');
+      return null;
+    }),
+  };
+});
+
+describe('publicRoutes', () => {
   const mockGooglePricing: ProviderPricing = {
     provider: LlmProviders.Google,
     models: {
@@ -71,8 +87,8 @@ describe('internalRoutes', () => {
     vi.clearAllMocks();
   });
 
-  describe('GET /internal/settings/pricing', () => {
-    it('returns pricing for all providers', async () => {
+  describe('GET /settings/pricing', () => {
+    it('returns pricing for all providers with valid auth', async () => {
       fakePricingRepository.getByProvider.mockImplementation((provider: string) => {
         switch (provider) {
           case 'google':
@@ -93,9 +109,9 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
@@ -117,7 +133,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
       });
 
       expect(response.statusCode).toBe(401);
@@ -131,9 +147,9 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'wrong-token',
+          authorization: 'Bearer invalid-token',
         },
       });
 
@@ -163,16 +179,16 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Missing pricing for providers');
-      expect(body.error).toContain('anthropic');
+      expect(body.error.message).toContain('Missing pricing for providers');
+      expect(body.error.message).toContain('anthropic');
 
       await app.close();
     });
@@ -185,17 +201,17 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Missing pricing for providers');
+      expect(body.error.message).toContain('Missing pricing for providers');
       // With the new individual checks, it returns on first missing provider (google)
-      expect(body.error).toContain('google');
+      expect(body.error.message).toContain('google');
 
       await app.close();
     });
@@ -221,15 +237,15 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('google');
+      expect(body.error.message).toContain('google');
 
       await app.close();
     });
@@ -255,15 +271,15 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('openai');
+      expect(body.error.message).toContain('openai');
 
       await app.close();
     });
@@ -289,15 +305,15 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing',
+        url: '/settings/pricing',
         headers: {
-          'x-internal-auth': 'test-token',
+          authorization: 'Bearer valid-token',
         },
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('perplexity');
+      expect(body.error.message).toContain('perplexity');
 
       await app.close();
     });
