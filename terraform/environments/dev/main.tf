@@ -1247,6 +1247,9 @@ module "app_settings_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/app-settings-service:latest"
 
   secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
