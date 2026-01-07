@@ -166,6 +166,20 @@ describe('FirestoreTodoRepository', () => {
       }
     });
 
+    it('returns todos for specified user without filters', async () => {
+      await repository.create(createTestInput({ userId: 'user-A', title: 'Todo A1' }));
+      await repository.create(createTestInput({ userId: 'user-A', title: 'Todo A2' }));
+      await repository.create(createTestInput({ userId: 'user-B', title: 'Todo B1' }));
+
+      const resultA = await repository.findByUserId('user-A');
+
+      expect(resultA.ok).toBe(true);
+      if (resultA.ok) {
+        expect(resultA.value).toHaveLength(2);
+        expect(resultA.value.every((t) => t.userId === 'user-A')).toBe(true);
+      }
+    });
+
     it('returns todos for specified user only', async () => {
       await repository.create(createTestInput({ userId: 'user-A', title: 'Todo A1' }));
       await repository.create(createTestInput({ userId: 'user-B', title: 'Todo B1' }));

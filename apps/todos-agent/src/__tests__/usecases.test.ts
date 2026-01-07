@@ -253,6 +253,31 @@ describe('updateTodo', () => {
     }
   });
 
+  it('updates todo with dueDate set to null', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Original',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      dueDate: new Date('2025-12-31'),
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await updateTodo(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { dueDate: null }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.dueDate).toBeNull();
+    }
+  });
+
   it('returns FORBIDDEN for non-owner', async () => {
     const createResult = await todoRepository.create({
       userId: 'user-1',
@@ -362,6 +387,61 @@ describe('addTodoItem', () => {
     }
   });
 
+  it('adds item with priority and dueDate', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const dueDate = new Date('2025-12-31');
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { title: 'New Item', priority: 'high', dueDate }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.title).toBe('New Item');
+      expect(result.value.items[0]?.priority).toBe('high');
+      expect(result.value.items[0]?.dueDate).toEqual(dueDate);
+    }
+  });
+
+  it('adds item to todo with existing items and calculates position', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }, { title: 'Item 2' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await addTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      'user-1',
+      { title: 'Item 3' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(3);
+      expect(result.value.items[2]?.title).toBe('Item 3');
+      expect(result.value.items[2]?.position).toBe(2);
+    }
+  });
+
   it('reopens completed todo when item added', async () => {
     const createResult = await todoRepository.create({
       userId: 'user-1',
@@ -428,6 +508,36 @@ describe('updateTodoItem', () => {
     if (result.ok) {
       expect(result.value.items[0]?.status).toBe('completed');
       expect(result.value.items[0]?.completedAt).not.toBeNull();
+    }
+  });
+
+  it('clears dueDate when set to null', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1', dueDate: new Date('2025-12-31') }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { dueDate: null }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items[0]?.dueDate).toBeNull();
     }
   });
 
