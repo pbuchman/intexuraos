@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import type { ProviderPricing } from '@intexuraos/llm-contract';
+import { type ProviderPricing, type Gemini25Pro } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { PricingContext, createPricingContext, fetchAllPricing, type AllPricingResponse } from '../pricingClient.js';
 
@@ -251,7 +251,7 @@ describe('pricingClient', () => {
     it('throws when getting pricing for unknown model', () => {
       const context = new PricingContext(completeAllPricing);
 
-      expect(() => context.getPricing('unknown-model' as LlmModels.Gemini25Pro)).toThrow('Pricing not found');
+      expect(() => context.getPricing('unknown-model' as Gemini25Pro)).toThrow('Pricing not found');
     });
 
     it('validates that specified models have pricing', () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 const mockResponsesCreate = vi.fn();
 const mockChatCompletionsCreate = vi.fn();
