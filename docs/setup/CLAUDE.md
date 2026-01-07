@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #382 | 11:46 PM | 🔵 | Sidebar Navigation Shows Settings Organization with Integration Subsections | ~386 |
+| #221 | 11:11 PM | 🔵 | Comprehensive Auth0 OAuth Implementation with Device Flow and ChatGPT Actions | ~551 |
 </claude-mem-context>

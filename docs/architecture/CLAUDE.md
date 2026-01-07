@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #382 | 11:46 PM | 🔵 | Sidebar Navigation Shows Settings Organization with Integration Subsections | ~386 |
+| #237 | 11:13 PM | 🔵 | Service-to-Service Communication Pattern Documented with Implementation Guide | ~495 |
 </claude-mem-context>

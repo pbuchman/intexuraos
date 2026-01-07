@@ -7,5 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #382 | 11:46 PM | 🔵 | Sidebar Navigation Shows Settings Organization with Integration Subsections | ~386 |
+| #369 | 11:45 PM | 🔵 | Action Events Published to Type-Specific PubSub Topics | ~370 |
+| #367 | " | 🔵 | Actions Agent Routes Events to Type-Specific Pub/Sub Topics | ~422 |
 </claude-mem-context>

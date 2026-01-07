@@ -7,6 +7,9 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #378 | 11:46 PM | 🔵 | WhatsApp Connection Page Demonstrates Third-Party Integration UI Pattern | ~495 |
+| #365 | 11:45 PM | 🔵 | Mobile Notifications Connection Page Uses Signature-Based Authentication Pattern | ~519 |
+| #346 | 11:34 PM | 🔵 | API Keys Settings Page Shows Multi-Provider Credential Management UI Pattern | ~493 |
 | #334 | 11:32 PM | 🔵 | Notion Connection Page Shows Manual Token Entry Pattern for Third-Party Integration | ~438 |
 | #244 | 11:15 PM | 🔵 | Notion Connection Page Shows Manual Token Entry Pattern | ~408 |
 </claude-mem-context>
