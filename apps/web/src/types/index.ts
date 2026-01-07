@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
  */
@@ -624,7 +625,7 @@ export interface UpdateTodoItemRequest {
 /**
  * LLM provider type
  */
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+export type { LlmProvider };
 
 /**
  * Image size for pricing

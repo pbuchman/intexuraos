@@ -3,6 +3,7 @@
  * Dispatches LLM calls to Pub/Sub for parallel processing in separate Cloud Run instances.
  */
 
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
 import type { ResearchModel } from '../models/index.js';
@@ -60,7 +61,7 @@ export async function processResearch(
 
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
   const titleModel: ResearchModel =
-    deps.titleGenerator !== undefined ? 'gemini-2.5-flash' : research.synthesisModel;
+    deps.titleGenerator !== undefined ? LlmModels.Gemini25Flash : research.synthesisModel;
   if (titleGen !== undefined) {
     deps.logger.info({ researchId, model: titleModel }, '[2.3.1] Starting title generation');
     const titleResult = await titleGen.generateTitle(research.prompt);
@@ -90,7 +91,7 @@ export async function processResearch(
         '[2.4.2] Research context inferred successfully'
       );
       if (deps.reportLlmSuccess !== undefined) {
-        deps.reportLlmSuccess('gemini-2.5-flash');
+        deps.reportLlmSuccess(LlmModels.Gemini25Flash);
       }
     } else {
       deps.logger.warn(

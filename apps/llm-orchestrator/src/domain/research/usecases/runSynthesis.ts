@@ -4,6 +4,7 @@
  * Triggered when all LLMs complete OR when user confirms 'proceed' with partial failure.
  */
 
+import { LlmModels } from '@intexuraos/llm-contract';
 import type {
   LlmSynthesisProvider,
   NotificationSender,
@@ -280,7 +281,7 @@ export async function runSynthesis(
   return { ok: true };
 }
 
-type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+type ImageModel = LlmModels.GPTImage1 | LlmModels.Gemini25FlashImage;
 
 /**
  * Select image generation model based on available API keys and synthesis model.
@@ -298,11 +299,11 @@ function selectImageModel(
   const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
 
   if (preferOpenAi) {
-    if (hasOpenAiKey) return 'gpt-image-1';
-    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+    if (hasOpenAiKey) return LlmModels.GPTImage1;
+    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
   } else {
-    if (hasGoogleKey) return 'gemini-2.5-flash-image';
-    if (hasOpenAiKey) return 'gpt-image-1';
+    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
+    if (hasOpenAiKey) return LlmModels.GPTImage1;
   }
 
   return null;
@@ -316,7 +317,7 @@ async function generateCoverImage(
   synthesisModel: string | undefined,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
-  const promptModel = 'gemini-2.5-pro';
+  const promptModel = LlmModels.Gemini25Pro;
   const imageModel = selectImageModel(imageApiKeys, synthesisModel);
 
   if (imageModel === null) {

@@ -2,6 +2,7 @@
  * Tests for Firestore UserSettings repository.
  * Uses FakeFirestore for in-memory testing.
  */
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
@@ -203,7 +204,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('creates new settings document if user does not exist', async () => {
       const encryptedKey = createEncryptedValue('google-key');
 
-      const result = await repo.updateLlmApiKey('new-user', 'google', encryptedKey);
+      const result = await repo.updateLlmApiKey('new-user', LlmProviders.Google, encryptedKey);
 
       expect(result.ok).toBe(true);
 
@@ -219,7 +220,7 @@ describe('FirestoreUserSettingsRepository', () => {
       await repo.saveSettings(createTestSettings());
 
       const encryptedKey = createEncryptedValue('anthropic-key');
-      const result = await repo.updateLlmApiKey('user-123', 'anthropic', encryptedKey);
+      const result = await repo.updateLlmApiKey('user-123', LlmProviders.Anthropic, encryptedKey);
 
       expect(result.ok).toBe(true);
 
@@ -233,7 +234,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmApiKey('user-123', 'google', createEncryptedValue('key'));
+      const result = await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('key'));
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -245,10 +246,10 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('deleteLlmApiKey', () => {
     it('deletes existing API key', async () => {
-      await repo.updateLlmApiKey('user-123', 'google', createEncryptedValue('google-key'));
-      await repo.updateLlmApiKey('user-123', 'openai', createEncryptedValue('openai-key'));
+      await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('google-key'));
+      await repo.updateLlmApiKey('user-123', LlmProviders.OpenAI, createEncryptedValue('openai-key'));
 
-      const result = await repo.deleteLlmApiKey('user-123', 'google');
+      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
 
       expect(result.ok).toBe(true);
 
@@ -261,13 +262,13 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('deletes associated test result when deleting key', async () => {
-      await repo.updateLlmApiKey('user-123', 'google', createEncryptedValue('key'));
-      await repo.updateLlmTestResult('user-123', 'google', {
+      await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('key'));
+      await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
         response: 'Test passed',
         testedAt: new Date().toISOString(),
       });
 
-      const result = await repo.deleteLlmApiKey('user-123', 'google');
+      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
 
       expect(result.ok).toBe(true);
 
@@ -282,7 +283,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
 
-      const result = await repo.deleteLlmApiKey('user-123', 'google');
+      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -299,7 +300,7 @@ describe('FirestoreUserSettingsRepository', () => {
         response: 'Test response',
       };
 
-      const result = await repo.updateLlmTestResult('new-user', 'google', testResult);
+      const result = await repo.updateLlmTestResult('new-user', LlmProviders.Google, testResult);
 
       expect(result.ok).toBe(true);
 
@@ -319,7 +320,7 @@ describe('FirestoreUserSettingsRepository', () => {
         response: 'OpenAI response',
       };
 
-      const result = await repo.updateLlmTestResult('user-123', 'openai', testResult);
+      const result = await repo.updateLlmTestResult('user-123', LlmProviders.OpenAI, testResult);
 
       expect(result.ok).toBe(true);
 
@@ -333,7 +334,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmTestResult('user-123', 'google', {
+      const result = await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
         response: 'Test response',
         testedAt: new Date().toISOString(),
       });
@@ -348,7 +349,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('updateLlmLastUsed', () => {
     it('creates new settings document if user does not exist', async () => {
-      const result = await repo.updateLlmLastUsed('new-user', 'google');
+      const result = await repo.updateLlmLastUsed('new-user', LlmProviders.Google);
 
       expect(result.ok).toBe(true);
 
@@ -364,7 +365,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates testedAt for existing settings document', async () => {
       await repo.saveSettings(createTestSettings());
 
-      const result = await repo.updateLlmLastUsed('user-123', 'openai');
+      const result = await repo.updateLlmLastUsed('user-123', LlmProviders.OpenAI);
 
       expect(result.ok).toBe(true);
 
@@ -378,7 +379,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmLastUsed('user-123', 'google');
+      const result = await repo.updateLlmLastUsed('user-123', LlmProviders.Google);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

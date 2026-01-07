@@ -329,36 +329,36 @@ describe('extractSelectedModels', () => {
     it('returns default models for "use all LLMs"', () => {
       expect(extractSelectedModels('use all LLMs for this research')).toEqual([
         LlmModels.Gemini25Pro,
-        'claude-opus-4-5-20251101',
-        'gpt-5.2',
-        'sonar-pro',
+        LlmModels.ClaudeOpus45,
+        LlmModels.GPT52,
+        LlmModels.SonarPro,
       ]);
     });
 
     it('returns default models for "use all models"', () => {
       expect(extractSelectedModels('use all models')).toEqual([
         LlmModels.Gemini25Pro,
-        'claude-opus-4-5-20251101',
-        'gpt-5.2',
-        'sonar-pro',
+        LlmModels.ClaudeOpus45,
+        LlmModels.GPT52,
+        LlmModels.SonarPro,
       ]);
     });
 
     it('returns default models for Polish "użyj wszystkich"', () => {
       expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
         LlmModels.Gemini25Pro,
-        'claude-opus-4-5-20251101',
-        'gpt-5.2',
-        'sonar-pro',
+        LlmModels.ClaudeOpus45,
+        LlmModels.GPT52,
+        LlmModels.SonarPro,
       ]);
     });
 
     it('returns default models for Polish "wszystkie modele"', () => {
       expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
         LlmModels.Gemini25Pro,
-        'claude-opus-4-5-20251101',
-        'gpt-5.2',
-        'sonar-pro',
+        LlmModels.ClaudeOpus45,
+        LlmModels.GPT52,
+        LlmModels.SonarPro,
       ]);
     });
   });
@@ -369,11 +369,11 @@ describe('extractSelectedModels', () => {
     });
 
     it('extracts gpt-5.2 for "gpt"', () => {
-      expect(extractSelectedModels('ask gpt about this')).toEqual(['gpt-5.2']);
+      expect(extractSelectedModels('ask gpt about this')).toEqual([LlmModels.GPT52]);
     });
 
     it('extracts gpt-5.2 for "chatgpt"', () => {
-      expect(extractSelectedModels('ask chatgpt about this')).toEqual(['gpt-5.2']);
+      expect(extractSelectedModels('ask chatgpt about this')).toEqual([LlmModels.GPT52]);
     });
 
     it('extracts claude-sonnet model for "claude"', () => {
@@ -384,14 +384,14 @@ describe('extractSelectedModels', () => {
 
     it('extracts multiple models', () => {
       const result = extractSelectedModels('use gpt and claude for this');
-      expect(result).toContain('gpt-5.2');
+      expect(result).toContain(LlmModels.GPT52);
       expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
     });
 
     it('extracts multiple models when mentioned', () => {
       const result = extractSelectedModels('compare gemini, gpt and claude');
       expect(result).toContain(LlmModels.Gemini25Flash);
-      expect(result).toContain('gpt-5.2');
+      expect(result).toContain(LlmModels.GPT52);
       expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
     });
   });

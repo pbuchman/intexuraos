@@ -331,7 +331,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Test prompt',
           selectedModels: [LlmModels.Gemini25Pro],
-          synthesisModel: 'claude-opus-4-5-20251101',
+          synthesisModel: LlmModels.ClaudeOpus45,
           inputContexts: [{ content: 'Input context content', label: 'Custom Label' }],
         },
       });
@@ -404,7 +404,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Test prompt',
           selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-          synthesisModel: 'claude-opus-4-5-20251101',
+          synthesisModel: LlmModels.ClaudeOpus45,
           inputContexts: [{ content: 'Test context', label: 'Test Label' }],
         },
       });
@@ -415,7 +415,7 @@ describe('Research Routes - Authenticated', () => {
       expect(saved).toBeDefined();
       if (saved !== undefined) {
         expect(saved.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch]);
-        expect(saved.synthesisModel).toBe('claude-opus-4-5-20251101');
+        expect(saved.synthesisModel).toBe(LlmModels.ClaudeOpus45);
         expect(saved.inputContexts).toHaveLength(1);
       }
     });
@@ -439,7 +439,7 @@ describe('Research Routes - Authenticated', () => {
       if (saved !== undefined) {
         expect(saved.selectedModels).toEqual([
           LlmModels.Gemini25Pro,
-          'claude-opus-4-5-20251101',
+          LlmModels.ClaudeOpus45,
           LlmModels.O4MiniDeepResearch,
         ]);
         expect(saved.synthesisModel).toBe(LlmModels.Gemini25Pro);
@@ -498,7 +498,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
-          selectedModels: ['claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.ClaudeOpus45],
           synthesisModel: LlmModels.Gemini25Pro,
         },
       });
@@ -507,7 +507,7 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.prompt).toBe('Updated prompt');
-      expect(body.data.selectedModels).toEqual(['claude-opus-4-5-20251101']);
+      expect(body.data.selectedModels).toEqual([LlmModels.ClaudeOpus45]);
       expect(body.data.synthesisModel).toBe(LlmModels.Gemini25Pro);
       expect(body.data.llmResults).toHaveLength(1);
       expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.Anthropic);
@@ -530,7 +530,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: [LlmModels.O4MiniDeepResearch, 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
         },
       });
 
@@ -538,7 +538,7 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.data.selectedModels).toEqual([
         LlmModels.O4MiniDeepResearch,
-        'claude-opus-4-5-20251101',
+        LlmModels.ClaudeOpus45,
       ]);
       expect(body.data.llmResults).toHaveLength(2);
       expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.OpenAI);
@@ -1099,14 +1099,14 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: ['claude-opus-4-5-20251101'] },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.sourceResearchId).toBe(source.id);
-      expect(body.data.selectedModels).toContain('claude-opus-4-5-20251101');
+      expect(body.data.selectedModels).toContain(LlmModels.ClaudeOpus45);
     });
 
     it('returns 404 when source research not found', async () => {
@@ -1116,7 +1116,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: '/research/nonexistent/enhance',
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: ['claude-opus-4-5-20251101'] },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
       });
 
       expect(response.statusCode).toBe(404);
@@ -1134,7 +1134,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: ['claude-opus-4-5-20251101'] },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
       });
 
       expect(response.statusCode).toBe(403);
@@ -1152,7 +1152,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: ['claude-opus-4-5-20251101'] },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
       });
 
       expect(response.statusCode).toBe(409);
@@ -1188,13 +1188,13 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { synthesisModel: 'claude-opus-4-5-20251101' },
+        payload: { synthesisModel: LlmModels.ClaudeOpus45 },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.synthesisModel).toBe('claude-opus-4-5-20251101');
+      expect(body.data.synthesisModel).toBe(LlmModels.ClaudeOpus45);
     });
 
     it('creates enhanced research with additional contexts', async () => {
@@ -1244,7 +1244,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: ['claude-opus-4-5-20251101'] },
+        payload: { additionalModels: [LlmModels.ClaudeOpus45] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -2073,7 +2073,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.ClaudeOpus45],
           sourceActionId: 'action-123',
         },
       });
@@ -2952,7 +2952,7 @@ describe('Internal Routes', () => {
         id: 'research-123',
         status: 'processing',
         selectedModels: [LlmModels.Gemini25Pro],
-        synthesisModel: 'claude-opus-4-5-20251101',
+        synthesisModel: LlmModels.ClaudeOpus45,
         llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(research);

@@ -1,3 +1,4 @@
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
 import { DollarSign, RefreshCw } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
@@ -196,10 +197,10 @@ export function LlmPricingPage(): React.JSX.Element {
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
-          <ProviderBlock provider="google" pricing={pricing.google} />
-          <ProviderBlock provider="openai" pricing={pricing.openai} />
-          <ProviderBlock provider="anthropic" pricing={pricing.anthropic} />
-          <ProviderBlock provider="perplexity" pricing={pricing.perplexity} />
+          <ProviderBlock provider={LlmProviders.Google} pricing={pricing.google} />
+          <ProviderBlock provider={LlmProviders.OpenAI} pricing={pricing.openai} />
+          <ProviderBlock provider={LlmProviders.Anthropic} pricing={pricing.anthropic} />
+          <ProviderBlock provider={LlmProviders.Perplexity} pricing={pricing.perplexity} />
         </div>
       )}
     </Layout>

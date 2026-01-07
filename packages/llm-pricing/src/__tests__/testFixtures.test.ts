@@ -1,3 +1,4 @@
+import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, expect, it } from 'vitest';
 import {
   TEST_PRICING,
@@ -29,7 +30,7 @@ describe('testFixtures', () => {
     it('returns test pricing for regular models', () => {
       const context = new FakePricingContext();
 
-      const pricing = context.getPricing('gemini-2.5-pro');
+      const pricing = context.getPricing(LlmModels.Gemini25Pro);
       expect(pricing.inputPricePerMillion).toBe(1.0);
       expect(pricing.outputPricePerMillion).toBe(2.0);
     });
@@ -37,7 +38,7 @@ describe('testFixtures', () => {
     it('returns image pricing for gpt-image-1', () => {
       const context = new FakePricingContext();
 
-      const pricing = context.getPricing('gpt-image-1');
+      const pricing = context.getPricing(LlmModels.GPTImage1);
       expect(pricing.inputPricePerMillion).toBe(0);
       expect(pricing.imagePricing?.['1024x1024']).toBe(0.04);
     });
@@ -45,7 +46,7 @@ describe('testFixtures', () => {
     it('returns image pricing for gemini-2.5-flash-image', () => {
       const context = new FakePricingContext();
 
-      const pricing = context.getPricing('gemini-2.5-flash-image');
+      const pricing = context.getPricing(LlmModels.Gemini25FlashImage);
       expect(pricing.inputPricePerMillion).toBe(0);
       expect(pricing.imagePricing?.['1024x1024']).toBe(0.04);
     });
@@ -53,14 +54,14 @@ describe('testFixtures', () => {
     it('hasPricing always returns true', () => {
       const context = new FakePricingContext();
 
-      expect(context.hasPricing('gemini-2.5-pro')).toBe(true);
-      expect(context.hasPricing('gpt-5.2')).toBe(true);
+      expect(context.hasPricing(LlmModels.Gemini25Pro)).toBe(true);
+      expect(context.hasPricing(LlmModels.GPT52)).toBe(true);
     });
 
     it('validateModels does not throw', () => {
       const context = new FakePricingContext();
 
-      expect(() => context.validateModels(['gemini-2.5-pro', 'gpt-5.2'])).not.toThrow();
+      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])).not.toThrow();
     });
 
     it('validateAllModels does not throw', () => {
@@ -74,10 +75,10 @@ describe('testFixtures', () => {
 
       const models = context.getModelsWithPricing();
       expect(models).toHaveLength(14);
-      expect(models).toContain('gemini-2.5-pro');
-      expect(models).toContain('gpt-image-1');
-      expect(models).toContain('claude-opus-4-5-20251101');
-      expect(models).toContain('sonar-pro');
+      expect(models).toContain(LlmModels.Gemini25Pro);
+      expect(models).toContain(LlmModels.GPTImage1);
+      expect(models).toContain(LlmModels.ClaudeOpus45);
+      expect(models).toContain(LlmModels.SonarPro);
     });
 
     it('allows custom pricing in constructor', () => {
@@ -87,7 +88,7 @@ describe('testFixtures', () => {
       };
       const context = new FakePricingContext(customPricing);
 
-      const pricing = context.getPricing('gemini-2.5-pro');
+      const pricing = context.getPricing(LlmModels.Gemini25Pro);
       expect(pricing.inputPricePerMillion).toBe(5.0);
       expect(pricing.outputPricePerMillion).toBe(10.0);
     });
@@ -100,7 +101,7 @@ describe('testFixtures', () => {
       };
       const context = new FakePricingContext(TEST_PRICING, customImagePricing);
 
-      const pricing = context.getPricing('gpt-image-1');
+      const pricing = context.getPricing(LlmModels.GPTImage1);
       expect(pricing.imagePricing?.['1024x1024']).toBe(0.10);
     });
   });
@@ -110,7 +111,7 @@ describe('testFixtures', () => {
       const context = createFakePricingContext();
 
       expect(context).toBeInstanceOf(FakePricingContext);
-      expect(context.getPricing('gemini-2.5-pro').inputPricePerMillion).toBe(1.0);
+      expect(context.getPricing(LlmModels.Gemini25Pro).inputPricePerMillion).toBe(1.0);
     });
 
     it('creates context with custom pricing', () => {
@@ -120,7 +121,7 @@ describe('testFixtures', () => {
       };
       const context = createFakePricingContext(customPricing);
 
-      expect(context.getPricing('gpt-5.2').inputPricePerMillion).toBe(3.0);
+      expect(context.getPricing(LlmModels.GPT52).inputPricePerMillion).toBe(3.0);
     });
 
     it('creates context with custom image pricing', () => {
@@ -131,7 +132,7 @@ describe('testFixtures', () => {
       };
       const context = createFakePricingContext(TEST_PRICING, customImagePricing);
 
-      expect(context.getPricing('gpt-image-1').imagePricing?.['1024x1024']).toBe(0.05);
+      expect(context.getPricing(LlmModels.GPTImage1).imagePricing?.['1024x1024']).toBe(0.05);
     });
   });
 });

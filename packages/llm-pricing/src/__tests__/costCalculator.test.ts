@@ -7,8 +7,8 @@ describe('costCalculator', () => {
   describe('calculateCost', () => {
     it('calculates cost based on input and output tokens', () => {
       const pricing: LlmPricing = {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         inputPricePerMillion: 0.1,
         outputPricePerMillion: 0.4,
         updatedAt: '2024-01-01',
@@ -20,7 +20,7 @@ describe('costCalculator', () => {
 
     it('rounds to 6 decimal places', () => {
       const pricing: LlmPricing = {
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4o',
         inputPricePerMillion: 2.5,
         outputPricePerMillion: 10.0,
@@ -33,7 +33,7 @@ describe('costCalculator', () => {
 
     it('handles zero tokens', () => {
       const pricing: LlmPricing = {
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3-sonnet',
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
@@ -53,8 +53,8 @@ describe('costCalculator', () => {
         providerCost: 0.05,
       };
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
         updatedAt: '2024-01-01',
@@ -66,7 +66,7 @@ describe('costCalculator', () => {
 
     describe('anthropic provider', () => {
       const anthropicPricing: LlmPricing = {
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3-5-sonnet',
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
@@ -128,7 +128,7 @@ describe('costCalculator', () => {
 
     describe('openai provider', () => {
       const openaiPricing: LlmPricing = {
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4o',
         inputPricePerMillion: 2.5,
         outputPricePerMillion: 10.0,
@@ -177,8 +177,8 @@ describe('costCalculator', () => {
 
     describe('google provider', () => {
       const googlePricing: LlmPricing = {
-        provider: 'google',
-        model: 'gemini-2.5-pro',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini25Pro,
         inputPricePerMillion: 1.25,
         outputPricePerMillion: 10.0,
         updatedAt: '2024-01-01',
@@ -226,8 +226,8 @@ describe('costCalculator', () => {
     describe('perplexity provider (default)', () => {
       it('calculates basic cost for perplexity', () => {
         const pricing: LlmPricing = {
-          provider: 'perplexity',
-          model: 'sonar',
+          provider: LlmProviders.Perplexity,
+          model: LlmModels.Sonar,
           inputPricePerMillion: 1.0,
           outputPricePerMillion: 1.0,
           updatedAt: '2024-01-01',
@@ -244,8 +244,8 @@ describe('costCalculator', () => {
 
     it('rounds result to 6 decimal places', () => {
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.Sonar,
         inputPricePerMillion: 1.111111,
         outputPricePerMillion: 2.222222,
         updatedAt: '2024-01-01',

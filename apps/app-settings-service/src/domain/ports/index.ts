@@ -2,7 +2,9 @@
  * Domain ports for app-settings-service.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+import type { LlmProvider } from '@intexuraos/llm-contract';
+export type { LlmProvider };
+
 export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 export interface ModelPricing {

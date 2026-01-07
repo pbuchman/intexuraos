@@ -32,11 +32,11 @@ export function calculateAccurateCost(usage: TokenUsage, pricing: LlmPricing): n
 
   let cost: number;
 
-  if (pricing.provider === 'anthropic') {
+  if (pricing.provider === LlmProviders.Anthropic) {
     cost = calculateAnthropicCost(usage, inputPrice, outputPrice, pricing);
-  } else if (pricing.provider === 'openai') {
+  } else if (pricing.provider === LlmProviders.OpenAI) {
     cost = calculateOpenAICost(usage, inputPrice, outputPrice, pricing);
-  } else if (pricing.provider === 'google') {
+  } else if (pricing.provider === LlmProviders.Google) {
     cost = calculateGeminiCost(usage, inputPrice, outputPrice, pricing);
   } else {
     cost = usage.inputTokens * inputPrice + usage.outputTokens * outputPrice;

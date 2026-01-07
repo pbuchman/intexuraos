@@ -3,6 +3,7 @@
  * Verifies Pub/Sub message publishing for individual LLM calls.
  */
 
+import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createLlmCallPublisher,
@@ -37,7 +38,7 @@ describe('LlmCallPublisher', () => {
     type: 'llm.call',
     researchId: 'research-123',
     userId: 'user-456',
-    model: 'gemini-2.5-pro',
+    model: LlmModels.Gemini25Pro,
     prompt: 'Test prompt',
   };
 
@@ -68,7 +69,7 @@ describe('LlmCallPublisher', () => {
       topicName: 'test-topic',
     });
 
-    const models = ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'] as const;
+    const models = [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45] as const;
 
     for (const model of models) {
       const result = await publisher.publishLlmCall({
