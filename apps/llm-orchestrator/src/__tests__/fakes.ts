@@ -41,6 +41,7 @@ export class FakeResearchRepository implements ResearchRepository {
   private failNextFind = false;
   private failNextDelete = false;
   private failNextUpdate = false;
+  private failNextUpdateLlmResult = false;
 
   async save(research: Research): Promise<Result<Research, RepositoryError>> {
     if (this.failNextSave) {
@@ -96,6 +97,10 @@ export class FakeResearchRepository implements ResearchRepository {
     model: string,
     result: Partial<LlmResult>
   ): Promise<Result<void, RepositoryError>> {
+    if (this.failNextUpdateLlmResult) {
+      this.failNextUpdateLlmResult = false;
+      throw new Error('Unexpected repository error during updateLlmResult');
+    }
     const existing = this.researches.get(researchId);
     if (existing === undefined) {
       return err({ code: 'NOT_FOUND', message: 'Research not found' });
@@ -146,6 +151,10 @@ export class FakeResearchRepository implements ResearchRepository {
 
   setFailNextUpdate(fail: boolean): void {
     this.failNextUpdate = fail;
+  }
+
+  setFailNextUpdateLlmResult(fail: boolean): void {
+    this.failNextUpdateLlmResult = fail;
   }
 
   addResearch(research: Research): void {
@@ -294,6 +303,19 @@ export function createFakeLlmResearchProvider(response = 'Research content'): Ll
   return {
     async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
       return ok({ content: response });
+    },
+  };
+}
+
+/**
+ * Create a fake LlmResearchProvider that always fails for testing error paths.
+ */
+export function createFailingLlmResearchProvider(
+  errorMessage = 'Test research failure'
+): LlmResearchProvider {
+  return {
+    async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage });
     },
   };
 }

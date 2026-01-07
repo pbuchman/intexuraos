@@ -92,6 +92,13 @@ resource "google_service_account" "app_settings_service" {
   description  = "Service account for app-settings-service Cloud Run deployment"
 }
 
+# Service account for todos-agent
+resource "google_service_account" "todos_agent" {
+  account_id   = "intexuraos-todos-${var.environment}"
+  display_name = "IntexuraOS Todos Agent (${var.environment})"
+  description  = "Service account for todos-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -201,6 +208,15 @@ resource "google_secret_manager_secret_iam_member" "app_settings_service_secrets
   member    = "serviceAccount:${google_service_account.app_settings_service.email}"
 }
 
+# Todos Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "todos_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.todos_agent.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -300,6 +316,13 @@ resource "google_project_iam_member" "app_settings_service_firestore" {
   member  = "serviceAccount:${google_service_account.app_settings_service.email}"
 }
 
+# Todos Agent: Firestore access
+resource "google_project_iam_member" "todos_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.todos_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -396,4 +419,11 @@ resource "google_project_iam_member" "app_settings_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.app_settings_service.email}"
+}
+
+# Todos Agent: Cloud Logging
+resource "google_project_iam_member" "todos_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.todos_agent.email}"
 }

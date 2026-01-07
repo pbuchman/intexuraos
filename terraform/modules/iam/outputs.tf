@@ -14,6 +14,7 @@ output "service_accounts" {
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
     app_settings_service         = google_service_account.app_settings_service.email
+    todos_agent                  = google_service_account.todos_agent.email
   }
 }
 
@@ -80,4 +81,9 @@ output "notes_agent_sa" {
 output "app_settings_service_sa" {
   description = "App Settings Service service account email"
   value       = google_service_account.app_settings_service.email
+}
+
+output "todos_agent_sa" {
+  description = "Todos Agent service account email"
+  value       = google_service_account.todos_agent.email
 }
