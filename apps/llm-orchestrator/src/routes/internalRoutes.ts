@@ -17,7 +17,7 @@ import {
   calculateAccurateCost,
   type ResearchModel,
 } from '../domain/research/index.js';
-import { getProviderForModel } from '@intexuraos/llm-contract';
+import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { supportedModelSchema, researchSchema } from './schemas/index.js';
 
