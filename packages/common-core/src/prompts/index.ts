@@ -7,3 +7,4 @@ export {
   type ExternalReport,
 } from './synthesisPrompt.js';
 export * from './context/index.js';
+export * from './attribution.js';
