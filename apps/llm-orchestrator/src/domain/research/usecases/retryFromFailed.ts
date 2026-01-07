@@ -6,7 +6,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { SupportedModel } from '../models/index.js';
+import type { ResearchModel } from '../models/index.js';
 import type { ResearchRepository } from '../ports/index.js';
 import type { RunSynthesisDeps } from './runSynthesis.js';
 import { runSynthesis } from './runSynthesis.js';
@@ -16,7 +16,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    model: SupportedModel;
+    model: ResearchModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -33,7 +33,7 @@ export interface RetryFromFailedResult {
   ok: boolean;
   error?: string;
   action?: RetryAction;
-  retriedModels?: SupportedModel[];
+  retriedModels?: ResearchModel[];
 }
 
 export async function retryFromFailed(
@@ -63,7 +63,7 @@ export async function retryFromFailed(
   const hasSuccessfulLlms = research.llmResults.some((r) => r.status === 'completed');
 
   if (hasFailedLlms) {
-    const failedModels = failedLlms.map((r) => r.model) as SupportedModel[];
+    const failedModels = failedLlms.map((r) => r.model) as ResearchModel[];
 
     for (const model of failedModels) {
       await researchRepo.updateLlmResult(researchId, model, {

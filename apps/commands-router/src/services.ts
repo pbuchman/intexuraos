@@ -1,4 +1,5 @@
 import pino from 'pino';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
@@ -35,6 +36,16 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
+/**
+ * Pricing for gemini-2.5-flash used by the classifier.
+ * Values from migration 012 pricing structure.
+ */
+const CLASSIFIER_PRICING: ModelPricing = {
+  inputPricePerMillion: 0.3,
+  outputPricePerMillion: 2.5,
+  groundingCostPerRequest: 0.035,
+};
+
 export function initServices(config: ServiceConfig): void {
   const logger = pino({ name: 'commands-router' });
 
@@ -44,7 +55,7 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
   const classifierFactory: ClassifierFactory = (apiKey: string, userId: string) =>
-    createGeminiClassifier({ apiKey, userId });
+    createGeminiClassifier({ apiKey, userId, pricing: CLASSIFIER_PRICING });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,

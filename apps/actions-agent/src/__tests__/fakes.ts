@@ -12,7 +12,7 @@ import type {
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import type { SupportedModel } from '@intexuraos/llm-contract';
+import type { ResearchModel } from '@intexuraos/llm-contract';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -72,7 +72,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: SupportedModel[];
+    selectedModels: ResearchModel[];
     sourceActionId?: string;
   } | null = null;
   private nextResearchId = 'research-123';
@@ -96,7 +96,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: SupportedModel[];
+    selectedModels: ResearchModel[];
     sourceActionId?: string;
   }): Promise<Result<{ id: string }>> {
     if (this.failNext) {

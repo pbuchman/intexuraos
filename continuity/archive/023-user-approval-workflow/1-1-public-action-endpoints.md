@@ -13,9 +13,9 @@ Move all public action endpoints from commands-router to actions-agent (GET, PAT
 ## Tasks
 
 - [ ] Create publicRoutes.ts in actions-agent
-- [ ] Implement GET /router/actions (list user's actions)
-- [ ] Implement PATCH /router/actions/:actionId (update status)
-- [ ] Implement DELETE /router/actions/:actionId (delete action)
+- [ ] Implement GET /actions (list user's actions)
+- [ ] Implement PATCH /actions/:actionId (update status)
+- [ ] Implement DELETE /actions/:actionId (delete action)
 - [ ] Add JWT authentication to public routes
 - [ ] Register publicRoutes plugin in server.ts
 - [ ] Copy action schemas from commands-router
@@ -32,20 +32,20 @@ Move all public action endpoints from commands-router to actions-agent (GET, PAT
 
 ## Endpoints to Implement
 
-### GET /router/actions
+### GET /actions
 
 - Auth: JWT (requireAuth)
 - Response: Array of actions for authenticated user
 - Calls: `actionRepository.listByUserId(userId)`
 
-### PATCH /router/actions/:actionId
+### PATCH /actions/:actionId
 
 - Auth: JWT (requireAuth)
 - Request: `{ status: ActionStatus }`
 - Validation: User owns action (403 if not)
 - Calls: `actionRepository.update()`
 
-### DELETE /router/actions/:actionId
+### DELETE /actions/:actionId
 
 - Auth: JWT (requireAuth)
 - Validation: User owns action (403 if not)

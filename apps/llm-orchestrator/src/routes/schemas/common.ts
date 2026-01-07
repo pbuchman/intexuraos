@@ -2,11 +2,11 @@
  * Common JSON schema components for research endpoints.
  */
 
-import { SUPPORTED_MODELS } from '@intexuraos/llm-contract';
+import { ALL_LLM_MODELS } from '@intexuraos/llm-contract';
 
 export const supportedModelSchema = {
   type: 'string',
-  enum: Object.keys(SUPPORTED_MODELS),
+  enum: ALL_LLM_MODELS,
 } as const;
 
 export const llmProviderSchema = {

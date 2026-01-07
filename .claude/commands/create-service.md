@@ -369,6 +369,10 @@ gcloud run deploy "$CLOUD_RUN_SERVICE" \
   --quiet
 ```
 
+Also modify `cloudbuild/scripts/check-affected.mjs` to include the new service for affected builds.
+
+```bash
+
 ### 10. Register in API Docs Hub
 
 Edit `apps/api-docs-hub/src/config.ts`:
@@ -474,6 +478,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Terraform module created
 - [ ] Service account in IAM module
 - [ ] CloudBuild trigger configured
+- [ ] Added to check-affected (`cloudbuild/scripts/check-affected.mjs`)
 - [ ] Registered in api-docs-hub
 - [ ] Service URL secret created (post-deployment)
 - [ ] Added to `.envrc.local.example`

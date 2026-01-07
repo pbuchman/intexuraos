@@ -3,6 +3,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { TEST_PRICING } from '@intexuraos/llm-pricing';
+
+const testPricing = TEST_PRICING;
 
 vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
   GeminiAdapter: class MockGeminiAdapter {
@@ -62,7 +65,7 @@ const { createSynthesizer, createTitleGenerator, createResearchProvider } =
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const provider = createResearchProvider('gemini-2.5-pro', 'google-key', 'test-user-id');
+      const provider = createResearchProvider('gemini-2.5-pro', 'google-key', 'test-user-id', testPricing);
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((provider as unknown as { model: string }).model).toBe('gemini-2.5-pro');
@@ -72,7 +75,8 @@ describe('LlmAdapterFactory', () => {
       const provider = createResearchProvider(
         'claude-opus-4-5-20251101',
         'anthropic-key',
-        'test-user-id'
+        'test-user-id',
+        testPricing
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
@@ -83,7 +87,8 @@ describe('LlmAdapterFactory', () => {
       const provider = createResearchProvider(
         'o4-mini-deep-research',
         'openai-key',
-        'test-user-id'
+        'test-user-id',
+        testPricing
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
@@ -91,7 +96,7 @@ describe('LlmAdapterFactory', () => {
     });
 
     it('creates PerplexityAdapter for perplexity model', () => {
-      const provider = createResearchProvider('sonar-pro', 'perplexity-key', 'test-user-id');
+      const provider = createResearchProvider('sonar-pro', 'perplexity-key', 'test-user-id', testPricing);
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe('sonar-pro');
@@ -100,7 +105,7 @@ describe('LlmAdapterFactory', () => {
 
   describe('createSynthesizer', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const synthesizer = createSynthesizer('gemini-2.5-pro', 'google-key', 'test-user-id');
+      const synthesizer = createSynthesizer('gemini-2.5-pro', 'google-key', 'test-user-id', testPricing);
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((synthesizer as unknown as { model: string }).model).toBe('gemini-2.5-pro');
@@ -108,19 +113,19 @@ describe('LlmAdapterFactory', () => {
 
     it('throws error for claude model (synthesis not supported)', () => {
       expect(() =>
-        createSynthesizer('claude-opus-4-5-20251101', 'anthropic-key', 'test-user-id')
+        createSynthesizer('claude-opus-4-5-20251101', 'anthropic-key', 'test-user-id', testPricing)
       ).toThrow('Anthropic does not support synthesis');
     });
 
     it('creates GptAdapter for openai model', () => {
-      const synthesizer = createSynthesizer('o4-mini-deep-research', 'openai-key', 'test-user-id');
+      const synthesizer = createSynthesizer('o4-mini-deep-research', 'openai-key', 'test-user-id', testPricing);
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
       expect((synthesizer as unknown as { model: string }).model).toBe('o4-mini-deep-research');
     });
 
     it('throws error for perplexity model (synthesis not supported)', () => {
-      expect(() => createSynthesizer('sonar-pro', 'perplexity-key', 'test-user-id')).toThrow(
+      expect(() => createSynthesizer('sonar-pro', 'perplexity-key', 'test-user-id', testPricing)).toThrow(
         'Perplexity does not support synthesis'
       );
     });
@@ -128,7 +133,7 @@ describe('LlmAdapterFactory', () => {
 
   describe('createTitleGenerator', () => {
     it('creates GeminiAdapter for title generation', () => {
-      const generator = createTitleGenerator('gemini-2.0-flash', 'google-key', 'test-user-id');
+      const generator = createTitleGenerator('gemini-2.0-flash', 'google-key', 'test-user-id', testPricing);
 
       expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((generator as unknown as { model: string }).model).toBe('gemini-2.0-flash');

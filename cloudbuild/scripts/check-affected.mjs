@@ -237,6 +237,9 @@ const ALL_SERVICES = [
   'actions-agent',
   'data-insights-service',
   'image-service',
+  'notes-agent',
+  'todos-agent',
+  'app-settings-service',
   'web',
   'firestore',
 ];

@@ -48,7 +48,7 @@ File: `apps/actions-agent/src/__tests__/routes/publicRoutes.test.ts`
 Add to existing file or create new section:
 
 ```typescript
-describe('PATCH /router/actions/:actionId with type', () => {
+describe('PATCH /actions/:actionId with type', () => {
   it('returns 401 without auth');
   it('returns 404 for non-existent action');
   it('returns 400 when changing type on processing action');

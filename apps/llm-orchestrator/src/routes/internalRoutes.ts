@@ -15,7 +15,7 @@ import {
   processResearch,
   runSynthesis,
   calculateAccurateCost,
-  type SupportedModel,
+  type ResearchModel,
 } from '../domain/research/index.js';
 import { getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
@@ -25,7 +25,7 @@ interface CreateDraftResearchBody {
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: SupportedModel[];
+  selectedModels: ResearchModel[];
   sourceActionId?: string;
 }
 
@@ -49,7 +49,7 @@ interface LlmAnalyticsEvent {
   type: 'llm.report';
   researchId: string;
   userId: string;
-  model: SupportedModel;
+  model: ResearchModel;
   inputTokens: number;
   outputTokens: number;
   durationMs: number;
@@ -59,7 +59,7 @@ interface LlmCallEvent {
   type: 'llm.call';
   researchId: string;
   userId: string;
-  model: SupportedModel;
+  model: ResearchModel;
   prompt: string;
 }
 
@@ -302,7 +302,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const synthesizer = services.createSynthesizer(
           synthesisModel,
           synthesisKey,
-          research.userId
+          research.userId,
+          services.pricingContext.getPricing(synthesisModel)
         );
 
         const deps: Parameters<typeof processResearch>[1] = {
@@ -319,12 +320,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           deps.titleGenerator = services.createTitleGenerator(
             'gemini-2.5-flash',
             apiKeys.google,
-            research.userId
+            research.userId,
+            services.pricingContext.getPricing('gemini-2.5-flash')
           );
           deps.contextInferrer = services.createContextInferrer(
             'gemini-2.5-flash',
             apiKeys.google,
             research.userId,
+            services.pricingContext.getPricing('gemini-2.5-flash'),
             request.log
           );
         }
@@ -680,7 +683,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.3] Starting LLM research call'
         );
 
-        const llmProvider = services.createResearchProvider(event.model, apiKey, event.userId);
+        const llmProvider = services.createResearchProvider(
+          event.model,
+          apiKey,
+          event.userId,
+          services.pricingContext.getPricing(event.model)
+        );
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt);
         const durationMs = Date.now() - startTime;
@@ -834,7 +842,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             const synthesizer = services.createSynthesizer(
               synthesisModel,
               synthesisKey,
-              event.userId
+              event.userId,
+              services.pricingContext.getPricing(synthesisModel)
             );
             const contextInferrer =
               apiKeysResult.value.google !== undefined
@@ -842,6 +851,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     'gemini-2.5-flash',
                     apiKeysResult.value.google,
                     event.userId,
+                    services.pricingContext.getPricing('gemini-2.5-flash'),
                     request.log
                   )
                 : undefined;

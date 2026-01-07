@@ -3,7 +3,11 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
-import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common-http';
+import {
+  intexuraFastifyPlugin,
+  fastifyAuthPlugin,
+  registerQuietHealthCheckLogging,
+} from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import {
   buildHealthResponse,
@@ -12,6 +16,7 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { publicRoutes } from './routes/publicRoutes.js';
 
 const SERVICE_NAME = 'app-settings-service';
 const SERVICE_VERSION = '0.0.4';
@@ -89,6 +94,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
           },
         },
         securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'JWT authentication token',
+          },
           internalAuth: {
             type: 'apiKey',
             in: 'header',
@@ -116,6 +127,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(fastifyCors, { origin: true });
   await app.register(intexuraFastifyPlugin);
+  await app.register(fastifyAuthPlugin);
   await app.register(fastifySwagger, buildOpenApiOptions());
   await app.register(fastifySwaggerUi, {
     routePrefix: '/docs',
@@ -125,6 +137,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   registerCoreSchemas(app);
 
   // Register routes
+  await app.register(publicRoutes);
   await app.register(internalRoutes, { prefix: '/internal' });
 
   // OpenAPI spec endpoint

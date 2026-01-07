@@ -3,6 +3,7 @@
  * Provides dependency injection for domain adapters.
  */
 import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
+import type { PricingContext } from '@intexuraos/llm-pricing';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import {
@@ -29,9 +30,6 @@ export interface ServiceContainer {
 let container: ServiceContainer | null = null;
 
 /**
- * Get or create the service container.
- */
-/**
  * Load encryption key from environment and create encryptor.
  * Returns null if key is not configured (optional feature).
  */
@@ -48,18 +46,38 @@ function loadEncryptor(): Encryptor | null {
  */
 export function getServices(): ServiceContainer {
   if (container === null) {
-    const auth0Config = loadAuth0ConfigFromInfra();
-    // LlmValidator is null in test environment to skip actual API calls
-    const isTestEnv = process.env['NODE_ENV'] === 'test';
-    container = {
-      authTokenRepository: new FirestoreAuthTokenRepository(),
-      userSettingsRepository: new FirestoreUserSettingsRepository(),
-      auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
-      encryptor: loadEncryptor(),
-      llmValidator: isTestEnv ? null : new LlmValidatorImpl(),
-    };
+    throw new Error('Service container not initialized. Call initializeServices() first.');
   }
   return container;
+}
+
+/**
+ * Initialize the service container with all dependencies.
+ * @param pricingContext - Pricing context for LLM validation (optional in test env)
+ */
+export function initializeServices(pricingContext?: PricingContext): void {
+  const auth0Config = loadAuth0ConfigFromInfra();
+  // LlmValidator is null in test environment to skip actual API calls
+  const isTestEnv = process.env['NODE_ENV'] === 'test';
+
+  let llmValidator: LlmValidator | null = null;
+  if (!isTestEnv && pricingContext !== undefined) {
+    const validationPricing = {
+      google: pricingContext.getPricing('gemini-2.0-flash'),
+      openai: pricingContext.getPricing('gpt-4o-mini'),
+      anthropic: pricingContext.getPricing('claude-3-5-haiku-20241022'),
+      perplexity: pricingContext.getPricing('sonar'),
+    };
+    llmValidator = new LlmValidatorImpl(validationPricing);
+  }
+
+  container = {
+    authTokenRepository: new FirestoreAuthTokenRepository(),
+    userSettingsRepository: new FirestoreUserSettingsRepository(),
+    auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
+    encryptor: loadEncryptor(),
+    llmValidator,
+  };
 }
 
 /**

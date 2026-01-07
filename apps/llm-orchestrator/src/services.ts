@@ -27,6 +27,8 @@ import { createImageServiceClient, type ImageServiceClient } from './infra/image
 export type { DecryptedApiKeys } from './infra/user/index.js';
 export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
 import type { Logger } from '@intexuraos/common-core';
+import type { ModelPricing, ResearchModel, FastModel } from '@intexuraos/llm-contract';
+import type { IPricingContext } from '@intexuraos/llm-pricing';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -34,7 +36,6 @@ import {
   type PricingRepository,
   type ResearchRepository,
   type ShareStoragePort,
-  type SupportedModel,
   type TitleGenerator,
 } from './domain/research/index.js';
 import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
@@ -53,6 +54,7 @@ export interface ShareConfig {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   pricingRepo: PricingRepository;
+  pricingContext: IPricingContext;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
@@ -62,20 +64,23 @@ export interface ServiceContainer {
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
   createResearchProvider: (
-    model: SupportedModel,
-    apiKey: string,
-    userId: string
-  ) => LlmResearchProvider;
-  createSynthesizer: (
-    model: SupportedModel,
-    apiKey: string,
-    userId: string
-  ) => LlmSynthesisProvider;
-  createTitleGenerator: (model: string, apiKey: string, userId: string) => TitleGenerator;
-  createContextInferrer: (
-    model: string,
+    model: ResearchModel,
     apiKey: string,
     userId: string,
+    pricing: ModelPricing
+  ) => LlmResearchProvider;
+  createSynthesizer: (
+    model: ResearchModel,
+    apiKey: string,
+    userId: string,
+    pricing: ModelPricing
+  ) => LlmSynthesisProvider;
+  createTitleGenerator: (model: FastModel, apiKey: string, userId: string, pricing: ModelPricing) => TitleGenerator;
+  createContextInferrer: (
+    model: FastModel,
+    apiKey: string,
+    userId: string,
+    pricing: ModelPricing,
     logger?: Logger
   ) => ContextInferenceProvider;
 }
@@ -162,7 +167,7 @@ function createShareStorageAndConfig(): {
 /**
  * Initialize the service container with all dependencies.
  */
-export function initializeServices(): void {
+export function initializeServices(pricingContext: IPricingContext): void {
   const researchRepo = new FirestoreResearchRepository();
   const pricingRepo = new FirestorePricingRepository();
 
@@ -197,6 +202,7 @@ export function initializeServices(): void {
   container = {
     researchRepo,
     pricingRepo,
+    pricingContext,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type {
   GeneratedImageRepository,
   PromptGenerator,
@@ -26,6 +27,7 @@ export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
   imageStorage: ImageStorage;
   userServiceClient: UserServiceClient;
+  pricingContext: IPricingContext;
   createPromptGenerator: (
     provider: 'google' | 'openai',
     apiKey: string,
@@ -57,7 +59,7 @@ export function resetServices(): void {
   container = null;
 }
 
-export function initializeServices(): void {
+export function initializeServices(pricingContext: IPricingContext): void {
   const bucketName = process.env['INTEXURAOS_IMAGE_BUCKET'] ?? '';
   const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
   const storage = createGcsImageStorage(bucketName, publicBaseUrl);
@@ -67,10 +69,19 @@ export function initializeServices(): void {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
   });
 
+  // Get pricing for prompt generation models
+  const geminiPricing = pricingContext.getPricing('gemini-2.5-flash');
+  const gptPricing = pricingContext.getPricing('gpt-4o-mini');
+
+  // Get pricing for image generation models
+  const openaiImagePricing = pricingContext.getPricing('gpt-image-1');
+  const googleImagePricing = pricingContext.getPricing('gemini-2.5-flash-image');
+
   container = {
     generatedImageRepository: createGeneratedImageRepository(),
     imageStorage: storage,
     userServiceClient,
+    pricingContext,
     createPromptGenerator: (
       provider: 'google' | 'openai',
       apiKey: string,
@@ -78,9 +89,9 @@ export function initializeServices(): void {
       _logger?: LoggerLike
     ): PromptGenerator => {
       if (provider === 'google') {
-        return createGeminiPromptAdapter({ apiKey, userId });
+        return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing });
       }
-      return createGptPromptAdapter({ apiKey, userId });
+      return createGptPromptAdapter({ apiKey, userId, pricing: gptPricing });
     },
     createImageGenerator: (
       model: ImageGenerationModel,
@@ -89,9 +100,23 @@ export function initializeServices(): void {
     ): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];
       if (config.provider === 'openai') {
-        return createOpenAIImageGenerator({ apiKey, model, storage, userId });
+        return createOpenAIImageGenerator({
+          apiKey,
+          model,
+          storage,
+          userId,
+          pricing: gptPricing,
+          imagePricing: openaiImagePricing,
+        });
       }
-      return createGoogleImageGenerator({ apiKey, model, storage, userId });
+      return createGoogleImageGenerator({
+        apiKey,
+        model,
+        storage,
+        userId,
+        pricing: geminiPricing,
+        imagePricing: googleImagePricing,
+      });
     },
     generateId: (): string => randomUUID(),
   };

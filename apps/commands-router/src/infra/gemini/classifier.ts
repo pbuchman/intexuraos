@@ -1,5 +1,5 @@
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import type { SupportedModel } from '@intexuraos/llm-contract';
+import type { ModelPricing, ResearchModel } from '@intexuraos/llm-contract';
 import type { CommandType } from '../../domain/models/command.js';
 import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
 
@@ -47,7 +47,7 @@ CRITICAL: The title MUST be in the SAME LANGUAGE as the user's message (Polish m
 The title should be a concise summary of the action (e.g., "Buy groceries", "Research AI trends", "Team meeting notes").
 The reasoning should briefly explain what keywords or patterns led to this classification.`;
 
-const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
+const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   'gemini-2.5-pro': ['gemini pro', 'gemini-pro'],
   'gemini-2.5-flash': ['gemini flash', 'gemini-flash', 'gemini', 'google'],
   'claude-opus-4-5-20251101': ['claude opus', 'opus'],
@@ -59,7 +59,7 @@ const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
   'sonar-deep-research': ['sonar deep', 'perplexity deep', 'deep sonar'],
 };
 
-const DEFAULT_MODELS: SupportedModel[] = [
+const DEFAULT_MODELS: ResearchModel[] = [
   'gemini-2.5-pro',
   'claude-opus-4-5-20251101',
   'gpt-5.2',
@@ -76,9 +76,10 @@ const ALL_LLMS_PATTERNS = [
 export interface GeminiClassifierConfig {
   apiKey: string;
   userId: string;
+  pricing: ModelPricing;
 }
 
-export function extractSelectedModels(text: string): SupportedModel[] | undefined {
+export function extractSelectedModels(text: string): ResearchModel[] | undefined {
   const lowerText = text.toLowerCase();
 
   for (const pattern of ALL_LLMS_PATTERNS) {
@@ -87,8 +88,8 @@ export function extractSelectedModels(text: string): SupportedModel[] | undefine
     }
   }
 
-  const found: SupportedModel[] = [];
-  for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [SupportedModel, string[]][]) {
+  const found: ResearchModel[] = [];
+  for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [ResearchModel, string[]][]) {
     for (const keyword of keywords) {
       if (lowerText.includes(keyword)) {
         found.push(model);
@@ -107,6 +108,7 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
     apiKey: config.apiKey,
     model: CLASSIFIER_MODEL,
     userId: config.userId,
+    pricing: config.pricing,
   });
 
   return {

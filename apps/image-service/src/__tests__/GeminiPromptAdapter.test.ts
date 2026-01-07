@@ -103,7 +103,7 @@ describe('GeminiPromptAdapter', () => {
         .post(/.*/)
         .replyWithError('API_KEY invalid');
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'bad-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({ apiKey: 'bad-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
