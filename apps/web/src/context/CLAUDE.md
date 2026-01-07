@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #193 | 11:08 PM | 🔵 | Frontend Uses Auth0 React SDK for Authentication | ~327 |
 </claude-mem-context>

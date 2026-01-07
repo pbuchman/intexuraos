@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #195 | 11:08 PM | 🔵 | OAuth2 Token Models Support Standard Token Structure | ~321 |
 </claude-mem-context>

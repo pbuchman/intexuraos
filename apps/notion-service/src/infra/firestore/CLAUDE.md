@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #271 | 11:19 PM | 🔵 | Refresh Access Token Use Case Implements Token Lifecycle Management | ~436 |
+| #330 | 11:31 PM | 🔵 | Notion Connection Repository Stores OAuth Tokens Unencrypted in Firestore | ~477 |
 </claude-mem-context>
