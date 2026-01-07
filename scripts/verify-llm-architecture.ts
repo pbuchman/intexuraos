@@ -256,6 +256,18 @@ function checkRule4_NoHardcodedModelStrings(): void {
       const lines = content.split('\n');
 
       lines.forEach((line, idx) => {
+        // Skip if this appears to be a keyword array (natural language matching)
+        // e.g., ['gemini flash', 'google'] for user input parsing
+        if (line.includes('[') && line.includes(']') &&
+            (line.includes("'") || line.includes('"')) &&
+            line.includes(',')) {
+          // Check if it's inside a string array (keyword list)
+          const arrayPattern = /\[[\s'",\w-]+\]/;
+          if (arrayPattern.test(line)) {
+            return;
+          }
+        }
+
         // Check each model string
         for (const modelString of MODEL_STRINGS) {
           if (isQuotedString(line, modelString)) {
@@ -335,6 +347,18 @@ function checkRule5_NoHardcodedProviderStrings(): void {
                   continue;
                 }
 
+                // Skip if this appears to be a keyword array (natural language matching)
+                // e.g., ['gemini flash', 'google'] for user input parsing
+                if (line.includes('[') && line.includes(']') &&
+                    (line.includes("'") || line.includes('"')) &&
+                    line.includes(',')) {
+                  // Check if it's inside a string array (keyword list)
+                  const arrayPattern = /\[[\s'",\w-]+\]/;
+                  if (arrayPattern.test(line)) {
+                    continue;
+                  }
+                }
+
                 // Flag if it looks like LLM provider usage
                 const llmContextPatterns = [
                   /provider/i,
@@ -394,9 +418,9 @@ function main(): void {
   checkRule5_NoHardcodedProviderStrings();
 
   // Separate blocking violations (RULE-1, RULE-2, RULE-3) from warnings (RULE-4, RULE-5)
-  // RULE-4 and RULE-5 are warnings until migration task 029 is complete
-  const blockingRules = ['RULE-1', 'RULE-2', 'RULE-3'];
-  const warningRules = ['RULE-4', 'RULE-5'];
+  // All rules are now blocking after task 029-type-safe-llm-constants completion
+  const blockingRules = ['RULE-1', 'RULE-2', 'RULE-3', 'RULE-4', 'RULE-5'];
+  const warningRules: string[] = [];
 
   const blockingViolations = violations.filter(v => blockingRules.includes(v.rule));
   const warningViolations = violations.filter(v => warningRules.includes(v.rule));
@@ -427,18 +451,15 @@ function main(): void {
     }
   }
 
-  // Print warnings (non-blocking)
+  // Print warnings (non-blocking) - currently none
   if (warningViolations.length > 0) {
-    console.log(`\n⚠️  Found ${String(warningViolations.length)} WARNING violation(s):`);
-    console.log('   (These will become blocking after task 029-type-safe-llm-constants is complete)\n');
+    console.log(`\n⚠️  Found ${String(warningViolations.length)} WARNING violation(s):\n`);
     for (const rule of warningRules) {
       const ruleViolations = byRule[rule];
       if (ruleViolations !== undefined && ruleViolations.length > 0) {
         console.log(`   ${rule}: ${String(ruleViolations.length)} violation(s)`);
       }
     }
-    console.log('\n   Run with --verbose to see all warning details.');
-    console.log('   Full list: continuity/029-type-safe-llm-constants/violations-baseline.txt');
   }
 
   console.log(`\n=== Summary ===`);

@@ -242,7 +242,7 @@ describe('retryFromFailed', () => {
 
     it('handles multiple failed providers', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, 'claude-opus-4-5-20251101'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
         llmResults: [
           { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
           {
@@ -252,8 +252,8 @@ describe('retryFromFailed', () => {
             error: 'Error 1',
           },
           {
-            provider: 'anthropic',
-            model: 'claude-opus-4-5-20251101',
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
             status: 'failed',
             error: 'Error 2',
           },
@@ -266,7 +266,7 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedModels: [LlmModels.O4MiniDeepResearch, 'claude-opus-4-5-20251101'],
+        retriedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       });
       expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledTimes(2);

@@ -1,7 +1,8 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * LLM Provider types for API key management.
  */
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+export type { LlmProvider };
 
 /**
  * Test result for an LLM API key.

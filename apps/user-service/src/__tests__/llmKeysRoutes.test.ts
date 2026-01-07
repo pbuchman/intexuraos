@@ -4,6 +4,7 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -283,7 +284,7 @@ describe('LLM Keys Routes', () => {
         method: 'PATCH',
         url: '/users/user-123/settings/llm-keys',
         payload: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -311,7 +312,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -338,7 +339,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           apiKey: 'AIzaSyB1234567890abcdef',
         },
       });
@@ -349,7 +350,7 @@ describe('LLM Keys Routes', () => {
         data: { provider: string; masked: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.provider).toBe('google');
+      expect(body.data.provider).toBe(LlmProviders.Google);
       expect(body.data.masked).toBe('AIza...cdef');
 
       // Verify key was stored
@@ -379,7 +380,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -408,7 +409,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'openai',
+          provider: LlmProviders.OpenAI,
           apiKey: 'sk-test1234567890abcdef',
         },
       });
@@ -437,7 +438,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'anthropic',
+          provider: LlmProviders.Anthropic,
           apiKey: 'sk-ant-test1234567890',
         },
       });
@@ -469,7 +470,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'openai',
+          provider: LlmProviders.OpenAI,
           apiKey: 'sk-invalid1234567890',
         },
       });
@@ -497,7 +498,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           apiKey: 'short',
         },
       });

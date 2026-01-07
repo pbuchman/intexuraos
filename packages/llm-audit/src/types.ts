@@ -1,8 +1,9 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * LLM Audit Logging Types.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+export type { LlmProvider };
 
 export type LlmAuditStatus = 'success' | 'error';
 

@@ -1,5 +1,5 @@
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing, ResearchModel } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing, type ResearchModel } from '@intexuraos/llm-contract';
 import type { CommandType } from '../../domain/models/command.js';
 import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
 
@@ -48,22 +48,22 @@ The title should be a concise summary of the action (e.g., "Buy groceries", "Res
 The reasoning should briefly explain what keywords or patterns led to this classification.`;
 
 const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
-  'gemini-2.5-pro': ['gemini pro', 'gemini-pro'],
-  'gemini-2.5-flash': ['gemini flash', 'gemini-flash', 'gemini', 'google'],
-  'claude-opus-4-5-20251101': ['claude opus', 'opus'],
-  'claude-sonnet-4-5-20250929': ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
-  'o4-mini-deep-research': ['o4', 'o4-mini', 'deep research'],
-  'gpt-5.2': ['gpt', 'gpt-5', 'openai', 'chatgpt'],
-  sonar: ['sonar basic'],
-  'sonar-pro': ['sonar', 'sonar pro', 'pplx', 'perplexity'],
-  'sonar-deep-research': ['sonar deep', 'perplexity deep', 'deep sonar'],
+  [LlmModels.Gemini25Pro]: ['gemini pro', 'gemini-pro'],
+  [LlmModels.Gemini25Flash]: ['gemini flash', 'gemini-flash', 'gemini', 'google'],
+  [LlmModels.ClaudeOpus45]: ['claude opus', 'opus'],
+  [LlmModels.ClaudeSonnet45]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
+  [LlmModels.O4MiniDeepResearch]: ['o4', 'o4-mini', 'deep research'],
+  [LlmModels.GPT52]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
+  [LlmModels.Sonar]: ['sonar basic'],
+  [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
+  [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
 };
 
 const DEFAULT_MODELS: ResearchModel[] = [
-  'gemini-2.5-pro',
-  'claude-opus-4-5-20251101',
-  'gpt-5.2',
-  'sonar-pro',
+  LlmModels.Gemini25Pro,
+  LlmModels.ClaudeOpus45,
+  LlmModels.GPT52,
+  LlmModels.SonarPro,
 ];
 
 const ALL_LLMS_PATTERNS = [
@@ -101,7 +101,7 @@ export function extractSelectedModels(text: string): ResearchModel[] | undefined
   return found.length > 0 ? found : undefined;
 }
 
-const CLASSIFIER_MODEL = 'gemini-2.5-flash';
+const CLASSIFIER_MODEL = LlmModels.Gemini25Flash;
 
 export function createGeminiClassifier(config: GeminiClassifierConfig): Classifier {
   const client = createGeminiClient({

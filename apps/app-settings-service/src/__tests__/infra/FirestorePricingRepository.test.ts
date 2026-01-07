@@ -52,7 +52,7 @@ describe('FirestorePricingRepository', () => {
 
     const { FirestorePricingRepository } = await import('../../infra/firestore/index.js');
     const repo = new FirestorePricingRepository();
-    const result = await repo.getByProvider('perplexity');
+    const result = await repo.getByProvider(LlmProviders.Perplexity);
 
     expect(result).toBeNull();
   });

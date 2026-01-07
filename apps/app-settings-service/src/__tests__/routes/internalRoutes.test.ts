@@ -102,10 +102,10 @@ describe('internalRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.google.provider).toBe('google');
-      expect(body.data.openai.provider).toBe('openai');
-      expect(body.data.anthropic.provider).toBe('anthropic');
-      expect(body.data.perplexity.provider).toBe('perplexity');
+      expect(body.data.google.provider).toBe(LlmProviders.Google);
+      expect(body.data.openai.provider).toBe(LlmProviders.OpenAI);
+      expect(body.data.anthropic.provider).toBe(LlmProviders.Anthropic);
+      expect(body.data.perplexity.provider).toBe(LlmProviders.Perplexity);
       expect(body.data.google.models[LlmModels.Gemini25Pro].inputPricePerMillion).toBe(1.25);
 
       await app.close();

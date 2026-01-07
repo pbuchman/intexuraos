@@ -12,14 +12,14 @@ describe('PricingClient', () => {
   const internalAuthToken = 'test-internal-token';
 
   const mockOpenAIPricing: ProviderPricing = {
-    provider: 'openai',
+    provider: LlmProviders.OpenAI,
     models: {
       'gpt-4o': {
         inputPricePerMillion: 2.5,
         outputPricePerMillion: 10.0,
         cacheReadMultiplier: 0.5,
       },
-      'gpt-4o-mini': {
+      LlmModels.GPT4oMini: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
       },
@@ -28,9 +28,9 @@ describe('PricingClient', () => {
   };
 
   const mockGooglePricing: ProviderPricing = {
-    provider: 'google',
+    provider: LlmProviders.Google,
     models: {
-      'gemini-2.5-flash': {
+      LlmModels.Gemini25Flash: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
         groundingCostPerRequest: 0.035,
@@ -58,7 +58,7 @@ describe('PricingClient', () => {
         .matchHeader('Content-Type', 'application/json')
         .reply(200, mockOpenAIPricing);
 
-      const result = await client.getForProvider('openai');
+      const result = await client.getForProvider(LlmProviders.OpenAI);
 
       expect(result).toEqual(mockOpenAIPricing);
     });
@@ -69,7 +69,7 @@ describe('PricingClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(404);
 
-      const result = await client.getForProvider('perplexity');
+      const result = await client.getForProvider(LlmProviders.Perplexity);
 
       expect(result).toBeNull();
     });
@@ -78,7 +78,7 @@ describe('PricingClient', () => {
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(500, 'Internal Server Error');
 
       // Without cache, should return null on error
-      const result = await client.getForProvider('openai');
+      const result = await client.getForProvider(LlmProviders.OpenAI);
 
       expect(result).toBeNull();
     });
@@ -90,12 +90,12 @@ describe('PricingClient', () => {
         .reply(200, mockOpenAIPricing);
 
       // First call - hits the API
-      const result1 = await client.getForProvider('openai');
+      const result1 = await client.getForProvider(LlmProviders.OpenAI);
       expect(result1).toEqual(mockOpenAIPricing);
       expect(scope.isDone()).toBe(true);
 
       // Second call - should use cache, not hit API again
-      const result2 = await client.getForProvider('openai');
+      const result2 = await client.getForProvider(LlmProviders.OpenAI);
       expect(result2).toEqual(mockOpenAIPricing);
     });
 
@@ -103,7 +103,7 @@ describe('PricingClient', () => {
       // First call - populate cache
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, mockOpenAIPricing);
 
-      await client.getForProvider('openai');
+      await client.getForProvider(LlmProviders.OpenAI);
 
       // Manually expire cache by manipulating time
       vi.useFakeTimers();
@@ -112,7 +112,7 @@ describe('PricingClient', () => {
       // Second call with network error - should return expired cache
       nock(baseUrl).get('/internal/settings/pricing/openai').replyWithError('Connection refused');
 
-      const result = await client.getForProvider('openai');
+      const result = await client.getForProvider(LlmProviders.OpenAI);
 
       expect(result).toEqual(mockOpenAIPricing);
 
@@ -128,7 +128,7 @@ describe('PricingClient', () => {
       // First call
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, mockOpenAIPricing);
 
-      await client.getForProvider('openai');
+      await client.getForProvider(LlmProviders.OpenAI);
 
       // Advance time past TTL
       vi.useFakeTimers();
@@ -137,7 +137,7 @@ describe('PricingClient', () => {
       // Second call after expiry - should fetch fresh data
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, updatedPricing);
 
-      const result = await client.getForProvider('openai');
+      const result = await client.getForProvider(LlmProviders.OpenAI);
 
       expect(result).toEqual(updatedPricing);
 
@@ -149,8 +149,8 @@ describe('PricingClient', () => {
 
       nock(baseUrl).get('/internal/settings/pricing/google').reply(200, mockGooglePricing);
 
-      const openaiResult = await client.getForProvider('openai');
-      const googleResult = await client.getForProvider('google');
+      const openaiResult = await client.getForProvider(LlmProviders.OpenAI);
+      const googleResult = await client.getForProvider(LlmProviders.Google);
 
       expect(openaiResult).toEqual(mockOpenAIPricing);
       expect(googleResult).toEqual(mockGooglePricing);
@@ -161,7 +161,7 @@ describe('PricingClient', () => {
     it('returns pricing for specific model', async () => {
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, mockOpenAIPricing);
 
-      const result = await client.getModelPricing('openai', 'gpt-4o');
+      const result = await client.getModelPricing(LlmProviders.OpenAI, 'gpt-4o');
 
       expect(result).toEqual({
         inputPricePerMillion: 2.5,
@@ -173,7 +173,7 @@ describe('PricingClient', () => {
     it('returns null when provider not found', async () => {
       nock(baseUrl).get('/internal/settings/pricing/perplexity').reply(404);
 
-      const result = await client.getModelPricing('perplexity', 'sonar-pro');
+      const result = await client.getModelPricing(LlmProviders.Perplexity, LlmModels.SonarPro);
 
       expect(result).toBeNull();
     });
@@ -181,7 +181,7 @@ describe('PricingClient', () => {
     it('returns null when model not found in provider', async () => {
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, mockOpenAIPricing);
 
-      const result = await client.getModelPricing('openai', 'gpt-5');
+      const result = await client.getModelPricing(LlmProviders.OpenAI, 'gpt-5');
 
       expect(result).toBeNull();
     });
@@ -192,12 +192,12 @@ describe('PricingClient', () => {
         .reply(200, mockOpenAIPricing);
 
       // First model lookup
-      const result1 = await client.getModelPricing('openai', 'gpt-4o');
+      const result1 = await client.getModelPricing(LlmProviders.OpenAI, 'gpt-4o');
       expect(result1).not.toBeNull();
       expect(scope.isDone()).toBe(true);
 
       // Second model lookup for different model - should use cache
-      const result2 = await client.getModelPricing('openai', 'gpt-4o-mini');
+      const result2 = await client.getModelPricing(LlmProviders.OpenAI, LlmModels.GPT4oMini);
       expect(result2).toEqual({
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
@@ -210,7 +210,7 @@ describe('PricingClient', () => {
       // First call - populate cache
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, mockOpenAIPricing);
 
-      await client.getForProvider('openai');
+      await client.getForProvider(LlmProviders.OpenAI);
 
       // Clear cache
       client.clearCache();
@@ -223,7 +223,7 @@ describe('PricingClient', () => {
 
       nock(baseUrl).get('/internal/settings/pricing/openai').reply(200, updatedPricing);
 
-      const result = await client.getForProvider('openai');
+      const result = await client.getForProvider(LlmProviders.OpenAI);
 
       expect(result).toEqual(updatedPricing);
     });

@@ -2,6 +2,7 @@
  * Tests for HTML generator utility.
  */
 
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { describe, expect, it } from 'vitest';
 import { generateShareableHtml } from '../../../../domain/research/utils/htmlGenerator.js';
 
@@ -84,13 +85,13 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result content',
           },
           {
-            provider: 'openai',
+            provider: LlmProviders.OpenAI,
             model: 'o4-mini',
             status: 'completed',
             result: 'OpenAI result content',
@@ -100,7 +101,7 @@ describe('generateShareableHtml', () => {
 
       expect(html).toContain('Individual Provider Reports');
       expect(html).toContain('<details>');
-      expect(html).toContain('gemini-2.0-flash');
+      expect(html).toContain(LlmModels.Gemini20Flash);
       expect(html).toContain('provider-google');
       expect(html).toContain('Google result content');
       expect(html).toContain('o4-mini');
@@ -113,20 +114,20 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: 'openai',
+            provider: LlmProviders.OpenAI,
             model: 'o4-mini',
             status: 'failed',
           },
         ],
       });
 
-      expect(html).toContain('gemini-2.0-flash');
+      expect(html).toContain(LlmModels.Gemini20Flash);
       expect(html).not.toContain('o4-mini');
     });
 
@@ -135,8 +136,8 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: '',
           },

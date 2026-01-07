@@ -1,3 +1,4 @@
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { describe, it, expect, vi } from 'vitest';
 import {
   createAnalyticsEventPublisher,
@@ -32,7 +33,7 @@ describe('createAnalyticsEventPublisher', () => {
     type: 'llm.report',
     researchId: 'research-123',
     userId: 'user-456',
-    provider: 'google',
+    provider: LlmProviders.Google,
     model: 'gemini-1.5-pro',
     inputTokens: 1500,
     outputTokens: 3000,
@@ -68,7 +69,7 @@ describe('createAnalyticsEventPublisher', () => {
 
     const openaiEvent: LlmAnalyticsEvent = {
       ...event,
-      provider: 'openai',
+      provider: LlmProviders.OpenAI,
       model: 'gpt-4o',
     };
 

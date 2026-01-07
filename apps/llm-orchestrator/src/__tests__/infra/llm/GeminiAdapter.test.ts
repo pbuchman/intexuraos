@@ -31,24 +31,24 @@ describe('GeminiAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id', testPricing);
+    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id', testPricing);
+      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'gemini-2.5-pro',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
         pricing: testPricing,
       });
     });
 
     it('creates adapter successfully', () => {
-      const testAdapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id', testPricing);
+      const testAdapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
       expect(testAdapter).toBeDefined();
     });
   });

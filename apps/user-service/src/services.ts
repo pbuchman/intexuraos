@@ -2,6 +2,7 @@
  * Service wiring for user-service.
  * Provides dependency injection for domain adapters.
  */
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from '@intexuraos/common-core';
 import type { PricingContext } from '@intexuraos/llm-pricing';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
@@ -63,10 +64,10 @@ export function initializeServices(pricingContext?: PricingContext): void {
   let llmValidator: LlmValidator | null = null;
   if (!isTestEnv && pricingContext !== undefined) {
     const validationPricing = {
-      google: pricingContext.getPricing('gemini-2.0-flash'),
-      openai: pricingContext.getPricing('gpt-4o-mini'),
-      anthropic: pricingContext.getPricing('claude-3-5-haiku-20241022'),
-      perplexity: pricingContext.getPricing('sonar'),
+      google: pricingContext.getPricing(LlmModels.Gemini20Flash),
+      openai: pricingContext.getPricing(LlmModels.GPT4oMini),
+      anthropic: pricingContext.getPricing(LlmModels.ClaudeHaiku35),
+      perplexity: pricingContext.getPricing(LlmModels.Sonar),
     };
     llmValidator = new LlmValidatorImpl(validationPricing);
   }
