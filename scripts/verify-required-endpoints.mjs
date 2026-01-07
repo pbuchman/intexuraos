@@ -27,6 +27,7 @@ const EXEMPT_APPS = ['api-docs-hub', 'web'];
 
 function getApps() {
   return readdirSync(appsDir).filter((entry) => {
+    if (/[*?[\]]/.test(entry)) return false;
     const fullPath = join(appsDir, entry);
     return statSync(fullPath).isDirectory() && !EXEMPT_APPS.includes(entry);
   });
