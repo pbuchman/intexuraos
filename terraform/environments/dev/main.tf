@@ -697,14 +697,15 @@ module "user_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/user-service:latest"
 
   secrets = {
-    INTEXURAOS_AUTH0_DOMAIN         = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
-    INTEXURAOS_AUTH0_CLIENT_ID      = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
-    INTEXURAOS_AUTH_JWKS_URL        = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER          = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE        = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN  = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_AUTH0_DOMAIN             = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
+    INTEXURAOS_AUTH0_CLIENT_ID          = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
+    INTEXURAOS_AUTH_JWKS_URL            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY     = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_ENCRYPTION_KEY           = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_APP_SETTINGS_SERVICE_URL = module.secret_manager.secret_ids["INTEXURAOS_APP_SETTINGS_SERVICE_URL"]
   }
 
   env_vars = {
@@ -1065,10 +1066,11 @@ module "data_insights_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-service:latest"
 
   secrets = {
-    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_AUTH_JWKS_URL            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_APP_SETTINGS_SERVICE_URL = module.secret_manager.secret_ids["INTEXURAOS_APP_SETTINGS_SERVICE_URL"]
   }
 
   env_vars = {
