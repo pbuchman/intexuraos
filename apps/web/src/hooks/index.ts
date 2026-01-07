@@ -1,5 +1,6 @@
 export { useApiClient, ApiError } from './useApiClient.js';
 export { useActionChanges, type UseActionChangesResult } from './useActionChanges.js';
+export { useBookmarks } from './useBookmarks.js';
 export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';
 export { useCompositeFeed, useCompositeFeeds } from './useCompositeFeeds.js';
 export { useDataSource, useDataSources } from './useDataSources.js';

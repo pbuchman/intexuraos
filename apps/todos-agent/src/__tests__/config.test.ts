@@ -18,7 +18,7 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://jwks.example.com';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://issuer.example.com';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
-    process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] = 'test-key';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-key';
 
     const config = loadConfig();
 
@@ -36,7 +36,7 @@ describe('loadConfig', () => {
     delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
     delete process.env['INTEXURAOS_AUTH_ISSUER'];
     delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
-    delete process.env['INTEXURAOS_INTERNAL_AUTH_KEY'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
     const config = loadConfig();
 

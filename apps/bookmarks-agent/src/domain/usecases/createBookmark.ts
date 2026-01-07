@@ -16,7 +16,10 @@ export async function createBookmark(
   deps: CreateBookmarkDeps,
   input: CreateBookmarkInput
 ): Promise<Result<Bookmark, BookmarkError>> {
-  deps.logger.info({ userId: input.userId, source: input.source, url: input.url }, 'Creating bookmark');
+  deps.logger.info(
+    { userId: input.userId, source: input.source, url: input.url },
+    'Creating bookmark'
+  );
 
   const existingResult = await deps.bookmarkRepository.findByUserIdAndUrl(input.userId, input.url);
 

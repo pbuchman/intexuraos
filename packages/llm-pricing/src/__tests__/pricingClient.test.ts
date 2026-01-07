@@ -289,6 +289,32 @@ describe('pricingClient', () => {
       expect(models).toContain(LlmModels.GPT52);
     });
 
+    it('ignores invalid model keys in pricing data', () => {
+      const pricingWithInvalidModel: AllPricingResponse = {
+        google: {
+          provider: LlmProviders.Google,
+          models: {
+            [LlmModels.Gemini25Flash]: {
+              inputPricePerMillion: 0.3,
+              outputPricePerMillion: 2.5,
+            },
+            'invalid-model-name': {
+              inputPricePerMillion: 1.0,
+              outputPricePerMillion: 2.0,
+            },
+          } as typeof mockGooglePricing.models,
+          updatedAt: '',
+        },
+        openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
+        anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
+        perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+      };
+
+      const context = new PricingContext(pricingWithInvalidModel);
+      expect(context.hasPricing(LlmModels.Gemini25Flash)).toBe(true);
+      expect(context.getModelsWithPricing()).toEqual([LlmModels.Gemini25Flash]);
+    });
+
     it('validateAllModels passes when all models have pricing', () => {
       const context = new PricingContext(completeAllPricing);
 

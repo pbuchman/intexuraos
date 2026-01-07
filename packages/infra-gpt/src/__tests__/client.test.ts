@@ -576,6 +576,135 @@ describe('createGptClient', () => {
         expect(result.value.usage.outputTokens).toBe(0);
       }
     });
+
+    it('handles input_tokens_details without cached_tokens', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Content',
+        output: [],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          input_tokens_details: {},
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.cacheTokens).toBeUndefined();
+      }
+    });
+
+    it('handles output_tokens_details with reasoning_tokens', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Content',
+        output: [],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 150,
+          output_tokens_details: { reasoning_tokens: 100 },
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.reasoningTokens).toBe(100);
+      }
+    });
+  });
+
+  describe('extractSourcesFromResponse edge cases', () => {
+    it('handles web_search_call with results missing url', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Content',
+        output: [
+          {
+            type: 'web_search_call',
+            results: [{ url: 'https://valid.com' }, { title: 'No URL result' }, {}],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual(['https://valid.com']);
+      }
+    });
+
+    it('handles web_search_call with non-array results', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Content',
+        output: [
+          {
+            type: 'web_search_call',
+            results: 'not-an-array',
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual([]);
+      }
+    });
+
+    it('ignores non-web_search_call output items', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'Content',
+        output: [
+          { type: 'message', content: 'Hello' },
+          { type: 'web_search_call', results: [{ url: 'https://example.com' }] },
+          { type: 'function_call', name: 'test' },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual(['https://example.com']);
+      }
+    });
   });
 
   describe('timeout error handling', () => {

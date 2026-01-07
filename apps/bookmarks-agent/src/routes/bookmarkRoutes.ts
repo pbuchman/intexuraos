@@ -174,7 +174,11 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         ogFetchStatus: request.query.ogFetchStatus,
       };
 
-      const result = await listBookmarks({ bookmarkRepository, logger: request.log }, user.userId, filters);
+      const result = await listBookmarks(
+        { bookmarkRepository, logger: request.log },
+        user.userId,
+        filters
+      );
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);

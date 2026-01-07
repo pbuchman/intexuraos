@@ -228,14 +228,12 @@ export function createGptClient(config: GptConfig): GptClient {
         let imageBuffer: Buffer;
         if (imageData?.b64_json !== undefined) {
           imageBuffer = Buffer.from(imageData.b64_json, 'base64');
-        } else if (imageData?.url !== undefined) {
-          const imageResponse = await fetch(imageData.url);
+        } else {
+          // Must be URL since we passed the b64Data check above (b64Data = b64_json ?? url)
+          const imageUrl = imageData?.url as string;
+          const imageResponse = await fetch(imageUrl);
           const arrayBuffer = await imageResponse.arrayBuffer();
           imageBuffer = Buffer.from(arrayBuffer);
-        } else {
-          const errorMsg = 'No image data in response';
-          await auditContext.error({ error: errorMsg });
-          return err({ code: 'API_ERROR', message: errorMsg });
         }
 
         const pricingConfig = imagePricing ?? pricing;

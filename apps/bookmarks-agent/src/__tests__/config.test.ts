@@ -10,7 +10,7 @@ describe('Config', () => {
     delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
     delete process.env['INTEXURAOS_AUTH_ISSUER'];
     delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
-    delete process.env['INTEXURAOS_INTERNAL_AUTH_KEY'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 
   afterEach(() => {
@@ -34,7 +34,7 @@ describe('Config', () => {
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/.well-known/jwks.json';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
-    process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] = 'secret-key';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-key';
 
     const config = loadConfig();
 

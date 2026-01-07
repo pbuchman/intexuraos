@@ -406,6 +406,28 @@ describe('createPerplexityClient', () => {
       }
     });
 
+    it('handles undefined message content', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: {} }],
+          usage: { prompt_tokens: 50, completion_tokens: 0 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Write something');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('');
+      }
+    });
+
     it('handles API error', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'Internal error');
 

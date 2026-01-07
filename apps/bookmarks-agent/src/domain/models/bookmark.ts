@@ -62,7 +62,11 @@ export interface BookmarkFilters {
   ogFetchStatus?: OgFetchStatus | undefined;
 }
 
-export type BookmarkErrorCode = 'NOT_FOUND' | 'STORAGE_ERROR' | 'INVALID_OPERATION' | 'DUPLICATE_URL';
+export type BookmarkErrorCode =
+  | 'NOT_FOUND'
+  | 'STORAGE_ERROR'
+  | 'INVALID_OPERATION'
+  | 'DUPLICATE_URL';
 
 export interface BookmarkError {
   code: BookmarkErrorCode;

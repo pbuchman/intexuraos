@@ -178,6 +178,7 @@ export interface AppConfig {
   dataInsightsServiceUrl: string;
   notesAgentUrl: string;
   todosAgentUrl: string;
+  bookmarksAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -663,4 +664,65 @@ export interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
+}
+
+/**
+ * Open Graph preview data for bookmarks
+ */
+export interface OpenGraphPreview {
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+  type?: string;
+  favicon?: string;
+}
+
+/**
+ * OG fetch status for bookmarks
+ */
+export type OgFetchStatus = 'pending' | 'processed' | 'failed';
+
+/**
+ * Bookmark from bookmarks-agent
+ */
+export interface Bookmark {
+  id: string;
+  userId: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  tags: string[];
+  ogPreview: OpenGraphPreview | null;
+  ogFetchedAt: string | null;
+  ogFetchStatus: OgFetchStatus;
+  aiSummary: string | null;
+  aiSummarizedAt: string | null;
+  source: string;
+  sourceId: string;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a bookmark
+ */
+export interface CreateBookmarkRequest {
+  url: string;
+  title?: string | null;
+  description?: string | null;
+  tags?: string[];
+  source: string;
+  sourceId: string;
+}
+
+/**
+ * Request to update a bookmark
+ */
+export interface UpdateBookmarkRequest {
+  title?: string | null;
+  description?: string | null;
+  tags?: string[];
+  archived?: boolean;
 }

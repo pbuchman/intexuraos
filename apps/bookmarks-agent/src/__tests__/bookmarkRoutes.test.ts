@@ -770,4 +770,157 @@ describe('Bookmark Routes', () => {
       expect(response.statusCode).toBe(500);
     });
   });
+
+  describe('Error on create method specifically', () => {
+    it('returns 500 when create fails after findByUserIdAndUrl succeeds', async () => {
+      ctx.bookmarkRepository.simulateMethodError('create', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error on create',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: {
+          url: 'https://example.com',
+          tags: [],
+          source: 'web',
+          sourceId: 'src-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
+  describe('Error on findById for update', () => {
+    it('returns 500 when findById fails during PATCH', async () => {
+      ctx.bookmarkRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/bookmarks/any-id',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { title: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
+  describe('Error on findById for delete', () => {
+    it('returns 500 when findById fails during DELETE', async () => {
+      ctx.bookmarkRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/bookmarks/any-id',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
+  describe('Archive edge cases', () => {
+    it('returns 500 when findById fails during archive', async () => {
+      ctx.bookmarkRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks/any-id/archive',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 200 when archiving already archived bookmark', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmark = createResult.value;
+      bookmark.archived = true;
+      await ctx.bookmarkRepository.update(bookmark.id, bookmark);
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/bookmarks/${bookmark.id}/archive`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.archived).toBe(true);
+    });
+  });
+
+  describe('Unarchive edge cases', () => {
+    it('returns 500 when findById fails during unarchive', async () => {
+      ctx.bookmarkRepository.simulateMethodError('findById', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks/any-id/unarchive',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 200 when unarchiving non-archived bookmark', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/bookmarks/${createResult.value.id}/unarchive`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.archived).toBe(false);
+    });
+  });
 });

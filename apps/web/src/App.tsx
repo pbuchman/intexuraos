@@ -15,6 +15,7 @@ import { config } from '@/config';
 
 import {
   ApiKeysSettingsPage,
+  BookmarksListPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataSourceFormPage,
@@ -264,6 +265,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <TodosListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-bookmarks"
+        element={
+          <ProtectedRoute>
+            <BookmarksListPage />
           </ProtectedRoute>
         }
       />

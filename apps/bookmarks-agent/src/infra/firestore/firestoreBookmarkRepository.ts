@@ -112,7 +112,10 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to create bookmark') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to create bookmark'),
+        },
       };
     }
   }
@@ -130,12 +133,18 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to find bookmark') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to find bookmark'),
+        },
       };
     }
   }
 
-  async findByUserId(userId: string, filters?: BookmarkFilters): Promise<Result<Bookmark[], BookmarkError>> {
+  async findByUserId(
+    userId: string,
+    filters?: BookmarkFilters
+  ): Promise<Result<Bookmark[], BookmarkError>> {
     try {
       const db = getFirestore();
       let query = db.collection(COLLECTION).where('userId', '==', userId);
@@ -151,23 +160,33 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
       query = query.orderBy('createdAt', 'desc');
 
       const snapshot = await query.get();
-      let bookmarks = snapshot.docs.map((doc) => toBookmark(doc.id, doc.data() as BookmarkDocument));
+      let bookmarks = snapshot.docs.map((doc) =>
+        toBookmark(doc.id, doc.data() as BookmarkDocument)
+      );
 
       if (filters?.tags !== undefined && filters.tags.length > 0) {
         const filterTags = filters.tags;
-        bookmarks = bookmarks.filter((bookmark) => filterTags.some((tag) => bookmark.tags.includes(tag)));
+        bookmarks = bookmarks.filter((bookmark) =>
+          filterTags.some((tag) => bookmark.tags.includes(tag))
+        );
       }
 
       return { ok: true, value: bookmarks };
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to list bookmarks') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to list bookmarks'),
+        },
       };
     }
   }
 
-  async findByUserIdAndUrl(userId: string, url: string): Promise<Result<Bookmark | null, BookmarkError>> {
+  async findByUserIdAndUrl(
+    userId: string,
+    url: string
+  ): Promise<Result<Bookmark | null, BookmarkError>> {
     try {
       const db = getFirestore();
       const snapshot = await db
@@ -190,7 +209,10 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to find bookmark by URL') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to find bookmark by URL'),
+        },
       };
     }
   }
@@ -211,7 +233,10 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to update bookmark') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to update bookmark'),
+        },
       };
     }
   }
@@ -231,7 +256,10 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
     } catch (error) {
       return {
         ok: false,
-        error: { code: 'STORAGE_ERROR', message: getErrorMessage(error, 'Failed to delete bookmark') },
+        error: {
+          code: 'STORAGE_ERROR',
+          message: getErrorMessage(error, 'Failed to delete bookmark'),
+        },
       };
     }
   }

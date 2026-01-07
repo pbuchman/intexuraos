@@ -30,7 +30,10 @@ export async function archiveBookmark(
   }
 
   if (findResult.value.userId !== userId) {
-    deps.logger.warn({ bookmarkId, userId, ownerId: findResult.value.userId }, 'Access denied to bookmark');
+    deps.logger.warn(
+      { bookmarkId, userId, ownerId: findResult.value.userId },
+      'Access denied to bookmark'
+    );
     return { ok: false, error: { code: 'FORBIDDEN', message: 'Access denied' } };
   }
 

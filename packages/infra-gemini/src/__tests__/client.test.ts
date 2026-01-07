@@ -538,4 +538,60 @@ describe('createGeminiClient', () => {
       }
     });
   });
+
+  describe('research edge cases', () => {
+    it('handles undefined text and usageMetadata', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: undefined,
+        usageMetadata: undefined,
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Query');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('');
+        expect(result.value.usage.inputTokens).toBe(0);
+        expect(result.value.usage.outputTokens).toBe(0);
+      }
+    });
+
+    it('skips grounding chunks with missing uri', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Content',
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
+        candidates: [
+          {
+            groundingMetadata: {
+              groundingChunks: [
+                { web: { uri: 'https://valid.com' } },
+                { web: {} },
+                { web: { uri: undefined } },
+                { notWeb: true },
+              ],
+            },
+          },
+        ],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Query');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual(['https://valid.com']);
+      }
+    });
+  });
 });

@@ -83,6 +83,15 @@ describe('PricingClient', () => {
       expect(result).toBeNull();
     });
 
+    it('returns null on network error without cache', async () => {
+      nock(baseUrl).get('/internal/settings/pricing/openai').replyWithError('Connection refused');
+
+      // Without cache, should return null on network error
+      const result = await client.getForProvider(LlmProviders.OpenAI);
+
+      expect(result).toBeNull();
+    });
+
     it('caches pricing and returns cached data on subsequent calls', async () => {
       const scope = nock(baseUrl)
         .get('/internal/settings/pricing/openai')

@@ -1,3 +1,4 @@
+export { BookmarksListPage } from './BookmarksListPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { SystemHealthPage } from './SystemHealthPage.js';

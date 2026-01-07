@@ -8,7 +8,13 @@ import type {
 } from '../domain/models/bookmark.js';
 import type { BookmarkRepository } from '../domain/ports/bookmarkRepository.js';
 
-type MethodName = 'create' | 'findById' | 'findByUserId' | 'findByUserIdAndUrl' | 'update' | 'delete';
+type MethodName =
+  | 'create'
+  | 'findById'
+  | 'findByUserId'
+  | 'findByUserIdAndUrl'
+  | 'update'
+  | 'delete';
 
 export class FakeBookmarkRepository implements BookmarkRepository {
   private bookmarks = new Map<string, Bookmark>();
@@ -73,7 +79,10 @@ export class FakeBookmarkRepository implements BookmarkRepository {
     return Promise.resolve({ ok: true, value: bookmark ?? null });
   }
 
-  findByUserId(userId: string, filters?: BookmarkFilters): Promise<Result<Bookmark[], BookmarkError>> {
+  findByUserId(
+    userId: string,
+    filters?: BookmarkFilters
+  ): Promise<Result<Bookmark[], BookmarkError>> {
     const error = this.checkError('findByUserId');
     if (error !== null) {
       return Promise.resolve({ ok: false, error });
