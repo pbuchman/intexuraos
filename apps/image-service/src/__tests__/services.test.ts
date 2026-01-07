@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels } from '@intexuraos/llm-contract';
 import {
   getServices,
   setServices,
@@ -94,7 +95,7 @@ describe('services', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createImageGenerator('gpt-image-1', 'test-key', 'test-user-id');
+      const generator = services.createImageGenerator(LlmModels.GPTImage1, 'test-key', 'test-user-id');
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();
@@ -105,7 +106,7 @@ describe('services', () => {
 
       const services = getServices();
       const generator = services.createImageGenerator(
-        'gemini-2.5-flash-image',
+        LlmModels.Gemini25FlashImage,
         'test-key',
         'test-user-id'
       );

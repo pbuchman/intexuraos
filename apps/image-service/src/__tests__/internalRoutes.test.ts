@@ -244,7 +244,7 @@ describe('Internal Routes', () => {
         url: '/internal/images/generate',
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -259,7 +259,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': 'wrong-token' },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -274,7 +274,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'short',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -304,7 +304,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
         },
       });
 
@@ -320,7 +320,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -337,7 +337,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -357,7 +357,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -375,7 +375,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -395,7 +395,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -424,7 +424,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           userId: TEST_USER_ID,
         },
       });
@@ -440,7 +440,7 @@ describe('Internal Routes', () => {
       prompt: 'Test prompt',
       thumbnailUrl: 'https://example.com/thumb.jpg',
       fullSizeUrl: 'https://example.com/full.png',
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       createdAt: '2024-01-01T00:00:00.000Z',
     };
 

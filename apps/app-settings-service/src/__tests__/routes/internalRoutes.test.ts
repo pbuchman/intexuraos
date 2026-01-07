@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { ProviderPricing } from '../../domain/ports/index.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 
@@ -9,9 +10,9 @@ vi.mock('@intexuraos/infra-firestore', () => ({
 
 describe('internalRoutes', () => {
   const mockGooglePricing: ProviderPricing = {
-    provider: 'google',
+    provider: LlmProviders.Google,
     models: {
-      'gemini-2.5-pro': {
+      [LlmModels.Gemini25Pro]: {
         inputPricePerMillion: 1.25,
         outputPricePerMillion: 10.0,
         groundingCostPerRequest: 0.035,
@@ -21,9 +22,9 @@ describe('internalRoutes', () => {
   };
 
   const mockOpenaiPricing: ProviderPricing = {
-    provider: 'openai',
+    provider: LlmProviders.OpenAI,
     models: {
-      'gpt-5.2': {
+      [LlmModels.GPT52]: {
         inputPricePerMillion: 1.75,
         outputPricePerMillion: 14.0,
       },
@@ -32,9 +33,9 @@ describe('internalRoutes', () => {
   };
 
   const mockAnthropicPricing: ProviderPricing = {
-    provider: 'anthropic',
+    provider: LlmProviders.Anthropic,
     models: {
-      'claude-opus-4-5-20251101': {
+      [LlmModels.ClaudeOpus45]: {
         inputPricePerMillion: 5.0,
         outputPricePerMillion: 25.0,
       },
@@ -43,9 +44,9 @@ describe('internalRoutes', () => {
   };
 
   const mockPerplexityPricing: ProviderPricing = {
-    provider: 'perplexity',
+    provider: LlmProviders.Perplexity,
     models: {
-      'sonar-pro': {
+      [LlmModels.SonarPro]: {
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
       },
@@ -105,7 +106,7 @@ describe('internalRoutes', () => {
       expect(body.data.openai.provider).toBe('openai');
       expect(body.data.anthropic.provider).toBe('anthropic');
       expect(body.data.perplexity.provider).toBe('perplexity');
-      expect(body.data.google.models['gemini-2.5-pro'].inputPricePerMillion).toBe(1.25);
+      expect(body.data.google.models[LlmModels.Gemini25Pro].inputPricePerMillion).toBe(1.25);
 
       await app.close();
     });

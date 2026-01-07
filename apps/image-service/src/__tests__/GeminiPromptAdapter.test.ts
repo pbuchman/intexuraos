@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
@@ -174,7 +174,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
-        model: 'gemini-2.0-flash',
+        model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         pricing: testPricing,
       });
