@@ -92,6 +92,35 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               downstreamRequestId: { type: 'string' },
             },
           },
+          ModelPricing: {
+            type: 'object',
+            required: ['inputPricePerMillion', 'outputPricePerMillion'],
+            properties: {
+              inputPricePerMillion: { type: 'number' },
+              outputPricePerMillion: { type: 'number' },
+              cacheReadMultiplier: { type: 'number' },
+              cacheWriteMultiplier: { type: 'number' },
+              webSearchCostPerCall: { type: 'number' },
+              groundingCostPerRequest: { type: 'number' },
+              imagePricing: {
+                type: 'object',
+                additionalProperties: { type: 'number' },
+              },
+              useProviderCost: { type: 'boolean' },
+            },
+          },
+          ProviderPricing: {
+            type: 'object',
+            required: ['provider', 'models', 'updatedAt'],
+            properties: {
+              provider: { type: 'string' },
+              models: {
+                type: 'object',
+                additionalProperties: { $ref: '#/components/schemas/ModelPricing' },
+              },
+              updatedAt: { type: 'string' },
+            },
+          },
         },
         securitySchemes: {
           bearerAuth: {
@@ -135,6 +164,40 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   registerCoreSchemas(app);
+
+  // Register service-specific schemas for Fastify serialization
+  app.addSchema({
+    $id: 'ModelPricing',
+    type: 'object',
+    required: ['inputPricePerMillion', 'outputPricePerMillion'],
+    properties: {
+      inputPricePerMillion: { type: 'number' },
+      outputPricePerMillion: { type: 'number' },
+      cacheReadMultiplier: { type: 'number' },
+      cacheWriteMultiplier: { type: 'number' },
+      webSearchCostPerCall: { type: 'number' },
+      groundingCostPerRequest: { type: 'number' },
+      imagePricing: {
+        type: 'object',
+        additionalProperties: { type: 'number' },
+      },
+      useProviderCost: { type: 'boolean' },
+    },
+  });
+
+  app.addSchema({
+    $id: 'ProviderPricing',
+    type: 'object',
+    required: ['provider', 'models', 'updatedAt'],
+    properties: {
+      provider: { type: 'string' },
+      models: {
+        type: 'object',
+        additionalProperties: { $ref: 'ModelPricing#' },
+      },
+      updatedAt: { type: 'string' },
+    },
+  });
 
   // Register routes
   await app.register(publicRoutes);
