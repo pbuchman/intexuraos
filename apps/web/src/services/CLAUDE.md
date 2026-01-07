@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #390 | 11:47 PM | 🔵 | Notion API Service Client Shows Frontend Integration Pattern | ~414 |
 | #372 | 11:45 PM | 🔵 | WhatsApp API Module Demonstrates Integration Service Client Pattern | ~443 |
 | #211 | 11:10 PM | 🔵 | Frontend API Client Uses Bearer Token Authentication | ~331 |
 | #192 | 11:08 PM | 🔵 | Web Frontend Auth API Structure | ~261 |
