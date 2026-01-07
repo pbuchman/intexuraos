@@ -2,7 +2,7 @@
  * Migration 011: New Pricing Structure for app-settings-service
  * Cache-bust: 2026-01-05T14:00:00Z
  *
- * Creates new pricing collection structure: settings/llm_pricing/{provider}
+ * Creates new pricing collection structure: settings/llm_pricing/providers/{provider}
  * Each provider gets its own document with models pricing.
  * This is used by app-settings-service as the new source of truth.
  *
@@ -16,12 +16,12 @@
 export const metadata = {
   id: '012',
   name: 'new-pricing-structure',
-  description: 'Create new settings/llm_pricing/{provider} structure with per-size image pricing',
+  description: 'Create new settings/llm_pricing/providers/{provider} structure with per-size image pricing',
   createdAt: '2026-01-05',
 };
 
 export async function up(context) {
-  console.log('  Creating new pricing structure in settings/llm_pricing/...');
+  console.log('  Creating new pricing structure in settings/llm_pricing/providers/...');
 
   const timestamp = new Date().toISOString();
 
@@ -142,12 +142,14 @@ export async function up(context) {
   };
 
   // Create documents
+  // Path structure: settings/llm_pricing/providers/{provider}
+  // (collection/document/collection/document - must have even number of components)
   const batch = context.firestore.batch();
 
-  batch.set(context.firestore.doc('settings/llm_pricing/google'), googlePricing);
-  batch.set(context.firestore.doc('settings/llm_pricing/openai'), openaiPricing);
-  batch.set(context.firestore.doc('settings/llm_pricing/anthropic'), anthropicPricing);
-  batch.set(context.firestore.doc('settings/llm_pricing/perplexity'), perplexityPricing);
+  batch.set(context.firestore.doc('settings/llm_pricing/providers/google'), googlePricing);
+  batch.set(context.firestore.doc('settings/llm_pricing/providers/openai'), openaiPricing);
+  batch.set(context.firestore.doc('settings/llm_pricing/providers/anthropic'), anthropicPricing);
+  batch.set(context.firestore.doc('settings/llm_pricing/providers/perplexity'), perplexityPricing);
 
   await batch.commit();
 
