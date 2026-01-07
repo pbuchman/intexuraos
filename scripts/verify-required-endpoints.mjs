@@ -90,10 +90,7 @@ for (const app of apps) {
 }
 
 if (violations.length === 0) {
-  console.log('✓ All apps have required endpoints\n');
-  for (const app of apps) {
-    console.log(`  ✓ ${app}`);
-  }
+  console.log(`✓ All ${apps.length} services have required endpoints`);
   process.exit(0);
 }
 
