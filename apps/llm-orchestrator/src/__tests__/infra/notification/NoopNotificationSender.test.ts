@@ -31,7 +31,12 @@ describe('NoopNotificationSender', () => {
   it('returns success for sendLlmFailure', async () => {
     const sender = new NoopNotificationSender();
 
-    const result = await sender.sendLlmFailure('user-123', 'research-456', LlmProviders.Google, 'API Error');
+    const result = await sender.sendLlmFailure(
+      'user-123',
+      'research-456',
+      LlmProviders.Google,
+      'API Error'
+    );
 
     expect(result.ok).toBe(true);
   });

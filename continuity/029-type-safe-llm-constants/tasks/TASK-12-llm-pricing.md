@@ -13,6 +13,7 @@ Replace hardcoded model and provider strings with constants in llm-pricing packa
 ### 1. `packages/llm-pricing/src/pricingClient.ts`
 
 **Update provider iteration:**
+
 ```typescript
 import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 
@@ -26,6 +27,7 @@ import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 ### 2. `packages/llm-pricing/src/testFixtures.ts`
 
 **Update fixture model strings:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
@@ -62,4 +64,3 @@ npm run typecheck -w @intexuraos/llm-pricing
 - [ ] No hardcoded provider strings in source files
 - [ ] Test fixtures use constants
 - [ ] Typecheck passes
-

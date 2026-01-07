@@ -5,6 +5,7 @@
 Migrate all LLM client usages from V1 to V2, delete V1 code entirely. No backward compatibility.
 
 **Success criteria:**
+
 - All `createXxxClient` → `createXxxClientV2` (then renamed back to `createXxxClient`)
 - All `client.ts` (V1) files deleted
 - `clientV2.ts` renamed to `client.ts`
@@ -37,6 +38,7 @@ Goal: cut over completely to V2, remove all V1 code.
 - Next: Archive task
 
 **Final verification passed:**
+
 - All V1 client files deleted
 - All V2 client files renamed to client.ts (with non-V2 function names)
 - All V2 test files renamed to client.test.ts (with updated imports/function names)
@@ -49,6 +51,7 @@ Goal: cut over completely to V2, remove all V1 code.
 ## Working Set
 
 ### Packages to modify (Tier 1):
+
 - packages/infra-gemini/src/client.ts (DELETE)
 - packages/infra-gemini/src/clientV2.ts → client.ts
 - packages/infra-gemini/src/types.ts (remove GeminiConfig)
@@ -67,6 +70,7 @@ Goal: cut over completely to V2, remove all V1 code.
 - packages/infra-perplexity/src/index.ts (simplify exports)
 
 ### Services to migrate (Tier 2):
+
 - apps/llm-orchestrator/src/infra/llm/GptAdapter.ts
 - apps/llm-orchestrator/src/infra/llm/ClaudeAdapter.ts
 - apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts
@@ -79,12 +83,12 @@ Goal: cut over completely to V2, remove all V1 code.
 - apps/data-insights-service/src/infra/gemini/titleGenerationService.ts
 
 ### Tests to update:
-- apps/llm-orchestrator/src/__tests__/infra/llm/GptAdapter.test.ts
-- apps/llm-orchestrator/src/__tests__/infra/llm/ClaudeAdapter.test.ts
-- apps/llm-orchestrator/src/__tests__/infra/llm/GeminiAdapter.test.ts
-- apps/llm-orchestrator/src/__tests__/infra/llm/PerplexityAdapter.test.ts
-- apps/llm-orchestrator/src/__tests__/infra/llm/ContextInferenceAdapter.test.ts
-- apps/image-service/src/__tests__/infra/OpenAIImageGenerator.test.ts
-- apps/image-service/src/__tests__/infra/GoogleImageGenerator.test.ts
-- apps/user-service/src/__tests__/infra/llmValidator.test.ts
 
+- apps/llm-orchestrator/src/**tests**/infra/llm/GptAdapter.test.ts
+- apps/llm-orchestrator/src/**tests**/infra/llm/ClaudeAdapter.test.ts
+- apps/llm-orchestrator/src/**tests**/infra/llm/GeminiAdapter.test.ts
+- apps/llm-orchestrator/src/**tests**/infra/llm/PerplexityAdapter.test.ts
+- apps/llm-orchestrator/src/**tests**/infra/llm/ContextInferenceAdapter.test.ts
+- apps/image-service/src/**tests**/infra/OpenAIImageGenerator.test.ts
+- apps/image-service/src/**tests**/infra/GoogleImageGenerator.test.ts
+- apps/user-service/src/**tests**/infra/llmValidator.test.ts

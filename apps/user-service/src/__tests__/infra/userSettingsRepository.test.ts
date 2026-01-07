@@ -6,7 +6,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import type { EncryptedValue } from '@intexuraos/common-core';
+import type { EncryptedValue } from '@intexuraos/common-core/encryption';
 import { FirestoreUserSettingsRepository } from '../../infra/firestore/index.js';
 import type { LlmTestResult, UserSettings } from '../../domain/settings/index.js';
 
@@ -234,7 +234,11 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('key'));
+      const result = await repo.updateLlmApiKey(
+        'user-123',
+        LlmProviders.Google,
+        createEncryptedValue('key')
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -246,8 +250,16 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('deleteLlmApiKey', () => {
     it('deletes existing API key', async () => {
-      await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('google-key'));
-      await repo.updateLlmApiKey('user-123', LlmProviders.OpenAI, createEncryptedValue('openai-key'));
+      await repo.updateLlmApiKey(
+        'user-123',
+        LlmProviders.Google,
+        createEncryptedValue('google-key')
+      );
+      await repo.updateLlmApiKey(
+        'user-123',
+        LlmProviders.OpenAI,
+        createEncryptedValue('openai-key')
+      );
 
       const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
 

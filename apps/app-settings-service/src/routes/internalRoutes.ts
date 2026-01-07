@@ -3,7 +3,6 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 
-
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   /**
    * GET /internal/settings/pricing

@@ -228,5 +228,3 @@ export function getProviderForModel(model: LLMModel): LlmProvider {
 export function isValidModel(model: string): model is LLMModel {
   return ALL_LLM_MODELS.includes(model as LLMModel);
 }
-
-

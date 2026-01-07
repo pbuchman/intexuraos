@@ -1,6 +1,11 @@
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { ALL_LLM_MODELS, MODEL_PROVIDER_MAP, LlmProviders, type LLMModel } from '@intexuraos/llm-contract';
+import {
+  ALL_LLM_MODELS,
+  MODEL_PROVIDER_MAP,
+  LlmProviders,
+  type LLMModel,
+} from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { getServices } from './services.js';
 
@@ -59,9 +64,7 @@ async function validateAllModelPricing(): Promise<void> {
   }
 
   if (missingModels.length > 0) {
-    const details = missingModels
-      .map((m) => `  - ${m} (${MODEL_PROVIDER_MAP[m]})`)
-      .join('\n');
+    const details = missingModels.map((m) => `  - ${m} (${MODEL_PROVIDER_MAP[m]})`).join('\n');
     throw new Error(
       `Missing pricing for ${String(missingModels.length)} LLM model(s):\n${details}\n` +
         'Run migrations to ensure all model pricing is configured.'

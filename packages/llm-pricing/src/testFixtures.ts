@@ -34,7 +34,10 @@ export class FakePricingContext implements IPricingContext {
   readonly testPricing: ModelPricing;
   readonly testImagePricing: ModelPricing;
 
-  constructor(pricing: ModelPricing = TEST_PRICING, imagePricing: ModelPricing = TEST_IMAGE_PRICING) {
+  constructor(
+    pricing: ModelPricing = TEST_PRICING,
+    imagePricing: ModelPricing = TEST_IMAGE_PRICING
+  ) {
     this.testPricing = pricing;
     this.testImagePricing = imagePricing;
   }
@@ -88,4 +91,3 @@ export function createFakePricingContext(
 ): FakePricingContext {
   return new FakePricingContext(pricing, imagePricing);
 }
-

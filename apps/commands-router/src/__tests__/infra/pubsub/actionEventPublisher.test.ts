@@ -160,7 +160,11 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'Compare AI models',
           confidence: 0.92,
-          selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
+          selectedModels: [
+            LlmModels.Gemini25Pro,
+            LlmModels.O4MiniDeepResearch,
+            LlmModels.ClaudeOpus45,
+          ],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };

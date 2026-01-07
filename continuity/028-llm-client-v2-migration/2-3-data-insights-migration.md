@@ -11,9 +11,11 @@
 ## Scope
 
 **Files to MODIFY:**
+
 - apps/data-insights-service/src/infra/gemini/titleGenerationService.ts
 
 **Tests to check/update:**
+
 - Check if tests exist for this service (may be integration-tested only)
 
 ## Current Structure
@@ -28,7 +30,7 @@ export function createTitleGenerationService(
 
       const geminiClient = createGeminiClient({
         apiKey,
-        model: TITLE_GENERATION_MODEL,  // 'gemini-2.5-flash'
+        model: TITLE_GENERATION_MODEL, // 'gemini-2.5-flash'
         userId,
       });
       // ...
@@ -44,7 +46,7 @@ import type { ModelPricing } from '@intexuraos/llm-contract';
 
 export function createTitleGenerationService(
   userServiceClient: UserServiceClient,
-  pricing: ModelPricing  // pricing for gemini-2.5-flash
+  pricing: ModelPricing // pricing for gemini-2.5-flash
 ): TitleGenerationService {
   return {
     async generateTitle(userId, content) {
@@ -73,6 +75,7 @@ export function createTitleGenerationService(
 ## Caller Location
 
 Find where `createTitleGenerationService` is called:
+
 ```bash
 grep -r "createTitleGenerationService" apps/data-insights-service/
 ```
@@ -98,4 +101,3 @@ npm run lint -w @intexuraos/data-insights-service
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 3-0-final-verification.md.
-

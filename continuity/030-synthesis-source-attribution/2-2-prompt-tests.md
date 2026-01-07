@@ -9,6 +9,7 @@ Update existing prompt tests and add new tests for Source ID Map and Attribution
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - 95% coverage required
 - Use `.toContain()` for string validation
 - Factory functions for test data
@@ -21,6 +22,7 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Update tests to verify:
+
 1. Source headings use S#/U# format
 2. Source ID Map section is present (not as `##` heading)
 3. Attribution Rules section is present
@@ -28,8 +30,8 @@ Update tests to verify:
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                                                 | Action     |
+| -------------------------------------------------------------------- | ---------- |
 | `packages/common-core/src/prompts/__tests__/synthesisPrompt.test.ts` | **MODIFY** |
 
 ## Files to Read First

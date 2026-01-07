@@ -9,6 +9,7 @@ Create a helper function that attempts to repair invalid attributions using a si
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Usecases accept `logger: Logger` as dependency
 - Return Result types for operations that can fail
 - No domain logic in infra
@@ -24,8 +25,8 @@ When synthesis output has missing or malformed Attribution lines, attempt a sing
 
 ## Files to Create
 
-| File | Action |
-|------|--------|
+| File                                                                      | Action     |
+| ------------------------------------------------------------------------- | ---------- |
 | `apps/llm-orchestrator/src/domain/research/usecases/repairAttribution.ts` | **CREATE** |
 
 ## Files to Read First
@@ -46,7 +47,7 @@ export interface RepairAttributionDeps {
     synthesize: (
       prompt: string,
       reports: Array<{ model: string; content: string }>,
-      additionalSources?: Array<{ content: string; label?: string }>,
+      additionalSources?: Array<{ content: string; label?: string }>
     ) => Promise<Result<{ content: string; usage?: unknown }, Error>>;
   };
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void };

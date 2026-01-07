@@ -60,7 +60,12 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
         status: 'completed',
         result: 'Google Result',
       },
-      { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Rate limit' },
+      {
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
+        status: 'failed',
+        error: 'Rate limit',
+      },
     ],
     partialFailure: {
       failedModels: [LlmModels.O4MiniDeepResearch],
@@ -227,8 +232,18 @@ describe('retryFailedLlms', () => {
     const research = createTestResearch({
       selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini25Flash, status: 'completed', result: 'Result' },
-        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error 1' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Flash,
+          status: 'completed',
+          result: 'Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error 1',
+        },
         {
           provider: LlmProviders.Anthropic,
           model: LlmModels.ClaudeOpus45,

@@ -39,7 +39,10 @@ export async function archiveTodo(
   if (todo.status !== 'completed' && todo.status !== 'cancelled') {
     return {
       ok: false,
-      error: { code: 'INVALID_OPERATION', message: 'Only completed or cancelled todos can be archived' },
+      error: {
+        code: 'INVALID_OPERATION',
+        message: 'Only completed or cancelled todos can be archived',
+      },
     };
   }
 

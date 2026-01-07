@@ -71,7 +71,9 @@ const STATUS_CONFIG: Record<TodoStatus, { label: string; className: string }> = 
 function PriorityBadge({ priority }: { priority: TodoPriority }): React.JSX.Element {
   const config = PRIORITY_CONFIG[priority];
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}
+    >
       {config.label}
     </span>
   );
@@ -80,7 +82,9 @@ function PriorityBadge({ priority }: { priority: TodoPriority }): React.JSX.Elem
 function StatusBadge({ status }: { status: TodoStatus }): React.JSX.Element {
   const config = STATUS_CONFIG[status];
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}
+    >
       {config.label}
     </span>
   );
@@ -192,7 +196,13 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={handleCancelEdit} disabled={saving}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleCancelEdit}
+            disabled={saving}
+          >
             Cancel
           </Button>
           <Button
@@ -225,7 +235,9 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
         <ItemStatusIcon status={item.status} />
       </button>
       <div className="min-w-0 flex-1">
-        <p className={`break-all text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+        <p
+          className={`break-all text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}
+        >
           {item.title}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -393,7 +405,10 @@ function TodoModal({
     }
   };
 
-  const handleUpdateItem = async (itemId: string, request: UpdateTodoItemRequest): Promise<void> => {
+  const handleUpdateItem = async (
+    itemId: string,
+    request: UpdateTodoItemRequest
+  ): Promise<void> => {
     const updated = await onUpdateItem(itemId, request);
     setCurrentTodo(updated);
   };
@@ -485,7 +500,9 @@ function TodoModal({
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start gap-2">
-                <h3 className="break-all text-xl font-semibold text-slate-900">{currentTodo.title}</h3>
+                <h3 className="break-all text-xl font-semibold text-slate-900">
+                  {currentTodo.title}
+                </h3>
                 {currentTodo.archived ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
                     <Archive className="h-3 w-3" />
@@ -517,7 +534,9 @@ function TodoModal({
                 </div>
               ) : null}
               {currentTodo.description !== null && currentTodo.description !== '' ? (
-                <div className="whitespace-pre-wrap break-all text-slate-700">{currentTodo.description}</div>
+                <div className="whitespace-pre-wrap break-all text-slate-700">
+                  {currentTodo.description}
+                </div>
               ) : null}
               <div className="text-xs text-slate-400">
                 <span>Created: {formatDate(currentTodo.createdAt)}</span>
@@ -784,7 +803,10 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
               placeholder="Enter todo title"
             />
             <div className="space-y-1">
-              <label htmlFor="create-description" className="block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="create-description"
+                className="block text-sm font-medium text-slate-700"
+              >
                 Description
               </label>
               <textarea
@@ -865,7 +887,8 @@ interface TodoRowProps {
 
 function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
   const completedCount = todo.items.filter((i) => i.status === 'completed').length;
-  const isPastDue = todo.dueDate !== null && new Date(todo.dueDate) < new Date() && todo.status !== 'completed';
+  const isPastDue =
+    todo.dueDate !== null && new Date(todo.dueDate) < new Date() && todo.status !== 'completed';
 
   return (
     <Card>
@@ -896,8 +919,14 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
                 </span>
               ) : null}
               {todo.dueDate !== null ? (
-                <span className={`flex items-center gap-1 text-xs ${isPastDue ? 'text-red-600' : 'text-slate-500'}`}>
-                  {isPastDue ? <AlertTriangle className="h-3 w-3" /> : <Calendar className="h-3 w-3" />}
+                <span
+                  className={`flex items-center gap-1 text-xs ${isPastDue ? 'text-red-600' : 'text-slate-500'}`}
+                >
+                  {isPastDue ? (
+                    <AlertTriangle className="h-3 w-3" />
+                  ) : (
+                    <Calendar className="h-3 w-3" />
+                  )}
                   {formatDueDate(todo.dueDate)}
                 </span>
               ) : null}

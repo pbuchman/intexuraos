@@ -4,7 +4,7 @@
  */
 
 import type { LlmProvider } from '@intexuraos/llm-contract';
-import type { EncryptedValue } from '@intexuraos/common-core';
+import type { EncryptedValue } from '@intexuraos/common-core/encryption';
 
 /**
  * LLM provider identifiers.

@@ -13,6 +13,7 @@ Replace hardcoded model strings with `LlmModels` constants in data-insights-serv
 ### 1. `apps/data-insights-service/src/index.ts`
 
 **Update REQUIRED_MODELS:**
+
 ```typescript
 import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
@@ -26,6 +27,7 @@ const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
 ### 2. `apps/data-insights-service/src/infra/gemini/feedNameGenerationService.ts`
 
 **Update model constant:**
+
 ```typescript
 import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
@@ -39,6 +41,7 @@ const NAME_GENERATION_MODEL: FastModel = LlmModels.Gemini25Flash;
 ### 3. `apps/data-insights-service/src/infra/gemini/titleGenerationService.ts`
 
 **Update model constant:**
+
 ```typescript
 import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
@@ -60,4 +63,3 @@ npm run typecheck -w @intexuraos/data-insights-service
 - [ ] No hardcoded model strings
 - [ ] All model references use `LlmModels.*`
 - [ ] Typecheck passes
-

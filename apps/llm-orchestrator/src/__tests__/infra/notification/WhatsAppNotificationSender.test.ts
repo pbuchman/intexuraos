@@ -146,7 +146,12 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendLlmFailure('user-123', 'research-456', LlmModels.O4MiniDeepResearch, 'Timeout');
+      await sender.sendLlmFailure(
+        'user-123',
+        'research-456',
+        LlmModels.O4MiniDeepResearch,
+        'Timeout'
+      );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({

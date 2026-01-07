@@ -149,11 +149,7 @@ describe('getTodo', () => {
   });
 
   it('returns NOT_FOUND for non-existent todo', async () => {
-    const result = await getTodo(
-      { todoRepository, logger: mockLogger },
-      'non-existent',
-      'user-1'
-    );
+    const result = await getTodo({ todoRepository, logger: mockLogger }, 'non-existent', 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -458,12 +454,9 @@ describe('addTodoItem', () => {
     todo.completedAt = new Date();
     await todoRepository.update(todo.id, todo);
 
-    const result = await addTodoItem(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1',
-      { title: 'New Item' }
-    );
+    const result = await addTodoItem({ todoRepository, logger: mockLogger }, todo.id, 'user-1', {
+      title: 'New Item',
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -762,11 +755,7 @@ describe('archiveTodo', () => {
     todo.status = 'completed';
     await todoRepository.update(todo.id, todo);
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -821,11 +810,7 @@ describe('unarchiveTodo', () => {
     todo.archived = true;
     await todoRepository.update(todo.id, todo);
 
-    const result = await unarchiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await unarchiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -895,11 +880,7 @@ describe('unarchiveTodo', () => {
   it('returns error on findById storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await unarchiveTodo(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1'
-    );
+    const result = await unarchiveTodo({ todoRepository, logger: mockLogger }, 'any-id', 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -923,13 +904,12 @@ describe('unarchiveTodo', () => {
     todo.archived = true;
     await todoRepository.update(todo.id, todo);
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
-    const result = await unarchiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await unarchiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -986,12 +966,9 @@ describe('addTodoItem - additional coverage', () => {
   it('returns error on findById storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await addTodoItem(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1',
-      { title: 'New Item' }
-    );
+    const result = await addTodoItem({ todoRepository, logger: mockLogger }, 'any-id', 'user-1', {
+      title: 'New Item',
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1010,7 +987,10 @@ describe('addTodoItem - additional coverage', () => {
     expect(createResult.ok).toBe(true);
     if (!createResult.ok) return;
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
     const result = await addTodoItem(
       { todoRepository, logger: mockLogger },
@@ -1061,11 +1041,7 @@ describe('archiveTodo - additional coverage', () => {
     todo.status = 'completed';
     await todoRepository.update(todo.id, todo);
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'other-user'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'other-user');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1089,11 +1065,7 @@ describe('archiveTodo - additional coverage', () => {
     todo.archived = true;
     await todoRepository.update(todo.id, todo);
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -1116,11 +1088,7 @@ describe('archiveTodo - additional coverage', () => {
     todo.status = 'cancelled';
     await todoRepository.update(todo.id, todo);
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -1131,11 +1099,7 @@ describe('archiveTodo - additional coverage', () => {
   it('returns error on findById storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, 'any-id', 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1158,13 +1122,12 @@ describe('archiveTodo - additional coverage', () => {
     todo.status = 'completed';
     await todoRepository.update(todo.id, todo);
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
-    const result = await archiveTodo(
-      { todoRepository, logger: mockLogger },
-      todo.id,
-      'user-1'
-    );
+    const result = await archiveTodo({ todoRepository, logger: mockLogger }, todo.id, 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1183,11 +1146,7 @@ describe('getTodo - additional coverage', () => {
   it('returns error on storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await getTodo(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1'
-    );
+    const result = await getTodo({ todoRepository, logger: mockLogger }, 'any-id', 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1220,12 +1179,9 @@ describe('updateTodo - additional coverage', () => {
   it('returns error on findById storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await updateTodo(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1',
-      { title: 'Updated' }
-    );
+    const result = await updateTodo({ todoRepository, logger: mockLogger }, 'any-id', 'user-1', {
+      title: 'Updated',
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1244,7 +1200,10 @@ describe('updateTodo - additional coverage', () => {
     expect(createResult.ok).toBe(true);
     if (!createResult.ok) return;
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
     const result = await updateTodo(
       { todoRepository, logger: mockLogger },
@@ -1283,11 +1242,7 @@ describe('deleteTodo - additional coverage', () => {
   it('returns error on findById storage failure', async () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
-    const result = await deleteTodo(
-      { todoRepository, logger: mockLogger },
-      'any-id',
-      'user-1'
-    );
+    const result = await deleteTodo({ todoRepository, logger: mockLogger }, 'any-id', 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1306,7 +1261,10 @@ describe('deleteTodo - additional coverage', () => {
     expect(createResult.ok).toBe(true);
     if (!createResult.ok) return;
 
-    todoRepository.simulateMethodError('delete', { code: 'STORAGE_ERROR', message: 'Delete failed' });
+    todoRepository.simulateMethodError('delete', {
+      code: 'STORAGE_ERROR',
+      message: 'Delete failed',
+    });
 
     const result = await deleteTodo(
       { todoRepository, logger: mockLogger },
@@ -1329,12 +1287,12 @@ describe('listTodos - additional coverage', () => {
   });
 
   it('returns error on storage failure', async () => {
-    todoRepository.simulateMethodError('findByUserId', { code: 'STORAGE_ERROR', message: 'DB error' });
+    todoRepository.simulateMethodError('findByUserId', {
+      code: 'STORAGE_ERROR',
+      message: 'DB error',
+    });
 
-    const result = await listTodos(
-      { todoRepository, logger: mockLogger },
-      'user-1'
-    );
+    const result = await listTodos({ todoRepository, logger: mockLogger }, 'user-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1489,7 +1447,10 @@ describe('updateTodoItem - additional coverage', () => {
     expect(itemId).toBeDefined();
     if (itemId === undefined) return;
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
     const result = await updateTodoItem(
       { todoRepository, logger: mockLogger },
@@ -1612,7 +1573,10 @@ describe('deleteTodoItem - additional coverage', () => {
     expect(itemId).toBeDefined();
     if (itemId === undefined) return;
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
     const result = await deleteTodoItem(
       { todoRepository, logger: mockLogger },
@@ -1705,7 +1669,10 @@ describe('reorderTodoItems - additional coverage', () => {
     const items = createResult.value.items;
     const itemIds = items.map((item) => item.id);
 
-    todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'Update failed' });
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
 
     const result = await reorderTodoItems(
       { todoRepository, logger: mockLogger },

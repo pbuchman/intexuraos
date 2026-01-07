@@ -90,7 +90,13 @@ describe('ContextInferenceAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLogger = createMockLogger();
-    adapter = new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, mockLogger);
+    adapter = new ContextInferenceAdapter(
+      'test-key',
+      LlmModels.Gemini20Flash,
+      'test-user',
+      testPricing,
+      mockLogger
+    );
   });
 
   describe('constructor', () => {

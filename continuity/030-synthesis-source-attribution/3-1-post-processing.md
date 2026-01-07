@@ -9,6 +9,7 @@ Integrate attribution validation, repair, and breakdown generation into the cent
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Logger passed as dependency
 - Use `getServices()` pattern in routes
 - Domain usecases have no infra imports
@@ -21,6 +22,7 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 After synthesis completes, add post-processing:
+
 1. Build source map from reports and additionalSources
 2. Validate attributions
 3. If invalid, attempt single repair
@@ -29,8 +31,8 @@ After synthesis completes, add post-processing:
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                                                 | Action     |
+| -------------------------------------------------------------------- | ---------- |
 | `apps/llm-orchestrator/src/domain/research/usecases/runSynthesis.ts` | **MODIFY** |
 
 ## Files to Read First
@@ -111,11 +113,13 @@ logger?.info(`[4.3.4] Attribution status: ${attributionStatus}`);
 ### Update Line ~260 (synthesizedResult)
 
 **Before:**
+
 ```typescript
 synthesizedResult: synthesisContent,
 ```
 
 **After:**
+
 ```typescript
 synthesizedResult: processedContent,
 ```
@@ -123,6 +127,7 @@ synthesizedResult: processedContent,
 ### Add attributionStatus to Update (line ~258-267)
 
 Add to the update object:
+
 ```typescript
 await researchRepo.update(researchId, {
   // ... existing fields ...

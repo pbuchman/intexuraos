@@ -113,7 +113,9 @@ describe('createUserServiceClient', () => {
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
 
-      await expect(client.reportLlmSuccess('user-1', LlmProviders.Anthropic)).resolves.toBeUndefined();
+      await expect(
+        client.reportLlmSuccess('user-1', LlmProviders.Anthropic)
+      ).resolves.toBeUndefined();
     });
   });
 });

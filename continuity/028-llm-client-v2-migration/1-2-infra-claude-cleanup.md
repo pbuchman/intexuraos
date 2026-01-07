@@ -11,12 +11,15 @@ Remove V1 client, rename V2 to be the only client. Simplify exports and types.
 ## Scope
 
 **Files to DELETE:**
+
 - packages/infra-claude/src/client.ts
 
 **Files to RENAME:**
+
 - packages/infra-claude/src/clientV2.ts → packages/infra-claude/src/client.ts
 
 **Files to MODIFY:**
+
 - packages/infra-claude/src/client.ts (renamed): change `createClaudeClientV2` → `createClaudeClient`, `ClaudeClientV2` → `ClaudeClient`
 - packages/infra-claude/src/types.ts: remove `ClaudeConfig`, rename `ClaudeConfigV2` → `ClaudeConfig`
 - packages/infra-claude/src/index.ts: remove V2 exports, update to new names
@@ -71,4 +74,3 @@ npx tsc --noEmit -p packages/infra-claude/tsconfig.json
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 1-3-infra-perplexity-cleanup.md.
-

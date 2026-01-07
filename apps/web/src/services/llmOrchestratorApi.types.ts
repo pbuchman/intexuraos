@@ -2,10 +2,7 @@
  * LLM Orchestrator types for research management.
  */
 
-import type {
-  LlmProvider as ContractLlmProvider,
-  ResearchModel,
-} from '@intexuraos/llm-contract';
+import type { LlmProvider as ContractLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 export type LlmProvider = ContractLlmProvider;

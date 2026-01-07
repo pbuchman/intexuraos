@@ -13,12 +13,17 @@ Replace hardcoded model and provider strings with constants in user-service.
 ### 1. `apps/user-service/src/index.ts`
 
 **Update REQUIRED_MODELS:**
+
 ```typescript
 import { LlmModels, type ValidationModel } from '@intexuraos/llm-contract';
 
 // Locate REQUIRED_MODELS and replace string literals:
 // FROM:
-const REQUIRED_MODELS: ValidationModel[] = ['gemini-2.0-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
+const REQUIRED_MODELS: ValidationModel[] = [
+  'gemini-2.0-flash',
+  'gpt-4o-mini',
+  'claude-3-5-haiku-20241022',
+];
 
 // TO:
 const REQUIRED_MODELS: ValidationModel[] = [
@@ -31,6 +36,7 @@ const REQUIRED_MODELS: ValidationModel[] = [
 ### 2. `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`
 
 **Update provider strings:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -51,4 +57,3 @@ npm run typecheck -w @intexuraos/user-service
 - [ ] No hardcoded model strings
 - [ ] No hardcoded provider strings
 - [ ] Typecheck passes
-

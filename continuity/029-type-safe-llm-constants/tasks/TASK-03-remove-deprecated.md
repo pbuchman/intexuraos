@@ -42,12 +42,12 @@ export const SYSTEM_DEFAULT_MODELS: ResearchModel[] = [
 // DELETE these lines:
 export {
   // ...
-  SYSTEM_DEFAULT_MODELS,  // DELETE
+  SYSTEM_DEFAULT_MODELS, // DELETE
 } from './supportedModels.js';
 
 export type {
   // ...
-  SupportedModel,  // DELETE
+  SupportedModel, // DELETE
 } from './supportedModels.js';
 ```
 
@@ -84,4 +84,3 @@ npm run typecheck 2>&1 | grep "SupportedModel" | wc -l
 - [ ] Both removed from index.ts exports
 - [ ] Package typecheck passes (llm-contract itself)
 - [ ] Full typecheck fails with expected SupportedModel errors
-

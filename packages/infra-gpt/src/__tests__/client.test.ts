@@ -577,4 +577,103 @@ describe('createGptClient', () => {
       }
     });
   });
+
+  describe('timeout error handling', () => {
+    it('handles timeout error in research via APIError', async () => {
+      mockResponsesCreate.mockRejectedValue(new MockAPIError(408, 'Request timeout'));
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toContain('timeout');
+      }
+    });
+
+    it('handles timeout error in generate via APIError', async () => {
+      mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toContain('timeout');
+      }
+    });
+
+    it('handles non-APIError without timeout detection', async () => {
+      mockResponsesCreate.mockRejectedValue(new Error('Network error'));
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+  });
+
+  describe('generateImage edge cases', () => {
+    it('handles empty data array', async () => {
+      mockImagesGenerate.mockResolvedValue({
+        data: [],
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('No image data');
+      }
+    });
+
+    it('handles data with neither b64_json nor url', async () => {
+      mockImagesGenerate.mockResolvedValue({
+        data: [{ revised_prompt: 'A cat' }],
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      const result = await client.generateImage('A cat');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('No image data');
+      }
+    });
+  });
 });

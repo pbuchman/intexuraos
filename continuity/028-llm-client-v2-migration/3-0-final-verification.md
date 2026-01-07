@@ -7,6 +7,7 @@
 ## Context
 
 After all migrations complete, verify:
+
 1. No V1 client code remains anywhere
 2. No references to V2 naming (should be just the standard names now)
 3. Full CI passes
@@ -15,7 +16,8 @@ After all migrations complete, verify:
 ## Scope
 
 **Verification targets:**
-- All infra-* packages
+
+- All infra-\* packages
 - All consumer services
 - Full codebase grep for dead code
 
@@ -50,11 +52,12 @@ ls packages/infra-*/src/clientV2.ts 2>/dev/null && echo "clientV2.ts files shoul
 - [ ] Run `npm run lint` — no unused imports/variables
 - [ ] Run `npm run test` — all tests pass
 - [ ] Run `npm run ci` — full CI green
-- [ ] Manual review: spot check each infra-* package exports
+- [ ] Manual review: spot check each infra-\* package exports
 
 ## Package Export Verification
 
-Each infra-* package should export:
+Each infra-\* package should export:
+
 - `createXxxClient` (not V2)
 - `XxxClient` type (not V2)
 - `XxxConfig` (not V2)
@@ -68,7 +71,7 @@ Each infra-* package should export:
 - [ ] `npm run ci` passes
 - [ ] No TypeScript errors
 - [ ] No ESLint warnings about unused code
-- [ ] All infra-* packages have clean exports
+- [ ] All infra-\* packages have clean exports
 
 ## Verification
 
@@ -88,6 +91,6 @@ find packages/infra-* -name "clientV2.ts" | wc -l  # Should be 0
 ## NO Continuation
 
 This is the final task. Upon completion:
+
 1. Update CONTINUITY.md with final state
 2. Move folder to `continuity/archive/028-llm-client-v2-migration/`
-

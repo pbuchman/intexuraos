@@ -11,12 +11,15 @@ Remove V1 client, rename V2 to be the only client. Simplify exports and types.
 ## Scope
 
 **Files to DELETE:**
+
 - packages/infra-gemini/src/client.ts
 
 **Files to RENAME:**
+
 - packages/infra-gemini/src/clientV2.ts → packages/infra-gemini/src/client.ts
 
 **Files to MODIFY:**
+
 - packages/infra-gemini/src/client.ts (renamed): change `createGeminiClientV2` → `createGeminiClient`, `GeminiClientV2` → `GeminiClient`
 - packages/infra-gemini/src/types.ts: remove `GeminiConfig`, rename `GeminiConfigV2` → `GeminiConfig`
 - packages/infra-gemini/src/index.ts: remove V2 exports, update to new names
@@ -74,4 +77,3 @@ Note: Full CI will fail until consumers are updated in Tier 2.
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 1-1-infra-gpt-cleanup.md.
-

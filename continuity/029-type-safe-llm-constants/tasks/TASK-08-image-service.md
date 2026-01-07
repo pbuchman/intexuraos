@@ -13,6 +13,7 @@ Replace hardcoded model and provider strings with constants in image-service. Up
 ### 1. `apps/image-service/src/domain/models/ImageGenerationModel.ts`
 
 **Update type definition:**
+
 ```typescript
 // FROM:
 export type ImageGenerationModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
@@ -23,18 +24,23 @@ export type ImageGenerationModel = GPTImage1 | Gemini25FlashImage;
 ```
 
 **Update IMAGE_GENERATION_MODELS:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 export const IMAGE_GENERATION_MODELS: Record<ImageGenerationModel, ImageModelConfig> = {
   [LlmModels.GPTImage1]: { provider: LlmProviders.OpenAI, modelId: LlmModels.GPTImage1 },
-  [LlmModels.Gemini25FlashImage]: { provider: LlmProviders.Google, modelId: LlmModels.Gemini25FlashImage },
+  [LlmModels.Gemini25FlashImage]: {
+    provider: LlmProviders.Google,
+    modelId: LlmModels.Gemini25FlashImage,
+  },
 };
 ```
 
 ### 2. `apps/image-service/src/domain/models/ImagePromptModel.ts`
 
 **Update type definition:**
+
 ```typescript
 // FROM:
 export type ImagePromptModel = 'gpt-4.1' | 'gemini-2.5-pro';
@@ -46,6 +52,7 @@ export type ImagePromptModel = 'gpt-4.1' | Gemini25Pro;
 ```
 
 **Update IMAGE_PROMPT_MODELS:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
@@ -58,20 +65,27 @@ export const IMAGE_PROMPT_MODELS: Record<ImagePromptModel, ImageModelConfig> = {
 ### 3. `apps/image-service/src/index.ts`
 
 **Update REQUIRED_MODELS:**
+
 ```typescript
-import { LlmModels, type ImageModel, type FastModel, type ValidationModel } from '@intexuraos/llm-contract';
+import {
+  LlmModels,
+  type ImageModel,
+  type FastModel,
+  type ValidationModel,
+} from '@intexuraos/llm-contract';
 
 const REQUIRED_MODELS: (ImageModel | FastModel | ValidationModel)[] = [
-  LlmModels.Gemini25Flash,       // Prompt generation
-  LlmModels.GPT4oMini,           // Prompt generation
-  LlmModels.GPTImage1,           // Image generation
-  LlmModels.Gemini25FlashImage,  // Image generation
+  LlmModels.Gemini25Flash, // Prompt generation
+  LlmModels.GPT4oMini, // Prompt generation
+  LlmModels.GPTImage1, // Image generation
+  LlmModels.Gemini25FlashImage, // Image generation
 ];
 ```
 
 ### 4. `apps/image-service/src/services.ts`
 
 **Update pricing lookups:**
+
 ```typescript
 import { LlmModels } from '@intexuraos/llm-contract';
 
@@ -91,6 +105,7 @@ const googleImagePricing = pricingContext.getPricing(LlmModels.Gemini25FlashImag
 ### 5. `apps/image-service/src/infra/llm/GeminiPromptAdapter.ts`
 
 **Update DEFAULT_MODEL:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
@@ -108,6 +123,7 @@ const DEFAULT_MODEL = LlmModels.Gemini25Pro;
 ### 6. `apps/image-service/src/infra/image/GoogleImageGenerator.ts`
 
 **Update model constant:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
@@ -124,6 +140,7 @@ model: LlmModels.Gemini25FlashImage,
 ### 7. `apps/image-service/src/routes/schemas/imageSchemas.ts`
 
 **Update enum values:**
+
 ```typescript
 import { LlmModels } from '@intexuraos/llm-contract';
 
@@ -137,6 +154,7 @@ enum: [LlmModels.GPTImage1, LlmModels.Gemini25FlashImage],
 ### 8. `apps/image-service/src/routes/schemas/promptSchemas.ts`
 
 **Update enum values:**
+
 ```typescript
 import { LlmModels } from '@intexuraos/llm-contract';
 
@@ -163,4 +181,3 @@ npm run typecheck -w @intexuraos/image-service
 ## Note
 
 The `gpt-4.1` model appears in image-service but is not in `ALL_LLM_MODELS`. This needs investigation - it may be a deprecated model or a typo. If it should be `gpt-4o-mini`, update accordingly.
-

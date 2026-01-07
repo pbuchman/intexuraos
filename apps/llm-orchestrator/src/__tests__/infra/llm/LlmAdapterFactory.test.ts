@@ -66,7 +66,12 @@ const { createSynthesizer, createTitleGenerator, createResearchProvider } =
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const provider = createResearchProvider(LlmModels.Gemini25Pro, 'google-key', 'test-user-id', testPricing);
+      const provider = createResearchProvider(
+        LlmModels.Gemini25Pro,
+        'google-key',
+        'test-user-id',
+        testPricing
+      );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
@@ -97,7 +102,12 @@ describe('LlmAdapterFactory', () => {
     });
 
     it('creates PerplexityAdapter for perplexity model', () => {
-      const provider = createResearchProvider(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing);
+      const provider = createResearchProvider(
+        LlmModels.SonarPro,
+        'perplexity-key',
+        'test-user-id',
+        testPricing
+      );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
@@ -106,7 +116,12 @@ describe('LlmAdapterFactory', () => {
 
   describe('createSynthesizer', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const synthesizer = createSynthesizer(LlmModels.Gemini25Pro, 'google-key', 'test-user-id', testPricing);
+      const synthesizer = createSynthesizer(
+        LlmModels.Gemini25Pro,
+        'google-key',
+        'test-user-id',
+        testPricing
+      );
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
@@ -119,22 +134,34 @@ describe('LlmAdapterFactory', () => {
     });
 
     it('creates GptAdapter for openai model', () => {
-      const synthesizer = createSynthesizer(LlmModels.O4MiniDeepResearch, 'openai-key', 'test-user-id', testPricing);
+      const synthesizer = createSynthesizer(
+        LlmModels.O4MiniDeepResearch,
+        'openai-key',
+        'test-user-id',
+        testPricing
+      );
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.O4MiniDeepResearch);
+      expect((synthesizer as unknown as { model: string }).model).toBe(
+        LlmModels.O4MiniDeepResearch
+      );
     });
 
     it('throws error for perplexity model (synthesis not supported)', () => {
-      expect(() => createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing)).toThrow(
-        'Perplexity does not support synthesis'
-      );
+      expect(() =>
+        createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing)
+      ).toThrow('Perplexity does not support synthesis');
     });
   });
 
   describe('createTitleGenerator', () => {
     it('creates GeminiAdapter for title generation', () => {
-      const generator = createTitleGenerator(LlmModels.Gemini20Flash, 'google-key', 'test-user-id', testPricing);
+      const generator = createTitleGenerator(
+        LlmModels.Gemini20Flash,
+        'google-key',
+        'test-user-id',
+        testPricing
+      );
 
       expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
       expect((generator as unknown as { model: string }).model).toBe(LlmModels.Gemini20Flash);

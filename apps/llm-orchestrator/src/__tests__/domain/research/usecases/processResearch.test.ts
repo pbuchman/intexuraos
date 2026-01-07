@@ -238,7 +238,12 @@ describe('processResearch', () => {
     const research = createTestResearch({
       selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Existing' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Existing',
+        },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet45, status: 'pending' },
       ],

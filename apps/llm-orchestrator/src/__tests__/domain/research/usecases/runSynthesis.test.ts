@@ -139,8 +139,18 @@ describe('runSynthesis', () => {
   it('returns error when no successful LLM results', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Error' },
-        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'failed',
+          error: 'Error',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -170,7 +180,12 @@ describe('runSynthesis', () => {
           status: 'completed',
           result: 'Claude Result',
         },
-        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error' },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -294,7 +309,12 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed' },
-        { provider: LlmProviders.OpenAI, model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
+        {
+          provider: LlmProviders.OpenAI,
+          model: 'gpt-4',
+          status: 'completed',
+          result: 'OpenAI Result',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -347,8 +367,18 @@ describe('runSynthesis', () => {
             status: 'completed',
             result: 'Only success',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Failed' },
-          { provider: LlmProviders.Anthropic, model: 'claude-opus', status: 'failed', error: 'Failed' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'failed',
+            error: 'Failed',
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-opus',
+            status: 'failed',
+            error: 'Failed',
+          },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -411,7 +441,12 @@ describe('runSynthesis', () => {
     it('runs synthesis when no LLMs succeed but has input contexts', async () => {
       const research = createTestResearch({
         llmResults: [
-          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Failed' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Failed',
+          },
         ],
         inputContexts: [
           { id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T10:00:00Z' },

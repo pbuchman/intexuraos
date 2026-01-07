@@ -20,7 +20,7 @@ const ALLOWED_CLIENT_FILES = [
   'packages/infra-gemini/src/client.ts',
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
-  'packages/infra-perplexity/src/client.ts'
+  'packages/infra-perplexity/src/client.ts',
 ];
 
 // All LLM model string literals that should not appear outside llm-contract
@@ -45,13 +45,7 @@ const MODEL_STRINGS = [
 const PROVIDER_STRINGS = ['google', 'openai', 'anthropic', 'perplexity'];
 
 // Directories/files excluded from hardcoded string checks
-const EXCLUDED_PATHS = [
-  'packages/llm-contract/',
-  'migrations/',
-  'node_modules/',
-  'dist/',
-  '.git/',
-];
+const EXCLUDED_PATHS = ['packages/llm-contract/', 'migrations/', 'node_modules/', 'dist/', '.git/'];
 
 interface Violation {
   file: string;
@@ -86,8 +80,11 @@ function walkDir(dir: string, callback: (file: string) => void, options: WalkOpt
     } else {
       const isTsFile = entry.endsWith('.ts') && !entry.endsWith('.d.ts');
       const isTsxFile = entry.endsWith('.tsx');
-      const isTestFile = entry.endsWith('.test.ts') || entry.endsWith('.spec.ts') ||
-                         entry.endsWith('.test.tsx') || entry.endsWith('.spec.tsx');
+      const isTestFile =
+        entry.endsWith('.test.ts') ||
+        entry.endsWith('.spec.ts') ||
+        entry.endsWith('.test.tsx') ||
+        entry.endsWith('.spec.tsx');
 
       if (isTsFile && !isTestFile) {
         callback(fullPath);
@@ -221,7 +218,7 @@ function checkRule3_NoHardcodedCosts(): void {
 }
 
 function isExcludedPath(relPath: string): boolean {
-  return EXCLUDED_PATHS.some(excluded => relPath.includes(excluded));
+  return EXCLUDED_PATHS.some((excluded) => relPath.includes(excluded));
 }
 
 function isInComment(line: string, matchIndex: number): boolean {
@@ -236,14 +233,13 @@ function isQuotedString(line: string, modelString: string): boolean {
   const doubleQuoted = `"${modelString}"`;
   const backtickQuoted = `\`${modelString}\``;
 
-  return line.includes(singleQuoted) || line.includes(doubleQuoted) || line.includes(backtickQuoted);
+  return (
+    line.includes(singleQuoted) || line.includes(doubleQuoted) || line.includes(backtickQuoted)
+  );
 }
 
 function checkRule4_NoHardcodedModelStrings(): void {
-  const dirsToScan = [
-    join(ROOT, 'apps'),
-    join(ROOT, 'packages'),
-  ];
+  const dirsToScan = [join(ROOT, 'apps'), join(ROOT, 'packages')];
 
   for (const dir of dirsToScan) {
     walkAllSourceFiles(dir, (file) => {
@@ -258,9 +254,12 @@ function checkRule4_NoHardcodedModelStrings(): void {
       lines.forEach((line, idx) => {
         // Skip if this appears to be a keyword array (natural language matching)
         // e.g., ['gemini flash', 'google'] for user input parsing
-        if (line.includes('[') && line.includes(']') &&
-            (line.includes("'") || line.includes('"')) &&
-            line.includes(',')) {
+        if (
+          line.includes('[') &&
+          line.includes(']') &&
+          (line.includes("'") || line.includes('"')) &&
+          line.includes(',')
+        ) {
           // Check if it's inside a string array (keyword list)
           const arrayPattern = /\[[\s'",\w-]+\]/;
           if (arrayPattern.test(line)) {
@@ -306,10 +305,7 @@ function checkRule4_NoHardcodedModelStrings(): void {
 }
 
 function checkRule5_NoHardcodedProviderStrings(): void {
-  const dirsToScan = [
-    join(ROOT, 'apps'),
-    join(ROOT, 'packages'),
-  ];
+  const dirsToScan = [join(ROOT, 'apps'), join(ROOT, 'packages')];
 
   for (const dir of dirsToScan) {
     walkAllSourceFiles(dir, (file) => {
@@ -338,20 +334,25 @@ function checkRule5_NoHardcodedProviderStrings(): void {
                 const lowerLine = line.toLowerCase();
 
                 // Skip OAuth/auth contexts for 'google'
-                if (providerString === 'google' &&
-                    (lowerLine.includes('oauth') ||
-                     lowerLine.includes('auth0') ||
-                     lowerLine.includes('firebase') ||
-                     lowerLine.includes('gcloud') ||
-                     lowerLine.includes('storage'))) {
+                if (
+                  providerString === 'google' &&
+                  (lowerLine.includes('oauth') ||
+                    lowerLine.includes('auth0') ||
+                    lowerLine.includes('firebase') ||
+                    lowerLine.includes('gcloud') ||
+                    lowerLine.includes('storage'))
+                ) {
                   continue;
                 }
 
                 // Skip if this appears to be a keyword array (natural language matching)
                 // e.g., ['gemini flash', 'google'] for user input parsing
-                if (line.includes('[') && line.includes(']') &&
-                    (line.includes("'") || line.includes('"')) &&
-                    line.includes(',')) {
+                if (
+                  line.includes('[') &&
+                  line.includes(']') &&
+                  (line.includes("'") || line.includes('"')) &&
+                  line.includes(',')
+                ) {
                   // Check if it's inside a string array (keyword list)
                   const arrayPattern = /\[[\s'",\w-]+\]/;
                   if (arrayPattern.test(line)) {
@@ -372,13 +373,15 @@ function checkRule5_NoHardcodedProviderStrings(): void {
                   /synthesis/i,
                 ];
 
-                const hasLlmContext = llmContextPatterns.some(p => p.test(line));
+                const hasLlmContext = llmContextPatterns.some((p) => p.test(line));
 
                 // Also flag type assertions and comparisons
-                const isTypeAssertion = line.includes(` as Llm`) || line.includes(` as '${providerString}'`);
-                const isComparison = line.includes(`=== '${providerString}'`) ||
-                                     line.includes(`!== '${providerString}'`) ||
-                                     line.includes(`== '${providerString}'`);
+                const isTypeAssertion =
+                  line.includes(` as Llm`) || line.includes(` as '${providerString}'`);
+                const isComparison =
+                  line.includes(`=== '${providerString}'`) ||
+                  line.includes(`!== '${providerString}'`) ||
+                  line.includes(`== '${providerString}'`);
 
                 if (hasLlmContext || isTypeAssertion || isComparison) {
                   violations.push({
@@ -397,7 +400,6 @@ function checkRule5_NoHardcodedProviderStrings(): void {
     });
   }
 }
-
 
 function main(): void {
   console.log('=== LLM Architecture Verification ===\n');
@@ -422,8 +424,8 @@ function main(): void {
   const blockingRules = ['RULE-1', 'RULE-2', 'RULE-3', 'RULE-4', 'RULE-5'];
   const warningRules: string[] = [];
 
-  const blockingViolations = violations.filter(v => blockingRules.includes(v.rule));
-  const warningViolations = violations.filter(v => warningRules.includes(v.rule));
+  const blockingViolations = violations.filter((v) => blockingRules.includes(v.rule));
+  const warningViolations = violations.filter((v) => warningRules.includes(v.rule));
 
   if (blockingViolations.length === 0 && warningViolations.length === 0) {
     console.log('All checks passed! No violations found.');
@@ -465,7 +467,9 @@ function main(): void {
   console.log(`\n=== Summary ===`);
   for (const [rule, ruleViolations] of Object.entries(byRule)) {
     const isBlocking = blockingRules.includes(rule);
-    console.log(`  ${rule}: ${String(ruleViolations.length)} violation(s) ${isBlocking ? '(BLOCKING)' : '(warning)'}`);
+    console.log(
+      `  ${rule}: ${String(ruleViolations.length)} violation(s) ${isBlocking ? '(BLOCKING)' : '(warning)'}`
+    );
   }
   console.log(`  Total: ${String(violations.length)} violation(s)`);
 

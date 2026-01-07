@@ -1024,7 +1024,10 @@ describe('Todo Routes', () => {
       todo.status = 'completed';
       await ctx.todoRepository.update(todo.id, todo);
 
-      ctx.todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'DB error' });
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
 
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -1052,7 +1055,10 @@ describe('Todo Routes', () => {
       todo.archived = true;
       await ctx.todoRepository.update(todo.id, todo);
 
-      ctx.todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'DB error' });
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
 
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -1103,7 +1109,10 @@ describe('Todo Routes', () => {
       if (!createResult.ok) return;
 
       const itemIds = createResult.value.items.map((item) => item.id);
-      ctx.todoRepository.simulateMethodError('update', { code: 'STORAGE_ERROR', message: 'DB error' });
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
 
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -1238,6 +1247,206 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
       expect(body.data.items[0].priority).toBe('urgent');
+    });
+  });
+
+  describe('Query parameter edge cases', () => {
+    it('filters by archived=false', async () => {
+      await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Active Todo',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos?archived=false',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].archived).toBe(false);
+    });
+
+    it('filters by comma-separated tags', async () => {
+      await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Todo with work tag',
+        tags: ['work', 'urgent'],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Todo with personal tag',
+        tags: ['personal'],
+        source: 'web',
+        sourceId: 'src-2',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/todos?tags=work,urgent',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].tags).toContain('work');
+    });
+  });
+
+  describe('Optional dueDate handling', () => {
+    it('updates todo with dueDate set to null', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        dueDate: new Date('2025-12-31'),
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/todos/${createResult.value.id}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { dueDate: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.dueDate).toBeNull();
+    });
+
+    it('updates todo without changing dueDate when not provided', async () => {
+      const dueDate = new Date('2025-12-31');
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        dueDate,
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/todos/${createResult.value.id}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { title: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.dueDate).toBe(dueDate.toISOString());
+    });
+
+    it('updates todo item with dueDate set to null', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        items: [{ title: 'Item 1', dueDate: new Date('2025-12-31') }],
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const itemId = createResult.value.items[0]?.id;
+      expect(itemId).toBeDefined();
+      if (itemId === undefined) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { dueDate: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.items[0].dueDate).toBeNull();
+    });
+
+    it('updates todo item without changing dueDate when not provided', async () => {
+      const dueDate = new Date('2025-12-31');
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+        items: [{ title: 'Item 1', dueDate }],
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const itemId = createResult.value.items[0]?.id;
+      expect(itemId).toBeDefined();
+      if (itemId === undefined) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: `/todos/${createResult.value.id}/items/${itemId}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { title: 'Updated Item' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.items[0].dueDate).toBe(dueDate.toISOString());
+    });
+  });
+
+  describe('DELETE /todos/:id/items/:itemId missing item', () => {
+    it('returns 404 for non-existent item', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: `/todos/${createResult.value.id}/items/non-existent`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 });

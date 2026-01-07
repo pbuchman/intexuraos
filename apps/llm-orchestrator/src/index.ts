@@ -1,6 +1,10 @@
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricing, createPricingContext, type PricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricing,
+  createPricingContext,
+  type PricingContext,
+} from '@intexuraos/llm-pricing';
 import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';

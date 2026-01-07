@@ -9,6 +9,7 @@ Before implementing attribution logic, define all TypeScript types in a new modu
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md` before starting:
+
 - Strict TypeScript mode (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`)
 - Use `arr[0] ?? fallback` pattern for indexed access
 - No domain logic in this task—types only
@@ -19,8 +20,8 @@ Create type definitions for the attribution system. These types will be used by 
 
 ## Files to Create
 
-| File | Action |
-|------|--------|
+| File                                              | Action     |
+| ------------------------------------------------- | ---------- |
 | `packages/common-core/src/prompts/attribution.ts` | **CREATE** |
 
 ## Files to Read First
@@ -86,7 +87,7 @@ export interface BreakdownEntry {
   constraintsCount: number;
   score: number; // primaryCount * 3 + secondaryCount * 1 (constraints excluded)
   usedFor: {
-    primary: string[];   // section titles
+    primary: string[]; // section titles
     secondary: string[];
     constraints: string[];
   };

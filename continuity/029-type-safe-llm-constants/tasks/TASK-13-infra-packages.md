@@ -6,13 +6,14 @@
 
 ## Objective
 
-Replace hardcoded provider strings with `LlmProviders` constants in infra-* packages.
+Replace hardcoded provider strings with `LlmProviders` constants in infra-\* packages.
 
 ## Files to Modify
 
 ### 1. `packages/infra-gemini/src/geminiClient.ts`
 
 **Update provider reference:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -24,6 +25,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 ### 2. `packages/infra-gpt/src/gptClient.ts`
 
 **Update provider reference:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -35,6 +37,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 ### 3. `packages/infra-claude/src/claudeClient.ts`
 
 **Update provider reference:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -46,6 +49,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 ### 4. `packages/infra-perplexity/src/perplexityClient.ts`
 
 **Update provider reference:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -65,6 +69,5 @@ npm run typecheck -w @intexuraos/infra-perplexity
 
 ## Acceptance Criteria
 
-- [ ] No hardcoded provider strings in any infra-* package
+- [ ] No hardcoded provider strings in any infra-\* package
 - [ ] All packages typecheck
-

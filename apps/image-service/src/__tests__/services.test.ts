@@ -95,7 +95,11 @@ describe('services', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createImageGenerator(LlmModels.GPTImage1, 'test-key', 'test-user-id');
+      const generator = services.createImageGenerator(
+        LlmModels.GPTImage1,
+        'test-key',
+        'test-user-id'
+      );
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();

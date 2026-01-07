@@ -9,6 +9,7 @@ Parse Markdown sections from synthesis output to identify where Attribution line
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - Strict TypeScript patterns
 - Use `arr[0] ?? fallback` for indexed access
 
@@ -22,6 +23,7 @@ Read `.claude/CLAUDE.md`:
 Implement functions to parse Markdown headings and extract sections with their Attribution lines.
 
 **Section parsing rules:**
+
 1. Prefer `##` headings as section boundaries
 2. If no `##` headings exist, fall back to `###` headings
 3. If no headings at all, treat entire document as one section titled "Synthesis"
@@ -29,8 +31,8 @@ Implement functions to parse Markdown headings and extract sections with their A
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                              | Action                     |
+| ------------------------------------------------- | -------------------------- |
 | `packages/common-core/src/prompts/attribution.ts` | **MODIFY** (add functions) |
 
 ## Files to Read First

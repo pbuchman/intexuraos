@@ -58,10 +58,7 @@ describe('FirestoreTodoRepository', () => {
 
     it('creates todo with items', async () => {
       const input = createTestInput({
-        items: [
-          { title: 'Item 1' },
-          { title: 'Item 2', priority: 'high' },
-        ],
+        items: [{ title: 'Item 1' }, { title: 'Item 2', priority: 'high' }],
       });
 
       const result = await repository.create(input);
@@ -152,6 +149,26 @@ describe('FirestoreTodoRepository', () => {
       if (result.ok && result.value) {
         expect(result.value.createdAt).toBeInstanceOf(Date);
         expect(result.value.updatedAt).toBeInstanceOf(Date);
+      }
+    });
+
+    it('returns todo with items that have dueDate', async () => {
+      const dueDate = new Date('2025-12-31');
+      const createResult = await repository.create(
+        createTestInput({
+          items: [{ title: 'Item with due date', dueDate }],
+        })
+      );
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const result = await repository.findById(createResult.value.id);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.items).toHaveLength(1);
+        expect(result.value.items[0]?.dueDate).toBeInstanceOf(Date);
+        expect(result.value.items[0]?.dueDate?.toISOString()).toBe(dueDate.toISOString());
       }
     });
   });
@@ -300,9 +317,11 @@ describe('FirestoreTodoRepository', () => {
     });
 
     it('preserves items when updating', async () => {
-      const createResult = await repository.create(createTestInput({
-        items: [{ title: 'Item 1' }],
-      }));
+      const createResult = await repository.create(
+        createTestInput({
+          items: [{ title: 'Item 1' }],
+        })
+      );
       expect(createResult.ok).toBe(true);
       if (!createResult.ok) return;
 
@@ -318,6 +337,50 @@ describe('FirestoreTodoRepository', () => {
       if (result.ok) {
         expect(result.value.items).toHaveLength(1);
         expect(result.value.items[0]?.title).toBe('Item 1');
+      }
+    });
+
+    it('updates todo with item that has completedAt', async () => {
+      const createResult = await repository.create(
+        createTestInput({
+          items: [{ title: 'Item 1' }],
+        })
+      );
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const completedAt = new Date('2025-01-15T10:00:00Z');
+      const firstItem = createResult.value.items[0];
+      expect(firstItem).toBeDefined();
+      if (firstItem === undefined) return;
+
+      const updatedTodo: Todo = {
+        ...createResult.value,
+        items: [
+          {
+            ...firstItem,
+            status: 'completed',
+            completedAt,
+          },
+        ],
+        updatedAt: new Date(),
+      };
+
+      const result = await repository.update(createResult.value.id, updatedTodo);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items[0]?.completedAt).toBeInstanceOf(Date);
+        expect(result.value.items[0]?.completedAt?.toISOString()).toBe(completedAt.toISOString());
+      }
+
+      const findResult = await repository.findById(createResult.value.id);
+      expect(findResult.ok).toBe(true);
+      if (findResult.ok && findResult.value) {
+        expect(findResult.value.items[0]?.completedAt).toBeInstanceOf(Date);
+        expect(findResult.value.items[0]?.completedAt?.toISOString()).toBe(
+          completedAt.toISOString()
+        );
       }
     });
   });

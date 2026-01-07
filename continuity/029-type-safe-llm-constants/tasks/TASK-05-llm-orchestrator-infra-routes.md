@@ -13,6 +13,7 @@ Replace `SupportedModel` with `ResearchModel` in llm-orchestrator infra and rout
 ### 1. `apps/llm-orchestrator/src/infra/pubsub/llmCallPublisher.ts`
 
 **Update import and types:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '../../domain/research/models/Research.js';
@@ -22,16 +23,19 @@ import type { ResearchModel } from '../../domain/research/models/Research.js';
 ```
 
 **Replace type usage:**
+
 - Line 9: `model: SupportedModel` → `model: ResearchModel`
 
 ### 2. `apps/llm-orchestrator/src/infra/llm/LlmAdapterFactory.ts`
 
 **Add import:**
+
 ```typescript
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 ```
 
 **Replace string checks with constants (example pattern):**
+
 ```typescript
 // FROM:
 case 'gemini-2.5-pro':
@@ -45,6 +49,7 @@ case LlmModels.Gemini25Flash:
 ### 3. `apps/llm-orchestrator/src/infra/llm/GeminiAdapter.ts`
 
 **Add import and use constant:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -57,6 +62,7 @@ provider: LlmProviders.Google,
 ### 4. `apps/llm-orchestrator/src/infra/llm/GptAdapter.ts`
 
 **Add import and use constant:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -69,6 +75,7 @@ provider: LlmProviders.OpenAI,
 ### 5. `apps/llm-orchestrator/src/infra/llm/ClaudeAdapter.ts`
 
 **Add import and use constant:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -81,6 +88,7 @@ provider: LlmProviders.Anthropic,
 ### 6. `apps/llm-orchestrator/src/infra/llm/PerplexityAdapter.ts`
 
 **Add import and use constant:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -93,6 +101,7 @@ provider: LlmProviders.Perplexity,
 ### 7. `apps/llm-orchestrator/src/routes/researchRoutes.ts`
 
 **Update import:**
+
 ```typescript
 // FROM:
 import { type SupportedModel, ... } from '@intexuraos/llm-contract';
@@ -102,12 +111,14 @@ import { type ResearchModel, LlmModels, ... } from '@intexuraos/llm-contract';
 ```
 
 **Replace type usages:**
+
 - Line 58: `selectedModels: SupportedModel[]` → `selectedModels: ResearchModel[]`
 - Line 59: `synthesisModel?: SupportedModel` → `synthesisModel?: ResearchModel`
 - Line 66-67: Same pattern
 - Line 85, 87: Same pattern
 
 **Replace hardcoded default models (line ~245):**
+
 ```typescript
 // FROM:
 const defaultModels: SupportedModel[] = [
@@ -131,6 +142,7 @@ const defaultModels: ResearchModel[] = [
 ### 8. `apps/llm-orchestrator/src/routes/internalRoutes.ts`
 
 **Update import:**
+
 ```typescript
 // FROM:
 import { type SupportedModel, ... } from '@intexuraos/llm-contract';
@@ -140,6 +152,7 @@ import { type ResearchModel, ... } from '@intexuraos/llm-contract';
 ```
 
 **Replace type usages:**
+
 - Line 28: `selectedModels: SupportedModel[]` → `selectedModels: ResearchModel[]`
 - Line 52: `model: SupportedModel` → `model: ResearchModel`
 - Line 62: `model: SupportedModel` → `model: ResearchModel`
@@ -147,6 +160,7 @@ import { type ResearchModel, ... } from '@intexuraos/llm-contract';
 ### 9. `apps/llm-orchestrator/src/index.ts`
 
 **Update REQUIRED_MODELS:**
+
 ```typescript
 import { LlmModels, type ResearchModel, type FastModel } from '@intexuraos/llm-contract';
 
@@ -178,4 +192,3 @@ npm run typecheck -w @intexuraos/llm-orchestrator
 - [ ] No hardcoded model strings (use `LlmModels.*`)
 - [ ] No hardcoded provider strings (use `LlmProviders.*`)
 - [ ] Typecheck passes
-

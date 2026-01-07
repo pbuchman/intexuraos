@@ -14,7 +14,13 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import { LlmModels, LlmProviders, type LLMClient, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
+import {
+  LlmModels,
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type GenerateResult,
+} from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type {
   PerplexityConfig,

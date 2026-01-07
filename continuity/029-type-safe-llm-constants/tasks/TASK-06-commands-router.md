@@ -13,6 +13,7 @@ Replace `SupportedModel` with `ResearchModel` and replace hardcoded model string
 ### 1. `apps/commands-router/src/domain/events/actionCreatedEvent.ts`
 
 **Update import and type:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '@intexuraos/llm-contract';
@@ -31,6 +32,7 @@ selectedModels?: ResearchModel[];
 ### 2. `apps/commands-router/src/domain/ports/classifier.ts`
 
 **Update import and type:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '@intexuraos/llm-contract';
@@ -49,6 +51,7 @@ selectedModels?: ResearchModel[];
 ### 3. `apps/commands-router/src/infra/gemini/classifier.ts`
 
 **Update imports:**
+
 ```typescript
 // FROM:
 import type { ModelPricing, SupportedModel } from '@intexuraos/llm-contract';
@@ -58,6 +61,7 @@ import { LlmModels, type ModelPricing, type ResearchModel } from '@intexuraos/ll
 ```
 
 **Replace MODEL_KEYWORDS (lines 50-60):**
+
 ```typescript
 // FROM:
 const MODEL_KEYWORDS: Record<SupportedModel, string[]> = {
@@ -87,6 +91,7 @@ const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
 ```
 
 **Replace DEFAULT_MODELS (lines 62-68):**
+
 ```typescript
 // FROM:
 const DEFAULT_MODELS: SupportedModel[] = [
@@ -106,6 +111,7 @@ const DEFAULT_MODELS: ResearchModel[] = [
 ```
 
 **Replace CLASSIFIER_MODEL (line ~104):**
+
 ```typescript
 // FROM:
 const CLASSIFIER_MODEL = 'gemini-2.5-flash';
@@ -115,6 +121,7 @@ const CLASSIFIER_MODEL = LlmModels.Gemini25Flash;
 ```
 
 **Update extractSelectedModels return type (line 82):**
+
 ```typescript
 // FROM:
 export function extractSelectedModels(text: string): SupportedModel[] | undefined {
@@ -124,6 +131,7 @@ export function extractSelectedModels(text: string): ResearchModel[] | undefined
 ```
 
 **Update casts (lines 91-92):**
+
 ```typescript
 // FROM:
 for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [SupportedModel, string[]][]) {
@@ -145,4 +153,3 @@ npm run typecheck -w @intexuraos/commands-router
 - [ ] `DEFAULT_MODELS` uses `LlmModels` constants
 - [ ] `CLASSIFIER_MODEL` uses `LlmModels.Gemini25Flash`
 - [ ] Typecheck passes
-

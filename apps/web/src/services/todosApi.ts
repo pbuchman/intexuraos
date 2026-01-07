@@ -43,10 +43,7 @@ export async function listTodos(
   return await apiRequest<Todo[]>(config.todosAgentUrl, `/todos${query}`, accessToken);
 }
 
-export async function createTodo(
-  accessToken: string,
-  request: CreateTodoRequest
-): Promise<Todo> {
+export async function createTodo(accessToken: string, request: CreateTodoRequest): Promise<Todo> {
   return await apiRequest<Todo>(config.todosAgentUrl, '/todos', accessToken, {
     method: 'POST',
     body: request,

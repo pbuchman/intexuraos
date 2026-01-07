@@ -421,4 +421,3 @@ export function generateBreakdown(
 
   return output;
 }
-

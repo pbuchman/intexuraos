@@ -15,10 +15,12 @@ Since this is a validation service using cheap models, pricing can be hardcoded 
 ## Scope
 
 **Files to MODIFY:**
+
 - apps/user-service/src/infra/llm/LlmValidatorImpl.ts
 
 **Tests to MODIFY:**
-- apps/user-service/src/__tests__/infra/llmValidator.test.ts
+
+- apps/user-service/src/**tests**/infra/llmValidator.test.ts
 
 ## Current Structure
 
@@ -94,12 +96,14 @@ export class LlmValidatorImpl implements LlmValidator {
 ## Client Instantiation Locations (8 total)
 
 ### validateKey method (4):
+
 1. Line ~37: `createGeminiClient` for Google
 2. Line ~55: `createGptClient` for OpenAI
 3. Line ~74: `createClaudeClient` for Anthropic
 4. Line ~92: `createPerplexityClient` for Perplexity
 
 ### testRequest method (4):
+
 1. Line ~120: `createGeminiClient` for Google
 2. Line ~135: `createGptClient` for OpenAI
 3. Line ~150: `createClaudeClient` for Anthropic
@@ -108,6 +112,7 @@ export class LlmValidatorImpl implements LlmValidator {
 ## Test Updates
 
 The test file has extensive mocking. Key changes:
+
 - Mock config expectations must include `pricing`
 - `LlmValidatorImpl` instantiation needs pricing object
 - Use `TEST_*_PRICING` fixtures for specific validation models:
@@ -135,4 +140,3 @@ npm run lint -w @intexuraos/user-service
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to 2-3-data-insights-migration.md.
-

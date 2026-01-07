@@ -4,7 +4,12 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { getProviderForModel, type ModelPricing, type ResearchModel, type FastModel } from '@intexuraos/llm-contract';
+import {
+  getProviderForModel,
+  type ModelPricing,
+  type ResearchModel,
+  type FastModel,
+} from '@intexuraos/llm-contract';
 import type {
   LlmResearchProvider,
   LlmSynthesisProvider,

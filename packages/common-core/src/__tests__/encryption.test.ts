@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createEncryptor, isErr, isOk } from '../index.js';
+import { isErr, isOk } from '../index.js';
+import { createEncryptor } from '../encryption.js';
 import { randomBytes } from 'crypto';
 
 describe('encryption', () => {

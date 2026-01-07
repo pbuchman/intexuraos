@@ -3,13 +3,8 @@
  * Stores per-user settings including LLM API keys and research settings.
  */
 
-import {
-  type EncryptedValue,
-  err,
-  getErrorMessage,
-  ok,
-  type Result,
-} from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import type { EncryptedValue } from '@intexuraos/common-core/encryption';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import type {
   LlmProvider,

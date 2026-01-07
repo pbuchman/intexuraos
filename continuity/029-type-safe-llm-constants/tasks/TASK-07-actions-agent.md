@@ -13,6 +13,7 @@ Replace `SupportedModel` with `ResearchModel` and replace hardcoded model string
 ### 1. `apps/actions-agent/src/domain/models/actionEvent.ts`
 
 **Update import and type:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '@intexuraos/llm-contract';
@@ -31,6 +32,7 @@ selectedModels?: ResearchModel[];
 ### 2. `apps/actions-agent/src/domain/ports/researchServiceClient.ts`
 
 **Update import and type:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '@intexuraos/llm-contract';
@@ -49,6 +51,7 @@ selectedModels: ResearchModel[];
 ### 3. `apps/actions-agent/src/domain/usecases/executeResearchAction.ts`
 
 **Add import and replace hardcoded model:**
+
 ```typescript
 // Add import:
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
@@ -63,6 +66,7 @@ const selectedModels: ResearchModel[] = [LlmModels.ClaudeOpus45];
 ### 4. `apps/actions-agent/src/infra/research/llmOrchestratorClient.ts`
 
 **Update import and type:**
+
 ```typescript
 // FROM:
 import type { SupportedModel } from '@intexuraos/llm-contract';
@@ -89,4 +93,3 @@ npm run typecheck -w @intexuraos/actions-agent
 - [ ] No `SupportedModel` references
 - [ ] Default model uses `LlmModels.ClaudeOpus45` instead of string
 - [ ] Typecheck passes
-

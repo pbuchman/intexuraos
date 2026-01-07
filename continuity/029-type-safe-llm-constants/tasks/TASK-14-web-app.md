@@ -20,14 +20,17 @@ grep -rn "'google'\|'openai'\|'anthropic'\|'perplexity'" apps/web/src/ --include
 ## Typical Files to Check
 
 ### 1. Model selection components
+
 - Components that let users select research models
 - Any dropdown/select with model options
 
 ### 2. Research configuration
+
 - Default model configurations
 - Model display names mapping
 
 ### 3. Type definitions
+
 - Local type definitions that duplicate LLMModel
 
 ## Pattern to Apply
@@ -56,4 +59,3 @@ npx tsx scripts/verify-llm-architecture.ts 2>&1 | grep "apps/web"
 - [ ] No hardcoded provider strings in web app
 - [ ] Typecheck passes
 - [ ] Verification script shows no web app violations
-

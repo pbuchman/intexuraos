@@ -152,4 +152,3 @@ npm run typecheck -w @intexuraos/llm-contract
 - [ ] `ALL_LLM_MODELS` uses constants (no string literals)
 - [ ] All individual types exported from index.ts
 - [ ] Typecheck passes
-

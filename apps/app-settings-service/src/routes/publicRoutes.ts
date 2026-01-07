@@ -74,20 +74,44 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Check if any provider is missing - need individual null checks for TypeScript narrowing
       if (google === null) {
-        request.log.error({ missingProviders: [LlmProviders.Google] }, 'Missing pricing for providers');
-        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Google}`);
+        request.log.error(
+          { missingProviders: [LlmProviders.Google] },
+          'Missing pricing for providers'
+        );
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Missing pricing for providers: ${LlmProviders.Google}`
+        );
       }
       if (openai === null) {
-        request.log.error({ missingProviders: [LlmProviders.OpenAI] }, 'Missing pricing for providers');
-        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.OpenAI}`);
+        request.log.error(
+          { missingProviders: [LlmProviders.OpenAI] },
+          'Missing pricing for providers'
+        );
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Missing pricing for providers: ${LlmProviders.OpenAI}`
+        );
       }
       if (anthropic === null) {
-        request.log.error({ missingProviders: [LlmProviders.Anthropic] }, 'Missing pricing for providers');
-        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Anthropic}`);
+        request.log.error(
+          { missingProviders: [LlmProviders.Anthropic] },
+          'Missing pricing for providers'
+        );
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Missing pricing for providers: ${LlmProviders.Anthropic}`
+        );
       }
       if (perplexity === null) {
-        request.log.error({ missingProviders: [LlmProviders.Perplexity] }, 'Missing pricing for providers');
-        return await reply.fail('INTERNAL_ERROR', `Missing pricing for providers: ${LlmProviders.Perplexity}`);
+        request.log.error(
+          { missingProviders: [LlmProviders.Perplexity] },
+          'Missing pricing for providers'
+        );
+        return await reply.fail(
+          'INTERNAL_ERROR',
+          `Missing pricing for providers: ${LlmProviders.Perplexity}`
+        );
       }
 
       // At this point all providers are non-null (TypeScript can narrow from the early returns above)
@@ -97,10 +121,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         Object.keys(anthropic.models).length +
         Object.keys(perplexity.models).length;
 
-      request.log.info(
-        { userId: user.userId, totalModels },
-        'Returning pricing for all providers'
-      );
+      request.log.info({ userId: user.userId, totalModels }, 'Returning pricing for all providers');
 
       return await reply.ok({
         google,

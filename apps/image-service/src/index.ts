@@ -24,10 +24,10 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 /** Models used by image-service */
 const REQUIRED_MODELS: (ImageModel | FastModel | ValidationModel)[] = [
-  LlmModels.Gemini25Flash,       // Prompt generation
-  LlmModels.GPT4oMini,           // Prompt generation
-  LlmModels.GPTImage1,           // Image generation
-  LlmModels.Gemini25FlashImage,  // Image generation
+  LlmModels.Gemini25Flash, // Prompt generation
+  LlmModels.GPT4oMini, // Prompt generation
+  LlmModels.GPTImage1, // Image generation
+  LlmModels.Gemini25FlashImage, // Image generation
 ];
 
 async function main(): Promise<void> {

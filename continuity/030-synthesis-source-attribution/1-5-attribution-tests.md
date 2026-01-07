@@ -9,6 +9,7 @@ Write comprehensive unit tests for the attribution module to achieve 95% coverag
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - 95% coverage required (NEVER modify thresholds)
 - Use Vitest with explicit imports (`describe`, `it`, `expect`)
 - Factory functions for test data
@@ -24,8 +25,8 @@ Create test file with comprehensive coverage of all attribution module functions
 
 ## Files to Create
 
-| File | Action |
-|------|--------|
+| File                                                             | Action     |
+| ---------------------------------------------------------------- | ---------- |
 | `packages/common-core/src/prompts/__tests__/attribution.test.ts` | **CREATE** |
 
 ## Files to Read First

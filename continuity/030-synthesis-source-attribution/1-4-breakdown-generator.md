@@ -9,6 +9,7 @@ Generate the "Source Utilization Breakdown" markdown appendix from parsed sectio
 ## Codebase Rules
 
 Read `.claude/CLAUDE.md`:
+
 - No obvious comments
 - Keep functions focused (SRP)
 
@@ -22,6 +23,7 @@ Read `.claude/CLAUDE.md`:
 ## Problem Statement
 
 Generate a deterministic markdown appendix showing:
+
 1. Scorecard table (per-source counts and scores)
 2. Per-source usage (which sections used each source)
 3. Ignored sources (sources with zero usage)
@@ -30,8 +32,8 @@ Generate a deterministic markdown appendix showing:
 
 ## Files to Modify
 
-| File | Action |
-|------|--------|
+| File                                              | Action                    |
+| ------------------------------------------------- | ------------------------- |
 | `packages/common-core/src/prompts/attribution.ts` | **MODIFY** (add function) |
 
 ## Files to Read First
@@ -60,11 +62,11 @@ export function generateBreakdown(
 
 ### Scorecard
 
-| ID | Name | Primary | Secondary | Constraints | Score |
-|----|------|---------|-----------|-------------|-------|
-| S1 | GPT-4 | 4 | 1 | 0 | 13 |
-| S2 | Claude | 2 | 3 | 1 | 9 |
-| U1 | Wikipedia | 0 | 2 | 1 | 2 |
+| ID  | Name      | Primary | Secondary | Constraints | Score |
+| --- | --------- | ------- | --------- | ----------- | ----- |
+| S1  | GPT-4     | 4       | 1         | 0           | 13    |
+| S2  | Claude    | 2       | 3         | 1           | 9     |
+| U1  | Wikipedia | 0       | 2         | 1           | 2     |
 
 ### Per-Source Usage
 

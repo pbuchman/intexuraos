@@ -13,6 +13,7 @@ Replace hardcoded provider strings with `LlmProviders` constants in app-settings
 ### 1. `apps/app-settings-service/src/index.ts`
 
 **Update provider iteration:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -26,6 +27,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 ### 2. `apps/app-settings-service/src/routes/internalRoutes.ts`
 
 **Update provider iteration:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -50,6 +52,7 @@ const [google, openai, anthropic, perplexity] = await Promise.all([
 ### 3. `apps/app-settings-service/src/infra/firestore/firestorePricingRepository.ts`
 
 **Update any hardcoded provider strings if present:**
+
 ```typescript
 import { LlmProviders } from '@intexuraos/llm-contract';
 
@@ -67,4 +70,3 @@ npm run typecheck -w @intexuraos/app-settings-service
 - [ ] No hardcoded provider strings
 - [ ] All provider references use `LlmProviders.*`
 - [ ] Typecheck passes
-
