@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   BellRing,
+  Bookmark,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -387,6 +388,22 @@ export function Sidebar(): React.JSX.Element {
           >
             <CheckSquare className="h-5 w-5 shrink-0" />
             {!isCollapsed ? <span>My Todos</span> : null}
+          </NavLink>
+
+          {/* My Bookmarks */}
+          <NavLink
+            to="/my-bookmarks"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <Bookmark className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>My Bookmarks</span> : null}
           </NavLink>
 
           {/* WhatsApp */}

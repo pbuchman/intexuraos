@@ -24,6 +24,7 @@ export function getConfig(): AppConfig {
     dataInsightsServiceUrl: getEnvVar('INTEXURAOS_DATA_INSIGHTS_SERVICE_URL'),
     notesAgentUrl: getEnvVar('INTEXURAOS_NOTES_AGENT_URL'),
     todosAgentUrl: getEnvVar('INTEXURAOS_TODOS_AGENT_URL'),
+    bookmarksAgentUrl: getEnvVar('INTEXURAOS_BOOKMARKS_AGENT_URL'),
     appSettingsServiceUrl: getEnvVar('INTEXURAOS_APP_SETTINGS_SERVICE_URL'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),

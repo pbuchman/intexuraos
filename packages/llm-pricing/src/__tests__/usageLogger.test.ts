@@ -231,6 +231,18 @@ describe('usageLogger', () => {
       expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
     });
 
+    it('includes errorMessage in log when provided', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error' });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"errorMessage":"API timeout error"')
+      );
+      consoleSpy.mockRestore();
+    });
+
     it('commits the batch', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 

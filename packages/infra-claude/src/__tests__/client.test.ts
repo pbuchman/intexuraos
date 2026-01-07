@@ -190,6 +190,33 @@ describe('createClaudeClient', () => {
       }
     });
 
+    it('handles web_search_tool_result with non-array content', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [
+          {
+            type: 'web_search_tool_result',
+            content: 'string content instead of array',
+          },
+          { type: 'text', text: 'Result text' },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+
+      const pricing = createTestPricing();
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing,
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual([]);
+      }
+    });
+
     it('returns error on API failure', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
 
