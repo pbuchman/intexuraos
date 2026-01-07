@@ -1,3 +1,4 @@
+import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createRetryPendingCommandsUseCase } from '../../domain/usecases/retryPendingCommands.js';
 import type { Command } from '../../domain/models/command.js';
@@ -167,7 +168,7 @@ describe('retryPendingCommands usecase', () => {
       confidence: 0.95,
       title: 'AI Trends Research',
       reasoning: 'Research task',
-      selectedModels: ['gemini-2.5-flash', 'o4-mini-deep-research'],
+      selectedModels: [LlmModels.Gemini25Flash, LlmModels.O4MiniDeepResearch],
     });
 
     const usecase = createRetryPendingCommandsUseCase({
@@ -184,8 +185,8 @@ describe('retryPendingCommands usecase', () => {
     const events = eventPublisher.getPublishedEvents();
     expect(events).toHaveLength(1);
     expect(events[0]?.payload.selectedModels).toEqual([
-      'gemini-2.5-flash',
-      'o4-mini-deep-research',
+      LlmModels.Gemini25Flash,
+      LlmModels.O4MiniDeepResearch,
     ]);
   });
 

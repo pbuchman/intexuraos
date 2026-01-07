@@ -2,6 +2,7 @@
  * Tests for LlmValidatorImpl.
  * Uses vi.mock to mock the infra packages.
  */
+import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import { LlmValidatorImpl, type ValidationPricing } from '../../infra/llm/LlmValidatorImpl.js';
@@ -59,7 +60,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createGeminiClient).toHaveBeenCalledWith({
           apiKey: 'test-api-key',
-          model: 'gemini-2.0-flash',
+          model: LlmModels.Gemini20Flash,
           userId: testUserId,
           pricing: testPricing.google,
         });
@@ -111,7 +112,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createGptClient).toHaveBeenCalledWith({
           apiKey: 'sk-test-key',
-          model: 'gpt-4o-mini',
+          model: LlmModels.GPT4oMini,
           userId: testUserId,
           pricing: testPricing.openai,
         });
@@ -160,7 +161,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createClaudeClient).toHaveBeenCalledWith({
           apiKey: 'sk-ant-key',
-          model: 'claude-3-5-haiku-20241022',
+          model: LlmModels.ClaudeHaiku35,
           userId: testUserId,
           pricing: testPricing.anthropic,
         });
@@ -211,7 +212,7 @@ describe('LlmValidatorImpl', () => {
         expect(result.ok).toBe(true);
         expect(createPerplexityClient).toHaveBeenCalledWith({
           apiKey: 'pplx-test-key',
-          model: 'sonar',
+          model: LlmModels.Sonar,
           userId: testUserId,
           pricing: testPricing.perplexity,
         });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createGeneratedImageRepository } from '../../../infra/firestore/index.js';
 import type { GeneratedImageRepository } from '../../../domain/ports/generatedImageRepository.js';
 import type { GeneratedImage } from '../../../domain/index.js';
@@ -11,7 +12,7 @@ function createTestImage(overrides: Partial<GeneratedImage> = {}): GeneratedImag
     prompt: 'A beautiful sunset over mountains',
     thumbnailUrl: 'https://storage.googleapis.com/bucket/images/img-123/thumbnail.jpg',
     fullSizeUrl: 'https://storage.googleapis.com/bucket/images/img-123/full.png',
-    model: 'gpt-image-1',
+    model: LlmModels.GPTImage1,
     createdAt: new Date().toISOString(),
     ...overrides,
   };
@@ -41,7 +42,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       if (result.ok) {
         expect(result.value.id).toBe(image.id);
         expect(result.value.prompt).toBe(image.prompt);
-        expect(result.value.model).toBe('gpt-image-1');
+        expect(result.value.model).toBe(LlmModels.GPTImage1);
       }
     });
 
@@ -49,7 +50,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       const image = createTestImage({
         id: 'img-456',
         prompt: 'A futuristic city at night',
-        model: 'gemini-2.5-flash-image',
+        model: LlmModels.Gemini25FlashImage,
       });
 
       const result = await repository.save(image);
@@ -58,7 +59,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       if (result.ok) {
         expect(result.value.id).toBe('img-456');
         expect(result.value.prompt).toBe('A futuristic city at night');
-        expect(result.value.model).toBe('gemini-2.5-flash-image');
+        expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
       }
     });
 

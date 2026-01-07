@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createLlmOrchestratorClient } from '../../../infra/research/llmOrchestratorClient.js';
 
 describe('createLlmOrchestratorClient', () => {
@@ -30,7 +31,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-456',
         title: 'AI Research',
         prompt: 'Research about artificial intelligence',
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(true);
@@ -45,7 +46,7 @@ describe('createLlmOrchestratorClient', () => {
           userId: 'user-789',
           title: 'Test Research',
           prompt: 'Research prompt',
-          selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
           sourceActionId: 'action-111',
         })
         .reply(200, { success: true, data: { id: 'draft-456' } });
@@ -55,7 +56,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-789',
         title: 'Test Research',
         prompt: 'Research prompt',
-        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
         sourceActionId: 'action-111',
       });
 
@@ -70,7 +71,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: ['o4-mini-deep-research'],
+        selectedModels: [LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(false);
@@ -92,7 +93,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: ['o4-mini-deep-research'],
+        selectedModels: [LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(false);
@@ -111,7 +112,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: ['o4-mini-deep-research'],
+        selectedModels: [LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(false);
@@ -130,7 +131,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: ['o4-mini-deep-research'],
+        selectedModels: [LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(false);
@@ -147,7 +148,7 @@ describe('createLlmOrchestratorClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: ['o4-mini-deep-research'],
+        selectedModels: [LlmModels.O4MiniDeepResearch],
       });
 
       expect(result.ok).toBe(false);

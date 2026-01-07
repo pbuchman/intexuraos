@@ -144,7 +144,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title: body.title,
         prompt: body.prompt,
         selectedModels: body.selectedModels,
-        synthesisModel: body.selectedModels[0] ?? 'gemini-2.5-pro',
+        synthesisModel: body.selectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.sourceActionId !== undefined) {
         createParams.sourceActionId = body.sourceActionId;
@@ -318,16 +318,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         if (apiKeys.google !== undefined) {
           deps.titleGenerator = services.createTitleGenerator(
-            'gemini-2.5-flash',
+            LlmModels.Gemini25Flash,
             apiKeys.google,
             research.userId,
-            services.pricingContext.getPricing('gemini-2.5-flash')
+            services.pricingContext.getPricing(LlmModels.Gemini25Flash)
           );
           deps.contextInferrer = services.createContextInferrer(
-            'gemini-2.5-flash',
+            LlmModels.Gemini25Flash,
             apiKeys.google,
             research.userId,
-            services.pricingContext.getPricing('gemini-2.5-flash'),
+            services.pricingContext.getPricing(LlmModels.Gemini25Flash),
             request.log
           );
         }
@@ -848,10 +848,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             const contextInferrer =
               apiKeysResult.value.google !== undefined
                 ? services.createContextInferrer(
-                    'gemini-2.5-flash',
+                    LlmModels.Gemini25Flash,
                     apiKeysResult.value.google,
                     event.userId,
-                    services.pricingContext.getPricing('gemini-2.5-flash'),
+                    services.pricingContext.getPricing(LlmModels.Gemini25Flash),
                     request.log
                   )
                 : undefined;

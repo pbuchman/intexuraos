@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
 import type {
   GeneratedImageRepository,
   PromptGenerator,
@@ -30,7 +30,7 @@ export interface ServiceContainer {
   userServiceClient: UserServiceClient;
   pricingContext: IPricingContext;
   createPromptGenerator: (
-    provider: 'google' | 'openai',
+    provider: Google | OpenAI,
     apiKey: string,
     userId: string,
     logger?: LoggerLike
@@ -84,12 +84,12 @@ export function initializeServices(pricingContext: IPricingContext): void {
     userServiceClient,
     pricingContext,
     createPromptGenerator: (
-      provider: 'google' | 'openai',
+      provider: Google | OpenAI,
       apiKey: string,
       userId: string,
       _logger?: LoggerLike
     ): PromptGenerator => {
-      if (provider === 'google') {
+      if (provider === LlmProviders.Google) {
         return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing });
       }
       return createGptPromptAdapter({ apiKey, userId, pricing: gptPricing });

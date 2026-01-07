@@ -46,7 +46,7 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test research prompt',
-        selectedModels: [LlmModels.Gemini25Pro, 'claude-opus-4-5-20251101'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {
@@ -61,7 +61,7 @@ describe('submitResearch', () => {
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Test research prompt');
       expect(result.value.status).toBe('pending');
-      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, 'claude-opus-4-5-20251101']);
+      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45]);
       expect(result.value.llmResults).toHaveLength(2);
     }
   });
@@ -71,7 +71,7 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Pro, 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {
@@ -85,8 +85,8 @@ describe('submitResearch', () => {
       expect(result.value.llmResults).toHaveLength(3);
       expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.Google);
       expect(result.value.llmResults[0]?.status).toBe('pending');
-      expect(result.value.llmResults[1]?.provider).toBe('openai');
-      expect(result.value.llmResults[2]?.provider).toBe('anthropic');
+      expect(result.value.llmResults[1]?.provider).toBe(LlmProviders.OpenAI);
+      expect(result.value.llmResults[2]?.provider).toBe(LlmProviders.Anthropic);
     }
   });
 
@@ -138,7 +138,7 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['claude-opus-4-5-20251101'],
+        selectedModels: [LlmModels.ClaudeOpus45],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {
@@ -149,7 +149,7 @@ describe('submitResearch', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.llmResults[0]?.model).toBe('claude-opus-4-5-20251101');
+      expect(result.value.llmResults[0]?.model).toBe(LlmModels.ClaudeOpus45);
     }
   });
 });

@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type {
   GeneratedImage,
   ImageStorage,
@@ -218,7 +219,7 @@ export class FakeImageGenerator implements ImageGenerator {
       prompt,
       thumbnailUrl: `https://storage.googleapis.com/test-bucket/images/${this.generatedId}/thumbnail.jpg`,
       fullSizeUrl: `https://storage.googleapis.com/test-bucket/images/${this.generatedId}/full.png`,
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       createdAt: new Date().toISOString(),
     });
   }

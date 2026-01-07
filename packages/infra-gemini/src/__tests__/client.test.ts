@@ -24,7 +24,7 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 const { createGeminiClient } = await import('../client.js');
 const { logUsage } = await import('@intexuraos/llm-pricing');
 
-const TEST_MODEL = 'gemini-2.5-flash';
+const TEST_MODEL = LlmModels.Gemini25Flash;
 
 const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
   inputPricePerMillion: 0.15,
@@ -199,7 +199,7 @@ describe('createGeminiClient', () => {
       expect(logUsage).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
-          provider: 'google',
+          provider: LlmProviders.Google,
           model: TEST_MODEL,
           callType: 'research',
           success: true,
@@ -394,7 +394,7 @@ describe('createGeminiClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.model).toBe('gemini-2.5-flash-image');
+        expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
         expect(result.value.usage.costUsd).toBe(0.02);
       }

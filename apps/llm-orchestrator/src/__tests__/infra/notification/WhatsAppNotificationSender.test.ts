@@ -2,6 +2,7 @@
  * Tests for WhatsAppNotificationSender.
  */
 
+import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '@intexuraos/common-core';
 
@@ -129,14 +130,14 @@ describe('WhatsAppNotificationSender', () => {
       const result = await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'API Error'
       );
 
       expect(result.ok).toBe(true);
       expect(mockPublishSendMessage).toHaveBeenCalledWith({
         userId: 'user-123',
-        message: expect.stringContaining('gemini-2.5-pro'),
+        message: expect.stringContaining(LlmModels.Gemini25Pro),
         correlationId: 'research-failure-research-456',
       });
     });
@@ -145,11 +146,11 @@ describe('WhatsAppNotificationSender', () => {
       mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
       const sender = new WhatsAppNotificationSender(mockConfig);
-      await sender.sendLlmFailure('user-123', 'research-456', 'o4-mini-deep-research', 'Timeout');
+      await sender.sendLlmFailure('user-123', 'research-456', LlmModels.O4MiniDeepResearch, 'Timeout');
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('o4-mini-deep-research'),
+          message: expect.stringContaining(LlmModels.O4MiniDeepResearch),
         })
       );
     });
@@ -161,13 +162,13 @@ describe('WhatsAppNotificationSender', () => {
       await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        'claude-opus-4-5-20251101',
+        LlmModels.ClaudeOpus45,
         'Key invalid'
       );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('claude-opus-4-5-20251101'),
+          message: expect.stringContaining(LlmModels.ClaudeOpus45),
         })
       );
     });
@@ -179,7 +180,7 @@ describe('WhatsAppNotificationSender', () => {
       await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        'gemini-2.5-flash',
+        LlmModels.Gemini25Flash,
         'Rate limit exceeded'
       );
 
