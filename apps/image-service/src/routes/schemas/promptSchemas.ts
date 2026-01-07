@@ -1,3 +1,6 @@
+import { LlmModels } from '@intexuraos/llm-contract';
+import type { Gemini25Pro } from '@intexuraos/llm-contract';
+
 export const generatePromptBodySchema = {
   type: 'object',
   required: ['text', 'model', 'userId'],
@@ -10,7 +13,7 @@ export const generatePromptBodySchema = {
     },
     model: {
       type: 'string',
-      enum: ['gpt-4.1', 'gemini-2.5-pro'],
+      enum: ['gpt-4.1', LlmModels.Gemini25Pro],
       description: 'LLM model to use for prompt generation',
     },
     userId: {
@@ -71,6 +74,6 @@ export const generatePromptResponseSchema = {
 
 export interface GeneratePromptBody {
   text: string;
-  model: 'gpt-4.1' | 'gemini-2.5-pro';
+  model: 'gpt-4.1' | Gemini25Pro;
   userId: string;
 }

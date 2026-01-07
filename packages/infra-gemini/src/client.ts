@@ -14,13 +14,15 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type {
-  LLMClient,
-  NormalizedUsage,
-  ImageGenerateOptions,
-  ImageGenerationResult,
-  GenerateResult,
-  ImageSize,
+import {
+  LlmModels,
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type ImageGenerateOptions,
+  type ImageGenerationResult,
+  type GenerateResult,
+  type ImageSize,
 } from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
@@ -28,7 +30,7 @@ import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 
 export type GeminiClient = LLMClient;
 
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
+const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 function createRequestContext(
@@ -39,7 +41,7 @@ function createRequestContext(
   const requestId = randomUUID();
   const startTime = new Date();
   const auditContext = createAuditContext({
-    provider: 'google',
+    provider: LlmProviders.Google,
     model,
     method,
     prompt,
@@ -60,7 +62,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
   ): void {
     void logUsage({
       userId,
-      provider: 'google',
+      provider: LlmProviders.Google,
       model,
       callType,
       usage,

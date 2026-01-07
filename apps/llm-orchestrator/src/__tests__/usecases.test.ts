@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Research } from '../domain/research/index.js';
 import {
   deleteResearch,
@@ -18,12 +19,12 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     userId: 'user-123',
     title: '',
     prompt: 'Test prompt',
-    selectedModels: ['gemini-2.5-pro'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro],
+    synthesisModel: LlmModels.Gemini25Pro,
     status: 'pending',
     llmResults: [
       {
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini-2.0-flash-exp',
         status: 'pending',
       },
@@ -45,8 +46,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test research prompt',
-        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro, 'claude-opus-4-5-20251101'],
+        synthesisModel: LlmModels.Gemini25Pro,
       },
       {
         researchRepo: fakeRepo,
@@ -60,7 +61,7 @@ describe('submitResearch', () => {
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Test research prompt');
       expect(result.value.status).toBe('pending');
-      expect(result.value.selectedModels).toEqual(['gemini-2.5-pro', 'claude-opus-4-5-20251101']);
+      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, 'claude-opus-4-5-20251101']);
       expect(result.value.llmResults).toHaveLength(2);
     }
   });
@@ -70,8 +71,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro, 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+        synthesisModel: LlmModels.Gemini25Pro,
       },
       {
         researchRepo: fakeRepo,
@@ -82,7 +83,7 @@ describe('submitResearch', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.llmResults).toHaveLength(3);
-      expect(result.value.llmResults[0]?.provider).toBe('google');
+      expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.Google);
       expect(result.value.llmResults[0]?.status).toBe('pending');
       expect(result.value.llmResults[1]?.provider).toBe('openai');
       expect(result.value.llmResults[2]?.provider).toBe('anthropic');
@@ -96,8 +97,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
       },
       {
         researchRepo: fakeRepo,
@@ -116,8 +117,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         skipSynthesis: true,
       },
       {
@@ -138,7 +139,7 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test prompt',
         selectedModels: ['claude-opus-4-5-20251101'],
-        synthesisModel: 'gemini-2.5-pro',
+        synthesisModel: LlmModels.Gemini25Pro,
       },
       {
         researchRepo: fakeRepo,

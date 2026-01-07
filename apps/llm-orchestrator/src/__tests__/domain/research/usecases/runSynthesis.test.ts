@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err, type SynthesisContext } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   runSynthesis,
   type RunSynthesisDeps,
@@ -73,18 +74,18 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         status: 'completed',
         result: 'Google Result',
       },
       {
-        provider: 'openai',
-        model: 'o4-mini-deep-research',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
         status: 'completed',
         result: 'OpenAI Result',
       },
@@ -314,7 +315,7 @@ describe('runSynthesis', () => {
   describe('skip synthesis logic', () => {
     it('skips synthesis when only 1 successful LLM and no input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
             provider: 'google',
@@ -360,7 +361,7 @@ describe('runSynthesis', () => {
 
     it('runs synthesis when 1 LLM succeeds with input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
             provider: 'google',
@@ -427,7 +428,7 @@ describe('runSynthesis', () => {
 
     it('sends notification with app URL when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
             provider: 'google',
@@ -451,7 +452,7 @@ describe('runSynthesis', () => {
 
     it('does not report LLM success when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
             provider: 'google',
@@ -756,7 +757,7 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
         'Synthesized result',
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'user-1'
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(

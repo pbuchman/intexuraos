@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { LlmModels } from '@intexuraos/llm-contract';
 import {
   unshareResearch,
   type UnshareResearchDeps,
@@ -53,8 +54,8 @@ function createTestResearchBase(): Omit<Research, 'shareInfo'> {
     title: 'Test Research',
     prompt: 'Test prompt',
     status: 'completed',
-    selectedModels: ['gemini-2.5-pro'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [],
     startedAt: '2024-01-01T10:00:00Z',
   };

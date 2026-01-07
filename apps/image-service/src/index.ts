@@ -2,6 +2,7 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import type { ImageModel, FastModel, ValidationModel } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 
@@ -23,10 +24,10 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 /** Models used by image-service */
 const REQUIRED_MODELS: (ImageModel | FastModel | ValidationModel)[] = [
-  'gemini-2.5-flash',       // Prompt generation
-  'gpt-4o-mini',            // Prompt generation
-  'gpt-image-1',            // Image generation
-  'gemini-2.5-flash-image', // Image generation
+  LlmModels.Gemini25Flash,       // Prompt generation
+  LlmModels.GPT4oMini,           // Prompt generation
+  LlmModels.GPTImage1,           // Image generation
+  LlmModels.Gemini25FlashImage,  // Image generation
 ];
 
 async function main(): Promise<void> {

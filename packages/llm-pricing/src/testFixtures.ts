@@ -3,7 +3,7 @@
  * Provides mock pricing and PricingContext for tests.
  */
 
-import type { ModelPricing, LLMModel } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing, type LLMModel } from '@intexuraos/llm-contract';
 import type { IPricingContext } from './pricingClient.js';
 
 /**
@@ -41,7 +41,7 @@ export class FakePricingContext implements IPricingContext {
 
   getPricing(model: LLMModel): ModelPricing {
     // Return image pricing for image models
-    if (model === 'gpt-image-1' || model === 'gemini-2.5-flash-image') {
+    if (model === LlmModels.GPTImage1 || model === LlmModels.Gemini25FlashImage) {
       return this.testImagePricing;
     }
     return this.testPricing;
@@ -61,20 +61,20 @@ export class FakePricingContext implements IPricingContext {
 
   getModelsWithPricing(): LLMModel[] {
     return [
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-2.5-flash-image',
-      'o4-mini-deep-research',
-      'gpt-5.2',
-      'gpt-4o-mini',
-      'gpt-image-1',
-      'claude-opus-4-5-20251101',
-      'claude-sonnet-4-5-20250929',
-      'claude-3-5-haiku-20241022',
-      'sonar',
-      'sonar-pro',
-      'sonar-deep-research',
+      LlmModels.Gemini25Pro,
+      LlmModels.Gemini25Flash,
+      LlmModels.Gemini20Flash,
+      LlmModels.Gemini25FlashImage,
+      LlmModels.O4MiniDeepResearch,
+      LlmModels.GPT52,
+      LlmModels.GPT4oMini,
+      LlmModels.GPTImage1,
+      LlmModels.ClaudeOpus45,
+      LlmModels.ClaudeSonnet45,
+      LlmModels.ClaudeHaiku35,
+      LlmModels.Sonar,
+      LlmModels.SonarPro,
+      LlmModels.SonarDeepResearch,
     ];
   }
 }

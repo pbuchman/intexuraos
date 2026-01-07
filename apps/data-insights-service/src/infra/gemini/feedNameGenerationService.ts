@@ -7,7 +7,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import type { FastModel } from '@intexuraos/llm-contract';
+import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {
   FeedNameGenerationService,
@@ -15,7 +15,7 @@ import type {
 } from '../../domain/compositeFeed/index.js';
 import { MAX_FEED_NAME_LENGTH } from '../../domain/compositeFeed/index.js';
 
-const NAME_GENERATION_MODEL: FastModel = 'gemini-2.5-flash';
+const NAME_GENERATION_MODEL: FastModel = LlmModels.Gemini25Flash;
 
 const NAME_PROMPT_TEMPLATE = `Generate a concise, descriptive name for a data feed based on the following information.
 

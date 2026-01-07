@@ -1,3 +1,5 @@
+import { LlmModels } from '@intexuraos/llm-contract';
+
 export const generateImageBodySchema = {
   type: 'object',
   required: ['prompt', 'model', 'userId'],
@@ -10,7 +12,7 @@ export const generateImageBodySchema = {
     },
     model: {
       type: 'string',
-      enum: ['gpt-image-1', 'gemini-2.5-flash-image'],
+      enum: [LlmModels.GPTImage1, LlmModels.Gemini25FlashImage],
       description: 'Image generation model to use',
     },
     userId: {
@@ -57,9 +59,11 @@ export const generateImageResponseSchema = {
   },
 } as const;
 
+import type { GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
+
 export interface GenerateImageBody {
   prompt: string;
-  model: 'gpt-image-1' | 'gemini-2.5-flash-image';
+  model: GPTImage1 | Gemini25FlashImage;
   userId: string;
   title?: string;
 }

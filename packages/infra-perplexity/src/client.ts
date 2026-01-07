@@ -14,7 +14,7 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type { LLMClient, NormalizedUsage, GenerateResult } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, type LLMClient, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type {
   PerplexityConfig,
@@ -32,9 +32,9 @@ export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
 const API_BASE_URL = 'https://api.perplexity.ai';
 
 const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
-  sonar: 'low',
-  'sonar-pro': 'medium',
-  'sonar-deep-research': 'high',
+  [LlmModels.Sonar]: 'low',
+  [LlmModels.SonarPro]: 'medium',
+  [LlmModels.SonarDeepResearch]: 'high',
 };
 
 function createRequestContext(
@@ -45,7 +45,7 @@ function createRequestContext(
   const requestId = randomUUID();
   const startTime = new Date();
   const auditContext = createAuditContext({
-    provider: 'perplexity',
+    provider: LlmProviders.Perplexity,
     model,
     method,
     prompt,
@@ -75,7 +75,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
   ): void {
     void logUsage({
       userId,
-      provider: 'perplexity',
+      provider: LlmProviders.Perplexity,
       model,
       callType,
       usage,

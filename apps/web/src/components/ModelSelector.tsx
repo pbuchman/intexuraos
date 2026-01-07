@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmProvider, SupportedModel } from '@/services/llmOrchestratorApi.types';
 
 interface ModelOption {
@@ -14,36 +15,36 @@ interface ProviderConfig {
 
 const PROVIDER_MODELS: ProviderConfig[] = [
   {
-    id: 'google',
+    id: LlmProviders.Google,
     displayName: 'Google',
     models: [
-      { id: 'gemini-2.5-flash', name: 'Gemini Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini Pro' },
+      { id: LlmModels.Gemini25Flash, name: 'Gemini Flash' },
+      { id: LlmModels.Gemini25Pro, name: 'Gemini Pro' },
     ],
   },
   {
-    id: 'anthropic',
+    id: LlmProviders.Anthropic,
     displayName: 'Anthropic',
     models: [
-      { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet' },
-      { id: 'claude-opus-4-5-20251101', name: 'Claude Opus' },
+      { id: LlmModels.ClaudeSonnet45, name: 'Claude Sonnet' },
+      { id: LlmModels.ClaudeOpus45, name: 'Claude Opus' },
     ],
   },
   {
-    id: 'openai',
+    id: LlmProviders.OpenAI,
     displayName: 'OpenAI',
     models: [
-      { id: 'gpt-5.2', name: 'GPT-5.2' },
-      { id: 'o4-mini-deep-research', name: 'O4 Mini' },
+      { id: LlmModels.GPT52, name: 'GPT-5.2' },
+      { id: LlmModels.O4MiniDeepResearch, name: 'O4 Mini' },
     ],
   },
   {
-    id: 'perplexity',
+    id: LlmProviders.Perplexity,
     displayName: 'Perplexity',
     models: [
-      { id: 'sonar', name: 'Sonar' },
-      { id: 'sonar-pro', name: 'Sonar Pro' },
-      { id: 'sonar-deep-research', name: 'Deep Research' },
+      { id: LlmModels.Sonar, name: 'Sonar' },
+      { id: LlmModels.SonarPro, name: 'Sonar Pro' },
+      { id: LlmModels.SonarDeepResearch, name: 'Deep Research' },
     ],
   },
 ];

@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 
 
@@ -67,10 +68,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Fetch all providers in parallel
       const [google, openai, anthropic, perplexity] = await Promise.all([
-        pricingRepository.getByProvider('google'),
-        pricingRepository.getByProvider('openai'),
-        pricingRepository.getByProvider('anthropic'),
-        pricingRepository.getByProvider('perplexity'),
+        pricingRepository.getByProvider(LlmProviders.Google),
+        pricingRepository.getByProvider(LlmProviders.OpenAI),
+        pricingRepository.getByProvider(LlmProviders.Anthropic),
+        pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
       // Check if any provider is missing

@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   enhanceResearch,
   type EnhanceResearchDeps,
@@ -42,18 +43,18 @@ function createCompletedResearch(overrides: Partial<Research> = {}): Research {
     title: 'Original Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         status: 'completed',
         result: 'Google result',
       },
       {
-        provider: 'openai',
-        model: 'o4-mini-deep-research',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
         status: 'completed',
         result: 'OpenAI result',
       },
@@ -298,8 +299,8 @@ describe('enhanceResearch', () => {
     const source = createCompletedResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google result',
           inputTokens: 1000,
@@ -307,8 +308,8 @@ describe('enhanceResearch', () => {
           costUsd: 0.05,
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'OpenAI result',
           inputTokens: 2000,

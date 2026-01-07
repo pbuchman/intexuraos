@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { TEST_PRICING } from '@intexuraos/llm-pricing';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 const testPricing = TEST_PRICING;
 
@@ -65,10 +66,10 @@ const { createSynthesizer, createTitleGenerator, createResearchProvider } =
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const provider = createResearchProvider('gemini-2.5-pro', 'google-key', 'test-user-id', testPricing);
+      const provider = createResearchProvider(LlmModels.Gemini25Pro, 'google-key', 'test-user-id', testPricing);
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((provider as unknown as { model: string }).model).toBe('gemini-2.5-pro');
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
     });
 
     it('creates ClaudeAdapter for claude model', () => {
@@ -96,19 +97,19 @@ describe('LlmAdapterFactory', () => {
     });
 
     it('creates PerplexityAdapter for perplexity model', () => {
-      const provider = createResearchProvider('sonar-pro', 'perplexity-key', 'test-user-id', testPricing);
+      const provider = createResearchProvider(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing);
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
-      expect((provider as unknown as { model: string }).model).toBe('sonar-pro');
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
     });
   });
 
   describe('createSynthesizer', () => {
     it('creates GeminiAdapter for gemini model', () => {
-      const synthesizer = createSynthesizer('gemini-2.5-pro', 'google-key', 'test-user-id', testPricing);
+      const synthesizer = createSynthesizer(LlmModels.Gemini25Pro, 'google-key', 'test-user-id', testPricing);
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe('gemini-2.5-pro');
+      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
     });
 
     it('throws error for claude model (synthesis not supported)', () => {
@@ -125,7 +126,7 @@ describe('LlmAdapterFactory', () => {
     });
 
     it('throws error for perplexity model (synthesis not supported)', () => {
-      expect(() => createSynthesizer('sonar-pro', 'perplexity-key', 'test-user-id', testPricing)).toThrow(
+      expect(() => createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing)).toThrow(
         'Perplexity does not support synthesis'
       );
     });
@@ -133,10 +134,10 @@ describe('LlmAdapterFactory', () => {
 
   describe('createTitleGenerator', () => {
     it('creates GeminiAdapter for title generation', () => {
-      const generator = createTitleGenerator('gemini-2.0-flash', 'google-key', 'test-user-id', testPricing);
+      const generator = createTitleGenerator(LlmModels.Gemini20Flash, 'google-key', 'test-user-id', testPricing);
 
       expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((generator as unknown as { model: string }).model).toBe('gemini-2.0-flash');
+      expect((generator as unknown as { model: string }).model).toBe(LlmModels.Gemini20Flash);
     });
   });
 });

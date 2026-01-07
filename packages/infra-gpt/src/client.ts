@@ -14,13 +14,15 @@ import {
   type Result,
 } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type {
-  LLMClient,
-  NormalizedUsage,
-  ImageGenerateOptions,
-  ImageGenerationResult,
-  GenerateResult,
-  ImageSize,
+import {
+  LlmModels,
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type ImageGenerateOptions,
+  type ImageGenerationResult,
+  type GenerateResult,
+  type ImageSize,
 } from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
@@ -29,7 +31,7 @@ import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 export type GptClient = LLMClient;
 
 const MAX_TOKENS = 8192;
-const IMAGE_MODEL = 'gpt-image-1';
+const IMAGE_MODEL = LlmModels.GPTImage1;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 function createRequestContext(
@@ -40,7 +42,7 @@ function createRequestContext(
   const requestId = randomUUID();
   const startTime = new Date();
   const auditContext = createAuditContext({
-    provider: 'openai',
+    provider: LlmProviders.OpenAI,
     model,
     method,
     prompt,
@@ -61,7 +63,7 @@ export function createGptClient(config: GptConfig): GptClient {
   ): void {
     void logUsage({
       userId,
-      provider: 'openai',
+      provider: LlmProviders.OpenAI,
       model,
       callType,
       usage,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { GeminiError } from '@intexuraos/infra-gemini';
 import type { GenerateResult } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { TEST_PRICING } from '@intexuraos/llm-pricing';
 import { extractSelectedModels } from '../../infra/gemini/classifier.js';
 
@@ -307,7 +308,7 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier({ apiKey: 'test-key', userId: 'test-user', pricing: testPricing });
       const classificationResult = await classifier.classify('Research this using only gemini');
 
-      expect(classificationResult.selectedModels).toEqual(['gemini-2.5-flash']);
+      expect(classificationResult.selectedModels).toEqual([LlmModels.Gemini25Flash]);
     });
 
     it('returns undefined selectedModels when no model specified', async () => {
@@ -327,7 +328,7 @@ describe('extractSelectedModels', () => {
   describe('all models patterns', () => {
     it('returns default models for "use all LLMs"', () => {
       expect(extractSelectedModels('use all LLMs for this research')).toEqual([
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'claude-opus-4-5-20251101',
         'gpt-5.2',
         'sonar-pro',
@@ -336,7 +337,7 @@ describe('extractSelectedModels', () => {
 
     it('returns default models for "use all models"', () => {
       expect(extractSelectedModels('use all models')).toEqual([
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'claude-opus-4-5-20251101',
         'gpt-5.2',
         'sonar-pro',
@@ -345,7 +346,7 @@ describe('extractSelectedModels', () => {
 
     it('returns default models for Polish "użyj wszystkich"', () => {
       expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'claude-opus-4-5-20251101',
         'gpt-5.2',
         'sonar-pro',
@@ -354,7 +355,7 @@ describe('extractSelectedModels', () => {
 
     it('returns default models for Polish "wszystkie modele"', () => {
       expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
-        'gemini-2.5-pro',
+        LlmModels.Gemini25Pro,
         'claude-opus-4-5-20251101',
         'gpt-5.2',
         'sonar-pro',
@@ -364,7 +365,7 @@ describe('extractSelectedModels', () => {
 
   describe('specific model keywords', () => {
     it('extracts gemini-2.5-flash for "gemini"', () => {
-      expect(extractSelectedModels('use gemini for this')).toEqual(['gemini-2.5-flash']);
+      expect(extractSelectedModels('use gemini for this')).toEqual([LlmModels.Gemini25Flash]);
     });
 
     it('extracts gpt-5.2 for "gpt"', () => {
@@ -377,21 +378,21 @@ describe('extractSelectedModels', () => {
 
     it('extracts claude-sonnet model for "claude"', () => {
       expect(extractSelectedModels('use claude for research')).toEqual([
-        'claude-sonnet-4-5-20250929',
+        LlmModels.ClaudeSonnet4520250929,
       ]);
     });
 
     it('extracts multiple models', () => {
       const result = extractSelectedModels('use gpt and claude for this');
       expect(result).toContain('gpt-5.2');
-      expect(result).toContain('claude-sonnet-4-5-20250929');
+      expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
     });
 
     it('extracts multiple models when mentioned', () => {
       const result = extractSelectedModels('compare gemini, gpt and claude');
-      expect(result).toContain('gemini-2.5-flash');
+      expect(result).toContain(LlmModels.Gemini25Flash);
       expect(result).toContain('gpt-5.2');
-      expect(result).toContain('claude-sonnet-4-5-20250929');
+      expect(result).toContain(LlmModels.ClaudeSonnet4520250929);
     });
   });
 
