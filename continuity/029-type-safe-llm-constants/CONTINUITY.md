@@ -41,14 +41,23 @@ Eliminate all hardcoded LLM model strings (e.g., `'gemini-2.5-pro'`) and provide
 - TASK-05: llm-orchestrator infra/routes migrated ✅
 - TASK-06: commands-router migrated ✅
 - TASK-07: actions-agent migrated ✅
+- TASK-08: image-service migrated (all source files) ✅
+- TASK-09: data-insights-service migrated ✅
+- TASK-10: user-service migrated ✅
+- TASK-11: app-settings-service migrated ✅
+- TASK-12: llm-pricing package migrated ✅
+- TASK-13: infra-* packages migrated (gemini, gpt, claude, perplexity) ✅
+- TASK-14: web app migrated (types, components, pages) ✅
+- TASK-15: Test files ~60% complete (~350/600 violations fixed) ⏳
 
 ### Now:
-- Fixing remaining test failures and coverage issues
+- Remaining ~250 test file violations need migration
+- CI verification to identify exact remaining work
 
 ### Next:
-- TASK-08 through TASK-14: Remaining app migrations (may be complete)
-- TASK-15: Test file updates
+- Complete remaining test file migrations (TASK-15)
 - TASK-16: Enable CI verification
+- Final verification: npm run ci passes with 0 violations
 
 ## Open Questions
 None - all design decisions confirmed by user.
@@ -68,4 +77,15 @@ None - all design decisions confirmed by user.
 - Typecheck: PASSED
 - Lint: PASSED
 - Coverage: Branch coverage 92.95% (below 95% threshold)
+
+### 2026-01-07 - GitHub PR Work (Claude via GitHub Actions)
+- Completed TASK-08 through TASK-14 (all source code migrations)
+- Completed ~60% of TASK-15 (test file migrations)
+  - llm-orchestrator: 11 test files (~200 violations)
+  - commands-router: 2 test files (~60 violations)
+  - image-service: 2 test files (~40 violations)
+  - llm-pricing: 1 test file (~20 violations)
+- Committed changes to development branch (commit ae85e76)
+- Remaining: ~250 test file violations in actions-agent, app-settings-service, and scattered test files
+- Status: All production code migrated, test suite partially migrated
 
