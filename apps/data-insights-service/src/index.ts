@@ -1,6 +1,7 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
@@ -21,7 +22,7 @@ const REQUIRED_ENV = [
 validateRequiredEnv(REQUIRED_ENV);
 
 /** Models used by this service */
-const REQUIRED_MODELS = ['gemini-2.5-flash'] as const;
+const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
 
 async function main(): Promise<void> {
   const config = loadConfig();

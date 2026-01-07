@@ -1,7 +1,7 @@
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import type { ValidationModel } from '@intexuraos/llm-contract';
+import { LlmModels, type ValidationModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 
@@ -25,10 +25,10 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 /** Validation models used by user-service */
 const REQUIRED_MODELS: ValidationModel[] = [
-  'gemini-2.0-flash',
-  'gpt-4o-mini',
-  'claude-3-5-haiku-20241022',
-  'sonar',
+  LlmModels.Gemini20Flash,
+  LlmModels.GPT4oMini,
+  LlmModels.ClaudeHaiku35,
+  LlmModels.Sonar,
 ];
 
 async function main(): Promise<void> {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 import {
@@ -159,7 +160,7 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload) as { error: { message: string } };
-      expect(body.error.message).toContain('openai');
+      expect(body.error.message).toContain(LlmProviders.OpenAI);
     });
 
     it('returns 429 when LLM is rate limited', async () => {
@@ -227,7 +228,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           text: 'This is a test article about machine learning.',
-          model: 'gemini-2.5-pro',
+          model: LlmModels.Gemini25Pro,
           userId: TEST_USER_ID,
         },
       });

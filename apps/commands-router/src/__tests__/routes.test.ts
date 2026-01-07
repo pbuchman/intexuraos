@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -1030,7 +1031,7 @@ describe('Commands Router Routes', () => {
         confidence: 0.95,
         title: 'Research topic',
         reasoning: 'Research query with model selection',
-        selectedModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'],
+        selectedModels: ['gemini-2.5-flash', LlmModels.ClaudeSonnet4520250929],
       });
 
       const event = {
@@ -1056,7 +1057,7 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.payload.selectedModels).toEqual([
         'gemini-2.5-flash',
-        'claude-sonnet-4-5-20250929',
+        LlmModels.ClaudeSonnet4520250929,
       ]);
     });
   });
@@ -1326,7 +1327,7 @@ describe('Commands Router Routes', () => {
         confidence: 0.95,
         title: 'AI Trends Research',
         reasoning: 'Research query about AI trends',
-        selectedModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'],
+        selectedModels: ['gemini-2.5-flash', LlmModels.ClaudeSonnet4520250929],
       });
 
       await app.inject({
@@ -1342,7 +1343,7 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
       expect(publishedEvents[0]?.payload.selectedModels).toEqual([
         'gemini-2.5-flash',
-        'claude-sonnet-4-5-20250929',
+        LlmModels.ClaudeSonnet4520250929,
       ]);
     });
   });

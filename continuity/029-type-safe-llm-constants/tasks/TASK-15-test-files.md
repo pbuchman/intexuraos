@@ -1,6 +1,43 @@
 # TASK-15: Migrate All Test Files
 
-## Status: PENDING
+## Status: IN_PROGRESS
+
+## Progress Summary
+
+**Migrated Files:** Approximately 50+ critical test files across multiple services
+**Estimated Violations Resolved:** ~350+ out of ~600 total
+
+### Completed Migrations:
+
+#### llm-orchestrator (COMPLETED - ~200 violations)
+- ✅ All domain/research/usecases test files (checkLlmCompletion, processResearch, retryFailedLlms, retryFromFailed, runSynthesis, enhanceResearch, unshareResearch)
+- ✅ routes.test.ts
+- ✅ usecases.test.ts
+- ✅ infra/llm/LlmAdapterFactory.test.ts
+
+#### commands-router (MOSTLY COMPLETED - ~60 violations)
+- ✅ infra/classifier.test.ts
+- ✅ routes.test.ts
+
+#### image-service (PARTIALLY COMPLETED - ~40/90 violations)
+- ✅ models.test.ts
+- ✅ internalRoutes.test.ts
+- ⏳ Remaining infra generator tests
+
+#### llm-pricing (COMPLETED - ~20 violations)
+- ✅ pricingClient.test.ts
+
+### Remaining Work:
+- actions-agent test files (~15 violations)
+- app-settings-service test files (~15 violations)
+- Remaining image-service infra tests (~50 violations)
+- Various other scattered test files
+
+### Migration Approach Used:
+1. Add import: `import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';`
+2. Use Edit tool's `replace_all` feature for efficient batch replacement
+3. Replace model strings: `'gemini-2.5-pro'` → `LlmModels.Gemini25Pro`
+4. Replace provider strings: `'google'` → `LlmProviders.Google`
 
 ## Depends On: TASK-04 through TASK-14
 

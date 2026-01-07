@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { ImageGenerationModel } from '../../domain/index.js';
 import type {
@@ -48,7 +49,7 @@ export class GoogleImageGenerator implements ImageGenerator {
 
     const client = createGeminiClient({
       apiKey: this.apiKey,
-      model: 'gemini-2.5-flash-image',
+      model: LlmModels.Gemini25FlashImage,
       userId: this.userId,
       pricing: this.pricing,
       imagePricing: this.imagePricing,

@@ -7,7 +7,7 @@ import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -18,10 +18,10 @@ import type {
 const VALIDATION_PROMPT = 'Say "API key validated" in exactly 3 words.';
 
 const VALIDATION_MODELS = {
-  google: 'gemini-2.0-flash',
-  openai: 'gpt-4o-mini',
-  anthropic: 'claude-3-5-haiku-20241022',
-  perplexity: 'sonar',
+  [LlmProviders.Google]: LlmModels.Gemini20Flash,
+  [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
+  [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
+  [LlmProviders.Perplexity]: LlmModels.Sonar,
 } as const;
 
 /**
@@ -51,10 +51,10 @@ export class LlmValidatorImpl implements LlmValidator {
     userId: string
   ): Promise<Result<void, LlmValidationError>> {
     switch (provider) {
-      case 'google': {
+      case LlmProviders.Google: {
         const client = createGeminiClient({
           apiKey,
-          model: VALIDATION_MODELS.google,
+          model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
           pricing: this.pricing.google,
         });
@@ -70,10 +70,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
-      case 'openai': {
+      case LlmProviders.OpenAI: {
         const client = createGptClient({
           apiKey,
-          model: VALIDATION_MODELS.openai,
+          model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
           pricing: this.pricing.openai,
         });
@@ -89,10 +89,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
-      case 'anthropic': {
+      case LlmProviders.Anthropic: {
         const client = createClaudeClient({
           apiKey,
-          model: VALIDATION_MODELS.anthropic,
+          model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
           pricing: this.pricing.anthropic,
         });
@@ -108,10 +108,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
-      case 'perplexity': {
+      case LlmProviders.Perplexity: {
         const client = createPerplexityClient({
           apiKey,
-          model: VALIDATION_MODELS.perplexity,
+          model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
         });
@@ -137,10 +137,10 @@ export class LlmValidatorImpl implements LlmValidator {
     userId: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {
     switch (provider) {
-      case 'google': {
+      case LlmProviders.Google: {
         const client = createGeminiClient({
           apiKey,
-          model: VALIDATION_MODELS.google,
+          model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
           pricing: this.pricing.google,
         });
@@ -153,10 +153,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok({ content: result.value.content });
       }
-      case 'openai': {
+      case LlmProviders.OpenAI: {
         const client = createGptClient({
           apiKey,
-          model: VALIDATION_MODELS.openai,
+          model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
           pricing: this.pricing.openai,
         });
@@ -169,10 +169,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok({ content: result.value.content });
       }
-      case 'anthropic': {
+      case LlmProviders.Anthropic: {
         const client = createClaudeClient({
           apiKey,
-          model: VALIDATION_MODELS.anthropic,
+          model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
           pricing: this.pricing.anthropic,
         });
@@ -185,10 +185,10 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok({ content: result.value.content });
       }
-      case 'perplexity': {
+      case LlmProviders.Perplexity: {
         const client = createPerplexityClient({
           apiKey,
-          model: VALIDATION_MODELS.perplexity,
+          model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
         });

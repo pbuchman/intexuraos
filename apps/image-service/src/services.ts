@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type {
   GeneratedImageRepository,
   PromptGenerator,
@@ -70,12 +71,12 @@ export function initializeServices(pricingContext: IPricingContext): void {
   });
 
   // Get pricing for prompt generation models
-  const geminiPricing = pricingContext.getPricing('gemini-2.5-flash');
-  const gptPricing = pricingContext.getPricing('gpt-4o-mini');
+  const geminiPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
+  const gptPricing = pricingContext.getPricing(LlmModels.GPT4oMini);
 
   // Get pricing for image generation models
-  const openaiImagePricing = pricingContext.getPricing('gpt-image-1');
-  const googleImagePricing = pricingContext.getPricing('gemini-2.5-flash-image');
+  const openaiImagePricing = pricingContext.getPricing(LlmModels.GPTImage1);
+  const googleImagePricing = pricingContext.getPricing(LlmModels.Gemini25FlashImage);
 
   container = {
     generatedImageRepository: createGeneratedImageRepository(),
@@ -99,7 +100,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
       userId: string
     ): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];
-      if (config.provider === 'openai') {
+      if (config.provider === LlmProviders.OpenAI) {
         return createOpenAIImageGenerator({
           apiKey,
           model,

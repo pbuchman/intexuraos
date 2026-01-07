@@ -1,6 +1,6 @@
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { ALL_LLM_MODELS, MODEL_PROVIDER_MAP, type LLMModel } from '@intexuraos/llm-contract';
+import { ALL_LLM_MODELS, MODEL_PROVIDER_MAP, LlmProviders, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { getServices } from './services.js';
 
@@ -20,10 +20,10 @@ async function validateAllModelPricing(): Promise<void> {
 
   // Fetch pricing for all providers
   const [google, openai, anthropic, perplexity] = await Promise.all([
-    pricingRepository.getByProvider('google'),
-    pricingRepository.getByProvider('openai'),
-    pricingRepository.getByProvider('anthropic'),
-    pricingRepository.getByProvider('perplexity'),
+    pricingRepository.getByProvider(LlmProviders.Google),
+    pricingRepository.getByProvider(LlmProviders.OpenAI),
+    pricingRepository.getByProvider(LlmProviders.Anthropic),
+    pricingRepository.getByProvider(LlmProviders.Perplexity),
   ]);
 
   // Build a map of all models that have pricing

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { ProviderPricing } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { PricingContext, createPricingContext, fetchAllPricing, type AllPricingResponse } from '../pricingClient.js';
 
 describe('pricingClient', () => {
   const mockGooglePricing: ProviderPricing = {
-    provider: 'google',
+    provider: LlmProviders.Google,
     models: {
       'gemini-2.5-pro': {
         inputPricePerMillion: 1.25,
@@ -31,7 +32,7 @@ describe('pricingClient', () => {
   };
 
   const mockOpenaiPricing: ProviderPricing = {
-    provider: 'openai',
+    provider: LlmProviders.OpenAI,
     models: {
       'o4-mini-deep-research': {
         inputPricePerMillion: 2.0,
@@ -59,7 +60,7 @@ describe('pricingClient', () => {
   };
 
   const mockAnthropicPricing: ProviderPricing = {
-    provider: 'anthropic',
+    provider: LlmProviders.Anthropic,
     models: {
       'claude-opus-4-5-20251101': {
         inputPricePerMillion: 5.0,
@@ -264,7 +265,7 @@ describe('pricingClient', () => {
     it('throws when validating models with missing pricing', () => {
       const incompletePricing: AllPricingResponse = {
         google: mockGooglePricing,
-        openai: { provider: 'openai', models: {}, updatedAt: '' },
+        openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
       };
@@ -293,7 +294,7 @@ describe('pricingClient', () => {
     it('validateAllModels throws when models are missing', () => {
       const incompletePricing: AllPricingResponse = {
         google: mockGooglePricing,
-        openai: { provider: 'openai', models: {}, updatedAt: '' },
+        openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
       };
@@ -310,7 +311,7 @@ describe('pricingClient', () => {
 
     it('throws if any model is missing pricing', () => {
       const incompletePricing: AllPricingResponse = {
-        google: { provider: 'google', models: {}, updatedAt: '' },
+        google: { provider: LlmProviders.Google, models: {}, updatedAt: '' },
         openai: mockOpenaiPricing,
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
@@ -326,14 +327,14 @@ describe('pricingClient', () => {
       }
       const partialPricing: AllPricingResponse = {
         google: {
-          provider: 'google',
+          provider: LlmProviders.Google,
           models: {
             'gemini-2.5-flash': geminiFlashPricing,
           },
           updatedAt: '',
         },
-        openai: { provider: 'openai', models: {}, updatedAt: '' },
-        anthropic: { provider: 'anthropic', models: {}, updatedAt: '' },
+        openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
+        anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: 'perplexity', models: {}, updatedAt: '' },
       };
 

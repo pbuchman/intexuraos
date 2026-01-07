@@ -9,6 +9,7 @@ import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
@@ -39,12 +40,12 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     userId: TEST_USER_ID,
     title: 'Test Research',
     prompt: 'Test prompt',
-    selectedModels: ['gemini-2.5-pro'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro],
+    synthesisModel: LlmModels.Gemini25Pro,
     status: 'pending',
     llmResults: [
       {
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini-2.0-flash-exp',
         status: 'pending',
       },
@@ -102,8 +103,8 @@ describe('Research Routes - Unauthenticated', () => {
       url: '/research',
       payload: {
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
       },
     });
 
@@ -305,8 +306,8 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: ['gemini-2.5-pro'],
-          synthesisModel: 'gemini-2.5-pro',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
         },
       });
 
@@ -329,7 +330,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: ['gemini-2.5-pro'],
+          selectedModels: [LlmModels.Gemini25Pro],
           synthesisModel: 'claude-opus-4-5-20251101',
           inputContexts: [{ content: 'Input context content', label: 'Custom Label' }],
         },
@@ -351,8 +352,8 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: ['gemini-2.5-pro'],
-          synthesisModel: 'gemini-2.5-pro',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
         },
       });
 
@@ -402,7 +403,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
           synthesisModel: 'claude-opus-4-5-20251101',
           inputContexts: [{ content: 'Test context', label: 'Test Label' }],
         },
@@ -413,7 +414,7 @@ describe('Research Routes - Authenticated', () => {
       const saved = fakeRepo.getAll()[0];
       expect(saved).toBeDefined();
       if (saved !== undefined) {
-        expect(saved.selectedModels).toEqual(['gemini-2.5-pro', 'o4-mini-deep-research']);
+        expect(saved.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch]);
         expect(saved.synthesisModel).toBe('claude-opus-4-5-20251101');
         expect(saved.inputContexts).toHaveLength(1);
       }
@@ -437,11 +438,11 @@ describe('Research Routes - Authenticated', () => {
       expect(saved).toBeDefined();
       if (saved !== undefined) {
         expect(saved.selectedModels).toEqual([
-          'gemini-2.5-pro',
+          LlmModels.Gemini25Pro,
           'claude-opus-4-5-20251101',
-          'o4-mini-deep-research',
+          LlmModels.O4MiniDeepResearch,
         ]);
-        expect(saved.synthesisModel).toBe('gemini-2.5-pro');
+        expect(saved.synthesisModel).toBe(LlmModels.Gemini25Pro);
       }
     });
 
@@ -498,7 +499,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Updated prompt',
           selectedModels: ['claude-opus-4-5-20251101'],
-          synthesisModel: 'gemini-2.5-pro',
+          synthesisModel: LlmModels.Gemini25Pro,
         },
       });
 
@@ -507,9 +508,9 @@ describe('Research Routes - Authenticated', () => {
       expect(body.success).toBe(true);
       expect(body.data.prompt).toBe('Updated prompt');
       expect(body.data.selectedModels).toEqual(['claude-opus-4-5-20251101']);
-      expect(body.data.synthesisModel).toBe('gemini-2.5-pro');
+      expect(body.data.synthesisModel).toBe(LlmModels.Gemini25Pro);
       expect(body.data.llmResults).toHaveLength(1);
-      expect(body.data.llmResults[0]?.provider).toBe('anthropic');
+      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.Anthropic);
       expect(body.data.llmResults[0]?.status).toBe('pending');
     });
 
@@ -518,8 +519,8 @@ describe('Research Routes - Authenticated', () => {
       const draft = createTestResearch({
         id: 'draft-456',
         status: 'draft',
-        selectedModels: ['gemini-2.5-pro'],
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(draft);
 
@@ -529,19 +530,19 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.O4MiniDeepResearch, 'claude-opus-4-5-20251101'],
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.data.selectedModels).toEqual([
-        'o4-mini-deep-research',
+        LlmModels.O4MiniDeepResearch,
         'claude-opus-4-5-20251101',
       ]);
       expect(body.data.llmResults).toHaveLength(2);
-      expect(body.data.llmResults[0]?.provider).toBe('openai');
-      expect(body.data.llmResults[1]?.provider).toBe('anthropic');
+      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.OpenAI);
+      expect(body.data.llmResults[1]?.provider).toBe(LlmProviders.Anthropic);
       expect(body.data.llmResults.every((r) => r.status === 'pending')).toBe(true);
     });
 
@@ -1078,8 +1079,8 @@ describe('Research Routes - Authenticated', () => {
         status: 'completed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
@@ -1340,20 +1341,20 @@ describe('Research Routes - Authenticated', () => {
         status: 'awaiting_confirmation',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: 'openai',
-            model: 'o4-mini-deep-research',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
             status: 'failed',
             error: 'Rate limit',
           },
         ],
         partialFailure: {
-          failedModels: ['o4-mini-deep-research'],
+          failedModels: [LlmModels.O4MiniDeepResearch],
           detectedAt: '2024-01-01T10:00:00Z',
           retryCount: 0,
         },
@@ -1406,7 +1407,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('retry');
-      expect(body.data.message).toContain('o4-mini-deep-research');
+      expect(body.data.message).toContain(LlmModels.O4MiniDeepResearch);
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('retrying');
@@ -1498,11 +1499,11 @@ describe('Research Routes - Authenticated', () => {
         userId: TEST_USER_ID,
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'awaiting_confirmation',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Result' },
         ],
         startedAt: new Date().toISOString(),
       };
@@ -1669,7 +1670,7 @@ describe('Research Routes - Authenticated', () => {
       const token = await createToken(TEST_USER_ID);
       const research = createAwaitingConfirmationResearch({
         partialFailure: {
-          failedModels: ['o4-mini-deep-research'],
+          failedModels: [LlmModels.O4MiniDeepResearch],
           detectedAt: '2024-01-01T10:00:00Z',
           retryCount: 2,
         },
@@ -1704,14 +1705,14 @@ describe('Research Routes - Authenticated', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: 'openai',
-            model: 'o4-mini-deep-research',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
             status: 'failed',
             error: 'Rate limit',
           },
@@ -1739,7 +1740,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('retried_llms');
-      expect(body.data.retriedModels).toContain('o4-mini-deep-research');
+      expect(body.data.retriedModels).toContain(LlmModels.O4MiniDeepResearch);
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('retrying');
@@ -1751,12 +1752,12 @@ describe('Research Routes - Authenticated', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
         ],
         synthesisError: 'Synthesis failed',
       });
@@ -1900,12 +1901,12 @@ describe('Research Routes - Authenticated', () => {
           status: 'failed',
           llmResults: [
             {
-              provider: 'google',
-              model: 'gemini-2.0-flash',
+              provider: LlmProviders.Google,
+              model: LlmModels.Gemini20Flash,
               status: 'completed',
               result: 'Result 1',
             },
-            { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+            { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'completed', result: 'Result 2' },
           ],
           synthesisError: 'Previous failure',
         });
@@ -2049,7 +2050,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
         },
       });
 
@@ -2060,7 +2061,7 @@ describe('Internal Routes', () => {
       expect(body.data.userId).toBe(TEST_USER_ID);
       expect(body.data.title).toBe('Test Draft Research');
       expect(body.data.status).toBe('draft');
-      expect(body.data.selectedModels).toEqual(['gemini-2.5-pro', 'o4-mini-deep-research']);
+      expect(body.data.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch]);
     });
 
     it('creates draft research with sourceActionId', async () => {
@@ -2091,7 +2092,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['gemini-2.5-pro'],
+          selectedModels: [LlmModels.Gemini25Pro],
         },
       });
 
@@ -2109,7 +2110,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['gemini-2.5-pro'],
+          selectedModels: [LlmModels.Gemini25Pro],
         },
       });
 
@@ -2129,7 +2130,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['gemini-2.5-pro'],
+          selectedModels: [LlmModels.Gemini25Pro],
         },
       });
 
@@ -2149,7 +2150,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: ['gemini-2.5-pro'],
+          selectedModels: [LlmModels.Gemini25Pro],
         },
       });
 
@@ -2324,7 +2325,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              provider: 'google',
+              provider: LlmProviders.Google,
               model: 'gemini-2.0-flash-exp',
               inputTokens: 100,
               outputTokens: 200,
@@ -2350,7 +2351,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              provider: 'google',
+              provider: LlmProviders.Google,
               model: 'gemini-2.0-flash-exp',
               inputTokens: 100,
               outputTokens: 200,
@@ -2427,7 +2428,7 @@ describe('Internal Routes', () => {
         type: 'llm.call',
         researchId: 'research-123',
         userId: TEST_USER_ID,
-        model: 'gemini-2.5-pro',
+        model: LlmModels.Gemini25Pro,
         prompt: 'Test prompt',
         ...overrides,
       };
@@ -2437,10 +2438,10 @@ describe('Internal Routes', () => {
       return createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
         llmResults: [
-          { provider: 'google', model: 'gemini-2.5-pro', status: 'pending' },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         ],
       });
     }
@@ -2597,11 +2598,11 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.5-pro',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
             status: 'completed',
             result: 'Already done',
           },
@@ -2631,11 +2632,11 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.5-pro',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
             status: 'failed',
             error: 'Previous error',
           },
@@ -2699,7 +2700,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: 'gemini-2.5-pro' })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.Gemini25Pro })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -2713,7 +2714,7 @@ describe('Internal Routes', () => {
 
       const failures = fakeNotificationSender.getSentFailures();
       expect(failures.length).toBe(1);
-      expect(failures[0]?.model).toBe('gemini-2.5-pro');
+      expect(failures[0]?.model).toBe(LlmModels.Gemini25Pro);
     });
 
     it('processes LLM call and updates result on success', async () => {
@@ -2742,7 +2743,7 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
 
       const updatedResearch = fakeRepo.getAll()[0];
-      const googleResult = updatedResearch?.llmResults.find((r) => r.provider === 'google');
+      const googleResult = updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.Google);
       expect(googleResult?.status).toBe('completed');
       expect(googleResult?.result).toBeDefined();
     });
@@ -2751,9 +2752,9 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
         inputContexts: [{ id: 'ctx-1', content: 'Input context', addedAt: '2024-01-01T10:00:00Z' }],
       });
       fakeRepo.addResearch(research);
@@ -2785,9 +2786,9 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2818,9 +2819,9 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });
@@ -2847,8 +2848,8 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
@@ -2876,10 +2877,10 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
         llmResults: [
-          { provider: 'google', model: 'gemini-2.5-pro', status: 'completed', result: 'Done' },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'completed', result: 'Done' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -2891,7 +2892,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: 'o4-mini-deep-research' })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -2902,22 +2903,22 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
-      expect(updatedResearch?.partialFailure?.failedModels).toContain('o4-mini-deep-research');
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
     });
 
     it('handles partial failure when LLM succeeds but another already failed', async () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.5-pro',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
             status: 'failed',
             error: 'Previous failure',
           },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -2929,7 +2930,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: 'o4-mini-deep-research' })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -2940,8 +2941,8 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
-      expect(updatedResearch?.partialFailure?.failedModels).toContain('gemini-2.5-pro');
-      expect(updatedResearch?.llmResults.find((r) => r.provider === 'openai')?.status).toBe(
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.Gemini25Pro);
+      expect(updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.OpenAI)?.status).toBe(
         'completed'
       );
     });
@@ -2950,9 +2951,9 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         synthesisModel: 'claude-opus-4-5-20251101',
-        llmResults: [{ provider: 'google', model: 'gemini-2.5-pro', status: 'pending' }],
+        llmResults: [{ provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' }],
       });
       fakeRepo.addResearch(research);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'google-key' });

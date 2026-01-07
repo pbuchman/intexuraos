@@ -7,6 +7,7 @@
 
 import {
   ALL_LLM_MODELS,
+  LlmProviders,
   type LLMModel,
   type ModelPricing,
   type ProviderPricing,
@@ -106,7 +107,7 @@ export class PricingContext implements IPricingContext {
     this.pricing = new Map();
 
     // Flatten all provider pricing into a single map
-    for (const provider of ['google', 'openai', 'anthropic', 'perplexity'] as const) {
+    for (const provider of [LlmProviders.Google, LlmProviders.OpenAI, LlmProviders.Anthropic, LlmProviders.Perplexity] as const) {
       const providerPricing = allPricing[provider];
       for (const [model, pricing] of Object.entries(providerPricing.models)) {
         if (isValidLLMModel(model)) {

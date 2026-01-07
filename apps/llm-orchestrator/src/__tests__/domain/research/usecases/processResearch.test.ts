@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type ResearchContext } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   processResearch,
   type ProcessResearchDeps,
@@ -72,11 +73,11 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'pending',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
-      { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
-      { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+      { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'pending' },
+      { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -135,11 +136,11 @@ describe('processResearch', () => {
 
     expect(deps.mockTitleGenerator.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Generated Title' });
-    expect(deps.mockReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
+    expect(deps.mockReportSuccess).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
   });
 
   it('uses synthesizer for title generation when titleGenerator not provided', async () => {
-    const research = createTestResearch({ synthesisModel: 'claude-opus-4-5-20251101' });
+    const research = createTestResearch({ synthesisModel: LlmModels.ClaudeOpus4520251101 });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     const mockSynthesizer = {
@@ -160,7 +161,7 @@ describe('processResearch', () => {
 
     expect(mockSynthesizer.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Synthesizer Title' });
-    expect(mockReportSuccess).toHaveBeenCalledWith('claude-opus-4-5-20251101');
+    expect(mockReportSuccess).toHaveBeenCalledWith(LlmModels.ClaudeOpus4520251101);
   });
 
   it('does not update title when title generation fails', async () => {
@@ -181,11 +182,11 @@ describe('processResearch', () => {
 
   it('publishes LLM call for each pending provider', async () => {
     const research = createTestResearch({
-      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'pending' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'pending' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet420250514, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -197,31 +198,31 @@ describe('processResearch', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      model: 'gemini-2.0-flash',
+      model: LlmModels.Gemini20Flash,
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      model: 'o4-mini-deep-research',
+      model: LlmModels.O4MiniDeepResearch,
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      model: 'claude-sonnet-4-20250514',
+      model: LlmModels.ClaudeSonnet420250514,
       prompt: 'Test research prompt',
     });
   });
 
   it('publishes in order of llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: ['claude-sonnet-4-5-20250929', 'gemini-2.5-flash'],
+      selectedModels: [LlmModels.ClaudeSonnet4520250929, LlmModels.Gemini25Flash],
       llmResults: [
-        { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', status: 'pending' },
-        { provider: 'google', model: 'gemini-2.5-flash', status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet4520250929, status: 'pending' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini25Flash, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -229,17 +230,17 @@ describe('processResearch', () => {
     await processResearch('research-1', deps);
 
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
-    expect(calls[0]?.[0].model).toBe('claude-sonnet-4-5-20250929');
-    expect(calls[1]?.[0].model).toBe('gemini-2.5-flash');
+    expect(calls[0]?.[0].model).toBe(LlmModels.ClaudeSonnet4520250929);
+    expect(calls[1]?.[0].model).toBe(LlmModels.Gemini25Flash);
   });
 
   it('skips already completed llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus4520251101],
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Existing' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
-        { provider: 'anthropic', model: 'claude-sonnet-4-20250514', status: 'pending' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed', result: 'Existing' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet420250514, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -248,29 +249,29 @@ describe('processResearch', () => {
 
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
     expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gemini-2.0-flash' })
+      expect.objectContaining({ model: LlmModels.Gemini20Flash })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'o4-mini-deep-research' })
+      expect.objectContaining({ model: LlmModels.O4MiniDeepResearch })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-sonnet-4-20250514' })
+      expect.objectContaining({ model: LlmModels.ClaudeSonnet420250514 })
     );
   });
 
   it('triggers synthesis when all results already completed', async () => {
     const research = createTestResearch({
-      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.0-flash',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
           status: 'completed',
           result: 'Google result',
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'OpenAI result',
         },
@@ -408,7 +409,7 @@ describe('processResearch', () => {
       expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
         researchContext: mockResearchContext,
       });
-      expect(localReportSuccess).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(localReportSuccess).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
     });
 
     it('logs warning when context inference fails', async () => {
@@ -461,7 +462,7 @@ describe('processResearch', () => {
 
       await processResearch('research-1', depsWithInferrer);
 
-      expect(localMockReportSuccess).not.toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(localMockReportSuccess).not.toHaveBeenCalledWith(LlmModels.Gemini25Flash);
     });
 
     it('skips reportLlmSuccess when callback not provided', async () => {
