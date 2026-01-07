@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #382 | 11:46 PM | 🔵 | Sidebar Navigation Shows Settings Organization with Integration Subsections | ~386 |
+| #375 | 11:45 PM | 🔵 | Firestore Repository Pattern Uses Document Mapping with Factory Function | ~448 |
 </claude-mem-context>
