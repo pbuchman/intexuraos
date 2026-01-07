@@ -22,14 +22,17 @@ import {
   HomePage,
   InboxPage,
   LlmOrchestratorPage,
+  LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
+  NotesListPage,
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareTargetPage,
   SystemHealthPage,
+  TodosListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
 } from '@/pages';
@@ -141,6 +144,14 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/settings/llm-pricing"
+        element={
+          <ProtectedRoute>
+            <LlmPricingPage />
+          </ProtectedRoute>
+        }
+      />
       {/* LLM Orchestrator routes */}
       <Route
         path="/research/new"
@@ -237,6 +248,22 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <WhatsAppNotesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-notes"
+        element={
+          <ProtectedRoute>
+            <NotesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-todos"
+        element={
+          <ProtectedRoute>
+            <TodosListPage />
           </ProtectedRoute>
         }
       />

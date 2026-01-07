@@ -1,5 +1,6 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
@@ -19,8 +20,18 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
+/** Models used by this service */
+const REQUIRED_MODELS = ['gemini-2.5-flash'] as const;
+
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Fetch pricing from app-settings-service
+  const pricingResult = await fetchAllPricing(config.appSettingsServiceUrl, config.internalAuthToken);
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+  const pricingContext = createPricingContext(pricingResult.value, [...REQUIRED_MODELS]);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
@@ -29,9 +40,9 @@ async function main(): Promise<void> {
 
   initServices({
     dataSourceRepository: new FirestoreDataSourceRepository(),
-    titleGenerationService: createTitleGenerationService(userServiceClient),
+    titleGenerationService: createTitleGenerationService(userServiceClient, pricingContext),
     compositeFeedRepository: new FirestoreCompositeFeedRepository(),
-    feedNameGenerationService: createFeedNameGenerationService(userServiceClient),
+    feedNameGenerationService: createFeedNameGenerationService(userServiceClient, pricingContext),
     mobileNotificationsClient: createMobileNotificationsClient({
       baseUrl: config.mobileNotificationsServiceUrl,
       internalAuthToken: config.internalAuthToken,

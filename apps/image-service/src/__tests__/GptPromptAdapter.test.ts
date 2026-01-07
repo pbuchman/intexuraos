@@ -109,7 +109,7 @@ describe('GptPromptAdapter', () => {
           },
         });
 
-      const adapter = new GptPromptAdapter({ apiKey: 'bad-key', userId: 'test-user' });
+      const adapter = new GptPromptAdapter({ apiKey: 'bad-key', userId: 'test-user', pricing: testPricing });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);

@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { SupportedModel } from '../models/index.js';
+import type { ResearchModel } from '../models/index.js';
 import type { LlmSynthesisProvider, ResearchRepository, TitleGenerator } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
 
@@ -20,7 +20,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    model: SupportedModel;
+    model: ResearchModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -32,7 +32,7 @@ export interface ProcessResearchDeps {
   titleGenerator?: TitleGenerator;
   synthesizer?: LlmSynthesisProvider;
   contextInferrer?: ContextInferenceProvider;
-  reportLlmSuccess?: (model: SupportedModel) => void;
+  reportLlmSuccess?: (model: ResearchModel) => void;
 }
 
 export interface ProcessResearchResult {
@@ -59,7 +59,7 @@ export async function processResearch(
   });
 
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
-  const titleModel: SupportedModel =
+  const titleModel: ResearchModel =
     deps.titleGenerator !== undefined ? 'gemini-2.5-flash' : research.synthesisModel;
   if (titleGen !== undefined) {
     deps.logger.info({ researchId, model: titleModel }, '[2.3.1] Starting title generation');
@@ -102,7 +102,7 @@ export async function processResearch(
 
   const pendingModels = research.llmResults
     .filter((r) => r.status === 'pending')
-    .map((r) => r.model as SupportedModel);
+    .map((r) => r.model as ResearchModel);
 
   deps.logger.info(
     {

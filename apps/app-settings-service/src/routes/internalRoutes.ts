@@ -1,69 +1,39 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
-import type { LlmProvider } from '../domain/ports/index.js';
 import { getServices } from '../services.js';
 
-const VALID_PROVIDERS: LlmProvider[] = ['google', 'openai', 'anthropic', 'perplexity'];
-
-function isValidProvider(provider: string): provider is LlmProvider {
-  return VALID_PROVIDERS.includes(provider as LlmProvider);
-}
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   /**
-   * GET /internal/settings/pricing/:provider
-   * Returns pricing configuration for a specific LLM provider.
+   * GET /internal/settings/pricing
+   * Returns pricing configuration for all LLM providers.
+   * Used by apps at startup to load pricing into PricingContext.
    */
-  fastify.get<{ Params: { provider: string } }>(
-    '/settings/pricing/:provider',
+  fastify.get(
+    '/internal/settings/pricing',
     {
       schema: {
-        operationId: 'getPricingByProvider',
-        summary: 'Get LLM pricing for a provider (internal)',
-        description: 'Internal endpoint for retrieving LLM pricing configuration by provider',
+        operationId: 'getAllPricing',
+        summary: 'Get LLM pricing for all providers (internal)',
+        description: 'Internal endpoint for retrieving all LLM pricing configuration',
         tags: ['internal'],
-        params: {
-          type: 'object',
-          properties: {
-            provider: {
-              type: 'string',
-              description: 'LLM provider name (google, openai, anthropic, perplexity)',
-            },
-          },
-          required: ['provider'],
-        },
         response: {
           200: {
             type: 'object',
             properties: {
-              provider: { type: 'string', enum: VALID_PROVIDERS },
-              models: {
+              success: { type: 'boolean', const: true },
+              data: {
                 type: 'object',
-                additionalProperties: {
-                  type: 'object',
-                  properties: {
-                    inputPricePerMillion: { type: 'number' },
-                    outputPricePerMillion: { type: 'number' },
-                    cacheReadMultiplier: { type: 'number' },
-                    cacheWriteMultiplier: { type: 'number' },
-                    webSearchCostPerCall: { type: 'number' },
-                    groundingCostPerRequest: { type: 'number' },
-                    imagePricing: {
-                      type: 'object',
-                      properties: {
-                        '1024x1024': { type: 'number' },
-                        '1536x1024': { type: 'number' },
-                        '1024x1536': { type: 'number' },
-                      },
-                    },
-                    useProviderCost: { type: 'boolean' },
-                  },
-                  required: ['inputPricePerMillion', 'outputPricePerMillion'],
+                properties: {
+                  google: { $ref: '#/components/schemas/ProviderPricing' },
+                  openai: { $ref: '#/components/schemas/ProviderPricing' },
+                  anthropic: { $ref: '#/components/schemas/ProviderPricing' },
+                  perplexity: { $ref: '#/components/schemas/ProviderPricing' },
                 },
+                required: ['google', 'openai', 'anthropic', 'perplexity'],
               },
-              updatedAt: { type: 'string' },
             },
-            required: ['provider', 'models', 'updatedAt'],
+            required: ['success', 'data'],
           },
           401: {
             type: 'object',
@@ -71,7 +41,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               error: { type: 'string' },
             },
           },
-          404: {
+          500: {
             type: 'object',
             properties: {
               error: { type: 'string' },
@@ -83,39 +53,64 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request, reply) => {
       logIncomingRequest(request, {
-        message: `Received request to GET /internal/settings/pricing/${request.params.provider}`,
+        message: 'Received request to GET /internal/settings/pricing',
       });
 
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for get pricing');
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for get all pricing');
         reply.status(401);
         return { error: 'Unauthorized' };
       }
 
-      const { provider } = request.params;
-
-      if (!isValidProvider(provider)) {
-        request.log.warn({ provider }, 'Invalid provider requested');
-        reply.status(404);
-        return { error: `Unknown provider: ${provider}` };
-      }
-
       const { pricingRepository } = getServices();
-      const pricing = await pricingRepository.getByProvider(provider);
 
-      if (pricing === null) {
-        request.log.warn({ provider }, 'Pricing not found for provider');
-        reply.status(404);
-        return { error: `Pricing not found for provider: ${provider}` };
+      // Fetch all providers in parallel
+      const [google, openai, anthropic, perplexity] = await Promise.all([
+        pricingRepository.getByProvider('google'),
+        pricingRepository.getByProvider('openai'),
+        pricingRepository.getByProvider('anthropic'),
+        pricingRepository.getByProvider('perplexity'),
+      ]);
+
+      // Check if any provider is missing
+      const missing: string[] = [];
+      if (google === null) missing.push('google');
+      if (openai === null) missing.push('openai');
+      if (anthropic === null) missing.push('anthropic');
+      if (perplexity === null) missing.push('perplexity');
+
+      if (missing.length > 0) {
+        request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: `Missing pricing for providers: ${missing.join(', ')}` };
       }
 
-      request.log.info(
-        { provider, modelCount: Object.keys(pricing.models).length },
-        'Returning pricing for provider'
-      );
+      // At this point all providers are non-null (missing.length === 0 check above)
+      // TypeScript doesn't narrow after array push checks, so we do explicit checks
+      if (google === null || openai === null || anthropic === null || perplexity === null) {
+        // This should never happen given the checks above
+        reply.status(500);
+        return { error: 'Unexpected null pricing' };
+      }
 
-      return pricing;
+      const totalModels =
+        Object.keys(google.models).length +
+        Object.keys(openai.models).length +
+        Object.keys(anthropic.models).length +
+        Object.keys(perplexity.models).length;
+
+      request.log.info({ totalModels }, 'Returning pricing for all providers');
+
+      return {
+        success: true,
+        data: {
+          google,
+          openai,
+          anthropic,
+          perplexity,
+        },
+      };
     }
   );
 

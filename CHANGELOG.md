@@ -33,12 +33,12 @@ This release includes comprehensive development across the platform with 187 fun
 
 ### API Endpoints - Actions Agent
 
-1. `GET /router/actions` - List user actions with status filtering
-2. `PATCH /router/actions/:id` - Update action details
-3. `DELETE /router/actions/:id` - Delete action
-4. `POST /router/actions/:id/approve` - Approve pending action
-5. `POST /router/actions/:id/reject` - Reject pending action
-6. `POST /router/actions/:id/execute` - Execute approved action
+1. `GET /actions` - List user actions with status filtering
+2. `PATCH /actions/:id` - Update action details
+3. `DELETE /actions/:id` - Delete action
+4. `POST /actions/:id/approve` - Approve pending action
+5. `POST /actions/:id/reject` - Reject pending action
+6. `POST /actions/:id/execute` - Execute approved action
 7. `GET /internal/actions/filters` - Get available filter options
 8. `POST /internal/whatsapp/pubsub/process-command` - Process WhatsApp commands via Pub/Sub
 

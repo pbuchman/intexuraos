@@ -16,7 +16,7 @@ Create a new `commands-router` service that:
 - [ ] Domain models (Command, Action) implemented
 - [ ] Firestore repositories with idempotency
 - [ ] Gemini classifier (direct SDK, Flash model)
-- [ ] Routes: `POST /internal/router/commands`, `GET /router/commands`, `GET /router/actions`
+- [ ] Routes: `POST /internal/router/commands`, `GET /router/commands`, `GET /actions`
 - [ ] Terraform: Cloud Run + PubSub topic/subscription
 - [ ] WhatsApp integration: publish on text save + voice transcription
 - [ ] Web UI: Inbox page with Commands/Actions tabs

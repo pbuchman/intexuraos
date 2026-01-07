@@ -6,11 +6,11 @@
 import {
   getProviderForModel,
   type LlmProvider,
-  type SupportedModel,
+  type ResearchModel,
 } from '@intexuraos/llm-contract';
 import type { ResearchContext } from '@intexuraos/common-core';
 
-export type { LlmProvider, SupportedModel } from '@intexuraos/llm-contract';
+export type { LlmProvider, ResearchModel } from '@intexuraos/llm-contract';
 export type { ResearchContext } from '@intexuraos/common-core';
 
 export type ResearchStatus =
@@ -26,7 +26,7 @@ export type ResearchStatus =
 export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
 
 export interface PartialFailure {
-  failedModels: SupportedModel[];
+  failedModels: ResearchModel[];
   userDecision?: PartialFailureDecision;
   detectedAt: string;
   retryCount: number;
@@ -78,8 +78,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   inputContexts?: InputContext[];
@@ -99,7 +99,7 @@ export interface Research {
   sourceResearchId?: string;
 }
 
-export function createLlmResults(selectedModels: SupportedModel[]): LlmResult[] {
+export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {
   return selectedModels.map((model) => ({
     provider: getProviderForModel(model),
     model,
@@ -111,8 +111,8 @@ export function createResearch(params: {
   id: string;
   userId: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }): Research {
@@ -155,8 +155,8 @@ export function createDraftResearch(params: {
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   sourceActionId?: string;
   inputContexts?: InputContext[];
 }): Research {
@@ -188,9 +188,9 @@ export interface EnhanceResearchParams {
   id: string;
   userId: string;
   sourceResearch: Research;
-  additionalModels?: SupportedModel[];
+  additionalModels?: ResearchModel[];
   additionalContexts?: { content: string; label?: string | undefined }[];
-  synthesisModel?: SupportedModel;
+  synthesisModel?: ResearchModel;
   removeContextIds?: string[];
 }
 
@@ -208,7 +208,7 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   const newResults = createLlmResults(newModels);
 
   const allModels = [
-    ...new Set([...completedResults.map((r) => r.model as SupportedModel), ...newModels]),
+    ...new Set([...completedResults.map((r) => r.model as ResearchModel), ...newModels]),
   ];
 
   const removeSet = new Set(params.removeContextIds ?? []);

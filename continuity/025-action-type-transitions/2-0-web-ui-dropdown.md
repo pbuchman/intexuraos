@@ -20,7 +20,7 @@ export async function updateAction(
     type?: ActionType;
   }
 ): Promise<Action> {
-  const response = await apiClient.patch(`/router/actions/${actionId}`, updates);
+  const response = await apiClient.patch(`/actions/${actionId}`, updates);
   return response.data.data.action;
 }
 ```

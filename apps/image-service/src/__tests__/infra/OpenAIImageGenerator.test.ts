@@ -92,8 +92,6 @@ describe('OpenAIImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
-        pricing: testPricing,
-        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =

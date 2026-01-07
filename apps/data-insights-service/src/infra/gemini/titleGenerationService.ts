@@ -6,11 +6,12 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { FastModel } from '@intexuraos/llm-contract';
+import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
 
-const TITLE_GENERATION_MODEL = 'gemini-2.5-flash';
+const TITLE_GENERATION_MODEL: FastModel = 'gemini-2.5-flash';
 
 /**
  * Error from title generation operations.
@@ -47,8 +48,10 @@ Title:`;
  */
 export function createTitleGenerationService(
   userServiceClient: UserServiceClient,
-  pricing: ModelPricing
+  pricingContext: IPricingContext
 ): TitleGenerationService {
+  const pricing = pricingContext.getPricing(TITLE_GENERATION_MODEL);
+
   return {
     async generateTitle(
       userId: string,

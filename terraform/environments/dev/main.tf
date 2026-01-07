@@ -401,6 +401,9 @@ module "secret_manager" {
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
     "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"        = "Actions Agent Cloud Run URL for commands-router"
     "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
+    "INTEXURAOS_NOTES_AGENT_URL"                  = "Notes Agent Cloud Run URL for web frontend"
+    "INTEXURAOS_TODOS_AGENT_URL"                  = "Todos Agent Cloud Run URL for web frontend"
+    "INTEXURAOS_APP_SETTINGS_SERVICE_URL"         = "App Settings service Cloud Run URL for web frontend"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
     "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"

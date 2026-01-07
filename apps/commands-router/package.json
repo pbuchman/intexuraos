@@ -25,6 +25,7 @@
     "@intexuraos/infra-gemini": "*",
     "@intexuraos/infra-pubsub": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
     "jose": "^5.9.6",
     "pino": "^10.1.0",

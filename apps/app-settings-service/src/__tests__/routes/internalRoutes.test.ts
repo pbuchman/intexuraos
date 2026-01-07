@@ -8,13 +8,46 @@ vi.mock('@intexuraos/infra-firestore', () => ({
 }));
 
 describe('internalRoutes', () => {
-  const mockPricing: ProviderPricing = {
+  const mockGooglePricing: ProviderPricing = {
     provider: 'google',
     models: {
       'gemini-2.5-pro': {
         inputPricePerMillion: 1.25,
         outputPricePerMillion: 10.0,
         groundingCostPerRequest: 0.035,
+      },
+    },
+    updatedAt: '2026-01-05T12:00:00Z',
+  };
+
+  const mockOpenaiPricing: ProviderPricing = {
+    provider: 'openai',
+    models: {
+      'gpt-5.2': {
+        inputPricePerMillion: 1.75,
+        outputPricePerMillion: 14.0,
+      },
+    },
+    updatedAt: '2026-01-05T12:00:00Z',
+  };
+
+  const mockAnthropicPricing: ProviderPricing = {
+    provider: 'anthropic',
+    models: {
+      'claude-opus-4-5-20251101': {
+        inputPricePerMillion: 5.0,
+        outputPricePerMillion: 25.0,
+      },
+    },
+    updatedAt: '2026-01-05T12:00:00Z',
+  };
+
+  const mockPerplexityPricing: ProviderPricing = {
+    provider: 'perplexity',
+    models: {
+      'sonar-pro': {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
       },
     },
     updatedAt: '2026-01-05T12:00:00Z',
@@ -37,16 +70,29 @@ describe('internalRoutes', () => {
     vi.clearAllMocks();
   });
 
-  describe('GET /internal/settings/pricing/:provider', () => {
-    it('returns pricing for valid provider', async () => {
-      fakePricingRepository.getByProvider.mockResolvedValue(mockPricing);
+  describe('GET /internal/settings/pricing', () => {
+    it('returns pricing for all providers', async () => {
+      fakePricingRepository.getByProvider.mockImplementation((provider: string) => {
+        switch (provider) {
+          case 'google':
+            return Promise.resolve(mockGooglePricing);
+          case 'openai':
+            return Promise.resolve(mockOpenaiPricing);
+          case 'anthropic':
+            return Promise.resolve(mockAnthropicPricing);
+          case 'perplexity':
+            return Promise.resolve(mockPerplexityPricing);
+          default:
+            return Promise.resolve(null);
+        }
+      });
 
       const { buildServer } = await import('../../server.js');
       const app = await buildServer();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing/google',
+        url: '/internal/settings/pricing',
         headers: {
           'x-internal-auth': 'test-token',
         },
@@ -54,8 +100,12 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.provider).toBe('google');
-      expect(body.models['gemini-2.5-pro'].inputPricePerMillion).toBe(1.25);
+      expect(body.success).toBe(true);
+      expect(body.data.google.provider).toBe('google');
+      expect(body.data.openai.provider).toBe('openai');
+      expect(body.data.anthropic.provider).toBe('anthropic');
+      expect(body.data.perplexity.provider).toBe('perplexity');
+      expect(body.data.google.models['gemini-2.5-pro'].inputPricePerMillion).toBe(1.25);
 
       await app.close();
     });
@@ -66,7 +116,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing/google',
+        url: '/internal/settings/pricing',
       });
 
       expect(response.statusCode).toBe(401);
@@ -80,7 +130,7 @@ describe('internalRoutes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing/google',
+        url: '/internal/settings/pricing',
         headers: {
           'x-internal-auth': 'wrong-token',
         },
@@ -91,42 +141,37 @@ describe('internalRoutes', () => {
       await app.close();
     });
 
-    it('returns 404 for invalid provider', async () => {
-      const { buildServer } = await import('../../server.js');
-      const app = await buildServer();
-
-      const response = await app.inject({
-        method: 'GET',
-        url: '/internal/settings/pricing/invalid-provider',
-        headers: {
-          'x-internal-auth': 'test-token',
-        },
+    it('returns 500 when any provider pricing is missing', async () => {
+      fakePricingRepository.getByProvider.mockImplementation((provider: string) => {
+        switch (provider) {
+          case 'google':
+            return Promise.resolve(mockGooglePricing);
+          case 'openai':
+            return Promise.resolve(mockOpenaiPricing);
+          case 'anthropic':
+            return Promise.resolve(null); // Missing
+          case 'perplexity':
+            return Promise.resolve(mockPerplexityPricing);
+          default:
+            return Promise.resolve(null);
+        }
       });
-
-      expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body);
-      expect(body.error).toContain('Unknown provider');
-
-      await app.close();
-    });
-
-    it('returns 404 when pricing not found', async () => {
-      fakePricingRepository.getByProvider.mockResolvedValue(null);
 
       const { buildServer } = await import('../../server.js');
       const app = await buildServer();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/settings/pricing/anthropic',
+        url: '/internal/settings/pricing',
         headers: {
           'x-internal-auth': 'test-token',
         },
       });
 
-      expect(response.statusCode).toBe(404);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('Pricing not found');
+      expect(body.error).toContain('Missing pricing for providers');
+      expect(body.error).toContain('anthropic');
 
       await app.close();
     });

@@ -739,13 +739,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  //   describe('GET /router/actions (authenticated)', () => {
+  //   describe('GET /actions (authenticated)', () => {
   //     it('returns 401 when no auth header', async () => {
   //       app = await buildServer();
   //
   //       const response = await app.inject({
   //         method: 'GET',
-  //         url: '/router/actions',
+  //         url: '/actions',
   //       });
   //
   //       expect(response.statusCode).toBe(401);
@@ -757,7 +757,7 @@ describe('Commands Router Routes', () => {
   //
   //       const response = await app.inject({
   //         method: 'GET',
-  //         url: '/router/actions',
+  //         url: '/actions',
   //         headers: {
   //           authorization: `Bearer ${token}`,
   //         },
@@ -790,7 +790,7 @@ describe('Commands Router Routes', () => {
   //
   //       const response = await app.inject({
   //         method: 'GET',
-  //         url: '/router/actions',
+  //         url: '/actions',
   //         headers: {
   //           authorization: `Bearer ${token}`,
   //         },
@@ -1406,334 +1406,6 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  //   describe('PATCH /router/actions/:actionId (authenticated)', () => {
-  //     it('returns 401 when no auth header', async () => {
-  //       app = await buildServer();
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-1',
-  //         payload: { status: 'processing' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(401);
-  //     });
-  //
-  //     it('returns 404 when action not found', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-1');
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/nonexistent',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'processing' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(404);
-  //     });
-  //
-  //     it('returns 404 when action belongs to different user', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-1');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-other-user',
-  //         userId: 'other-user',
-  //         commandId: 'cmd-1',
-  //         type: 'todo',
-  //         confidence: 0.9,
-  //         title: 'Other user action',
-  //         status: 'pending',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-other-user',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'processing' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(404);
-  //     });
-  //
-  //     it('updates action status to processing (proceed)', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-proceed');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-proceed',
-  //         userId: 'user-proceed',
-  //         commandId: 'cmd-1',
-  //         type: 'todo',
-  //         confidence: 0.9,
-  //         title: 'Test Action',
-  //         status: 'pending',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-proceed',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'processing' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('processing');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-proceed');
-  //       expect(updatedAction?.status).toBe('processing');
-  //     });
-  //
-  //     it('updates action status to rejected', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-reject');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-reject',
-  //         userId: 'user-reject',
-  //         commandId: 'cmd-1',
-  //         type: 'todo',
-  //         confidence: 0.9,
-  //         title: 'Test Action',
-  //         status: 'pending',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-reject',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'rejected' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('rejected');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-reject');
-  //       expect(updatedAction?.status).toBe('rejected');
-  //     });
-  //
-  //     it('updates action status to archived from pending', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-archive-pending');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-archive-pending',
-  //         userId: 'user-archive-pending',
-  //         commandId: 'cmd-1',
-  //         type: 'research',
-  //         confidence: 0.9,
-  //         title: 'Test Research',
-  //         status: 'pending',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-archive-pending',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'archived' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('archived');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-archive-pending');
-  //       expect(updatedAction?.status).toBe('archived');
-  //     });
-  //
-  //     it('updates action status to archived from completed', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-archive-completed');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-archive-completed',
-  //         userId: 'user-archive-completed',
-  //         commandId: 'cmd-1',
-  //         type: 'research',
-  //         confidence: 0.9,
-  //         title: 'Test Research',
-  //         status: 'completed',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-archive-completed',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'archived' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('archived');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-archive-completed');
-  //       expect(updatedAction?.status).toBe('archived');
-  //     });
-  //
-  //     it('updates action status to archived from failed', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-archive-failed');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-archive-failed',
-  //         userId: 'user-archive-failed',
-  //         commandId: 'cmd-1',
-  //         type: 'research',
-  //         confidence: 0.9,
-  //         title: 'Test Research',
-  //         status: 'failed',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-archive-failed',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'archived' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('archived');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-archive-failed');
-  //       expect(updatedAction?.status).toBe('archived');
-  //     });
-  //
-  //     it('updates action status to archived from rejected', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-archive-rejected');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-archive-rejected',
-  //         userId: 'user-archive-rejected',
-  //         commandId: 'cmd-1',
-  //         type: 'research',
-  //         confidence: 0.9,
-  //         title: 'Test Research',
-  //         status: 'rejected',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'PATCH',
-  //         url: '/router/actions/action-archive-rejected',
-  //         headers: { authorization: `Bearer ${token}` },
-  //         payload: { status: 'archived' },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as {
-  //         success: boolean;
-  //         data: { action: { status: string } };
-  //       };
-  //       expect(body.success).toBe(true);
-  //       expect(body.data.action.status).toBe('archived');
-  //
-  //       const updatedAction = await fakeActionsAgentClient.getById('action-archive-rejected');
-  //       expect(updatedAction?.status).toBe('archived');
-  //     });
-  //   });
-  //
-  //   describe('DELETE /router/actions/:actionId (authenticated)', () => {
-  //     it('returns 401 when no auth header', async () => {
-  //       app = await buildServer();
-  //
-  //       const response = await app.inject({
-  //         method: 'DELETE',
-  //         url: '/router/actions/action-1',
-  //       });
-  //
-  //       expect(response.statusCode).toBe(401);
-  //     });
-  //
-  //     it('returns 404 when action not found', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-1');
-  //
-  //       const response = await app.inject({
-  //         method: 'DELETE',
-  //         url: '/router/actions/nonexistent',
-  //         headers: { authorization: `Bearer ${token}` },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(404);
-  //     });
-  //
-  //     it('deletes action successfully', async () => {
-  //       app = await buildServer();
-  //       const token = await createAccessToken('user-delete-action');
-  //
-  //       fakeActionsAgentClient.addAction({
-  //         id: 'action-to-delete',
-  //         userId: 'user-delete-action',
-  //         commandId: 'cmd-1',
-  //         type: 'todo',
-  //         confidence: 0.9,
-  //         title: 'Action to delete',
-  //         status: 'pending',
-  //         payload: {},
-  //         createdAt: '2025-01-01T12:00:00.000Z',
-  //         updatedAt: '2025-01-01T12:00:00.000Z',
-  //       });
-  //
-  //       const response = await app.inject({
-  //         method: 'DELETE',
-  //         url: '/router/actions/action-to-delete',
-  //         headers: { authorization: `Bearer ${token}` },
-  //       });
-  //
-  //       expect(response.statusCode).toBe(200);
-  //       const body = JSON.parse(response.body) as { success: boolean };
-  //       expect(body.success).toBe(true);
-  //
-  //       const deletedAction = await fakeActionsAgentClient.getById('action-to-delete');
-  //       expect(deletedAction).toBeNull();
-  //     });
-  //   });
-  //
   describe('DELETE /router/commands/:commandId (authenticated)', () => {
     it('returns 401 when no auth header', async () => {
       app = await buildServer();

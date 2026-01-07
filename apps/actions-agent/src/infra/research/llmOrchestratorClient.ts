@@ -1,6 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import type { SupportedModel } from '@intexuraos/llm-contract';
+import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { ResearchServiceClient } from '../../domain/ports/researchServiceClient.js';
 import pino from 'pino';
 
@@ -32,7 +32,7 @@ export function createLlmOrchestratorClient(
       userId: string;
       title: string;
       prompt: string;
-      selectedModels: SupportedModel[];
+      selectedModels: ResearchModel[];
       sourceActionId?: string;
     }): Promise<Result<{ id: string }>> {
       try {

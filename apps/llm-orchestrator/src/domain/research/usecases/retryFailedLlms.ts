@@ -6,7 +6,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { SupportedModel } from '../models/index.js';
+import type { ResearchModel } from '../models/index.js';
 import type { ResearchRepository } from '../ports/index.js';
 
 const MAX_RETRIES = 2;
@@ -16,7 +16,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    model: SupportedModel;
+    model: ResearchModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -29,7 +29,7 @@ export interface RetryFailedLlmsDeps {
 export interface RetryResult {
   ok: boolean;
   error?: string;
-  retriedModels?: SupportedModel[];
+  retriedModels?: ResearchModel[];
 }
 
 export async function retryFailedLlms(

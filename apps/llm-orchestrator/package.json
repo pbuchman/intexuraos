@@ -28,6 +28,7 @@
     "@intexuraos/infra-perplexity": "*",
     "@intexuraos/infra-pubsub": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
     "marked": "^15.0.6",
     "pino": "^10.1.0",

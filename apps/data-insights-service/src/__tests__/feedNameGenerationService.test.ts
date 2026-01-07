@@ -8,6 +8,7 @@ import type {
   LLMClient,
   NormalizedUsage,
 } from '@intexuraos/llm-contract';
+import { FakePricingContext } from '@intexuraos/llm-pricing';
 import * as infraGemini from '@intexuraos/infra-gemini';
 
 vi.mock('@intexuraos/infra-gemini');
@@ -22,6 +23,8 @@ const mockUsage: NormalizedUsage = {
 function mockGenerateResult(content: string): Result<GenerateResult, LLMError> {
   return ok({ content, usage: mockUsage });
 }
+
+const fakePricingContext = new FakePricingContext();
 
 describe('feedNameGenerationService', () => {
   let mockUserServiceClient: UserServiceClient;
@@ -45,7 +48,7 @@ describe('feedNameGenerationService', () => {
 
   describe('generateName', () => {
     it('generates a name using Gemini', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(
         userId,
@@ -62,7 +65,7 @@ describe('feedNameGenerationService', () => {
     });
 
     it('handles empty source names', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], ['Filter']);
 
@@ -70,7 +73,7 @@ describe('feedNameGenerationService', () => {
     });
 
     it('handles empty filter names', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', ['Source'], []);
 
@@ -81,7 +84,7 @@ describe('feedNameGenerationService', () => {
       mockUserServiceClient.getGeminiApiKey = vi
         .fn()
         .mockResolvedValue(err({ code: 'NO_API_KEY', message: 'No API key configured' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -96,7 +99,7 @@ describe('feedNameGenerationService', () => {
       mockUserServiceClient.getGeminiApiKey = vi
         .fn()
         .mockResolvedValue(err({ code: 'INTERNAL_ERROR', message: 'Service unavailable' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -109,7 +112,7 @@ describe('feedNameGenerationService', () => {
 
     it('returns GENERATION_ERROR when Gemini fails', async () => {
       mockGenerate.mockResolvedValue(err({ code: 'API_ERROR', message: 'Rate limit exceeded' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -122,7 +125,7 @@ describe('feedNameGenerationService', () => {
 
     it('trims whitespace from generated name', async () => {
       mockGenerate.mockResolvedValue(mockGenerateResult('  Trimmed Name  '));
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -136,7 +139,7 @@ describe('feedNameGenerationService', () => {
     it('truncates name to max length of 200', async () => {
       const longName = 'A'.repeat(300);
       mockGenerate.mockResolvedValue(mockGenerateResult(longName));
-      const service = createFeedNameGenerationService(mockUserServiceClient);
+      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 

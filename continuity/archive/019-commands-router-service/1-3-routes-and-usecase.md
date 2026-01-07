@@ -16,7 +16,7 @@ Need endpoints for PubSub push and UI data retrieval.
 
 - POST /internal/router/commands - PubSub push handler
 - GET /router/commands - List commands (authenticated)
-- GET /router/actions - List actions (authenticated)
+- GET /actions - List actions (authenticated)
 - ProcessCommandUseCase - orchestrate flow
 
 ## Non-Scope
@@ -57,7 +57,7 @@ interface PubSubMessage {
 
 - `POST /internal/router/commands` - X-Internal-Auth validated
 - `GET /router/commands` - JWT auth, returns user's commands
-- `GET /router/actions` - JWT auth, returns user's actions
+- `GET /actions` - JWT auth, returns user's actions
 
 ## Files
 

@@ -70,7 +70,7 @@ Architecture should support future "split action" feature where one command beco
 
 | Service         | Method | Path                                   | Change                    |
 | --------------- | ------ | -------------------------------------- | ------------------------- |
-| actions-agent   | PATCH  | `/router/actions/:actionId`            | Add optional `type` field |
+| actions-agent   | PATCH  | `/actions/:actionId`            | Add optional `type` field |
 | commands-router | GET    | `/internal/router/commands/:commandId` | New internal endpoint     |
 
 ## Key Files
