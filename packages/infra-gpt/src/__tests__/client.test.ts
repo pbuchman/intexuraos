@@ -214,7 +214,7 @@ describe('createGptClient', () => {
       expect(logUsage).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
-          provider: 'openai',
+          provider: LlmProviders.OpenAI,
           model: TEST_MODEL,
           callType: 'research',
           success: true,
@@ -405,7 +405,7 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.model).toBe('gpt-image-1');
+        expect(result.value.model).toBe(LlmModels.GPTImage1);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
         expect(result.value.usage.costUsd).toBe(0.04);
       }

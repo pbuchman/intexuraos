@@ -139,8 +139,8 @@ describe('runSynthesis', () => {
   it('returns error when no successful LLM results', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Error' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Error' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -159,18 +159,18 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.0-flash',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
           status: 'completed',
           result: 'Google Result',
         },
         {
-          provider: 'anthropic',
+          provider: LlmProviders.Anthropic,
           model: 'claude-3',
           status: 'completed',
           result: 'Claude Result',
         },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Error' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -180,7 +180,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: 'gemini-2.0-flash', content: 'Google Result' },
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
         { model: 'claude-3', content: 'Claude Result' },
       ],
       undefined,
@@ -293,8 +293,8 @@ describe('runSynthesis', () => {
   it('handles empty result string from LLM', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed' },
-        { provider: 'openai', model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed' },
+        { provider: LlmProviders.OpenAI, model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -304,7 +304,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: 'gemini-2.0-flash', content: '' },
+        { model: LlmModels.Gemini20Flash, content: '' },
         { model: 'gpt-4', content: 'OpenAI Result' },
       ],
       undefined,
@@ -318,8 +318,8 @@ describe('runSynthesis', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -342,13 +342,13 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Only success',
           },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Failed' },
-          { provider: 'anthropic', model: 'claude-opus', status: 'failed', error: 'Failed' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'failed', error: 'Failed' },
+          { provider: LlmProviders.Anthropic, model: 'claude-opus', status: 'failed', error: 'Failed' },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -364,8 +364,8 @@ describe('runSynthesis', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
@@ -387,14 +387,14 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: 'openai',
-            model: 'o4-mini-deep-research',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
             status: 'completed',
             result: 'OpenAI result',
           },
@@ -411,7 +411,7 @@ describe('runSynthesis', () => {
     it('runs synthesis when no LLMs succeed but has input contexts', async () => {
       const research = createTestResearch({
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Failed' },
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'failed', error: 'Failed' },
         ],
         inputContexts: [
           { id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T10:00:00Z' },
@@ -431,8 +431,8 @@ describe('runSynthesis', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -455,8 +455,8 @@ describe('runSynthesis', () => {
         selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -520,8 +520,8 @@ describe('runSynthesis', () => {
       expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
         originalPrompt: 'Test research prompt',
         reports: [
-          { model: 'gemini-2.0-flash', content: 'Google Result' },
-          { model: 'o4-mini-deep-research', content: 'OpenAI Result' },
+          { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+          { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
         ],
         additionalSources: undefined,
       });
@@ -762,7 +762,7 @@ describe('runSynthesis', () => {
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        'gemini-2.5-flash-image',
+        LlmModels.Gemini25FlashImage,
         'user-1',
         { title: 'Test Cover Title' }
       );
@@ -814,7 +814,7 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        'gpt-image-1',
+        LlmModels.GPTImage1,
         'user-1',
         { title: 'OpenAI Cover Title' }
       );

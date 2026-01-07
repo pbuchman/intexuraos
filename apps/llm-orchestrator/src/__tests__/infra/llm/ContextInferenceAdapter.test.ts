@@ -90,17 +90,17 @@ describe('ContextInferenceAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLogger = createMockLogger();
-    adapter = new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user', testPricing, mockLogger);
+    adapter = new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', 'gemini-2.0-flash', 'test-user', testPricing);
+      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'gemini-2.0-flash',
+        model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         pricing: testPricing,
       });

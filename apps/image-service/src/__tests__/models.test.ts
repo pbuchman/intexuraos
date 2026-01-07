@@ -46,27 +46,27 @@ describe('ImagePromptModel', () => {
 describe('ImageGenerationModel', () => {
   describe('IMAGE_GENERATION_MODELS', () => {
     it('has gpt-image-1 with openai provider', () => {
-      expect(IMAGE_GENERATION_MODELS['gpt-image-1']).toEqual({
+      expect(IMAGE_GENERATION_MODELS[LlmModels.GPTImage1]).toEqual({
         provider: LlmProviders.OpenAI,
-        modelId: 'gpt-image-1',
+        modelId: LlmModels.GPTImage1,
       });
     });
 
     it('has gemini-2.5-flash-image with google provider', () => {
-      expect(IMAGE_GENERATION_MODELS['gemini-2.5-flash-image']).toEqual({
+      expect(IMAGE_GENERATION_MODELS[LlmModels.Gemini25FlashImage]).toEqual({
         provider: LlmProviders.Google,
-        modelId: 'gemini-2.5-flash-image',
+        modelId: LlmModels.Gemini25FlashImage,
       });
     });
   });
 
   describe('isValidImageGenerationModel', () => {
     it('returns true for gpt-image-1', () => {
-      expect(isValidImageGenerationModel('gpt-image-1')).toBe(true);
+      expect(isValidImageGenerationModel(LlmModels.GPTImage1)).toBe(true);
     });
 
     it('returns true for gemini-2.5-flash-image', () => {
-      expect(isValidImageGenerationModel('gemini-2.5-flash-image')).toBe(true);
+      expect(isValidImageGenerationModel(LlmModels.Gemini25FlashImage)).toBe(true);
     });
 
     it('returns false for invalid model', () => {

@@ -3,12 +3,13 @@
  * Represents user preferences and configuration.
  */
 
+import type { LlmProvider } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '@intexuraos/common-core';
 
 /**
  * LLM provider identifiers.
  */
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+export type { LlmProvider };
 
 /**
  * Result of testing an LLM API key.

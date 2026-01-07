@@ -1,3 +1,4 @@
+import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionEventPublisher } from '../../../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
@@ -54,7 +55,7 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'What are the latest AI trends?',
           confidence: 0.95,
-          selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -156,7 +157,7 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'Compare AI models',
           confidence: 0.92,
-          selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -168,9 +169,9 @@ describe('ActionEventPublisher', () => {
 
       const [, publishedData] = mockPublishToTopic.mock.calls[0] as [string, ActionCreatedEvent];
       expect(publishedData.payload.selectedModels).toEqual([
-        'gemini-2.5-pro',
-        'o4-mini-deep-research',
-        'claude-opus-4-5-20251101',
+        LlmModels.Gemini25Pro,
+        LlmModels.O4MiniDeepResearch,
+        LlmModels.ClaudeOpus45,
       ]);
     });
   });

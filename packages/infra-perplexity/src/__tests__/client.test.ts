@@ -17,7 +17,7 @@ const { createPerplexityClient } = await import('../client.js');
 const { logUsage } = await import('@intexuraos/llm-pricing');
 
 const API_BASE_URL = 'https://api.perplexity.ai';
-const TEST_MODEL = 'sonar-pro';
+const TEST_MODEL = LlmModels.SonarPro;
 
 const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
   inputPricePerMillion: 3.0,
@@ -183,7 +183,7 @@ describe('createPerplexityClient', () => {
       expect(logUsage).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
-          provider: 'perplexity',
+          provider: LlmProviders.Perplexity,
           model: TEST_MODEL,
           callType: 'research',
           success: true,

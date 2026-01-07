@@ -98,7 +98,7 @@ async function generateContextLabels(
   googleApiKey: string | undefined,
   userId: string,
   createTitleGenerator: (
-    model: 'gemini-2.5-flash',
+    model: LlmModels.Gemini25Flash,
     apiKey: string,
     userId: string,
     pricing: import('@intexuraos/llm-contract').ModelPricing
@@ -109,7 +109,7 @@ async function generateContextLabels(
     return contexts;
   }
 
-  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey, userId, pricing);
+  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, pricing);
 
   return await Promise.all(
     contexts.map(async (ctx) => {
@@ -164,7 +164,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: user.userId,
         prompt: body.prompt,
         selectedModels: body.selectedModels,
-        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
+        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
@@ -172,7 +172,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing('gemini-2.5-flash')
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         submitParams.inputContexts = contextsWithLabels;
       }
@@ -229,10 +229,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let title: string;
       if (apiKeys.google !== undefined) {
         const titleGenerator = createTitleGenerator(
-          'gemini-2.5-flash',
+          LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          pricingContext.getPricing('gemini-2.5-flash')
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
@@ -243,9 +243,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Create draft research
       const defaultModels: ResearchModel[] = [
-        'gemini-2.5-pro',
-        'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
+        LlmModels.Gemini25Pro,
+        LlmModels.ClaudeOpus45,
+        LlmModels.O4MiniDeepResearch,
       ];
       const resolvedSelectedModels = body.selectedModels ?? defaultModels;
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
@@ -254,7 +254,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title,
         prompt: body.prompt,
         selectedModels: resolvedSelectedModels,
-        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
+        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
@@ -262,7 +262,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing('gemini-2.5-flash')
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const now = new Date().toISOString();
         draftParams.inputContexts = contextsWithLabels.map((ctx) => {
@@ -345,10 +345,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
           const titleGenerator = createTitleGenerator(
-            'gemini-2.5-flash',
+            LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            pricingContext.getPricing('gemini-2.5-flash')
+            pricingContext.getPricing(LlmModels.Gemini25Flash)
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
@@ -373,7 +373,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing('gemini-2.5-flash')
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const now = new Date().toISOString();
         updates.inputContexts = contextsWithLabels.map((ctx) => {
@@ -649,10 +649,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const contextInferrer =
             apiKeysResult.value.google !== undefined
               ? createContextInferrer(
-                  'gemini-2.5-flash',
+                  LlmModels.Gemini25Flash,
                   apiKeysResult.value.google,
                   user.userId,
-                  pricingContext.getPricing('gemini-2.5-flash'),
+                  pricingContext.getPricing(LlmModels.Gemini25Flash),
                   request.log
                 )
               : undefined;
@@ -889,7 +889,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing('gemini-2.5-flash')
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         enhanceInput.additionalContexts = contextsWithLabels;
       }

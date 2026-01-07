@@ -1,3 +1,4 @@
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 const mockBatch = {
@@ -69,8 +70,8 @@ describe('usageLogger', () => {
 
   const baseParams = {
     userId: 'user-123',
-    provider: 'google' as const,
-    model: 'gemini-2.5-flash',
+    provider: LlmProviders.Google as const,
+    model: LlmModels.Gemini25Flash,
     callType: 'research' as const,
     usage: {
       inputTokens: 100,
@@ -140,7 +141,7 @@ describe('usageLogger', () => {
       await logUsage(baseParams);
 
       expect(mockFirestore.collection).toHaveBeenCalledWith('llm_usage_stats');
-      expect(mockCollection.doc).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockCollection.doc).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
     });
 
     it('creates batch with model metadata', async () => {
@@ -152,12 +153,12 @@ describe('usageLogger', () => {
 
       const setCalls = mockBatch.set.mock.calls;
       const modelSetCall = setCalls.find(
-        (call) => call[1]?.model === 'gemini-2.5-flash' && call[1]?.provider === 'google'
+        (call) => call[1]?.model === LlmModels.Gemini25Flash && call[1]?.provider === LlmProviders.Google
       );
       expect(modelSetCall).toBeDefined();
       expect(modelSetCall?.[1]).toMatchObject({
-        model: 'gemini-2.5-flash',
-        provider: 'google',
+        model: LlmModels.Gemini25Flash,
+        provider: LlmProviders.Google,
       });
       expect(modelSetCall?.[2]).toEqual({ merge: true });
 

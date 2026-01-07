@@ -82,7 +82,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'nonexistent',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -101,7 +101,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'research-1',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -119,7 +119,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -137,7 +137,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -174,7 +174,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -183,7 +183,7 @@ describe('enhanceResearch', () => {
     if (result.ok) {
       expect(result.value.id).toBe('generated-id');
       expect(result.value.sourceResearchId).toBe('source-research-id');
-      expect(result.value.selectedModels).toContain('claude-opus-4-5-20251101');
+      expect(result.value.selectedModels).toContain(LlmModels.ClaudeOpus45);
       expect(result.value.llmResults).toHaveLength(3);
     }
     expect(deps.mockRepo.save).toHaveBeenCalledOnce();
@@ -197,14 +197,14 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: 'claude-opus-4-5-20251101',
+      synthesisModel: LlmModels.ClaudeOpus45,
     };
 
     const result = await enhanceResearch(params, deps);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.synthesisModel).toBe('claude-opus-4-5-20251101');
+      expect(result.value.synthesisModel).toBe(LlmModels.ClaudeOpus45);
     }
   });
 
@@ -257,7 +257,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -276,8 +276,8 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
-      synthesisModel: 'gemini-2.5-flash',
+      additionalModels: [LlmModels.ClaudeOpus45],
+      synthesisModel: LlmModels.Gemini25Flash,
     };
 
     const result = await enhanceResearch(params, deps);
@@ -287,8 +287,8 @@ describe('enhanceResearch', () => {
       expect.objectContaining({
         llmResults: expect.arrayContaining([
           expect.objectContaining({
-            provider: 'anthropic',
-            model: 'claude-opus-4-5-20251101',
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
           }),
         ]),
       })
@@ -324,7 +324,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: 'claude-opus-4-5-20251101',
+      synthesisModel: LlmModels.ClaudeOpus45,
     };
 
     const result = await enhanceResearch(params, deps);

@@ -1031,7 +1031,7 @@ describe('Commands Router Routes', () => {
         confidence: 0.95,
         title: 'Research topic',
         reasoning: 'Research query with model selection',
-        selectedModels: ['gemini-2.5-flash', LlmModels.ClaudeSonnet4520250929],
+        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet4520250929],
       });
 
       const event = {
@@ -1056,7 +1056,7 @@ describe('Commands Router Routes', () => {
       const publishedEvents = fakeEventPublisher.getPublishedEvents();
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.payload.selectedModels).toEqual([
-        'gemini-2.5-flash',
+        LlmModels.Gemini25Flash,
         LlmModels.ClaudeSonnet4520250929,
       ]);
     });
@@ -1327,7 +1327,7 @@ describe('Commands Router Routes', () => {
         confidence: 0.95,
         title: 'AI Trends Research',
         reasoning: 'Research query about AI trends',
-        selectedModels: ['gemini-2.5-flash', LlmModels.ClaudeSonnet4520250929],
+        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet4520250929],
       });
 
       await app.inject({
@@ -1342,7 +1342,7 @@ describe('Commands Router Routes', () => {
       expect(publishedEvents[0]?.actionType).toBe('research');
       expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
       expect(publishedEvents[0]?.payload.selectedModels).toEqual([
-        'gemini-2.5-flash',
+        LlmModels.Gemini25Flash,
         LlmModels.ClaudeSonnet4520250929,
       ]);
     });

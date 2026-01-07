@@ -74,26 +74,26 @@ describe('LlmAdapterFactory', () => {
 
     it('creates ClaudeAdapter for claude model', () => {
       const provider = createResearchProvider(
-        'claude-opus-4-5-20251101',
+        LlmModels.ClaudeOpus45,
         'anthropic-key',
         'test-user-id',
         testPricing
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
-      expect((provider as unknown as { model: string }).model).toBe('claude-opus-4-5-20251101');
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus45);
     });
 
     it('creates GptAdapter for openai model', () => {
       const provider = createResearchProvider(
-        'o4-mini-deep-research',
+        LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
         testPricing
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
-      expect((provider as unknown as { model: string }).model).toBe('o4-mini-deep-research');
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.O4MiniDeepResearch);
     });
 
     it('creates PerplexityAdapter for perplexity model', () => {
@@ -114,15 +114,15 @@ describe('LlmAdapterFactory', () => {
 
     it('throws error for claude model (synthesis not supported)', () => {
       expect(() =>
-        createSynthesizer('claude-opus-4-5-20251101', 'anthropic-key', 'test-user-id', testPricing)
+        createSynthesizer(LlmModels.ClaudeOpus45, 'anthropic-key', 'test-user-id', testPricing)
       ).toThrow('Anthropic does not support synthesis');
     });
 
     it('creates GptAdapter for openai model', () => {
-      const synthesizer = createSynthesizer('o4-mini-deep-research', 'openai-key', 'test-user-id', testPricing);
+      const synthesizer = createSynthesizer(LlmModels.O4MiniDeepResearch, 'openai-key', 'test-user-id', testPricing);
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe('o4-mini-deep-research');
+      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.O4MiniDeepResearch);
     });
 
     it('throws error for perplexity model (synthesis not supported)', () => {

@@ -24,17 +24,17 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 /** All models used by llm-orchestrator for research and synthesis */
 const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
   // Research models
-  'gemini-2.5-pro',
-  'gemini-2.5-flash',
-  'claude-opus-4-5-20251101',
-  'claude-sonnet-4-5-20250929',
-  'o4-mini-deep-research',
-  'gpt-5.2',
-  'sonar',
-  'sonar-pro',
-  'sonar-deep-research',
+  LlmModels.Gemini25Pro,
+  LlmModels.Gemini25Flash,
+  LlmModels.ClaudeOpus45,
+  LlmModels.ClaudeSonnet45,
+  LlmModels.O4MiniDeepResearch,
+  LlmModels.GPT52,
+  LlmModels.Sonar,
+  LlmModels.SonarPro,
+  LlmModels.SonarDeepResearch,
   // Fast models for title generation
-  'gemini-2.0-flash',
+  LlmModels.Gemini20Flash,
 ];
 
 async function loadPricing(): Promise<PricingContext> {

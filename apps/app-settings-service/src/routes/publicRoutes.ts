@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 
 export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -65,17 +66,17 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { pricingRepository } = getServices();
 
       const [google, openai, anthropic, perplexity] = await Promise.all([
-        pricingRepository.getByProvider('google'),
-        pricingRepository.getByProvider('openai'),
-        pricingRepository.getByProvider('anthropic'),
-        pricingRepository.getByProvider('perplexity'),
+        pricingRepository.getByProvider(LlmProviders.Google),
+        pricingRepository.getByProvider(LlmProviders.OpenAI),
+        pricingRepository.getByProvider(LlmProviders.Anthropic),
+        pricingRepository.getByProvider(LlmProviders.Perplexity),
       ]);
 
       const missing: string[] = [];
-      if (google === null) missing.push('google');
-      if (openai === null) missing.push('openai');
-      if (anthropic === null) missing.push('anthropic');
-      if (perplexity === null) missing.push('perplexity');
+      if (google === null) missing.push(LlmProviders.Google);
+      if (openai === null) missing.push(LlmProviders.OpenAI);
+      if (anthropic === null) missing.push(LlmProviders.Anthropic);
+      if (perplexity === null) missing.push(LlmProviders.Perplexity);
 
       if (missing.length > 0) {
         request.log.error({ missingProviders: missing }, 'Missing pricing for providers');
