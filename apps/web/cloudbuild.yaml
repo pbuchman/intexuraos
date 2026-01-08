@@ -39,6 +39,8 @@ steps:
         rm -rf node_modules
         npm ci
         npm run --workspace=@intexuraos/web build
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'

@@ -344,6 +344,8 @@ steps:
       - '-c'
       - |
         npm run --workspace=@intexuraos/web build
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   # ============================================================================
   # PHASE 2: DEPLOYMENTS (each waits for its build)
