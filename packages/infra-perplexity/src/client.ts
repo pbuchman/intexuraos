@@ -29,7 +29,6 @@ import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type {
   PerplexityConfig,
   PerplexityError,
-  PerplexityLogger,
   PerplexityRequestBody,
   PerplexityResponse,
   PerplexityUsage,
@@ -110,8 +109,7 @@ interface PerplexityStreamChunk {
  */
 async function processStreamResponse(
   response: Response,
-  onUsageFound: (usage: PerplexityUsage) => void,
-  logger?: PerplexityLogger
+  onUsageFound: (usage: PerplexityUsage) => void
 ): Promise<{ content: string; citations: string[] }> {
   if (!response.body) {
     throw new Error('Response body is empty');
@@ -122,15 +120,11 @@ async function processStreamResponse(
   let content = '';
   let citations: string[] = [];
   let buffer = '';
-  let chunkCount = 0;
-
-  logger?.info({}, '[Perplexity SSE] Starting stream processing...');
 
   try {
     for (;;) {
       const result = await reader.read();
       if (result.done) {
-        logger?.info({ totalChunks: chunkCount }, '[Perplexity SSE] Stream complete');
         break;
       }
       const value = result.value as Uint8Array | undefined;
@@ -149,40 +143,26 @@ async function processStreamResponse(
 
         const dataStr = trimmed.slice(6); // Remove 'data: '
         if (dataStr === '[DONE]') {
-          logger?.info({}, '[Perplexity SSE] Received [DONE] signal');
           continue;
         }
 
         try {
           const data = JSON.parse(dataStr) as PerplexityStreamChunk;
-          chunkCount++;
 
           // 1. Accumulate Content (Delta)
           const delta = data.choices?.[0]?.delta?.content;
           if (typeof delta === 'string') {
             content += delta;
-            logger?.info(
-              { chunkNumber: chunkCount, deltaChars: delta.length, totalChars: content.length },
-              '[Perplexity SSE] Chunk received'
-            );
           }
 
           // 2. Capture Usage (usually in the final chunk)
           if (data.usage !== undefined) {
-            logger?.info(
-              {
-                promptTokens: data.usage.prompt_tokens,
-                completionTokens: data.usage.completion_tokens,
-              },
-              '[Perplexity SSE] Usage received'
-            );
             onUsageFound(data.usage);
           }
 
           // 3. Capture Citations (continuously updated, we overwrite to get the latest set)
           if (data.citations !== undefined) {
             citations = data.citations;
-            logger?.info({ sourceCount: citations.length }, '[Perplexity SSE] Citations updated');
           }
         } catch {
           // Swallow parse errors for malformed intermediate chunks
@@ -197,7 +177,7 @@ async function processStreamResponse(
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
+  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
 
   function trackUsage(
     callType: CallType,
@@ -282,13 +262,9 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
         // --- STREAM PROCESSING ---
         let rawUsage: PerplexityUsage | undefined;
-        const { content, citations } = await processStreamResponse(
-          response,
-          (u) => {
-            rawUsage = u;
-          },
-          logger
-        );
+        const { content, citations } = await processStreamResponse(response, (u) => {
+          rawUsage = u;
+        });
 
         const usage = extractUsage(rawUsage);
 
