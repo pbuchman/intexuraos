@@ -32,6 +32,18 @@ export {
   type LlmReport,
   type Domain,
   type Mode,
+  // Attribution module
+  parseAttributionLine,
+  parseSections,
+  buildSourceMap,
+  validateSynthesisAttributions,
+  generateBreakdown,
+  type SourceId,
+  type SourceMapItem,
+  type AttributionLine,
+  type ParsedSection,
+  type ValidationResult,
+  type BreakdownEntry,
 } from './prompts/index.js';
 
 // Logger interface for adapters

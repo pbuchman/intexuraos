@@ -301,31 +301,23 @@ describe('buildSourceMap', () => {
     expect(sourceMap[2]?.displayName).toBe('Named');
   });
 
-  it('handles sparse arrays gracefully', () => {
-    const reports: ({ model: string } | undefined)[] = [
-      { model: 'GPT-4' },
-      undefined,
-      { model: 'Claude' },
-    ];
-    const sourceMap = buildSourceMap(reports as readonly { model: string }[]);
+  it('handles sparse arrays with sequential IDs', () => {
+    const reports = [{ model: 'GPT-4' }, undefined, { model: 'Claude' }];
+    const sourceMap = buildSourceMap(reports);
 
     expect(sourceMap).toHaveLength(2);
     expect(sourceMap[0]?.id).toBe('S1');
-    expect(sourceMap[1]?.id).toBe('S3');
+    expect(sourceMap[1]?.id).toBe('S2');
   });
 
-  it('handles sparse additionalSources arrays', () => {
+  it('handles sparse additionalSources with sequential IDs', () => {
     const reports = [{ model: 'GPT-4' }];
-    const additionalSources: ({ label?: string } | undefined)[] = [
-      { label: 'Wikipedia' },
-      undefined,
-      { label: 'Custom' },
-    ];
-    const sourceMap = buildSourceMap(reports, additionalSources as readonly { label?: string }[]);
+    const additionalSources = [{ label: 'Wikipedia' }, undefined, { label: 'Custom' }];
+    const sourceMap = buildSourceMap(reports, additionalSources);
 
     expect(sourceMap).toHaveLength(3);
     expect(sourceMap[1]?.id).toBe('U1');
-    expect(sourceMap[2]?.id).toBe('U3');
+    expect(sourceMap[2]?.id).toBe('U2');
   });
 });
 
