@@ -7,15 +7,6 @@ const DEFAULT_CACHE_WRITE_MULTIPLIER = 1.25;
 const DEFAULT_CACHE_READ_MULTIPLIER = 0.1;
 const DEFAULT_OPENAI_CACHE_MULTIPLIER = 0.25;
 
-export function calculateCost(
-  inputTokens: number,
-  outputTokens: number,
-  pricing: LlmPricing
-): number {
-  const inputCost = (inputTokens / 1_000_000) * pricing.inputPricePerMillion;
-  const outputCost = (outputTokens / 1_000_000) * pricing.outputPricePerMillion;
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-}
 
 export function calculateAccurateCost(
   usage: TokenUsage & { costUsd?: number },

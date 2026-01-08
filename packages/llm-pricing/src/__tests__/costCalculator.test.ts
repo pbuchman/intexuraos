@@ -1,50 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { calculateCost, calculateAccurateCost } from '../costCalculator.js';
+import { calculateAccurateCost } from '../costCalculator.js';
 import type { LlmPricing } from '../types.js';
 import { type TokenUsage, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 describe('costCalculator', () => {
-  describe('calculateCost', () => {
-    it('calculates cost based on input and output tokens', () => {
-      const pricing: LlmPricing = {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini20Flash,
-        inputPricePerMillion: 0.1,
-        outputPricePerMillion: 0.4,
-        updatedAt: '2024-01-01',
-      };
-
-      const cost = calculateCost(1000, 500, pricing);
-      expect(cost).toBe(0.0003);
-    });
-
-    it('rounds to 6 decimal places', () => {
-      const pricing: LlmPricing = {
-        provider: LlmProviders.OpenAI,
-        model: 'gpt-4o',
-        inputPricePerMillion: 2.5,
-        outputPricePerMillion: 10.0,
-        updatedAt: '2024-01-01',
-      };
-
-      const cost = calculateCost(1234567, 987654, pricing);
-      expect(cost).toBeCloseTo(12.962958, 6);
-    });
-
-    it('handles zero tokens', () => {
-      const pricing: LlmPricing = {
-        provider: LlmProviders.Anthropic,
-        model: 'claude-3-sonnet',
-        inputPricePerMillion: 3.0,
-        outputPricePerMillion: 15.0,
-        updatedAt: '2024-01-01',
-      };
-
-      const cost = calculateCost(0, 0, pricing);
-      expect(cost).toBe(0);
-    });
-  });
-
   describe('calculateAccurateCost', () => {
     it('returns providerCost when present', () => {
       const usage: TokenUsage = {
