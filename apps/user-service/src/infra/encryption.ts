@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { err, ok, type Result } from './result.js';
+import { err, ok, type Result } from '@intexuraos/common-core';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -63,3 +63,4 @@ export function createEncryptor(keyBase64: string): Encryptor {
     },
   };
 }
+

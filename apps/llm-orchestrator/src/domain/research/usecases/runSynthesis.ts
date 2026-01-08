@@ -10,7 +10,7 @@ import {
   validateSynthesisAttributions,
   parseSections,
   generateBreakdown,
-} from '@intexuraos/common-core';
+} from '@intexuraos/llm-common';
 import type {
   LlmSynthesisProvider,
   NotificationSender,

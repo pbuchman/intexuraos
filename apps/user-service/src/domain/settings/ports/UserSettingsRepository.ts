@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { EncryptedValue } from '@intexuraos/common-core/encryption';
+import type { EncryptedValue } from '../../../infra/encryption.js';
 import type { LlmProvider, LlmTestResult, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 

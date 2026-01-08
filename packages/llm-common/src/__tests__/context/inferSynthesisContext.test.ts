@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInferSynthesisContextPrompt } from '../inferSynthesisContext.js';
+import { buildInferSynthesisContextPrompt } from '../../context/inferSynthesisContext.js';
 
 describe('buildInferSynthesisContextPrompt', () => {
   it('includes original prompt', () => {

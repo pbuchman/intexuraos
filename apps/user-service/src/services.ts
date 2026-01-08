@@ -3,7 +3,7 @@
  * Provides dependency injection for domain adapters.
  */
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createEncryptor, type Encryptor } from '@intexuraos/common-core/encryption';
+import { createEncryptor, type Encryptor } from './infra/encryption.js';
 import type { PricingContext } from '@intexuraos/llm-pricing';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
