@@ -73,6 +73,14 @@ export interface ShareInfo {
   coverImageId?: string;
 }
 
+/**
+ * Status of source attribution in synthesized output.
+ * - 'complete': All sections have valid Attribution lines
+ * - 'incomplete': Some sections missing or have invalid attributions
+ * - 'repaired': Originally invalid but repair succeeded
+ */
+export type AttributionStatus = 'complete' | 'incomplete' | 'repaired';
+
 export interface Research {
   id: string;
   userId: string;
@@ -97,6 +105,7 @@ export interface Research {
   researchContext?: ResearchContext;
   shareInfo?: ShareInfo;
   sourceResearchId?: string;
+  attributionStatus?: AttributionStatus;
 }
 
 export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {

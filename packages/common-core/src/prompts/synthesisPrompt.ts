@@ -72,20 +72,75 @@ ${ctx.missing_sections.map((s) => `- ${s}`).join('\n')}
 Note these gaps in your synthesis.`;
 }
 
+function buildSourceIdMapSection(
+  reports: readonly (SynthesisReport | undefined)[],
+  additionalSources?: readonly (AdditionalSource | undefined)[]
+): string {
+  const rows: string[] = [];
+  rows.push('SOURCE ID MAP (for Attribution)');
+  rows.push('ID   | Type | Name');
+  rows.push('-----|------|-----');
+
+  let llmIndex = 1;
+  for (const report of reports) {
+    if (report === undefined) continue;
+    rows.push(`S${String(llmIndex)}   | LLM  | ${report.model}`);
+    llmIndex++;
+  }
+
+  if (additionalSources !== undefined) {
+    let userIndex = 1;
+    for (const source of additionalSources) {
+      if (source === undefined) continue;
+      const label = source.label ?? `Source ${String(userIndex)}`;
+      rows.push(`U${String(userIndex)}   | User | ${label}`);
+      userIndex++;
+    }
+  }
+
+  return rows.join('\n');
+}
+
+const ATTRIBUTION_RULES = `
+ATTRIBUTION RULES (CRITICAL)
+
+At the END of EVERY ## section, add an Attribution line in this EXACT format:
+Attribution: Primary=S1,S2; Secondary=U1; Constraints=; UNK=false
+
+Categories:
+- Primary: Sources providing the main content for this section (most important)
+- Secondary: Sources providing supporting information
+- Constraints: Sources that mention limitations or caveats
+- UNK: Set to true ONLY if you cannot attribute content to any source
+
+Rules:
+- Use ONLY IDs from the Source ID Map above (S1, S2, U1, etc.)
+- Every section MUST end with an Attribution line
+- Multiple IDs in one category: separate with commas (e.g., Primary=S1,S2)
+- Empty category: leave value empty (e.g., Constraints=)
+- DO NOT output a 'Source Utilization Breakdown' section (system appends it automatically)
+`;
+
 function buildContextualSynthesisPrompt(
   originalPrompt: string,
-  reports: SynthesisReport[],
+  reports: (SynthesisReport | undefined)[],
   ctx: SynthesisContext,
-  additionalSources?: AdditionalSource[]
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
-  const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
+  const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
+  const formattedReports = validReports
+    .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
+    .join('\n\n---\n\n');
 
   let additionalSourcesSection = '';
   if (additionalSources !== undefined && additionalSources.length > 0) {
-    const formattedSources = additionalSources
+    const validAdditionalSources = additionalSources.filter(
+      (s): s is AdditionalSource => s !== undefined
+    );
+    const formattedSources = validAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
-        return `### ${sourceLabel}\n\n${source.content}`;
+        return `### U${String(idx + 1)} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
       })
       .join('\n\n---\n\n');
     additionalSourcesSection = `## Additional Sources
@@ -99,10 +154,14 @@ ${formattedSources}
 `;
   }
 
-  const hasAdditionalSources = additionalSources !== undefined && additionalSources.length > 0;
-  const modelsList = reports.map((r) => r.model).join(', ');
+  const validAdditionalSourcesForList =
+    additionalSources !== undefined
+      ? additionalSources.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
+  const hasAdditionalSources = validAdditionalSourcesForList.length > 0;
+  const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? additionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? validAdditionalSourcesForList.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
@@ -134,6 +193,7 @@ ${ctx.output_format.wants_table ? '- Include comparison tables where appropriate
       : '';
 
   const introSuffix = hasAdditionalSources ? ' and additional context provided by the user' : '';
+  const sourceIdMap = buildSourceIdMapSection(reports, additionalSources);
 
   return `Below are reports from multiple AI models${introSuffix}. Synthesize them into a comprehensive, well-organized report.
 
@@ -145,6 +205,8 @@ ${originalPrompt}
 
 ${sourcesInfo}
 
+${sourceIdMap}
+${ATTRIBUTION_RULES}
 ## Source Preference Strategy
 
 - ${ctx.source_preference.prefer_official_over_aggregators ? 'Prefer official sources over aggregators when information conflicts' : 'Weight all sources equally'}
@@ -167,6 +229,7 @@ Create a unified synthesis that:
 3. **Handle conflicts**: Note any conflicting information with clear attribution
 4. **Address gaps**: Acknowledge missing coverage areas
 5. **Conclude**: Provide a balanced summary
+6. **Attribute sources**: End each ## section with an Attribution line using IDs from the Source ID Map
 
 ## Citation Rules (CRITICAL)
 
@@ -192,9 +255,9 @@ Write the ENTIRE synthesis in ${ctx.language.toUpperCase()}. This is the languag
  */
 export function buildSynthesisPrompt(
   originalPrompt: string,
-  reports: SynthesisReport[],
-  ctxOrAdditionalSources?: SynthesisContext | AdditionalSource[],
-  additionalSources?: AdditionalSource[]
+  reports: (SynthesisReport | undefined)[],
+  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
   if (
     ctxOrAdditionalSources !== undefined &&
@@ -213,14 +276,22 @@ export function buildSynthesisPrompt(
     ? ctxOrAdditionalSources
     : undefined;
 
-  const formattedReports = reports.map((r) => `### ${r.model}\n\n${r.content}`).join('\n\n---\n\n');
+  const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
+  const formattedReports = validReports
+    .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
+    .join('\n\n---\n\n');
+
+  const validLegacyAdditionalSources =
+    legacyAdditionalSources !== undefined
+      ? legacyAdditionalSources.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
 
   let additionalSourcesSection = '';
-  if (legacyAdditionalSources !== undefined && legacyAdditionalSources.length > 0) {
-    const formattedSources = legacyAdditionalSources
+  if (validLegacyAdditionalSources.length > 0) {
+    const formattedSources = validLegacyAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
-        return `### ${sourceLabel}\n\n${source.content}`;
+        return `### U${String(idx + 1)} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
       })
       .join('\n\n---\n\n');
     additionalSourcesSection = `## Additional Sources
@@ -234,8 +305,7 @@ ${formattedSources}
 `;
   }
 
-  const hasAdditionalSources =
-    legacyAdditionalSources !== undefined && legacyAdditionalSources.length > 0;
+  const hasAdditionalSources = validLegacyAdditionalSources.length > 0;
   const conflictGuidelines = hasAdditionalSources
     ? `
 ## Conflict Resolution Guidelines
@@ -248,9 +318,9 @@ When information conflicts between any sources:
 `
     : '';
 
-  const modelsList = reports.map((r) => r.model).join(', ');
+  const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? legacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? validLegacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
@@ -258,6 +328,8 @@ When information conflicts between any sources:
     : `- **LLM models**: ${modelsList}`;
 
   const introSuffix = hasAdditionalSources ? ' and additional context provided by the user' : '';
+  const sourceIdMap = buildSourceIdMapSection(reports, legacyAdditionalSources);
+
   return `Below are reports from multiple AI models${introSuffix}. Synthesize them into a comprehensive, well-organized report.
 
 ## Original Prompt
@@ -268,6 +340,8 @@ ${originalPrompt}
 
 ${sourcesInfo}
 
+${sourceIdMap}
+${ATTRIBUTION_RULES}
 ${additionalSourcesSection}## LLM Reports
 
 ${formattedReports}
@@ -279,6 +353,7 @@ Create a unified synthesis that:
 2. **Combine insights**: Merge the best information from all sources${hasAdditionalSources ? ' (both LLM reports and additional sources)' : ''}
 3. **Handle conflicts**: Note any conflicting information with clear attribution
 4. **Conclude**: Provide a balanced summary
+5. **Attribute sources**: End each ## section with an Attribution line using IDs from the Source ID Map
 
 ## Adaptive Behavior
 
