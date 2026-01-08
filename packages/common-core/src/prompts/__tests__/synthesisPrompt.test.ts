@@ -75,16 +75,16 @@ describe('buildSynthesisPrompt', () => {
     expect(result).toContain('Source 1, Named Source');
   });
 
-  it('formats LLM reports with model headers', () => {
+  it('formats LLM reports with source ID headers', () => {
     const reports: SynthesisReport[] = [
       { model: 'GPT-4', content: 'GPT content here' },
       { model: 'Claude', content: 'Claude content here' },
     ];
     const result = buildSynthesisPrompt(originalPrompt, reports);
 
-    expect(result).toContain('### GPT-4');
+    expect(result).toContain('### S1 (LLM report; model: GPT-4)');
     expect(result).toContain('GPT content here');
-    expect(result).toContain('### Claude');
+    expect(result).toContain('### S2 (LLM report; model: Claude)');
     expect(result).toContain('Claude content here');
   });
 
@@ -96,7 +96,7 @@ describe('buildSynthesisPrompt', () => {
     const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
 
     expect(result).toContain('## Additional Sources');
-    expect(result).toContain('### Perplexity');
+    expect(result).toContain('### U1 (Additional source; label: Perplexity)');
     expect(result).toContain('External analysis');
   });
 
@@ -179,6 +179,57 @@ describe('buildSynthesisPrompt', () => {
     expect(result).toContain('Travel/lifestyle');
     expect(result).toContain('Technical/programming');
     expect(result).toContain('Medical/health');
+  });
+
+  it('includes Source ID Map section (not as ## heading)', () => {
+    const reports: SynthesisReport[] = [
+      { model: 'GPT-4', content: 'Content 1' },
+      { model: 'Claude', content: 'Content 2' },
+    ];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('SOURCE ID MAP (for Attribution)');
+    expect(result).toContain('S1   | LLM  | GPT-4');
+    expect(result).toContain('S2   | LLM  | Claude');
+    expect(result).not.toContain('## SOURCE ID MAP');
+  });
+
+  it('includes Source ID Map with additional sources', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const additionalSources: AdditionalSource[] = [
+      { label: 'Wikipedia', content: 'Wiki content' },
+      { label: 'Custom', content: 'Custom content' },
+    ];
+    const result = buildSynthesisPrompt(originalPrompt, reports, additionalSources);
+
+    expect(result).toContain('S1   | LLM  | GPT-4');
+    expect(result).toContain('U1   | User | Wikipedia');
+    expect(result).toContain('U2   | User | Custom');
+  });
+
+  it('includes Attribution Rules section', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('ATTRIBUTION RULES (CRITICAL)');
+    expect(result).toContain('Attribution: Primary=S1,S2; Secondary=U1; Constraints=; UNK=false');
+    expect(result).toContain('Primary: Sources providing the main content');
+    expect(result).toContain('Secondary: Sources providing supporting information');
+    expect(result).toContain('Constraints: Sources that mention limitations');
+  });
+
+  it('includes DO NOT output breakdown instruction', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain("DO NOT output a 'Source Utilization Breakdown' section");
+  });
+
+  it('includes attribution task in Your Task list', () => {
+    const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+    const result = buildSynthesisPrompt(originalPrompt, reports);
+
+    expect(result).toContain('**Attribute sources**: End each ## section with an Attribution line');
   });
 
   describe('with SynthesisContext', () => {
@@ -426,8 +477,63 @@ describe('buildSynthesisPrompt', () => {
       const additionalSources: AdditionalSource[] = [{ content: 'Unlabeled content' }];
       const result = buildSynthesisPrompt(originalPrompt, reports, ctx, additionalSources);
 
-      expect(result).toContain('### Source 1');
+      expect(result).toContain('### U1 (Additional source; label: Source 1)');
       expect(result).toContain('Unlabeled content');
+    });
+
+    it('includes Source ID Map in contextual path', () => {
+      const reports: SynthesisReport[] = [
+        { model: 'GPT-4', content: 'Content 1' },
+        { model: 'Claude', content: 'Content 2' },
+      ];
+      const ctx = createTestSynthesisContext();
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('SOURCE ID MAP (for Attribution)');
+      expect(result).toContain('S1   | LLM  | GPT-4');
+      expect(result).toContain('S2   | LLM  | Claude');
+    });
+
+    it('includes Attribution Rules in contextual path', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext();
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('ATTRIBUTION RULES (CRITICAL)');
+      expect(result).toContain("DO NOT output a 'Source Utilization Breakdown' section");
+    });
+
+    it('includes attribution task in contextual Your Task list', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext();
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain(
+        '6. **Attribute sources**: End each ## section with an Attribution line'
+      );
+    });
+
+    it('uses S# format for LLM reports in contextual path', () => {
+      const reports: SynthesisReport[] = [
+        { model: 'GPT-4', content: 'Content 1' },
+        { model: 'Claude', content: 'Content 2' },
+      ];
+      const ctx = createTestSynthesisContext();
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
+
+      expect(result).toContain('### S1 (LLM report; model: GPT-4)');
+      expect(result).toContain('### S2 (LLM report; model: Claude)');
+    });
+
+    it('uses U# format for additional sources in contextual path', () => {
+      const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
+      const ctx = createTestSynthesisContext();
+      const additionalSources: AdditionalSource[] = [
+        { label: 'Wikipedia', content: 'Wiki content' },
+      ];
+      const result = buildSynthesisPrompt(originalPrompt, reports, ctx, additionalSources);
+
+      expect(result).toContain('### U1 (Additional source; label: Wikipedia)');
     });
   });
 });

@@ -5,6 +5,12 @@
  */
 
 import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
+import {
+  buildSourceMap,
+  validateSynthesisAttributions,
+  parseSections,
+  generateBreakdown,
+} from '@intexuraos/common-core';
 import type {
   LlmSynthesisProvider,
   NotificationSender,
@@ -12,10 +18,11 @@ import type {
   ShareStoragePort,
 } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
-import type { ShareInfo } from '../models/Research.js';
+import type { ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
+import { repairAttribution } from './repairAttribution.js';
 
 export interface ShareConfig {
   shareBaseUrl: string;
@@ -165,6 +172,46 @@ export async function runSynthesis(
 
   logger?.info(`[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
 
+  // [4.3.3] Post-process synthesis for attribution
+  logger?.info('[4.3.3] Starting attribution post-processing');
+
+  const sourceMap = buildSourceMap(reports, additionalSources);
+  let processedContent = synthesisContent;
+  let attributionStatus: AttributionStatus = 'incomplete';
+
+  const validation = validateSynthesisAttributions(synthesisContent, sourceMap);
+
+  if (validation.valid) {
+    attributionStatus = 'complete';
+    logger?.info('[4.3.3a] Attribution validation passed');
+  } else {
+    logger?.info(`[4.3.3b] Attribution validation failed: ${validation.errors.join(', ')}`);
+
+    const repairResult = await repairAttribution(synthesisContent, sourceMap, {
+      synthesizer,
+      logger,
+    });
+
+    if (repairResult.ok) {
+      const revalidation = validateSynthesisAttributions(repairResult.value, sourceMap);
+      if (revalidation.valid) {
+        processedContent = repairResult.value;
+        attributionStatus = 'repaired';
+        logger?.info('[4.3.3c] Attribution repair succeeded');
+      } else {
+        logger?.info('[4.3.3c] Attribution repair did not fix all issues');
+      }
+    } else {
+      logger?.info('[4.3.3c] Attribution repair failed');
+    }
+  }
+
+  const sections = parseSections(processedContent);
+  const breakdown = generateBreakdown(sections, sourceMap);
+  processedContent = `${processedContent}\n\n${breakdown}`;
+
+  logger?.info(`[4.3.4] Attribution status: ${attributionStatus}`);
+
   // Calculate aggregate totals from all LLM results + synthesis
   const llmTotals = research.llmResults.reduce(
     (acc, r) => ({
@@ -194,7 +241,7 @@ export async function runSynthesis(
     logger?.info('[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
-      synthesisContent,
+      processedContent,
       userId,
       imageApiKeys,
       research.synthesisModel,
@@ -228,7 +275,7 @@ export async function runSynthesis(
 
     const html = generateShareableHtml({
       title: research.title,
-      synthesizedResult: synthesisContent,
+      synthesizedResult: processedContent,
       shareUrl,
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
@@ -257,12 +304,13 @@ export async function runSynthesis(
   logger?.info('[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
-    synthesizedResult: synthesisContent,
+    synthesizedResult: processedContent,
     completedAt: now.toISOString(),
     totalDurationMs,
     totalInputTokens,
     totalOutputTokens,
     totalCostUsd,
+    attributionStatus,
     ...(shareInfo !== undefined && { shareInfo }),
   });
 
