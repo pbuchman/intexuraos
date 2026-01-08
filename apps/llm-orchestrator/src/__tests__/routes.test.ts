@@ -421,7 +421,7 @@ describe('Research Routes - Authenticated', () => {
       }
     });
 
-    it('uses default LLMs when not provided', async () => {
+    it('creates draft without models when not provided (no defaults)', async () => {
       const token = await createToken(TEST_USER_ID);
 
       const response = await app.inject({
@@ -438,11 +438,7 @@ describe('Research Routes - Authenticated', () => {
       const saved = fakeRepo.getAll()[0];
       expect(saved).toBeDefined();
       if (saved !== undefined) {
-        expect(saved.selectedModels).toEqual([
-          LlmModels.Gemini25Pro,
-          LlmModels.ClaudeOpus45,
-          LlmModels.O4MiniDeepResearch,
-        ]);
+        expect(saved.selectedModels).toEqual([]);
         expect(saved.synthesisModel).toBe(LlmModels.Gemini25Pro);
       }
     });
