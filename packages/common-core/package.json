@@ -8,8 +8,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./errors": "./src/errors.ts",
-    "./encryption": "./src/encryption.ts"
+    "./errors": "./src/errors.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

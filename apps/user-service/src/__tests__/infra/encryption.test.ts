@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isErr, isOk } from '../index.js';
-import { createEncryptor } from '../encryption.js';
+import { isErr, isOk } from '@intexuraos/common-core';
+import { createEncryptor } from '../../infra/encryption.js';
 import { randomBytes } from 'crypto';
 
 describe('encryption', () => {
@@ -84,3 +84,4 @@ describe('encryption', () => {
     }
   });
 });
+
