@@ -38,8 +38,7 @@ steps:
         gcloud builds submit . \
           --config=cloudbuild.dynamic.json \
           --project=$PROJECT_ID \
-          --region=${_REGION} \
-          --substitutions=_REGION=${_REGION},_ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL},_ENVIRONMENT=${_ENVIRONMENT}
+          --region=${_REGION}
 
 options:
   logging: CLOUD_LOGGING_ONLY
