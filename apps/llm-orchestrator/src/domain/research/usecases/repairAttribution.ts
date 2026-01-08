@@ -3,7 +3,8 @@
  * Attempts to repair invalid attributions using a single LLM call.
  */
 
-import { type Result, ok, err, type SourceMapItem } from '@intexuraos/common-core';
+import { type Result, ok, err } from '@intexuraos/common-core';
+import type { SourceMapItem } from '@intexuraos/llm-common';
 import type { LlmSynthesisProvider } from '../ports/llmProvider.js';
 
 export interface RepairAttributionDeps {

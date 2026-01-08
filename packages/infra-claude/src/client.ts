@@ -6,8 +6,8 @@
 
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
+import { buildResearchPrompt } from '@intexuraos/llm-common';
 import {
-  buildResearchPrompt,
   err,
   getErrorMessage,
   ok,
