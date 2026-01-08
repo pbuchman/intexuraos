@@ -42,6 +42,15 @@ describe('retryPendingActions', () => {
       research: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },
+      todo: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
+      note: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
+      link: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
     };
   });
 
@@ -63,8 +72,8 @@ describe('retryPendingActions', () => {
 
   it('skips actions without handler', async () => {
     mockRepository.listByStatus.mockResolvedValue([
-      createTestAction({ type: 'todo' }),
-      createTestAction({ id: 'action-2', type: 'note' }),
+      createTestAction({ type: 'calendar' }),
+      createTestAction({ id: 'action-2', type: 'reminder' }),
     ]);
 
     const useCase = createRetryPendingActionsUseCase({
@@ -142,7 +151,7 @@ describe('retryPendingActions', () => {
   it('processes multiple actions independently', async () => {
     mockRepository.listByStatus.mockResolvedValue([
       createTestAction({ id: 'action-1', type: 'research' }),
-      createTestAction({ id: 'action-2', type: 'todo' }),
+      createTestAction({ id: 'action-2', type: 'calendar' }),
       createTestAction({ id: 'action-3', type: 'research' }),
     ]);
     mockPublisher.publishActionCreated

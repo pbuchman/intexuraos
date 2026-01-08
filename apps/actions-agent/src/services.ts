@@ -4,14 +4,41 @@ import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from './domain/ports/actionTransitionRepository.js';
 import type { CommandsRouterClient } from './domain/ports/commandsRouterClient.js';
+import type { TodosServiceClient } from './domain/ports/todosServiceClient.js';
+import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
+import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
 } from './domain/usecases/handleResearchAction.js';
 import {
+  createHandleTodoActionUseCase,
+  type HandleTodoActionUseCase,
+} from './domain/usecases/handleTodoAction.js';
+import {
+  createHandleNoteActionUseCase,
+  type HandleNoteActionUseCase,
+} from './domain/usecases/handleNoteAction.js';
+import {
+  createHandleLinkActionUseCase,
+  type HandleLinkActionUseCase,
+} from './domain/usecases/handleLinkAction.js';
+import {
   createExecuteResearchActionUseCase,
   type ExecuteResearchActionUseCase,
 } from './domain/usecases/executeResearchAction.js';
+import {
+  createExecuteTodoActionUseCase,
+  type ExecuteTodoActionUseCase,
+} from './domain/usecases/executeTodoAction.js';
+import {
+  createExecuteNoteActionUseCase,
+  type ExecuteNoteActionUseCase,
+} from './domain/usecases/executeNoteAction.js';
+import {
+  createExecuteLinkActionUseCase,
+  type ExecuteLinkActionUseCase,
+} from './domain/usecases/executeLinkAction.js';
 import {
   createRetryPendingActionsUseCase,
   type RetryPendingActionsUseCase,
@@ -27,6 +54,9 @@ import { createWhatsappNotificationSender } from './infra/notification/whatsappN
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
 import { createCommandsRouterHttpClient } from './infra/http/commandsRouterHttpClient.js';
+import { createTodosServiceHttpClient } from './infra/http/todosServiceHttpClient.js';
+import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClient.js';
+import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
@@ -37,20 +67,35 @@ export interface Services {
   actionRepository: ActionRepository;
   actionTransitionRepository: ActionTransitionRepository;
   commandsRouterClient: CommandsRouterClient;
+  todosServiceClient: TodosServiceClient;
+  notesServiceClient: NotesServiceClient;
+  bookmarksServiceClient: BookmarksServiceClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
+  handleTodoActionUseCase: HandleTodoActionUseCase;
+  handleNoteActionUseCase: HandleNoteActionUseCase;
+  handleLinkActionUseCase: HandleLinkActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
+  executeTodoActionUseCase: ExecuteTodoActionUseCase;
+  executeNoteActionUseCase: ExecuteNoteActionUseCase;
+  executeLinkActionUseCase: ExecuteLinkActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
+  todo: HandleTodoActionUseCase;
+  note: HandleNoteActionUseCase;
+  link: HandleLinkActionUseCase;
 }
 
 export interface ServiceConfig {
   llmOrchestratorUrl: string;
   userServiceUrl: string;
   commandsRouterUrl: string;
+  todosAgentUrl: string;
+  notesAgentUrl: string;
+  bookmarksAgentUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -88,10 +133,47 @@ export function initServices(config: ServiceConfig): void {
     topicName: config.whatsappSendTopic,
   });
 
+  const todosServiceClient = createTodosServiceHttpClient({
+    baseUrl: config.todosAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
+
+  const notesServiceClient = createNotesServiceHttpClient({
+    baseUrl: config.notesAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
+
+  const bookmarksServiceClient = createBookmarksServiceHttpClient({
+    baseUrl: config.bookmarksAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
+
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
     actionServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleResearchAction' }),
+  });
+
+  const handleTodoActionUseCase = createHandleTodoActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleTodoAction' }),
+  });
+
+  const handleNoteActionUseCase = createHandleNoteActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleNoteAction' }),
+  });
+
+  const handleLinkActionUseCase = createHandleLinkActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleLinkAction' }),
   });
 
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
@@ -99,12 +181,42 @@ export function initServices(config: ServiceConfig): void {
     researchServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'executeResearchAction' }),
+  });
+
+  const executeTodoActionUseCase = createExecuteTodoActionUseCase({
+    actionRepository,
+    todosServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'executeTodoAction' }),
+  });
+
+  const executeNoteActionUseCase = createExecuteNoteActionUseCase({
+    actionRepository,
+    notesServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'executeNoteAction' }),
+  });
+
+  const executeLinkActionUseCase = createExecuteLinkActionUseCase({
+    actionRepository,
+    bookmarksServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'executeLinkAction' }),
   });
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
     actionRepository,
     actionEventPublisher,
-    actionHandlerRegistry: { research: handleResearchActionUseCase },
+    actionHandlerRegistry: {
+      research: handleResearchActionUseCase,
+      todo: handleTodoActionUseCase,
+      note: handleNoteActionUseCase,
+      link: handleLinkActionUseCase,
+    },
     logger: pino({ name: 'retryPendingActions' }),
   });
 
@@ -122,14 +234,26 @@ export function initServices(config: ServiceConfig): void {
     actionRepository,
     actionTransitionRepository,
     commandsRouterClient,
+    todosServiceClient,
+    notesServiceClient,
+    bookmarksServiceClient,
     actionEventPublisher,
     whatsappPublisher,
     handleResearchActionUseCase,
+    handleTodoActionUseCase,
+    handleNoteActionUseCase,
+    handleLinkActionUseCase,
     executeResearchActionUseCase,
+    executeTodoActionUseCase,
+    executeNoteActionUseCase,
+    executeLinkActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
+    todo: handleTodoActionUseCase,
+    note: handleNoteActionUseCase,
+    link: handleLinkActionUseCase,
   };
 }
 

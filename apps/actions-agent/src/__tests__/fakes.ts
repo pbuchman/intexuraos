@@ -9,6 +9,21 @@ import type {
   CommandsRouterClient,
   CommandWithText,
 } from '../domain/ports/commandsRouterClient.js';
+import type {
+  TodosServiceClient,
+  CreateTodoRequest,
+  CreateTodoResponse,
+} from '../domain/ports/todosServiceClient.js';
+import type {
+  NotesServiceClient,
+  CreateNoteRequest,
+  CreateNoteResponse,
+} from '../domain/ports/notesServiceClient.js';
+import type {
+  BookmarksServiceClient,
+  CreateBookmarkRequest,
+  CreateBookmarkResponse,
+} from '../domain/ports/bookmarksServiceClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -326,7 +341,111 @@ export class FakeCommandsRouterClient implements CommandsRouterClient {
   }
 }
 
+export class FakeTodosServiceClient implements TodosServiceClient {
+  private createdTodos: CreateTodoRequest[] = [];
+  private nextTodoId = 'todo-123';
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getCreatedTodos(): CreateTodoRequest[] {
+    return this.createdTodos;
+  }
+
+  setNextTodoId(id: string): void {
+    this.nextTodoId = id;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.createdTodos.push(request);
+    return ok({
+      id: this.nextTodoId,
+      userId: request.userId,
+      title: request.title,
+      status: 'pending',
+    });
+  }
+}
+
+export class FakeNotesServiceClient implements NotesServiceClient {
+  private createdNotes: CreateNoteRequest[] = [];
+  private nextNoteId = 'note-123';
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getCreatedNotes(): CreateNoteRequest[] {
+    return this.createdNotes;
+  }
+
+  setNextNoteId(id: string): void {
+    this.nextNoteId = id;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.createdNotes.push(request);
+    return ok({
+      id: this.nextNoteId,
+      userId: request.userId,
+      title: request.title,
+    });
+  }
+}
+
+export class FakeBookmarksServiceClient implements BookmarksServiceClient {
+  private createdBookmarks: CreateBookmarkRequest[] = [];
+  private nextBookmarkId = 'bookmark-123';
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getCreatedBookmarks(): CreateBookmarkRequest[] {
+    return this.createdBookmarks;
+  }
+
+  setNextBookmarkId(id: string): void {
+    this.nextBookmarkId = id;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.createdBookmarks.push(request);
+    return ok({
+      id: this.nextBookmarkId,
+      userId: request.userId,
+      url: request.url,
+      title: request.title ?? null,
+    });
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
+import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
+import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
+import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -353,6 +472,69 @@ export function createFakeExecuteResearchActionUseCase(config?: {
   };
 }
 
+export type FakeExecuteTodoActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteTodoActionResult, Error>>;
+
+export function createFakeExecuteTodoActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteTodoActionResult;
+}): FakeExecuteTodoActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteTodoActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/todos/todo-123',
+      }
+    );
+  };
+}
+
+export type FakeExecuteNoteActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteNoteActionResult, Error>>;
+
+export function createFakeExecuteNoteActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteNoteActionResult;
+}): FakeExecuteNoteActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteNoteActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/notes/note-123',
+      }
+    );
+  };
+}
+
+export type FakeExecuteLinkActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteLinkActionResult, Error>>;
+
+export function createFakeExecuteLinkActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteLinkActionResult;
+}): FakeExecuteLinkActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteLinkActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/bookmarks/bookmark-123',
+      }
+    );
+  };
+}
+
 export function createFakeRetryPendingActionsUseCase(config?: {
   returnResult?: RetryResult;
 }): RetryPendingActionsUseCase {
@@ -371,6 +553,19 @@ export function createFakeRetryPendingActionsUseCase(config?: {
   };
 }
 
+import {
+  createHandleTodoActionUseCase,
+  type HandleTodoActionUseCase,
+} from '../domain/usecases/handleTodoAction.js';
+import {
+  createHandleNoteActionUseCase,
+  type HandleNoteActionUseCase,
+} from '../domain/usecases/handleNoteAction.js';
+import {
+  createHandleLinkActionUseCase,
+  type HandleLinkActionUseCase,
+} from '../domain/usecases/handleLinkAction.js';
+
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
   researchServiceClient: FakeResearchServiceClient;
@@ -378,9 +573,15 @@ export function createFakeServices(deps: {
   actionRepository?: FakeActionRepository;
   actionTransitionRepository?: FakeActionTransitionRepository;
   commandsRouterClient?: FakeCommandsRouterClient;
+  todosServiceClient?: FakeTodosServiceClient;
+  notesServiceClient?: FakeNotesServiceClient;
+  bookmarksServiceClient?: FakeBookmarksServiceClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
+  executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
+  executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
+  executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
@@ -389,13 +590,40 @@ export function createFakeServices(deps: {
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
   const commandsRouterClient = deps.commandsRouterClient ?? new FakeCommandsRouterClient();
+  const todosServiceClient = deps.todosServiceClient ?? new FakeTodosServiceClient();
+  const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
+  const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
+
+  const silentLogger = pino({ level: 'silent' });
 
   const handleResearchActionUseCase: HandleResearchActionUseCase =
     createHandleResearchActionUseCase({
       actionServiceClient: deps.actionServiceClient,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
+      logger: silentLogger,
     });
+
+  const handleTodoActionUseCase: HandleTodoActionUseCase = createHandleTodoActionUseCase({
+    actionServiceClient: deps.actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: 'http://test.app',
+    logger: silentLogger,
+  });
+
+  const handleNoteActionUseCase: HandleNoteActionUseCase = createHandleNoteActionUseCase({
+    actionServiceClient: deps.actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: 'http://test.app',
+    logger: silentLogger,
+  });
+
+  const handleLinkActionUseCase: HandleLinkActionUseCase = createHandleLinkActionUseCase({
+    actionServiceClient: deps.actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: 'http://test.app',
+    logger: silentLogger,
+  });
 
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
@@ -413,14 +641,26 @@ export function createFakeServices(deps: {
     actionRepository,
     actionTransitionRepository,
     commandsRouterClient,
+    todosServiceClient,
+    notesServiceClient,
+    bookmarksServiceClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
+    handleTodoActionUseCase,
+    handleNoteActionUseCase,
+    handleLinkActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
+    executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
+    executeNoteActionUseCase: deps.executeNoteActionUseCase ?? createFakeExecuteNoteActionUseCase(),
+    executeLinkActionUseCase: deps.executeLinkActionUseCase ?? createFakeExecuteLinkActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
     research: handleResearchActionUseCase,
+    todo: handleTodoActionUseCase,
+    note: handleNoteActionUseCase,
+    link: handleLinkActionUseCase,
   };
 }

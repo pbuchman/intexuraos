@@ -1,37 +1,48 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import { type ResearchModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
+import type { BookmarksServiceClient } from '../ports/bookmarksServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Logger } from 'pino';
 
-export interface ExecuteResearchActionDeps {
+export interface ExecuteLinkActionDeps {
   actionRepository: ActionRepository;
-  researchServiceClient: ResearchServiceClient;
+  bookmarksServiceClient: BookmarksServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
 }
 
-export interface ExecuteResearchActionResult {
+export interface ExecuteLinkActionResult {
   status: 'completed' | 'failed';
   resource_url?: string;
   error?: string;
 }
 
-export type ExecuteResearchActionUseCase = (
+export type ExecuteLinkActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteResearchActionResult>>;
+) => Promise<Result<ExecuteLinkActionResult>>;
 
-export function createExecuteResearchActionUseCase(
-  deps: ExecuteResearchActionDeps
-): ExecuteResearchActionUseCase {
-  const { actionRepository, researchServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+// Matches http/https URLs, excluding characters that are:
+// - Whitespace (\s) - URL terminator
+// - HTML/XML delimiters (<>) - prevents matching into markup
+// - Quotes ("") - prevents matching into quoted attributes
+// - URI unsafe chars ({}|\\^`[]) - per RFC 3986, these must be percent-encoded
+const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
 
-  return async (actionId: string): Promise<Result<ExecuteResearchActionResult>> => {
-    logger.info({ actionId }, 'Executing research action');
+function extractUrl(text: string): string | null {
+  const matches = text.match(URL_REGEX);
+  return matches?.[0] ?? null;
+}
+
+export function createExecuteLinkActionUseCase(
+  deps: ExecuteLinkActionDeps
+): ExecuteLinkActionUseCase {
+  const { actionRepository, bookmarksServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+
+  return async (actionId: string): Promise<Result<ExecuteLinkActionResult>> => {
+    logger.info({ actionId }, 'Executing link action');
 
     const action = await actionRepository.getById(actionId);
     if (action === null) {
@@ -61,6 +72,39 @@ export function createExecuteResearchActionUseCase(
       return err(new Error(`Cannot execute action with status: ${action.status}`));
     }
 
+    const urlFromPayload = typeof action.payload['url'] === 'string' ? action.payload['url'] : null;
+    const urlFromTitle = extractUrl(action.title);
+    const url = urlFromPayload ?? urlFromTitle;
+
+    logger.info(
+      {
+        actionId,
+        urlFromPayload: urlFromPayload !== null,
+        urlFromTitle: urlFromTitle !== null,
+        urlResolved: url !== null,
+      },
+      'URL extraction attempted'
+    );
+
+    if (url === null) {
+      logger.error({ actionId, title: action.title }, 'No URL found in action');
+      const failedAction: Action = {
+        ...action,
+        status: 'failed',
+        payload: {
+          ...action.payload,
+          error: 'No URL found in action',
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      await actionRepository.update(failedAction);
+      logger.info({ actionId, status: 'failed' }, 'Action marked as failed due to missing URL');
+      return ok({
+        status: 'failed',
+        error: 'No URL found in action',
+      });
+    }
+
     logger.info({ actionId }, 'Setting action to processing');
     const updatedAction: Action = {
       ...action,
@@ -69,28 +113,21 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    // No default models - user must select before approving the research draft
-    const selectedModels: ResearchModel[] = [];
-    const prompt =
-      typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
+    logger.info({ actionId, userId: action.userId, url }, 'Creating bookmark via bookmarks-agent');
 
-    logger.info(
-      { actionId, userId: action.userId, title: action.title, models: selectedModels },
-      'Creating research draft via llm-orchestrator'
-    );
-
-    const result = await researchServiceClient.createDraft({
+    const result = await bookmarksServiceClient.createBookmark({
       userId: action.userId,
+      url,
       title: action.title,
-      prompt,
-      selectedModels,
-      sourceActionId: action.id,
+      tags: [],
+      source: 'actions-agent',
+      sourceId: action.id,
     });
 
     if (!result.ok) {
       logger.error(
         { actionId, error: getErrorMessage(result.error) },
-        'Failed to create research draft via llm-orchestrator'
+        'Failed to create bookmark via bookmarks-agent'
       );
       const failedAction: Action = {
         ...action,
@@ -109,34 +146,34 @@ export function createExecuteResearchActionUseCase(
       });
     }
 
-    const researchId = result.value.id;
-    const resourceUrl = `/#/research/${researchId}`;
+    const bookmarkId = result.value.id;
+    const resourceUrl = `/#/bookmarks/${bookmarkId}`;
 
-    logger.info({ actionId, researchId }, 'Research draft created successfully');
+    logger.info({ actionId, bookmarkId }, 'Bookmark created successfully');
 
     const completedAction: Action = {
       ...action,
       status: 'completed',
       payload: {
         ...action.payload,
-        researchId,
+        bookmarkId,
         resource_url: resourceUrl,
       },
       updatedAt: new Date().toISOString(),
     };
     await actionRepository.update(completedAction);
 
-    logger.info({ actionId, researchId, status: 'completed' }, 'Action marked as completed');
+    logger.info({ actionId, bookmarkId, status: 'completed' }, 'Action marked as completed');
 
     const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
+    const message = `Bookmark saved: "${action.title}". View it here: ${fullUrl}`;
 
     logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
     const publishResult = await whatsappPublisher.publishSendMessage({
       userId: action.userId,
       message,
-      correlationId: `research-complete-${researchId}`,
+      correlationId: `bookmark-complete-${bookmarkId}`,
     });
 
     if (!publishResult.ok) {
@@ -149,8 +186,8 @@ export function createExecuteResearchActionUseCase(
     }
 
     logger.info(
-      { actionId, researchId, resourceUrl, status: 'completed' },
-      'Research action execution completed successfully'
+      { actionId, bookmarkId, resourceUrl, status: 'completed' },
+      'Link action execution completed successfully'
     );
 
     return ok({

@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isOk, isErr } from '@intexuraos/common-core';
-import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
+import { createHandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
 
 const silentLogger = pino({ level: 'silent' });
 
-describe('handleResearchAction usecase', () => {
+describe('handleLinkAction usecase', () => {
   let fakeActionClient: FakeActionServiceClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
@@ -16,10 +16,10 @@ describe('handleResearchAction usecase', () => {
     actionId: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',
-    actionType: 'research',
-    title: 'Test Research',
+    actionType: 'link',
+    title: 'Save this article https://example.com/article',
     payload: {
-      prompt: 'What is quantum computing?',
+      prompt: 'https://example.com/article',
       confidence: 0.95,
     },
     timestamp: '2025-01-01T12:00:00.000Z',
@@ -32,7 +32,7 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = createHandleLinkActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -53,12 +53,12 @@ describe('handleResearchAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('ready for approval');
+    expect(messages[0]?.message).toContain('New link ready to save');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = createHandleLinkActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -77,7 +77,7 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = createHandleLinkActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',

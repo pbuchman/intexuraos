@@ -1291,14 +1291,14 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('returns 400 when action type is not research', async () => {
+    it('returns 400 when action type is not supported', async () => {
       await fakeActionRepository.save({
         id: 'action-1',
         userId: 'user-123',
         commandId: 'cmd-1',
-        type: 'todo',
+        type: 'calendar',
         confidence: 0.95,
-        title: 'Test Todo',
+        title: 'Test Calendar',
         status: 'awaiting_approval',
         payload: {},
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1318,7 +1318,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('Action type todo not supported');
+      expect(body.error.message).toContain('Action type calendar not supported');
     });
 
     it('executes research action successfully', async () => {
@@ -1509,7 +1509,7 @@ describe('Research Agent Routes', () => {
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
-        payload: createValidPayload({ actionType: 'todo' }),
+        payload: createValidPayload({ actionType: 'calendar' }),
       });
 
       expect(response.statusCode).toBe(200);

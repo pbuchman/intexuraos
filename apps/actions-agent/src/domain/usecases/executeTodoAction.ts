@@ -1,37 +1,36 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import { type ResearchModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
+import type { TodosServiceClient } from '../ports/todosServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Logger } from 'pino';
 
-export interface ExecuteResearchActionDeps {
+export interface ExecuteTodoActionDeps {
   actionRepository: ActionRepository;
-  researchServiceClient: ResearchServiceClient;
+  todosServiceClient: TodosServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
 }
 
-export interface ExecuteResearchActionResult {
+export interface ExecuteTodoActionResult {
   status: 'completed' | 'failed';
   resource_url?: string;
   error?: string;
 }
 
-export type ExecuteResearchActionUseCase = (
+export type ExecuteTodoActionUseCase = (
   actionId: string
-) => Promise<Result<ExecuteResearchActionResult>>;
+) => Promise<Result<ExecuteTodoActionResult>>;
 
-export function createExecuteResearchActionUseCase(
-  deps: ExecuteResearchActionDeps
-): ExecuteResearchActionUseCase {
-  const { actionRepository, researchServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+export function createExecuteTodoActionUseCase(
+  deps: ExecuteTodoActionDeps
+): ExecuteTodoActionUseCase {
+  const { actionRepository, todosServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
 
-  return async (actionId: string): Promise<Result<ExecuteResearchActionResult>> => {
-    logger.info({ actionId }, 'Executing research action');
+  return async (actionId: string): Promise<Result<ExecuteTodoActionResult>> => {
+    logger.info({ actionId }, 'Executing todo action');
 
     const action = await actionRepository.getById(actionId);
     if (action === null) {
@@ -69,28 +68,27 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    // No default models - user must select before approving the research draft
-    const selectedModels: ResearchModel[] = [];
     const prompt =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
 
     logger.info(
-      { actionId, userId: action.userId, title: action.title, models: selectedModels },
-      'Creating research draft via llm-orchestrator'
+      { actionId, userId: action.userId, title: action.title },
+      'Creating todo via todos-agent'
     );
 
-    const result = await researchServiceClient.createDraft({
+    const result = await todosServiceClient.createTodo({
       userId: action.userId,
       title: action.title,
-      prompt,
-      selectedModels,
-      sourceActionId: action.id,
+      description: prompt,
+      tags: [],
+      source: 'actions-agent',
+      sourceId: action.id,
     });
 
     if (!result.ok) {
       logger.error(
         { actionId, error: getErrorMessage(result.error) },
-        'Failed to create research draft via llm-orchestrator'
+        'Failed to create todo via todos-agent'
       );
       const failedAction: Action = {
         ...action,
@@ -109,34 +107,34 @@ export function createExecuteResearchActionUseCase(
       });
     }
 
-    const researchId = result.value.id;
-    const resourceUrl = `/#/research/${researchId}`;
+    const todoId = result.value.id;
+    const resourceUrl = `/#/todos/${todoId}`;
 
-    logger.info({ actionId, researchId }, 'Research draft created successfully');
+    logger.info({ actionId, todoId }, 'Todo created successfully');
 
     const completedAction: Action = {
       ...action,
       status: 'completed',
       payload: {
         ...action.payload,
-        researchId,
+        todoId,
         resource_url: resourceUrl,
       },
       updatedAt: new Date().toISOString(),
     };
     await actionRepository.update(completedAction);
 
-    logger.info({ actionId, researchId, status: 'completed' }, 'Action marked as completed');
+    logger.info({ actionId, todoId, status: 'completed' }, 'Action marked as completed');
 
     const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
+    const message = `Todo created: "${action.title}". View it here: ${fullUrl}`;
 
     logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
     const publishResult = await whatsappPublisher.publishSendMessage({
       userId: action.userId,
       message,
-      correlationId: `research-complete-${researchId}`,
+      correlationId: `todo-complete-${todoId}`,
     });
 
     if (!publishResult.ok) {
@@ -149,8 +147,8 @@ export function createExecuteResearchActionUseCase(
     }
 
     logger.info(
-      { actionId, researchId, resourceUrl, status: 'completed' },
-      'Research action execution completed successfully'
+      { actionId, todoId, resourceUrl, status: 'completed' },
+      'Todo action execution completed successfully'
     );
 
     return ok({
