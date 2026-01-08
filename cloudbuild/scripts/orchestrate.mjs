@@ -215,6 +215,12 @@ async function getAffectedServices() {
 
   const pipeline = {
     steps,
+    // ADD THIS BLOCK
+    substitutions: {
+      _REGION: REGION,
+      _ARTIFACT_REGISTRY_URL: ARTIFACT_URL,
+      _ENVIRONMENT: ENV_NAME,
+    },
     options: {
       logging: 'CLOUD_LOGGING_ONLY',
       machineType: 'E2_HIGHCPU_8',
