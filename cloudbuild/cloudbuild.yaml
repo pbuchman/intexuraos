@@ -1,45 +1,552 @@
-# IntexuraOS Hyper-Fast Orchestrator
-steps:
-  # 1. Analyze & Generate Plan (Runs in ~5-10 seconds)
-  # Uses alpine to keep image pull fast. Installs git for diffing.
-  - name: 'node:22-alpine'
-    id: 'plan'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        apk add --no-cache git
-        node cloudbuild/scripts/orchestrate.mjs
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'PROJECT_ID=$PROJECT_ID'
-      - '_REGION=${_REGION}'
-      - '_ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - '_ENVIRONMENT=${_ENVIRONMENT}'
-      - '_FORCE_DEPLOY=${_FORCE_DEPLOY}'
+# IntexuraOS Monolithic Build Pipeline
+# Builds and deploys ALL services on every trigger - no conditional logic.
 
-  # 2. Execute the Plan (0 startup time if skipped)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'execute'
-    waitFor: ['plan']
+steps:
+  # ============================================================================
+  # PHASE 1: PARALLEL DOCKER BUILDS (all services)
+  # ============================================================================
+
+  # --- user-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-user-service'
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [ ! -f cloudbuild.dynamic.json ]; then
-          echo "No services affected. Skipping build."
-          exit 0
-        fi
+        docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/user-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/user-service:latest \
+          -f apps/user-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:latest
+    env: ['DOCKER_BUILDKIT=1']
 
-        echo ">> Submitting child build..."
-        # Submit the dynamic config.
-        # CRITICAL: This respects .gcloudignore to avoid uploading node_modules
-        gcloud builds submit . \
-          --config=cloudbuild.dynamic.json \
-          --project=$PROJECT_ID \
-          --region=${_REGION}
+  # --- promptvault-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-promptvault-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+          -f apps/promptvault-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- notion-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-notion-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+          -f apps/notion-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- whatsapp-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-whatsapp-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+          -f apps/whatsapp-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- api-docs-hub ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-api-docs-hub'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+          -f apps/api-docs-hub/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- mobile-notifications-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-mobile-notifications-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+          -f apps/mobile-notifications-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- llm-orchestrator ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-llm-orchestrator'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+          -f apps/llm-orchestrator/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- commands-router ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-commands-router'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+          -f apps/commands-router/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- actions-agent ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-actions-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
+          -f apps/actions-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- data-insights-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-data-insights-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          -f apps/data-insights-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- image-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/image-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+          -f apps/image-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- notes-agent ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-notes-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+          -f apps/notes-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- todos-agent ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-todos-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
+          -f apps/todos-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- bookmarks-agent ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-bookmarks-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
+          -f apps/bookmarks-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # --- app-settings-service ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-app-settings-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+          -f apps/app-settings-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  # ============================================================================
+  # PHASE 1b: WEB BUILD (parallel with Docker builds)
+  # ============================================================================
+
+  - name: 'node:22-slim'
+    id: 'build-web'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        npm ci
+        npm run --workspace=@intexuraos/web build
+    secretEnv:
+      - 'INTEXURAOS_FIREBASE_API_KEY'
+      - 'INTEXURAOS_FIREBASE_AUTH_DOMAIN'
+      - 'INTEXURAOS_FIREBASE_PROJECT_ID'
+      - 'INTEXURAOS_AUTH0_SPA_CLIENT_ID'
+      - 'INTEXURAOS_AUTH0_DOMAIN'
+
+  # ============================================================================
+  # PHASE 2: DEPLOYMENTS (each waits for its build)
+  # ============================================================================
+
+  # --- Deploy user-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-user-service'
+    waitFor: ['build-user-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-user-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy promptvault-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-promptvault-service'
+    waitFor: ['build-promptvault-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-promptvault-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy notion-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notion-service'
+    waitFor: ['build-notion-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-notion-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy whatsapp-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-whatsapp-service'
+    waitFor: ['build-whatsapp-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-whatsapp-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy api-docs-hub ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-api-docs-hub'
+    waitFor: ['build-api-docs-hub']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-api-docs-hub.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy mobile-notifications-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-mobile-notifications-service'
+    waitFor: ['build-mobile-notifications-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-mobile-notifications-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy llm-orchestrator ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-llm-orchestrator'
+    waitFor: ['build-llm-orchestrator']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-llm-orchestrator.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy commands-router ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-commands-router'
+    waitFor: ['build-commands-router']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-commands-router.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy actions-agent ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-actions-agent'
+    waitFor: ['build-actions-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-actions-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy data-insights-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-data-insights-service'
+    waitFor: ['build-data-insights-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy image-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-image-service'
+    waitFor: ['build-image-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-image-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy notes-agent ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notes-agent'
+    waitFor: ['build-notes-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-notes-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy todos-agent ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-todos-agent'
+    waitFor: ['build-todos-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-todos-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy bookmarks-agent ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-bookmarks-agent'
+    waitFor: ['build-bookmarks-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy app-settings-service ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-app-settings-service'
+    waitFor: ['build-app-settings-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-app-settings-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # --- Deploy web ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-web'
+    waitFor: ['build-web']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-web.sh']
+    env:
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'REGION=${_REGION}'
+
+  # --- Deploy Firestore (migrations) ---
+  - name: 'node:22-slim'
+    id: 'deploy-firestore'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        npm ci
+        bash cloudbuild/scripts/deploy-firestore.sh
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+
+# ============================================================================
+# SECRETS (for web build)
+# ============================================================================
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_API_KEY/versions/latest
+      env: 'INTEXURAOS_FIREBASE_API_KEY'
+    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_AUTH_DOMAIN/versions/latest
+      env: 'INTEXURAOS_FIREBASE_AUTH_DOMAIN'
+    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_PROJECT_ID/versions/latest
+      env: 'INTEXURAOS_FIREBASE_PROJECT_ID'
+    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_AUTH0_SPA_CLIENT_ID/versions/latest
+      env: 'INTEXURAOS_AUTH0_SPA_CLIENT_ID'
+    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_AUTH0_DOMAIN/versions/latest
+      env: 'INTEXURAOS_AUTH0_DOMAIN'
+
+# ============================================================================
+# OPTIONS
+# ============================================================================
 
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
+
+timeout: '2400s'  # 40 minutes (15 parallel builds + deploys)
+
+substitutions:
+  _REGION: europe-central2
+  _ARTIFACT_REGISTRY_URL: ''
+  _ENVIRONMENT: dev
+
