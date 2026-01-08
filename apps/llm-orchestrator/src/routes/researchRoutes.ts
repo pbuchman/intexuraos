@@ -242,20 +242,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title = body.prompt.slice(0, 60);
       }
 
-      // Create draft research
-      const defaultModels: ResearchModel[] = [
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.O4MiniDeepResearch,
-      ];
-      const resolvedSelectedModels = body.selectedModels ?? defaultModels;
+      // Create draft research (no default models - user must select before approving)
+      const selectedModels = body.selectedModels ?? [];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedModels: resolvedSelectedModels,
-        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? LlmModels.Gemini25Pro,
+        selectedModels,
+        synthesisModel: body.synthesisModel ?? selectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
@@ -533,6 +528,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (existing.value.status !== 'draft') {
         return await reply.fail('CONFLICT', 'Research is not in draft status');
+      }
+
+      // Require at least one source: either models or input contexts
+      const hasModels = existing.value.selectedModels.length > 0;
+      const hasContexts =
+        existing.value.inputContexts !== undefined && existing.value.inputContexts.length > 0;
+      if (!hasModels && !hasContexts) {
+        return await reply.fail(
+          'INVALID_REQUEST',
+          'Select at least one model or provide input context before starting research'
+        );
       }
 
       const updateResult = await researchRepo.update(params.id, { status: 'pending' });

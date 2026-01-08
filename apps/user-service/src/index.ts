@@ -35,12 +35,14 @@ async function main(): Promise<void> {
   const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
+  process.stdout.write(`Fetching pricing from ${appSettingsUrl}\n`);
   const pricingResult = await fetchAllPricing(appSettingsUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
   const pricingContext = createPricingContext(pricingResult.value, REQUIRED_MODELS);
+  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
   initializeServices(pricingContext);
 
   const app = await buildServer();

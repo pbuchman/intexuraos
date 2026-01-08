@@ -88,7 +88,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             selectedModels: {
               type: 'array',
               items: supportedModelSchema,
-              minItems: 1,
+              minItems: 0,
               maxItems: 6,
             },
             sourceActionId: { type: 'string', description: 'ID of the originating action' },

@@ -218,7 +218,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
-  fastify.put<{ Params: NoteParams; Body: UpdateNoteBody }>(
+  fastify.patch<{ Params: NoteParams; Body: UpdateNoteBody }>(
     '/notes/:id',
     {
       schema: {

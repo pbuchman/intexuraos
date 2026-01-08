@@ -27,6 +27,7 @@ const EXEMPT_APPS = ['api-docs-hub', 'web'];
 
 function getApps() {
   return readdirSync(appsDir).filter((entry) => {
+    if (/[*?[\]]/.test(entry)) return false;
     const fullPath = join(appsDir, entry);
     return statSync(fullPath).isDirectory() && !EXEMPT_APPS.includes(entry);
   });
@@ -89,10 +90,7 @@ for (const app of apps) {
 }
 
 if (violations.length === 0) {
-  console.log('✓ All apps have required endpoints\n');
-  for (const app of apps) {
-    console.log(`  ✓ ${app}`);
-  }
+  console.log(`✓ All ${apps.length} services have required endpoints`);
   process.exit(0);
 }
 

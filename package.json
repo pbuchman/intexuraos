@@ -18,7 +18,7 @@
     "emulators:stop": "docker compose -f docker/docker-compose.local.yaml down",
     "emulators:logs": "docker compose -f docker/docker-compose.local.yaml logs -f",
     "firestore:sync": "./scripts/sync-firestore.sh",
-    "lint": "eslint .",
+    "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

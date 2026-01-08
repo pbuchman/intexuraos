@@ -151,10 +151,7 @@ try {
 
   // Final result
   if (exitCode === 0) {
-    console.log('\n✓ BOUNDARY ENFORCEMENT VERIFIED:');
-    console.log('  - boundaries plugin is loaded and configured');
-    console.log('  - files outside boundaries are rejected');
-    console.log('  - files inside boundaries are recognized');
+    console.log('\n✓ Boundary enforcement verified');
   }
 } catch (err) {
   console.error('❌ Script error:', err.message);
