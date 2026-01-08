@@ -38,6 +38,7 @@ export class FakeNoteRepository implements NoteRepository {
     const note: Note = {
       id: randomUUID(),
       ...input,
+      status: input.status ?? 'active',
       createdAt: now,
       updatedAt: now,
     };

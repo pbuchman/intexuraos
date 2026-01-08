@@ -1,9 +1,12 @@
+export type NoteStatus = 'draft' | 'active';
+
 export interface Note {
   id: string;
   userId: string;
   title: string;
   content: string;
   tags: string[];
+  status: NoteStatus;
   source: string;
   sourceId: string;
   createdAt: Date;
@@ -15,6 +18,7 @@ export interface CreateNoteInput {
   title: string;
   content: string;
   tags: string[];
+  status?: NoteStatus | undefined;
   source: string;
   sourceId: string;
 }

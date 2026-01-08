@@ -1,4 +1,9 @@
-export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type TodoStatus =
+  | 'draft'
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
 export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface TodoItem {
@@ -38,6 +43,7 @@ export interface CreateTodoInput {
   tags: string[];
   priority?: TodoPriority | undefined;
   dueDate?: Date | null | undefined;
+  status?: TodoStatus | undefined;
   source: string;
   sourceId: string;
   items?: CreateTodoItemInput[] | undefined;

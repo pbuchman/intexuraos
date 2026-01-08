@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../../domain/models/actionEvent.js';
-import { getTopicForActionType } from './config.js';
+import { getActionsQueueTopic } from './config.js';
 
 export interface ActionEventPublisher {
   publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>>;
@@ -17,7 +17,7 @@ class ActionEventPublisherImpl extends BasePubSubPublisher implements ActionEven
   }
 
   async publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>> {
-    const topicName = getTopicForActionType(event.actionType);
+    const topicName = getActionsQueueTopic();
 
     return await this.publishToTopic(
       topicName,
