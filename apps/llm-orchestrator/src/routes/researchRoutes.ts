@@ -536,7 +536,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         existing.value.inputContexts !== undefined && existing.value.inputContexts.length > 0;
       if (!hasModels && !hasContexts) {
         return await reply.fail(
-          'VALIDATION_ERROR',
+          'INVALID_REQUEST',
           'Select at least one model or provide input context before starting research'
         );
       }
