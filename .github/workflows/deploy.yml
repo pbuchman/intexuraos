@@ -5,14 +5,73 @@ on:
     branches:
       - development
   workflow_dispatch:
+    inputs:
+      force_strategy:
+        description: 'Force a specific strategy'
+        required: false
+        type: choice
+        options:
+          - 'auto'
+          - 'monolith'
+        default: 'auto'
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  deploy:
-    name: Deploy to Dev
+  analyze:
+    name: Analyze Changes
+    runs-on: ubuntu-latest
+    outputs:
+      strategy: ${{ steps.dispatch.outputs.strategy }}
+      targets: ${{ steps.dispatch.outputs.targets }}
+      affected_count: ${{ steps.dispatch.outputs.affected_count }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Get base commit
+        id: base
+        run: |
+          # For push events, compare with the commit before the push
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            BASE_SHA="${{ github.event.before }}"
+            # Handle initial push (before is all zeros)
+            if [[ "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="HEAD~1"
+            fi
+          else
+            BASE_SHA="HEAD~1"
+          fi
+          echo "base_sha=$BASE_SHA" >> $GITHUB_OUTPUT
+          echo "Base SHA: $BASE_SHA"
+
+      - name: Run Smart Dispatch
+        id: dispatch
+        env:
+          BASE_SHA: ${{ steps.base.outputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node .github/scripts/smart-dispatch.mjs
+
+      - name: Override to Monolith (if forced)
+        if: ${{ github.event.inputs.force_strategy == 'monolith' }}
+        run: |
+          echo "strategy=MONOLITH" >> $GITHUB_OUTPUT
+          echo "⚠️ Strategy forced to MONOLITH by workflow dispatch"
+
+  deploy-monolith:
+    name: Deploy All Services
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'MONOLITH' || github.event.inputs.force_strategy == 'monolith'
     runs-on: ubuntu-latest
 
     steps:
@@ -25,10 +84,51 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Trigger Cloud Build
+      - name: Trigger Full Rebuild
         run: |
+          echo "🚀 Triggering MONOLITH build (all services)"
           gcloud builds triggers run intexuraos-dev-deploy \
             --branch="${GITHUB_REF_NAME}" \
             --region=europe-central2 \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}"
+
+  deploy-individual:
+    name: Deploy Individual Services
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'INDIVIDUAL'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.analyze.outputs.targets) }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Trigger ${{ matrix.target }}
+        run: |
+          echo "🎯 Triggering individual build: ${{ matrix.target }}"
+          gcloud builds triggers run ${{ matrix.target }} \
+            --branch="${GITHUB_REF_NAME}" \
+            --region=europe-central2 \
+            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}"
+
+  skip-deploy:
+    name: No Changes to Deploy
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'NONE'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report
+        run: |
+          echo "✅ No deployable changes detected"
+          echo "Affected services: ${{ needs.analyze.outputs.affected_count }}"
 
