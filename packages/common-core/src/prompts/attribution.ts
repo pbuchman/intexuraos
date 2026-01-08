@@ -424,3 +424,15 @@ export function generateBreakdown(
 
   return output;
 }
+
+/**
+ * Strip attribution lines from markdown content.
+ * Removes lines starting with "Attribution:" (case-insensitive) while preserving all other content.
+ * Used when rendering HTML reports to hide section-level attributions.
+ */
+export function stripAttributionLines(markdown: string): string {
+  return markdown
+    .split('\n')
+    .filter((line) => !line.trim().toLowerCase().startsWith('attribution:'))
+    .join('\n');
+}
