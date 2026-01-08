@@ -564,13 +564,13 @@ module "pubsub_commands_ingest" {
   ]
 }
 
-# Topic for research action events (commands-router -> actions-agent)
-module "pubsub_actions_research" {
+# Topic for action events (unified queue for all action types)
+module "pubsub_actions_queue" {
   source = "../../modules/pubsub-push"
 
   project_id     = var.project_id
   project_number = local.project_number
-  topic_name     = "intexuraos-actions-research-${var.environment}"
+  topic_name     = "intexuraos-actions-queue-${var.environment}"
   labels         = local.common_labels
 
   push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
@@ -1013,8 +1013,9 @@ module "commands_router" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
-    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
+    INTEXURAOS_GCP_PROJECT_ID        = var.project_id
+    INTEXURAOS_USER_SERVICE_URL      = module.user_service.service_url
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE  = "intexuraos-actions-queue-${var.environment}"
   }
 
   depends_on = [
@@ -1057,7 +1058,7 @@ module "actions_agent" {
     INTEXURAOS_NOTES_AGENT_URL               = module.notes_agent.service_url
     INTEXURAOS_BOOKMARKS_AGENT_URL           = module.bookmarks_agent.service_url
     INTEXURAOS_CALENDAR_AGENT_URL            = module.calendar_agent.service_url
-    INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE          = "intexuraos-actions-queue-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   }

@@ -11,6 +11,7 @@ interface NoteDocument {
   title: string;
   content: string;
   tags: string[];
+  status: string;
   source: string;
   sourceId: string;
   createdAt: string;
@@ -24,6 +25,7 @@ function toNote(id: string, doc: NoteDocument): Note {
     title: doc.title,
     content: doc.content,
     tags: doc.tags,
+    status: (doc.status || 'active') as Note['status'],
     source: doc.source,
     sourceId: doc.sourceId,
     createdAt: new Date(doc.createdAt),
@@ -43,6 +45,7 @@ export class FirestoreNoteRepository implements NoteRepository {
         title: input.title,
         content: input.content,
         tags: input.tags,
+        status: input.status ?? 'active',
         source: input.source,
         sourceId: input.sourceId,
         createdAt: now.toISOString(),
@@ -56,6 +59,7 @@ export class FirestoreNoteRepository implements NoteRepository {
         value: {
           id: docRef.id,
           ...input,
+          status: input.status ?? 'active',
           createdAt: now,
           updatedAt: now,
         },

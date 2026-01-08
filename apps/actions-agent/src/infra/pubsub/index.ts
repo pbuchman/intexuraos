@@ -3,4 +3,4 @@ export {
   type ActionEventPublisher,
   type ActionEventPublisherConfig,
 } from './actionEventPublisher.js';
-export { getTopicForActionType } from './config.js';
+export { getActionsQueueTopic } from './config.js';
