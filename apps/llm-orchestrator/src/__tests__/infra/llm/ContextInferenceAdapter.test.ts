@@ -3,7 +3,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Logger, ResearchContext, SynthesisContext } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
+import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-common';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockGenerate = vi.fn();

@@ -3,7 +3,8 @@
  */
 
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { ok, err, type SourceMapItem } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
+import type { SourceMapItem } from '@intexuraos/llm-common';
 import { repairAttribution } from '../../../../domain/research/usecases/repairAttribution.js';
 import type { LlmSynthesisProvider } from '../../../../domain/research/ports/llmProvider.js';
 

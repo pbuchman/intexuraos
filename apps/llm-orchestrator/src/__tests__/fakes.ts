@@ -5,12 +5,14 @@
 import {
   err,
   ok,
+  type Result,
+} from '@intexuraos/common-core';
+import {
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
   type ResearchContext,
-  type Result,
   type SynthesisContext,
-} from '@intexuraos/common-core';
+} from '@intexuraos/llm-common';
 import type {
   LlmError,
   LlmPricing,
