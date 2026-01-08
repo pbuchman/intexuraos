@@ -32,6 +32,7 @@ steps:
     args:
       - '-c'
       - |
+        rm -rf node_modules
         npm ci
         npm run --workspace=@intexuraos/web build
 

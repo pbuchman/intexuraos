@@ -6,6 +6,7 @@ steps:
     args:
       - '-c'
       - |
+        rm -rf node_modules
         npm ci
         bash cloudbuild/scripts/deploy-firestore.sh
     env:
