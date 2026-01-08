@@ -6,14 +6,15 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
-        docker buildx build \
-          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache \
-          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache,mode=max \
-          --push \
+        docker pull ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
           -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
           -f apps/todos-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

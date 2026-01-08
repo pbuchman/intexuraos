@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.6
 # IntexuraOS Image Service Dockerfile
 # Multi-stage build with esbuild bundling.
 
@@ -12,9 +11,8 @@ COPY package*.json ./
 COPY apps/image-service/package*.json ./apps/image-service/
 COPY packages/*/package*.json ./packages/
 
-# Install dependencies (cache npm directory between builds)
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline
+# Install dependencies
+RUN npm ci
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -32,8 +30,7 @@ WORKDIR /app
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/image-service/dist/package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --omit=dev --prefer-offline
+RUN npm install --omit=dev
 
 # Copy built file
 COPY --from=builder /app/apps/image-service/dist/index.js ./dist/
