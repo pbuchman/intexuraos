@@ -28,9 +28,11 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.url).toBe('https://example.com');
-      expect(body.data.userId).toBe('user-1');
-      expect(body.data.source).toBe('actions-agent');
+      expect(body.data.id).toBeDefined();
+      expect(body.data.url).toMatch(/^\/#\/bookmarks\//);
+      expect(body.data.bookmark.url).toBe('https://example.com');
+      expect(body.data.bookmark.userId).toBe('user-1');
+      expect(body.data.bookmark.source).toBe('actions-agent');
     });
 
     it('returns 401 without internal auth header', async () => {
@@ -129,9 +131,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.title).toBeNull();
-      expect(body.data.description).toBeNull();
-      expect(body.data.ogFetchStatus).toBe('pending');
+      expect(body.data.bookmark.title).toBeNull();
+      expect(body.data.bookmark.description).toBeNull();
+      expect(body.data.bookmark.ogFetchStatus).toBe('pending');
     });
 
     it('prevents duplicate URLs', async () => {

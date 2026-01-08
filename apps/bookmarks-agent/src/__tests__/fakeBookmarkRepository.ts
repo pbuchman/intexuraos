@@ -50,6 +50,7 @@ export class FakeBookmarkRepository implements BookmarkRepository {
     const bookmark: Bookmark = {
       id: randomUUID(),
       userId: input.userId,
+      status: input.status ?? 'active',
       url: input.url,
       title: input.title ?? null,
       description: input.description ?? null,

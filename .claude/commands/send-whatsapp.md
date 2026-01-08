@@ -12,15 +12,13 @@ curl -s -X POST "https://graph.facebook.com/v22.0/${INTEXURAOS_WHATSAPP_PHONE_NU
   -H "Content-Type: application/json" \
   -d "{
     \"messaging_product\": \"whatsapp\",
-    \"recipient_type\": \"individual\",
     \"to\": \"${INTEXURAOS_MY_PHONE_NUMBER}\",
     \"type\": \"text\",
-    \"text\": {
-      \"preview_url\": false,
-      \"body\": \"Your message here\"
-    }
+    \"text\": { \"body\": \"Your message here\" }
   }"
 ```
+
+**Important:** Use this exact minimal payload format. Do NOT add extra fields like `recipient_type` or `preview_url` - they can cause delivery issues even when the API returns success.
 
 ## Via Internal Service (For Production)
 
@@ -113,8 +111,9 @@ The base64-encoded event payload:
 
 ## Troubleshooting
 
-| Error              | Cause                       | Fix                                     |
-| ------------------ | --------------------------- | --------------------------------------- |
-| 401 Unauthorized   | Invalid/missing auth token  | Check `INTEXURAOS_INTERNAL_AUTH_TOKEN`  |
-| User not connected | User hasn't linked WhatsApp | Connect via web app Settings → WhatsApp |
-| Connection refused | Service not running         | Start whatsapp-service locally          |
+| Error                       | Cause                       | Fix                                                      |
+| --------------------------- | --------------------------- | -------------------------------------------------------- |
+| 401 Unauthorized            | Invalid/missing auth token  | Check `INTEXURAOS_INTERNAL_AUTH_TOKEN`                   |
+| User not connected          | User hasn't linked WhatsApp | Connect via web app Settings → WhatsApp                  |
+| Connection refused          | Service not running         | Start whatsapp-service locally                           |
+| API success but no delivery | Extra fields in payload     | Use minimal payload (no `recipient_type`, `preview_url`) |

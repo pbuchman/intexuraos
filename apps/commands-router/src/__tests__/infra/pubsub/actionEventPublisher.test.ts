@@ -37,17 +37,17 @@ describe('ActionEventPublisher', () => {
   beforeEach(() => {
     mockPublishToTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'] = 'test-research-topic';
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'test-actions-queue';
     publisher = new ActionEventPublisher({ projectId: 'test-project' });
   });
 
   afterEach(() => {
-    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'];
+    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'];
     vi.clearAllMocks();
   });
 
   describe('publishActionCreated', () => {
-    it('publishes research action event successfully', async () => {
+    it('publishes research action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -66,13 +66,13 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('test-research-topic', event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'research',
       });
     });
 
-    it('skips publish for action types without configured topic', async () => {
+    it('publishes todo action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -90,13 +90,13 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'todo',
       });
     });
 
-    it('skips publish for note action type', async () => {
+    it('publishes note action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -114,7 +114,7 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'note',
       });

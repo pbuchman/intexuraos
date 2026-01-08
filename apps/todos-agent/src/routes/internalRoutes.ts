@@ -2,7 +2,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
-import type { Todo, TodoItem, TodoPriority } from '../domain/models/todo.js';
+import type { Todo, TodoItem, TodoPriority, TodoStatus } from '../domain/models/todo.js';
 
 interface CreateTodoBody {
   userId: string;
@@ -11,13 +11,14 @@ interface CreateTodoBody {
   tags: string[];
   priority?: TodoPriority;
   dueDate?: string | null;
+  status?: TodoStatus;
   source: string;
   sourceId: string;
   items?: { title: string; priority?: TodoPriority | null; dueDate?: string | null }[];
 }
 
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
-const todoStatusEnum = ['pending', 'in_progress', 'completed', 'cancelled'];
+const todoStatusEnum = ['draft', 'pending', 'in_progress', 'completed', 'cancelled'];
 
 const createTodoBodySchema = {
   type: 'object',
@@ -29,6 +30,7 @@ const createTodoBodySchema = {
     tags: { type: 'array', items: { type: 'string' } },
     priority: { type: 'string', enum: todoPriorityEnum },
     dueDate: { type: ['string', 'null'], format: 'date-time' },
+    status: { type: 'string', enum: todoStatusEnum },
     source: { type: 'string', minLength: 1 },
     sourceId: { type: 'string', minLength: 1 },
     items: {
@@ -139,7 +141,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean' },
-              data: todoResponseSchema,
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  url: { type: 'string' },
+                  todo: todoResponseSchema,
+                },
+              },
             },
           },
         },
@@ -167,6 +176,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           tags: request.body.tags,
           priority: request.body.priority,
           dueDate: parseDate(request.body.dueDate),
+          status: request.body.status,
           source: request.body.source,
           sourceId: request.body.sourceId,
           items: request.body.items?.map((item) => ({
@@ -181,8 +191,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
+      const todoId = result.value.id;
+      const url = `/#/todos/${todoId}`;
+
       void reply.status(201);
-      return await reply.ok(formatTodo(result.value));
+      return await reply.ok({
+        id: todoId,
+        url,
+        todo: formatTodo(result.value),
+      });
     }
   );
 

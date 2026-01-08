@@ -27,9 +27,11 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.title).toBe('Internal Todo');
-      expect(body.data.userId).toBe('user-1');
-      expect(body.data.source).toBe('actions-agent');
+      expect(body.data.id).toBeDefined();
+      expect(body.data.url).toMatch(/^\/#\/todos\//);
+      expect(body.data.todo.title).toBe('Internal Todo');
+      expect(body.data.todo.userId).toBe('user-1');
+      expect(body.data.todo.source).toBe('actions-agent');
     });
 
     it('creates a todo with items', async () => {
@@ -52,9 +54,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.items).toHaveLength(2);
-      expect(body.data.items[0].title).toBe('Task 1');
-      expect(body.data.items[1].priority).toBe('high');
+      expect(body.data.todo.items).toHaveLength(2);
+      expect(body.data.todo.items[0].title).toBe('Task 1');
+      expect(body.data.todo.items[1].priority).toBe('high');
     });
 
     it('returns 401 without internal auth header', async () => {
@@ -134,8 +136,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.priority).toBe('urgent');
-      expect(body.data.dueDate).toBe(dueDate.toISOString());
+      expect(body.data.todo.priority).toBe('urgent');
+      expect(body.data.todo.dueDate).toBe(dueDate.toISOString());
     });
 
     it('returns 500 on storage error', async () => {
@@ -185,11 +187,11 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.items).toHaveLength(3);
-      expect(body.data.items[0].priority).toBe('high');
-      expect(body.data.items[1].dueDate).toBe(itemDueDate.toISOString());
-      expect(body.data.items[2].priority).toBe('urgent');
-      expect(body.data.items[2].dueDate).toBe(itemDueDate.toISOString());
+      expect(body.data.todo.items).toHaveLength(3);
+      expect(body.data.todo.items[0].priority).toBe('high');
+      expect(body.data.todo.items[1].dueDate).toBe(itemDueDate.toISOString());
+      expect(body.data.todo.items[2].priority).toBe('urgent');
+      expect(body.data.todo.items[2].dueDate).toBe(itemDueDate.toISOString());
     });
 
     it('creates todo with all optional fields', async () => {
@@ -215,9 +217,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.description).toBe('A detailed description');
-      expect(body.data.priority).toBe('high');
-      expect(body.data.dueDate).toBe(dueDate.toISOString());
+      expect(body.data.todo.description).toBe('A detailed description');
+      expect(body.data.todo.priority).toBe('high');
+      expect(body.data.todo.dueDate).toBe(dueDate.toISOString());
     });
 
     it('creates todo without optional fields', async () => {
@@ -239,10 +241,10 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.description).toBeNull();
-      expect(body.data.priority).toBe('medium');
-      expect(body.data.dueDate).toBeNull();
-      expect(body.data.items).toHaveLength(0);
+      expect(body.data.todo.description).toBeNull();
+      expect(body.data.todo.priority).toBe('medium');
+      expect(body.data.todo.dueDate).toBeNull();
+      expect(body.data.todo.items).toHaveLength(0);
     });
 
     it('creates todo with null optional fields explicitly', async () => {
@@ -266,8 +268,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.description).toBeNull();
-      expect(body.data.dueDate).toBeNull();
+      expect(body.data.todo.description).toBeNull();
+      expect(body.data.todo.dueDate).toBeNull();
     });
   });
 });

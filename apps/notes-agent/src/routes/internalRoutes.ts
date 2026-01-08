@@ -2,16 +2,19 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createNote } from '../domain/usecases/createNote.js';
-import type { Note } from '../domain/models/note.js';
+import type { Note, NoteStatus } from '../domain/models/note.js';
 
 interface CreateNoteBody {
   userId: string;
   title: string;
   content: string;
   tags: string[];
+  status?: NoteStatus;
   source: string;
   sourceId: string;
 }
+
+const noteStatusEnum = ['draft', 'active'];
 
 const createNoteBodySchema = {
   type: 'object',
@@ -21,6 +24,7 @@ const createNoteBodySchema = {
     title: { type: 'string', minLength: 1 },
     content: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
+    status: { type: 'string', enum: noteStatusEnum },
     source: { type: 'string', minLength: 1 },
     sourceId: { type: 'string', minLength: 1 },
   },
@@ -34,6 +38,7 @@ const noteResponseSchema = {
     title: { type: 'string' },
     content: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
+    status: { type: 'string', enum: noteStatusEnum },
     source: { type: 'string' },
     sourceId: { type: 'string' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -48,6 +53,7 @@ function formatNote(note: Note): object {
     title: note.title,
     content: note.content,
     tags: note.tags,
+    status: note.status,
     source: note.source,
     sourceId: note.sourceId,
     createdAt: note.createdAt.toISOString(),
@@ -71,7 +77,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean' },
-              data: noteResponseSchema,
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  url: { type: 'string' },
+                  note: noteResponseSchema,
+                },
+              },
             },
           },
         },
@@ -90,14 +103,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { noteRepository } = getServices();
-      const result = await createNote({ noteRepository, logger: request.log }, request.body);
+      const result = await createNote({ noteRepository, logger: request.log }, {
+        ...request.body,
+        status: request.body.status,
+      });
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
+      const noteId = result.value.id;
+      const url = `/#/notes/${noteId}`;
+
       void reply.status(201);
-      return await reply.ok(formatNote(result.value));
+      return await reply.ok({
+        id: noteId,
+        url,
+        note: formatNote(result.value),
+      });
     }
   );
 
