@@ -98,12 +98,6 @@ resource "google_project_iam_member" "cloud_build_secret_accessor" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
-# Cloud Build needs to query previous builds (for affected service detection)
-resource "google_project_iam_member" "cloud_build_viewer" {
-  project = var.project_id
-  role    = "roles/cloudbuild.builds.viewer"
-  member  = "serviceAccount:${google_service_account.cloud_build.email}"
-}
 
 # Cloud Build needs to trigger builds via API (for GitHub Actions integration)
 resource "google_project_iam_member" "cloud_build_builds_editor" {
@@ -127,7 +121,7 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
 
 resource "google_cloudbuild_trigger" "manual_main" {
   name        = "intexuraos-${var.environment}-deploy"
-  description = "Deploy trigger - invoked by GitHub Actions for any branch"
+  description = "Deploy trigger - builds and deploys all services unconditionally"
   location    = var.region
 
   source_to_build {
@@ -142,7 +136,6 @@ resource "google_cloudbuild_trigger" "manual_main" {
     _REGION                = var.region
     _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
     _ENVIRONMENT           = var.environment
-    _FORCE_DEPLOY          = "true"
   }
 
   service_account = google_service_account.cloud_build.id
