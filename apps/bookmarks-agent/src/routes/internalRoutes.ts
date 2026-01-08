@@ -146,7 +146,7 @@ function formatBookmark(bookmark: Bookmark): object {
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: CreateBookmarkBody }>(
-    '/internal/bookmarks/bookmarks',
+    '/internal/bookmarks',
     {
       schema: {
         operationId: 'createBookmarkInternal',
@@ -168,7 +168,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Body: CreateBookmarkBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to POST /internal/bookmarks/bookmarks',
+        message: 'Received request to POST /internal/bookmarks',
       });
 
       const authResult = validateInternalAuth(request);
@@ -205,7 +205,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get<{ Params: BookmarkParams; Querystring: GetBookmarkQuery }>(
-    '/internal/bookmarks/bookmarks/:id',
+    '/internal/bookmarks/:id',
     {
       schema: {
         operationId: 'getBookmarkInternal',
@@ -231,7 +231,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       reply: FastifyReply
     ) => {
       logIncomingRequest(request, {
-        message: 'Received request to GET /internal/bookmarks/bookmarks/:id',
+        message: 'Received request to GET /internal/bookmarks/:id',
       });
 
       const authResult = validateInternalAuth(request);
@@ -263,7 +263,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{ Params: BookmarkParams; Body: UpdateBookmarkBody }>(
-    '/internal/bookmarks/bookmarks/:id',
+    '/internal/bookmarks/:id',
     {
       schema: {
         operationId: 'updateBookmarkInternal',
@@ -289,7 +289,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       reply: FastifyReply
     ) => {
       logIncomingRequest(request, {
-        message: 'Received request to PATCH /internal/bookmarks/bookmarks/:id',
+        message: 'Received request to PATCH /internal/bookmarks/:id',
       });
 
       const authResult = validateInternalAuth(request);

@@ -187,7 +187,14 @@ export function LlmPricingPage(): React.JSX.Element {
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
-      ) : pricing === null ? (
+      ) : pricing !== null ? (
+        <div className="grid gap-6 md:grid-cols-2">
+          <ProviderBlock provider={LlmProviders.Google} pricing={pricing.google} />
+          <ProviderBlock provider={LlmProviders.OpenAI} pricing={pricing.openai} />
+          <ProviderBlock provider={LlmProviders.Anthropic} pricing={pricing.anthropic} />
+          <ProviderBlock provider={LlmProviders.Perplexity} pricing={pricing.perplexity} />
+        </div>
+      ) : error === null ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <DollarSign className="mb-4 h-12 w-12 text-slate-300" />
@@ -195,14 +202,7 @@ export function LlmPricingPage(): React.JSX.Element {
             <p className="text-slate-500">Pricing data is not available.</p>
           </div>
         </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2">
-          <ProviderBlock provider={LlmProviders.Google} pricing={pricing.google} />
-          <ProviderBlock provider={LlmProviders.OpenAI} pricing={pricing.openai} />
-          <ProviderBlock provider={LlmProviders.Anthropic} pricing={pricing.anthropic} />
-          <ProviderBlock provider={LlmProviders.Perplexity} pricing={pricing.perplexity} />
-        </div>
-      )}
+      ) : null}
     </Layout>
   );
 }

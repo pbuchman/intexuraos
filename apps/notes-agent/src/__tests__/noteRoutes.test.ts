@@ -234,7 +234,7 @@ describe('noteRoutes', () => {
     });
   });
 
-  describe('PUT /notes/:id', () => {
+  describe('PATCH /notes/:id', () => {
     it('updates a note', async () => {
       const created = await ctx.noteRepository.create({
         userId: 'test-user-123',
@@ -247,7 +247,7 @@ describe('noteRoutes', () => {
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: `/notes/${created.ok ? created.value.id : ''}`,
         headers: {
           authorization: `Bearer ${token}`,
@@ -272,7 +272,7 @@ describe('noteRoutes', () => {
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: `/notes/${created.ok ? created.value.id : ''}`,
         headers: {
           authorization: `Bearer ${token}`,
@@ -290,7 +290,7 @@ describe('noteRoutes', () => {
     it('returns 404 for non-existent note', async () => {
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: '/notes/non-existent-id',
         headers: {
           authorization: `Bearer ${token}`,
@@ -311,7 +311,7 @@ describe('noteRoutes', () => {
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: '/notes/any-id',
         headers: {
           authorization: `Bearer ${token}`,
@@ -326,7 +326,7 @@ describe('noteRoutes', () => {
 
     it('returns 401 when no auth token provided', async () => {
       const response = await ctx.app.inject({
-        method: 'PUT',
+        method: 'PATCH',
         url: '/notes/any-id',
         headers: { 'content-type': 'application/json' },
         payload: { title: 'Updated' },
