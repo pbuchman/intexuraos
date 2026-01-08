@@ -1,5 +1,4 @@
 export type { LlmPricing, LlmProvider } from './types.js';
-export { calculateAccurateCost } from './costCalculator.js';
 export {
   logUsage,
   isUsageLoggingEnabled,
