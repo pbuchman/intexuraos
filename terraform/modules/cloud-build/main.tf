@@ -142,6 +142,105 @@ resource "google_cloudbuild_trigger" "manual_main" {
 }
 
 # -----------------------------------------------------------------------------
+# Manual Per-Service Triggers (R2)
+# -----------------------------------------------------------------------------
+# These triggers are for manual execution only (via GCP Console).
+# They deploy a single service without triggering on git push.
+# The `ignored_files = ["**"]` pattern ensures no automatic execution.
+
+locals {
+  # Docker-based services (build + deploy)
+  docker_services = [
+    "user-service",
+    "promptvault-service",
+    "notion-service",
+    "whatsapp-service",
+    "api-docs-hub",
+    "mobile-notifications-service",
+    "llm-orchestrator",
+    "commands-router",
+    "actions-agent",
+    "data-insights-service",
+    "image-service",
+    "notes-agent",
+    "todos-agent",
+    "bookmarks-agent",
+    "app-settings-service",
+  ]
+}
+
+# Manual triggers for Docker-based services
+resource "google_cloudbuild_trigger" "manual_service" {
+  for_each = toset(local.docker_services)
+
+  name        = "manual-${each.key}"
+  description = "Manual trigger: Deploy ${each.key} only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  # Ignore all files to prevent automatic triggering on push
+  ignored_files = ["**"]
+
+  filename = "apps/${each.key}/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                = var.region
+    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
+    _ENVIRONMENT           = var.environment
+  }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# Manual trigger for web (special: npm build + secrets)
+resource "google_cloudbuild_trigger" "manual_web" {
+  name        = "manual-web"
+  description = "Manual trigger: Deploy web frontend only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "apps/web/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION      = var.region
+    _ENVIRONMENT = var.environment
+  }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# Manual trigger for Firestore migrations
+resource "google_cloudbuild_trigger" "manual_firestore" {
+  name        = "manual-firestore"
+  description = "Manual trigger: Deploy Firestore migrations only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "cloudbuild/cloudbuild-firestore.yaml"
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# -----------------------------------------------------------------------------
 # Workload Identity Federation (GitHub Actions → GCP)
 # -----------------------------------------------------------------------------
 # Allows GitHub Actions to authenticate to GCP without service account keys.
