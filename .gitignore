@@ -5,6 +5,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
+.eslintcache
 scripts/test-results/
 
 # IDE - exclude user-specific files but keep project configuration
@@ -59,3 +60,4 @@ firestore.rules
 apps/web/dev-dist/
 # Local Next.js build output
 apps/web/dev-dist/
+apps/\*

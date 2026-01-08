@@ -6,11 +6,11 @@ const TEST_INTERNAL_TOKEN = 'test-internal-token';
 describe('Internal Routes', () => {
   const ctx = setupTestContext();
 
-  describe('POST /internal/todos/todos', () => {
+  describe('POST /internal/todos', () => {
     it('creates a todo with valid internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -35,7 +35,7 @@ describe('Internal Routes', () => {
     it('creates a todo with items', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -60,7 +60,7 @@ describe('Internal Routes', () => {
     it('returns 401 without internal auth header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'content-type': 'application/json',
         },
@@ -79,7 +79,7 @@ describe('Internal Routes', () => {
     it('returns 401 with invalid internal auth token', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': 'wrong-token',
           'content-type': 'application/json',
@@ -99,7 +99,7 @@ describe('Internal Routes', () => {
     it('returns 400 for missing required fields', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -116,7 +116,7 @@ describe('Internal Routes', () => {
       const dueDate = new Date('2025-12-31T23:59:59Z');
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -143,7 +143,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -164,7 +164,7 @@ describe('Internal Routes', () => {
       const itemDueDate = new Date('2025-06-15T12:00:00Z');
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -196,7 +196,7 @@ describe('Internal Routes', () => {
       const dueDate = new Date('2025-09-01T00:00:00Z');
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -223,7 +223,7 @@ describe('Internal Routes', () => {
     it('creates todo without optional fields', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -248,7 +248,7 @@ describe('Internal Routes', () => {
     it('creates todo with null optional fields explicitly', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/todos/todos',
+        url: '/internal/todos',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',

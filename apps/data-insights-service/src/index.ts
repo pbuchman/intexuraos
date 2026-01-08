@@ -28,6 +28,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   // Fetch pricing from app-settings-service
+  process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
   const pricingResult = await fetchAllPricing(
     config.appSettingsServiceUrl,
     config.internalAuthToken
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
   const pricingContext = createPricingContext(pricingResult.value, [...REQUIRED_MODELS]);
+  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
