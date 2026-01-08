@@ -37,11 +37,31 @@ export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
+/** Default fetch timeout: 14 minutes (840s) - below Cloud Run's 15min limit */
+const DEFAULT_TIMEOUT_MS = 840_000;
+
 const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
   [LlmModels.Sonar]: 'low',
   [LlmModels.SonarPro]: 'medium',
   [LlmModels.SonarDeepResearch]: 'high',
 };
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function createRequestContext(
   method: string,
@@ -71,7 +91,7 @@ class PerplexityApiError extends Error {
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing } = config;
+  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
 
   function trackUsage(
     callType: CallType,
@@ -125,14 +145,18 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           temperature: 0.2,
         };
 
-        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
+        const response = await fetchWithTimeout(
+          `${API_BASE_URL}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
           },
-          body: JSON.stringify(requestBody),
-        });
+          timeoutMs
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -192,14 +216,18 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           temperature: 0.2,
         };
 
-        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
+        const response = await fetchWithTimeout(
+          `${API_BASE_URL}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
           },
-          body: JSON.stringify(requestBody),
-        });
+          timeoutMs
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -252,6 +280,9 @@ function mapPerplexityError(error: unknown): PerplexityError {
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
     if (error.status === 503) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { code: 'TIMEOUT', message: 'Request timed out' };
   }
   const message = getErrorMessage(error);
   if (message.includes('timeout')) return { code: 'TIMEOUT', message };

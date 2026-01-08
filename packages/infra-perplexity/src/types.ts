@@ -13,6 +13,8 @@ export interface PerplexityConfig {
   model: string;
   userId: string;
   pricing: import('@intexuraos/llm-contract').ModelPricing;
+  /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
+  timeoutMs?: number;
 }
 
 export type SearchContextSize = 'low' | 'medium' | 'high';

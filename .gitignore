@@ -61,3 +61,8 @@ apps/web/dev-dist/
 # Local Next.js build output
 apps/web/dev-dist/
 apps/\*
+
+# Ignore auto-generated folder context files
+CLAUDE.md
+# But keep the root CLAUDE.md if you want
+!.claude/CLAUDE.md
