@@ -8,7 +8,11 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
+import {
+  FakeAuthTokenRepository,
+  FakeOAuthConnectionRepository,
+  FakeUserSettingsRepository,
+} from './fakes.js';
 
 vi.mock('firebase-admin/auth', () => ({
   getAuth: vi.fn(() => ({
@@ -92,6 +96,8 @@ describe('Firebase Routes', () => {
       auth0Client: null,
       encryptor: null,
       llmValidator: null,
+      oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+      googleOAuthClient: null,
     });
   });
 

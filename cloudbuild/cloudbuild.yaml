@@ -291,6 +291,25 @@ steps:
         docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
+  # --- calendar-agent ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-calendar-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          -f apps/calendar-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest
+    env: ['DOCKER_BUILDKIT=1']
+
   # ============================================================================
   # PHASE 1b: WEB BUILD (parallel with Docker builds)
   # ============================================================================
@@ -532,6 +551,18 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # --- Deploy calendar-agent ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-calendar-agent'
+    waitFor: ['build-calendar-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-calendar-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   # --- Deploy web ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-web'
@@ -551,7 +582,6 @@ steps:
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
-
 # ============================================================================
 # OPTIONS
 # ============================================================================
@@ -560,10 +590,9 @@ options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 
-timeout: '2400s'  # 40 minutes (15 parallel builds + deploys)
+timeout: '2400s' # 40 minutes (15 parallel builds + deploys)
 
 substitutions:
   _REGION: europe-central2
   _ARTIFACT_REGISTRY_URL: ''
   _ENVIRONMENT: dev
-

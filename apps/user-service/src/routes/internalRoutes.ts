@@ -5,12 +5,14 @@
  * GET /internal/users/:uid/llm-keys - Get decrypted LLM API keys for a user
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  * GET /internal/users/:uid/research-settings - Get research settings for a user
+ * GET /internal/users/:uid/oauth/google/token - Get valid Google OAuth token for a user
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
+import { getValidAccessToken, OAuthProviders } from '../domain/oauth/index.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /internal/users/:uid/llm-keys
@@ -166,6 +168,104 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       reply.status(204);
       return;
+    }
+  );
+
+  // GET /internal/users/:uid/oauth/google/token
+  fastify.get(
+    '/internal/users/:uid/oauth/google/token',
+    {
+      schema: {
+        operationId: 'getInternalGoogleOAuthToken',
+        summary: 'Get valid Google OAuth token (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Returns a valid Google OAuth access token, refreshing if necessary.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        response: {
+          200: {
+            description: 'Valid OAuth access token',
+            type: 'object',
+            properties: {
+              accessToken: { type: 'string' },
+              email: { type: 'string' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          404: {
+            description: 'No OAuth connection found',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Internal error',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/oauth/google/token',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for oauth/google/token endpoint'
+        );
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const params = request.params as { uid: string };
+      const { oauthConnectionRepository, googleOAuthClient } = getServices();
+
+      if (googleOAuthClient === null) {
+        reply.status(500);
+        return { error: 'Google OAuth is not configured', code: 'CONFIGURATION_ERROR' };
+      }
+
+      const result = await getValidAccessToken(
+        { userId: params.uid, provider: OAuthProviders.GOOGLE },
+        { oauthConnectionRepository, googleOAuthClient, logger: request.log }
+      );
+
+      if (!result.ok) {
+        if (result.error.code === 'CONNECTION_NOT_FOUND') {
+          reply.status(404);
+          return { error: result.error.message, code: result.error.code };
+        }
+        reply.status(500);
+        return { error: result.error.message, code: result.error.code };
+      }
+
+      return {
+        accessToken: result.value.accessToken,
+        email: result.value.email,
+      };
     }
   );
 

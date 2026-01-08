@@ -214,6 +214,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    calendar_agent = {
+      name      = "intexuraos-calendar-agent"
+      app_path  = "apps/calendar-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -425,6 +432,12 @@ module "secret_manager" {
     "INTEXURAOS_FIREBASE_AUTH_DOMAIN" = "Firebase Auth domain"
     # SSL certificate
     "INTEXURAOS_SSL_PRIVATE_KEY" = "SSL certificate private key for intexuraos.cloud"
+    # Google OAuth secrets for calendar integration
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
+    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
+    # Calendar Agent URL
+    "INTEXURAOS_CALENDAR_AGENT_URL" = "Calendar Agent Cloud Run URL"
   }
 
   depends_on = [google_project_service.apis]
@@ -697,15 +710,18 @@ module "user_service" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/user-service:latest"
 
   secrets = {
-    INTEXURAOS_AUTH0_DOMAIN             = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
-    INTEXURAOS_AUTH0_CLIENT_ID          = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
-    INTEXURAOS_AUTH_JWKS_URL            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
-    INTEXURAOS_AUTH_ISSUER              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
-    INTEXURAOS_AUTH_AUDIENCE            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY     = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_ENCRYPTION_KEY           = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_APP_SETTINGS_SERVICE_URL = module.secret_manager.secret_ids["INTEXURAOS_APP_SETTINGS_SERVICE_URL"]
+    INTEXURAOS_AUTH0_DOMAIN               = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_DOMAIN"]
+    INTEXURAOS_AUTH0_CLIENT_ID            = module.secret_manager.secret_ids["INTEXURAOS_AUTH0_CLIENT_ID"]
+    INTEXURAOS_AUTH_JWKS_URL              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER                = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE              = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY       = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_ENCRYPTION_KEY             = module.secret_manager.secret_ids["INTEXURAOS_ENCRYPTION_KEY"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN        = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_APP_SETTINGS_SERVICE_URL   = module.secret_manager.secret_ids["INTEXURAOS_APP_SETTINGS_SERVICE_URL"]
+    INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"]
+    INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET"]
+    INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI  = module.secret_manager.secret_ids["INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"]
   }
 
   env_vars = {
@@ -902,6 +918,7 @@ module "api_docs_hub" {
     INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
     INTEXURAOS_TODOS_AGENT_OPENAPI_URL                  = "${module.todos_agent.service_url}/openapi.json"
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
+    INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
   }
 
   depends_on = [
@@ -920,6 +937,7 @@ module "api_docs_hub" {
     module.notes_agent,
     module.todos_agent,
     module.bookmarks_agent,
+    module.calendar_agent,
   ]
 }
 
@@ -1038,6 +1056,7 @@ module "actions_agent" {
     INTEXURAOS_TODOS_AGENT_URL               = module.todos_agent.service_url
     INTEXURAOS_NOTES_AGENT_URL               = module.notes_agent.service_url
     INTEXURAOS_BOOKMARKS_AGENT_URL           = module.bookmarks_agent.service_url
+    INTEXURAOS_CALENDAR_AGENT_URL            = module.calendar_agent.service_url
     INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC = "intexuraos-actions-research-${var.environment}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
@@ -1053,6 +1072,7 @@ module "actions_agent" {
     module.todos_agent,
     module.notes_agent,
     module.bookmarks_agent,
+    module.calendar_agent,
   ]
 }
 
@@ -1257,6 +1277,41 @@ module "app_settings_service" {
     INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Calendar Agent - Google Calendar integration
+module "calendar_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.calendar_agent.name
+  service_account = module.iam.service_accounts["calendar_agent"]
+  port            = local.services.calendar_agent.port
+  min_scale       = local.services.calendar_agent.min_scale
+  max_scale       = local.services.calendar_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/calendar-agent:latest"
+
+  secrets = {
+    INTEXURAOS_AUTH_JWKS_URL       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
+    INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
+    INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_USER_SERVICE_URL    = module.secret_manager.secret_ids["INTEXURAOS_USER_SERVICE_URL"]
   }
 
   env_vars = {
@@ -1633,4 +1688,9 @@ output "todos_agent_url" {
 output "bookmarks_agent_url" {
   description = "Bookmarks Agent URL"
   value       = module.bookmarks_agent.service_url
+}
+
+output "calendar_agent_url" {
+  description = "Calendar Agent URL"
+  value       = module.calendar_agent.service_url
 }

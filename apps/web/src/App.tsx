@@ -20,6 +20,7 @@ import {
   CompositeFeedsListPage,
   DataSourceFormPage,
   DataSourcesListPage,
+  GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
   LlmOrchestratorPage,
@@ -134,6 +135,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <MobileNotificationsConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/calendar"
+        element={
+          <ProtectedRoute>
+            <GoogleCalendarConnectionPage />
           </ProtectedRoute>
         }
       />
