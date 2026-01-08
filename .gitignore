@@ -46,6 +46,8 @@ tfplan
 
 # Affected services output (Cloud Build)
 affected.json
+.affected/
+cloudbuild.dynamic.json
 
 speechmatics-js-sdk/
 
