@@ -23,7 +23,7 @@ export async function updateNote(
   request: UpdateNoteRequest
 ): Promise<Note> {
   return await apiRequest<Note>(config.notesAgentUrl, `/notes/${id}`, accessToken, {
-    method: 'PUT',
+    method: 'PATCH',
     body: request,
   });
 }

@@ -6,11 +6,11 @@ const TEST_INTERNAL_TOKEN = 'test-internal-token';
 describe('Internal Routes', () => {
   const ctx = setupTestContext();
 
-  describe('POST /internal/bookmarks/bookmarks', () => {
+  describe('POST /internal/bookmarks', () => {
     it('creates a bookmark with valid internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -36,7 +36,7 @@ describe('Internal Routes', () => {
     it('returns 401 without internal auth header', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'content-type': 'application/json',
         },
@@ -55,7 +55,7 @@ describe('Internal Routes', () => {
     it('returns 401 with invalid internal auth token', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': 'wrong-token',
           'content-type': 'application/json',
@@ -75,7 +75,7 @@ describe('Internal Routes', () => {
     it('returns 400 for missing required fields', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -93,7 +93,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -113,7 +113,7 @@ describe('Internal Routes', () => {
     it('creates bookmark without optional fields', async () => {
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -145,7 +145,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -163,7 +163,7 @@ describe('Internal Routes', () => {
     });
   });
 
-  describe('GET /internal/bookmarks/bookmarks/:id', () => {
+  describe('GET /internal/bookmarks/:id', () => {
     it('returns bookmark with valid internal auth', async () => {
       const createResult = await ctx.bookmarkRepository.create({
         userId: 'user-1',
@@ -177,7 +177,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}?userId=user-1`,
+        url: `/internal/bookmarks/${createResult.value.id}?userId=user-1`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
         },
@@ -191,7 +191,7 @@ describe('Internal Routes', () => {
     it('returns 404 for non-existent bookmark', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/internal/bookmarks/bookmarks/non-existent?userId=user-1',
+        url: '/internal/bookmarks/non-existent?userId=user-1',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
         },
@@ -203,7 +203,7 @@ describe('Internal Routes', () => {
     it('returns 401 without internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/internal/bookmarks/bookmarks/any-id?userId=user-1',
+        url: '/internal/bookmarks/any-id?userId=user-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -217,7 +217,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: '/internal/bookmarks/bookmarks/any-id?userId=user-1',
+        url: '/internal/bookmarks/any-id?userId=user-1',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
         },
@@ -239,7 +239,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'GET',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}?userId=other-user`,
+        url: `/internal/bookmarks/${createResult.value.id}?userId=other-user`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
         },
@@ -249,7 +249,7 @@ describe('Internal Routes', () => {
     });
   });
 
-  describe('PATCH /internal/bookmarks/bookmarks/:id', () => {
+  describe('PATCH /internal/bookmarks/:id', () => {
     it('updates bookmark with AI summary', async () => {
       const createResult = await ctx.bookmarkRepository.create({
         userId: 'user-1',
@@ -263,7 +263,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -292,7 +292,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -330,7 +330,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -350,7 +350,7 @@ describe('Internal Routes', () => {
     it('returns 404 for non-existent bookmark', async () => {
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/internal/bookmarks/bookmarks/non-existent',
+        url: '/internal/bookmarks/non-existent',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -366,7 +366,7 @@ describe('Internal Routes', () => {
     it('returns 401 without internal auth', async () => {
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/internal/bookmarks/bookmarks/any-id',
+        url: '/internal/bookmarks/any-id',
         headers: {
           'content-type': 'application/json',
         },
@@ -396,7 +396,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -422,7 +422,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -450,7 +450,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: `/internal/bookmarks/bookmarks/${createResult.value.id}`,
+        url: `/internal/bookmarks/${createResult.value.id}`,
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -477,7 +477,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'POST',
-        url: '/internal/bookmarks/bookmarks',
+        url: '/internal/bookmarks',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',
@@ -504,7 +504,7 @@ describe('Internal Routes', () => {
 
       const response = await ctx.app.inject({
         method: 'PATCH',
-        url: '/internal/bookmarks/bookmarks/any-id',
+        url: '/internal/bookmarks/any-id',
         headers: {
           'x-internal-auth': TEST_INTERNAL_TOKEN,
           'content-type': 'application/json',

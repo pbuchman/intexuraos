@@ -57,7 +57,7 @@ function formatNote(note: Note): object {
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: CreateNoteBody }>(
-    '/internal/notes/notes',
+    '/internal/notes',
     {
       schema: {
         operationId: 'createNoteInternal',
@@ -79,7 +79,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Body: CreateNoteBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to POST /internal/notes/notes',
+        message: 'Received request to POST /internal/notes',
       });
 
       const authResult = validateInternalAuth(request);

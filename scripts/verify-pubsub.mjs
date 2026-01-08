@@ -155,7 +155,7 @@ function main() {
     process.exit(1);
   }
 
-  console.log('Pub/Sub standards verified successfully!');
+  console.log('✓ Pub/Sub standards verified');
 }
 
 main();
