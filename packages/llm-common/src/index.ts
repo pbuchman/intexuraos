@@ -40,7 +40,6 @@ export {
   type SynthesisOutputFormat,
   type SynthesisContext,
   type LlmReport,
-  type AdditionalSource as ContextAdditionalSource,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
   // Guards
