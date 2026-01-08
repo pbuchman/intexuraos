@@ -7,12 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { buildResearchPrompt } from '@intexuraos/llm-common';
-import {
-  err,
-  getErrorMessage,
-  ok,
-  type Result,
-} from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,

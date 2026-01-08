@@ -551,7 +551,6 @@ steps:
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
-
 # ============================================================================
 # OPTIONS
 # ============================================================================
@@ -560,10 +559,9 @@ options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 
-timeout: '2400s'  # 40 minutes (15 parallel builds + deploys)
+timeout: '2400s' # 40 minutes (15 parallel builds + deploys)
 
 substitutions:
   _REGION: europe-central2
   _ARTIFACT_REGISTRY_URL: ''
   _ENVIRONMENT: dev
-
