@@ -38,6 +38,7 @@ export {
   buildSourceMap,
   validateSynthesisAttributions,
   generateBreakdown,
+  stripAttributionLines,
   type SourceId,
   type SourceMapItem,
   type AttributionLine,

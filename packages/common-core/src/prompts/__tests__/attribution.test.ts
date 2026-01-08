@@ -5,6 +5,7 @@ import {
   buildSourceMap,
   validateSynthesisAttributions,
   generateBreakdown,
+  stripAttributionLines,
   type SourceId,
   type ParsedSection,
   type SourceMapItem,
@@ -606,5 +607,123 @@ describe('generateBreakdown', () => {
     const breakdown = generateBreakdown(sections, sourceMap);
 
     expect(breakdown).toContain('All sources were ignored.');
+  });
+});
+
+describe('stripAttributionLines', () => {
+  it('strips single attribution line', () => {
+    const markdown = `## Section 1
+Content here
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+
+More content`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`## Section 1
+Content here
+
+More content`);
+  });
+
+  it('strips multiple attribution lines', () => {
+    const markdown = `## Section 1
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+
+## Section 2
+More content
+Attribution: Primary=S2; Secondary=; Constraints=; UNK=false`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`## Section 1
+Content
+
+## Section 2
+More content`);
+  });
+
+  it('preserves Source Utilization Breakdown section', () => {
+    const markdown = `## Overview
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+
+## Source Utilization Breakdown (Generated)
+
+### Scorecard
+| ID | Name | Primary | Secondary | Constraints | Score |`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toContain('## Source Utilization Breakdown (Generated)');
+    expect(result).toContain('### Scorecard');
+    expect(result).not.toContain('Attribution: Primary=S1');
+  });
+
+  it('handles case-insensitive matching', () => {
+    const markdown = `Content
+attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+ATTRIBUTION: Primary=S2; Secondary=; Constraints=; UNK=false
+More content`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`Content
+More content`);
+  });
+
+  it('preserves empty lines and other content', () => {
+    const markdown = `## Section 1
+
+Content line 1
+
+Content line 2
+
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+
+## Section 2`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`## Section 1
+
+Content line 1
+
+Content line 2
+
+
+## Section 2`);
+  });
+
+  it('handles markdown with no attribution lines', () => {
+    const markdown = `## Section 1
+Content here
+More content`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(markdown);
+  });
+
+  it('handles empty string', () => {
+    const result = stripAttributionLines('');
+    expect(result).toBe('');
+  });
+
+  it('handles attribution line with leading whitespace', () => {
+    const markdown = `Content
+   Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+More content`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`Content
+More content`);
+  });
+
+  it('preserves lines that contain "attribution" but do not start with it', () => {
+    const markdown = `This is about attribution systems
+Content here
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+More discussion about attribution`;
+
+    const result = stripAttributionLines(markdown);
+    expect(result).toBe(`This is about attribution systems
+Content here
+More discussion about attribution`);
   });
 });
