@@ -8,15 +8,14 @@ import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
-  getErrorMessage,
   isResearchContext,
   isSynthesisContext,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
   type ResearchContext,
-  type Result,
   type SynthesisContext,
-} from '@intexuraos/common-core';
+} from '@intexuraos/llm-common';
+import { getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
 import type { Logger } from '@intexuraos/common-core';

@@ -4,7 +4,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ok, err, type SynthesisContext } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
+import type { SynthesisContext } from '@intexuraos/llm-common';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   runSynthesis,

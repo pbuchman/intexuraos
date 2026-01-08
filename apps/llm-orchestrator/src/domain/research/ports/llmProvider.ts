@@ -3,7 +3,8 @@
  * Implemented by Gemini, Claude, and GPT adapters.
  */
 
-import type { Result, SynthesisContext } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
+import type { SynthesisContext } from '@intexuraos/llm-common';
 
 export interface LlmError {
   code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED';

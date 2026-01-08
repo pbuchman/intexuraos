@@ -6,7 +6,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import type { EncryptedValue } from '@intexuraos/common-core/encryption';
+import type { EncryptedValue } from '../../infra/encryption.js';
 import { FirestoreUserSettingsRepository } from '../../infra/firestore/index.js';
 import type { LlmTestResult, UserSettings } from '../../domain/settings/index.js';
 

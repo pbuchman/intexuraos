@@ -8,7 +8,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // =============================================================================
@@ -31,6 +31,7 @@ const SERVICES = [
   'todos-agent',
   'bookmarks-agent',
   'app-settings-service',
+  'calendar-agent',
 ];
 
 const SPECIAL_TARGETS = ['web', 'firestore'];
@@ -96,6 +97,68 @@ function buildDependencyGraph() {
   return graph;
 }
 
+function buildPackageGraph() {
+  const deps = {};
+  const packagesDir = join(process.cwd(), 'packages');
+
+  if (!existsSync(packagesDir)) {
+    return deps;
+  }
+
+  const packages = readdirSync(packagesDir).filter((d) => {
+    const fullPath = join(packagesDir, d);
+    return statSync(fullPath).isDirectory();
+  });
+
+  for (const pkg of packages) {
+    const pkgJsonPath = join(packagesDir, pkg, 'package.json');
+    if (existsSync(pkgJsonPath)) {
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+        const allDeps = { ...pkgJson.dependencies, ...pkgJson.devDependencies };
+        deps[pkg] = [];
+        for (const dep of Object.keys(allDeps)) {
+          if (dep.startsWith('@intexuraos/')) {
+            deps[pkg].push(dep.replace('@intexuraos/', ''));
+          }
+        }
+      } catch {
+        deps[pkg] = [];
+      }
+    }
+  }
+
+  return deps;
+}
+
+function expandTransitiveDependents(changedPackages, packageGraph) {
+  const reverseDeps = {};
+  for (const [pkg, deps] of Object.entries(packageGraph)) {
+    for (const dep of deps) {
+      if (!reverseDeps[dep]) {
+        reverseDeps[dep] = new Set();
+      }
+      reverseDeps[dep].add(pkg);
+    }
+  }
+
+  const affected = new Set(changedPackages);
+  const queue = [...changedPackages];
+
+  while (queue.length > 0) {
+    const pkg = queue.shift();
+    const dependents = reverseDeps[pkg] || new Set();
+    for (const dependent of dependents) {
+      if (!affected.has(dependent)) {
+        affected.add(dependent);
+        queue.push(dependent);
+      }
+    }
+  }
+
+  return affected;
+}
+
 // =============================================================================
 // CHANGE DETECTION
 // =============================================================================
@@ -120,7 +183,7 @@ function getChangedFiles(baseSha, headSha) {
   }
 }
 
-function analyzeChanges(changedFiles, graph) {
+function analyzeChanges(changedFiles, graph, packageGraph) {
   const affected = new Map(); // service -> Set of reasons
 
   const addAffected = (service, reason) => {
@@ -143,7 +206,7 @@ function analyzeChanges(changedFiles, graph) {
     return { affected, globalChange: true };
   }
 
-  // Check package changes
+  // Check package changes (direct)
   const changedPackages = new Set();
   for (const file of changedFiles) {
     const match = file.match(/^packages\/([^/]+)\//);
@@ -152,11 +215,18 @@ function analyzeChanges(changedFiles, graph) {
     }
   }
 
+  // Expand to include transitively affected packages
+  const allAffectedPackages = expandTransitiveDependents(changedPackages, packageGraph);
+
   // Map package changes to dependent services
   for (const [svc, deps] of Object.entries(graph)) {
-    for (const pkg of changedPackages) {
+    for (const pkg of allAffectedPackages) {
       if (deps.packageDeps.includes(pkg)) {
-        addAffected(svc, `Dependency @intexuraos/${pkg} updated`);
+        const isDirect = changedPackages.has(pkg);
+        const reason = isDirect
+          ? `Dependency @intexuraos/${pkg} updated`
+          : `Transitive dependency @intexuraos/${pkg} updated`;
+        addAffected(svc, reason);
       }
     }
   }
@@ -279,8 +349,9 @@ async function main() {
   console.log();
 
   const graph = buildDependencyGraph();
+  const packageGraph = buildPackageGraph();
   const changedFiles = getChangedFiles(baseSha, headSha);
-  const { affected, globalChange } = analyzeChanges(changedFiles, graph);
+  const { affected, globalChange } = analyzeChanges(changedFiles, graph, packageGraph);
   const decision = decide(affected, globalChange);
 
   printReport(changedFiles, affected, decision);

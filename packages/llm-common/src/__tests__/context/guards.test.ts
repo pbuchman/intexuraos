@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DOMAINS } from '../types.js';
+import { DOMAINS } from '../../context/types.js';
 import {
   isAnswerStyle,
   isAvoidSourceType,
@@ -19,7 +19,7 @@ import {
   isSynthesisGoal,
   isSynthesisOutputFormat,
   isTimeScope,
-} from '../guards.js';
+} from '../../context/guards.js';
 
 describe('DOMAINS constant', () => {
   it('exports all domain values', () => {

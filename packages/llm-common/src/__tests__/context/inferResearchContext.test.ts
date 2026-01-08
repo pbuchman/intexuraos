@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInferResearchContextPrompt } from '../inferResearchContext.js';
+import { buildInferResearchContextPrompt } from '../../context/inferResearchContext.js';
 
 describe('buildInferResearchContextPrompt', () => {
   it('includes user query in the prompt', () => {

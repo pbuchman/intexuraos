@@ -10,13 +10,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import {
-  buildResearchPrompt,
-  err,
-  getErrorMessage,
-  ok,
-  type Result,
-} from '@intexuraos/common-core';
+import { buildResearchPrompt } from '@intexuraos/llm-common';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmModels,
@@ -43,6 +38,9 @@ const API_BASE_URL = 'https://api.perplexity.ai';
 
 /** Default fetch timeout: 14 minutes (840s) - below Cloud Run's 15min limit */
 const DEFAULT_TIMEOUT_MS = 840_000;
+
+/** Maximum output tokens for Perplexity responses */
+const MAX_TOKENS = 8192;
 
 const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
   [LlmModels.Sonar]: 'low',
@@ -229,6 +227,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             },
           ],
           temperature: 0.2,
+          max_tokens: MAX_TOKENS,
           stream: true, // ENABLED STREAMING
         };
 
@@ -304,7 +303,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             },
           ],
           temperature: 0.2,
-          // NOTE: generate() uses standard buffered requests (no streaming)
+          max_tokens: MAX_TOKENS,
         };
 
         const response = await fetchWithTimeout(

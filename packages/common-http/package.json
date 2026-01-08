@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
+    "@intexuraos/llm-common": "*",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
     "jose": "^5.9.6",

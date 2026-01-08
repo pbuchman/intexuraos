@@ -4,7 +4,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { EncryptedValue } from '@intexuraos/common-core/encryption';
+import type { EncryptedValue } from '../encryption.js';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import type {
   LlmProvider,

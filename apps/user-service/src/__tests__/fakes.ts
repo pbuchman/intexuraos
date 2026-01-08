@@ -5,7 +5,7 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import type { EncryptedValue, Encryptor } from '@intexuraos/common-core/encryption';
+import type { EncryptedValue, Encryptor } from '../infra/encryption.js';
 import type {
   Auth0Client,
   AuthError,
