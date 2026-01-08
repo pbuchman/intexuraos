@@ -726,3 +726,21 @@ export interface UpdateBookmarkRequest {
   tags?: string[];
   archived?: boolean;
 }
+
+/**
+ * Google Calendar connection status from user-service
+ */
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  email?: string;
+  scopes?: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * Google Calendar OAuth initiate response
+ */
+export interface GoogleCalendarInitiateResponse {
+  authorizationUrl: string;
+}

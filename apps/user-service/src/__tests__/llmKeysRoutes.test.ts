@@ -16,6 +16,7 @@ import {
   FakeAuthTokenRepository,
   FakeEncryptor,
   FakeLlmValidator,
+  FakeOAuthConnectionRepository,
   FakeUserSettingsRepository,
 } from './fakes.js';
 
@@ -93,6 +94,8 @@ describe('LLM Keys Routes', () => {
       auth0Client: null,
       encryptor: fakeEncryptor,
       llmValidator: fakeLlmValidator,
+      oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+      googleOAuthClient: null,
     });
   });
 
@@ -359,13 +362,14 @@ describe('LLM Keys Routes', () => {
     });
 
     it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
-      // Set encryptor to null
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
         auth0Client: null,
         encryptor: null,
         llmValidator: null,
+        oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+        googleOAuthClient: null,
       });
 
       app = await buildServer();
@@ -711,13 +715,14 @@ describe('LLM Keys Routes', () => {
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      // Set encryptor to null
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
         auth0Client: null,
         encryptor: null,
         llmValidator: null,
+        oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+        googleOAuthClient: null,
       });
 
       app = await buildServer();
@@ -754,13 +759,14 @@ describe('LLM Keys Routes', () => {
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      // Set llmValidator to null but keep encryptor
       setServices({
         authTokenRepository: fakeAuthTokenRepo,
         userSettingsRepository: fakeSettingsRepo,
         auth0Client: null,
         encryptor: fakeEncryptor,
         llmValidator: null,
+        oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+        googleOAuthClient: null,
       });
 
       app = await buildServer();

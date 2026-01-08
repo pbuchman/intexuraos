@@ -24,6 +24,19 @@ import type {
   UserSettings,
   UserSettingsRepository,
 } from '../domain/settings/index.js';
+import type {
+  OAuthConnection,
+  OAuthConnectionPublic,
+  OAuthProvider,
+  OAuthTokens,
+} from '../domain/oauth/models/OAuthConnection.js';
+import type { OAuthError } from '../domain/oauth/models/OAuthError.js';
+import type { OAuthConnectionRepository } from '../domain/oauth/ports/OAuthConnectionRepository.js';
+import type {
+  GoogleOAuthClient,
+  GoogleTokenResponse,
+  GoogleUserInfo,
+} from '../domain/oauth/ports/GoogleOAuthClient.js';
 
 /**
  * Fake Auth token repository for testing.
@@ -470,5 +483,281 @@ export class FakeLlmValidator implements LlmValidator {
       return Promise.resolve(err({ code: 'API_ERROR', message: 'Test request failed' }));
     }
     return Promise.resolve(ok({ content: this.testResponse }));
+  }
+}
+
+/**
+ * Fake OAuth Connection Repository for testing.
+ */
+export class FakeOAuthConnectionRepository implements OAuthConnectionRepository {
+  private connections = new Map<string, OAuthConnection>();
+  private shouldFailSave = false;
+  private shouldFailGet = false;
+  private shouldFailGetPublic = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
+
+  setFailNextSave(fail: boolean): void {
+    this.shouldFailSave = fail;
+  }
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextGetPublic(fail: boolean): void {
+    this.shouldFailGetPublic = fail;
+  }
+
+  setFailNextUpdate(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  setConnection(userId: string, provider: OAuthProvider, connection: OAuthConnection): void {
+    this.connections.set(`${userId}:${provider}`, connection);
+  }
+
+  saveConnection(
+    userId: string,
+    provider: OAuthProvider,
+    email: string,
+    tokens: OAuthTokens
+  ): Promise<Result<OAuthConnectionPublic, OAuthError>> {
+    if (this.shouldFailSave) {
+      this.shouldFailSave = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated save failure' }));
+    }
+
+    const now = new Date().toISOString();
+    const connection: OAuthConnection = {
+      userId,
+      provider,
+      email,
+      tokens,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.connections.set(`${userId}:${provider}`, connection);
+
+    return Promise.resolve(
+      ok({
+        userId,
+        provider,
+        email,
+        scopes: tokens.scope.split(' '),
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+  }
+
+  getConnection(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<Result<OAuthConnection | null, OAuthError>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated get failure' }));
+    }
+    const connection = this.connections.get(`${userId}:${provider}`);
+    return Promise.resolve(ok(connection ?? null));
+  }
+
+  getConnectionPublic(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<Result<OAuthConnectionPublic | null, OAuthError>> {
+    if (this.shouldFailGetPublic) {
+      this.shouldFailGetPublic = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getPublic failure' })
+      );
+    }
+    const connection = this.connections.get(`${userId}:${provider}`);
+    if (connection === undefined) {
+      return Promise.resolve(ok(null));
+    }
+    return Promise.resolve(
+      ok({
+        userId: connection.userId,
+        provider: connection.provider,
+        email: connection.email,
+        scopes: connection.tokens.scope.split(' '),
+        createdAt: connection.createdAt,
+        updatedAt: connection.updatedAt,
+      })
+    );
+  }
+
+  updateTokens(
+    userId: string,
+    provider: OAuthProvider,
+    tokens: OAuthTokens
+  ): Promise<Result<void, OAuthError>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated update failure' }));
+    }
+
+    const existing = this.connections.get(`${userId}:${provider}`);
+    if (existing === undefined) {
+      return Promise.resolve(
+        err({ code: 'CONNECTION_NOT_FOUND', message: 'Connection not found' })
+      );
+    }
+
+    existing.tokens = tokens;
+    existing.updatedAt = new Date().toISOString();
+    this.connections.set(`${userId}:${provider}`, existing);
+    return Promise.resolve(ok(undefined));
+  }
+
+  deleteConnection(userId: string, provider: OAuthProvider): Promise<Result<void, OAuthError>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
+    }
+    this.connections.delete(`${userId}:${provider}`);
+    return Promise.resolve(ok(undefined));
+  }
+
+  getStoredConnection(userId: string, provider: OAuthProvider): OAuthConnection | undefined {
+    return this.connections.get(`${userId}:${provider}`);
+  }
+
+  clear(): void {
+    this.connections.clear();
+  }
+}
+
+/**
+ * Fake Google OAuth Client for testing.
+ */
+export class FakeGoogleOAuthClient implements GoogleOAuthClient {
+  private shouldFailExchange = false;
+  private shouldFailRefresh = false;
+  private shouldFailUserInfo = false;
+  private shouldFailRevoke = false;
+  private exchangeError: OAuthError | null = null;
+  private refreshError: OAuthError | null = null;
+  private userEmail = 'test@example.com';
+  private lastGeneratedState: string | null = null;
+  private lastGeneratedRedirectUri: string | null = null;
+  private customRefreshResponse: Partial<GoogleTokenResponse> | null = null;
+
+  setFailNextExchange(fail: boolean, error?: OAuthError): void {
+    this.shouldFailExchange = fail;
+    this.exchangeError = error ?? null;
+  }
+
+  setFailNextRefresh(fail: boolean, error?: OAuthError): void {
+    this.shouldFailRefresh = fail;
+    this.refreshError = error ?? null;
+  }
+
+  setFailNextUserInfo(fail: boolean): void {
+    this.shouldFailUserInfo = fail;
+  }
+
+  setFailNextRevoke(fail: boolean): void {
+    this.shouldFailRevoke = fail;
+  }
+
+  setUserEmail(email: string): void {
+    this.userEmail = email;
+  }
+
+  setCustomRefreshResponse(response: Partial<GoogleTokenResponse>): void {
+    this.customRefreshResponse = response;
+  }
+
+  getLastGeneratedState(): string | null {
+    return this.lastGeneratedState;
+  }
+
+  getLastGeneratedRedirectUri(): string | null {
+    return this.lastGeneratedRedirectUri;
+  }
+
+  generateAuthUrl(state: string, redirectUri: string): string {
+    this.lastGeneratedState = state;
+    this.lastGeneratedRedirectUri = redirectUri;
+    return `https://accounts.google.com/o/oauth2/v2/auth?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  }
+
+  exchangeCode(
+    _code: string,
+    _redirectUri: string
+  ): Promise<Result<GoogleTokenResponse, OAuthError>> {
+    if (this.shouldFailExchange) {
+      this.shouldFailExchange = false;
+      return Promise.resolve(
+        err(this.exchangeError ?? { code: 'TOKEN_EXCHANGE_FAILED', message: 'Exchange failed' })
+      );
+    }
+    return Promise.resolve(
+      ok({
+        accessToken: 'fake-access-token',
+        refreshToken: 'fake-refresh-token',
+        expiresIn: 3600,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+        tokenType: 'Bearer',
+      })
+    );
+  }
+
+  refreshAccessToken(_refreshToken: string): Promise<Result<GoogleTokenResponse, OAuthError>> {
+    if (this.shouldFailRefresh) {
+      this.shouldFailRefresh = false;
+      return Promise.resolve(
+        err(
+          this.refreshError ?? { code: 'TOKEN_REFRESH_FAILED', message: 'Refresh failed' }
+        )
+      );
+    }
+    if (this.customRefreshResponse !== null) {
+      const response: GoogleTokenResponse = {
+        accessToken: this.customRefreshResponse.accessToken ?? 'new-fake-access-token',
+        refreshToken: this.customRefreshResponse.refreshToken ?? '',
+        expiresIn: this.customRefreshResponse.expiresIn ?? 3600,
+        scope: this.customRefreshResponse.scope ?? '',
+        tokenType: this.customRefreshResponse.tokenType ?? 'Bearer',
+      };
+      this.customRefreshResponse = null;
+      return Promise.resolve(ok(response));
+    }
+    return Promise.resolve(
+      ok({
+        accessToken: 'new-fake-access-token',
+        refreshToken: 'new-fake-refresh-token',
+        expiresIn: 3600,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+        tokenType: 'Bearer',
+      })
+    );
+  }
+
+  getUserInfo(_accessToken: string): Promise<Result<GoogleUserInfo, OAuthError>> {
+    if (this.shouldFailUserInfo) {
+      this.shouldFailUserInfo = false;
+      return Promise.resolve(
+        err({ code: 'TOKEN_EXCHANGE_FAILED', message: 'Failed to get user info' })
+      );
+    }
+    return Promise.resolve(ok({ email: this.userEmail, verified: true }));
+  }
+
+  revokeToken(_token: string): Promise<Result<void, OAuthError>> {
+    if (this.shouldFailRevoke) {
+      this.shouldFailRevoke = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Revoke failed' })
+      );
+    }
+    return Promise.resolve(ok(undefined));
   }
 }

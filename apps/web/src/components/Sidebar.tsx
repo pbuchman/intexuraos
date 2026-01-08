@@ -4,6 +4,7 @@ import {
   Bell,
   BellRing,
   Bookmark,
+  Calendar,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -40,6 +41,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
   { to: '/settings/notion', label: 'Notion', icon: FileText },
+  { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
 ];
