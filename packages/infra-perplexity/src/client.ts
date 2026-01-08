@@ -124,13 +124,13 @@ async function processStreamResponse(
   let buffer = '';
   let chunkCount = 0;
 
-  logger?.info('[Perplexity SSE] Starting stream processing...');
+  logger?.info({}, '[Perplexity SSE] Starting stream processing...');
 
   try {
     for (;;) {
       const result = await reader.read();
       if (result.done) {
-        logger?.info('[Perplexity SSE] Stream complete', { totalChunks: chunkCount });
+        logger?.info({ totalChunks: chunkCount }, '[Perplexity SSE] Stream complete');
         break;
       }
       const value = result.value as Uint8Array | undefined;
@@ -149,7 +149,7 @@ async function processStreamResponse(
 
         const dataStr = trimmed.slice(6); // Remove 'data: '
         if (dataStr === '[DONE]') {
-          logger?.info('[Perplexity SSE] Received [DONE] signal');
+          logger?.info({}, '[Perplexity SSE] Received [DONE] signal');
           continue;
         }
 
@@ -161,26 +161,28 @@ async function processStreamResponse(
           const delta = data.choices?.[0]?.delta?.content;
           if (typeof delta === 'string') {
             content += delta;
-            logger?.info('[Perplexity SSE] Chunk received', {
-              chunkNumber: chunkCount,
-              deltaChars: delta.length,
-              totalChars: content.length,
-            });
+            logger?.info(
+              { chunkNumber: chunkCount, deltaChars: delta.length, totalChars: content.length },
+              '[Perplexity SSE] Chunk received'
+            );
           }
 
           // 2. Capture Usage (usually in the final chunk)
           if (data.usage !== undefined) {
-            logger?.info('[Perplexity SSE] Usage received', {
-              promptTokens: data.usage.prompt_tokens,
-              completionTokens: data.usage.completion_tokens,
-            });
+            logger?.info(
+              {
+                promptTokens: data.usage.prompt_tokens,
+                completionTokens: data.usage.completion_tokens,
+              },
+              '[Perplexity SSE] Usage received'
+            );
             onUsageFound(data.usage);
           }
 
           // 3. Capture Citations (continuously updated, we overwrite to get the latest set)
           if (data.citations !== undefined) {
             citations = data.citations;
-            logger?.info('[Perplexity SSE] Citations updated', { sourceCount: citations.length });
+            logger?.info({ sourceCount: citations.length }, '[Perplexity SSE] Citations updated');
           }
         } catch {
           // Swallow parse errors for malformed intermediate chunks
