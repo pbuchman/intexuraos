@@ -14,7 +14,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-user-service 2>/dev/null || docker buildx use builder-user-service
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/user-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/user-service:buildcache,mode=max \
@@ -32,7 +32,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-promptvault-service 2>/dev/null || docker buildx use builder-promptvault-service
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/promptvault-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/promptvault-service:buildcache,mode=max \
@@ -50,7 +50,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-notion-service 2>/dev/null || docker buildx use builder-notion-service
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notion-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notion-service:buildcache,mode=max \
@@ -68,7 +68,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-whatsapp-service 2>/dev/null || docker buildx use builder-whatsapp-service
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:buildcache,mode=max \
@@ -86,7 +86,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-api-docs-hub 2>/dev/null || docker buildx use builder-api-docs-hub
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:buildcache,mode=max \
@@ -104,7 +104,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-mobile-notifications 2>/dev/null || docker buildx use builder-mobile-notifications
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:buildcache,mode=max \
@@ -122,7 +122,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-llm-orchestrator 2>/dev/null || docker buildx use builder-llm-orchestrator
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:buildcache,mode=max \
@@ -140,7 +140,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-commands-router 2>/dev/null || docker buildx use builder-commands-router
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/commands-router:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/commands-router:buildcache,mode=max \
@@ -158,7 +158,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-actions-agent 2>/dev/null || docker buildx use builder-actions-agent
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/actions-agent:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/actions-agent:buildcache,mode=max \
@@ -176,7 +176,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-data-insights 2>/dev/null || docker buildx use builder-data-insights
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/data-insights-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/data-insights-service:buildcache,mode=max \
@@ -194,7 +194,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-image-service 2>/dev/null || docker buildx use builder-image-service
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/image-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/image-service:buildcache,mode=max \
@@ -212,7 +212,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-notes-agent 2>/dev/null || docker buildx use builder-notes-agent
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notes-agent:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notes-agent:buildcache,mode=max \
@@ -230,7 +230,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-todos-agent 2>/dev/null || docker buildx use builder-todos-agent
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache,mode=max \
@@ -248,7 +248,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-bookmarks-agent 2>/dev/null || docker buildx use builder-bookmarks-agent
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache,mode=max \
@@ -266,7 +266,7 @@ steps:
     args:
       - '-c'
       - |
-        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx create --use --name builder-app-settings 2>/dev/null || docker buildx use builder-app-settings
         docker buildx build \
           --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/app-settings-service:buildcache \
           --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/app-settings-service:buildcache,mode=max \
