@@ -27,7 +27,13 @@ export class PerplexityAdapter implements LlmResearchProvider {
     pricing: ModelPricing,
     logger?: PerplexityLogger
   ) {
-    this.client = createPerplexityClient({ apiKey, model, userId, pricing, logger });
+    this.client = createPerplexityClient({
+      apiKey,
+      model,
+      userId,
+      pricing,
+      ...(logger !== undefined && { logger }),
+    });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {

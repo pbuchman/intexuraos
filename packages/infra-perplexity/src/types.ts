@@ -7,11 +7,12 @@ export type {
 
 /**
  * Logger interface for Perplexity API calls.
+ * Matches the standard Logger interface from common-core (pino-compatible).
  */
 export interface PerplexityLogger {
-  info: (msg: string, data?: Record<string, unknown>) => void;
-  warn: (msg: string, data?: Record<string, unknown>) => void;
-  error: (msg: string, data?: Record<string, unknown>) => void;
+  info: (obj: object, msg?: string) => void;
+  warn: (obj: object, msg?: string) => void;
+  error: (obj: object, msg?: string) => void;
 }
 
 /**
