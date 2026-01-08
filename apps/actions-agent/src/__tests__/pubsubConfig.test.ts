@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getTopicForActionType } from '../infra/pubsub/config.js';
+import { getActionsQueueTopic } from '../infra/pubsub/config.js';
 
-describe('getTopicForActionType', () => {
+describe('getActionsQueueTopic', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -12,39 +12,27 @@ describe('getTopicForActionType', () => {
     process.env = originalEnv;
   });
 
-  it('returns topic for research action type', () => {
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'] = 'projects/test/topics/research';
+  it('returns topic when configured', () => {
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'projects/test/topics/actions-queue';
 
-    const result = getTopicForActionType('research');
+    const result = getActionsQueueTopic();
 
-    expect(result).toBe('projects/test/topics/research');
+    expect(result).toBe('projects/test/topics/actions-queue');
   });
 
   it('returns null when topic is not configured', () => {
-    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'];
+    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'];
 
-    const result = getTopicForActionType('research');
+    const result = getActionsQueueTopic();
 
     expect(result).toBeNull();
   });
 
   it('returns null when topic is empty string', () => {
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_TODO_TOPIC'] = '';
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = '';
 
-    const result = getTopicForActionType('todo');
+    const result = getActionsQueueTopic();
 
     expect(result).toBeNull();
-  });
-
-  it('returns topic for each action type', () => {
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_NOTE_TOPIC'] = 'note-topic';
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_LINK_TOPIC'] = 'link-topic';
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_CALENDAR_TOPIC'] = 'calendar-topic';
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_REMINDER_TOPIC'] = 'reminder-topic';
-
-    expect(getTopicForActionType('note')).toBe('note-topic');
-    expect(getTopicForActionType('link')).toBe('link-topic');
-    expect(getTopicForActionType('calendar')).toBe('calendar-topic');
-    expect(getTopicForActionType('reminder')).toBe('reminder-topic');
   });
 });

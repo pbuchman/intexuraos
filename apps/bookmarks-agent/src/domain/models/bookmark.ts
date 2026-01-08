@@ -1,4 +1,5 @@
 export type OgFetchStatus = 'pending' | 'processed' | 'failed';
+export type BookmarkStatus = 'draft' | 'active';
 
 export interface OpenGraphPreview {
   title: string | null;
@@ -12,6 +13,7 @@ export interface OpenGraphPreview {
 export interface Bookmark {
   id: string;
   userId: string;
+  status: BookmarkStatus;
 
   url: string;
   title: string | null;
@@ -39,6 +41,7 @@ export interface CreateBookmarkInput {
   title?: string | undefined;
   description?: string | undefined;
   tags?: string[] | undefined;
+  status?: BookmarkStatus | undefined;
   source: string;
   sourceId: string;
 }

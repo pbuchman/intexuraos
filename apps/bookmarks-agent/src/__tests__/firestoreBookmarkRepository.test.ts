@@ -19,6 +19,7 @@ function createFullBookmark(id: string, overrides: Partial<Bookmark> = {}): Book
   return {
     id,
     userId: 'user-123',
+    status: 'active',
     url: 'https://example.com/article',
     title: 'Test Bookmark',
     description: 'Test description',

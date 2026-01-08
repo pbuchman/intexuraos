@@ -4,7 +4,7 @@ import { getServices } from '../services.js';
 import { createBookmark } from '../domain/usecases/createBookmark.js';
 import { getBookmark } from '../domain/usecases/getBookmark.js';
 import { updateBookmarkInternal } from '../domain/usecases/updateBookmarkInternal.js';
-import type { Bookmark, OgFetchStatus, OpenGraphPreview } from '../domain/models/bookmark.js';
+import type { Bookmark, BookmarkStatus, OgFetchStatus, OpenGraphPreview } from '../domain/models/bookmark.js';
 
 interface CreateBookmarkBody {
   userId: string;
@@ -12,6 +12,7 @@ interface CreateBookmarkBody {
   title?: string;
   description?: string;
   tags?: string[];
+  status?: BookmarkStatus;
   source: string;
   sourceId: string;
 }
@@ -35,6 +36,7 @@ interface GetBookmarkQuery {
 }
 
 const ogFetchStatusEnum = ['pending', 'processed', 'failed'];
+const bookmarkStatusEnum = ['draft', 'active'];
 
 const createBookmarkBodySchema = {
   type: 'object',
@@ -45,6 +47,7 @@ const createBookmarkBodySchema = {
     title: { type: 'string' },
     description: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
+    status: { type: 'string', enum: bookmarkStatusEnum },
     source: { type: 'string', minLength: 1 },
     sourceId: { type: 'string', minLength: 1 },
   },
@@ -106,6 +109,7 @@ const bookmarkResponseSchema = {
   properties: {
     id: { type: 'string' },
     userId: { type: 'string' },
+    status: { type: 'string', enum: bookmarkStatusEnum },
     url: { type: 'string' },
     title: { type: ['string', 'null'] },
     description: { type: ['string', 'null'] },
@@ -127,6 +131,7 @@ function formatBookmark(bookmark: Bookmark): object {
   return {
     id: bookmark.id,
     userId: bookmark.userId,
+    status: bookmark.status,
     url: bookmark.url,
     title: bookmark.title,
     description: bookmark.description,
@@ -160,7 +165,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean' },
-              data: bookmarkResponseSchema,
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  url: { type: 'string' },
+                  bookmark: bookmarkResponseSchema,
+                },
+              },
             },
           },
         },
@@ -187,6 +199,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           title: request.body.title,
           description: request.body.description,
           tags: request.body.tags,
+          status: request.body.status,
           source: request.body.source,
           sourceId: request.body.sourceId,
         }
@@ -199,8 +212,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
+      const bookmarkId = result.value.id;
+      const bookmarkUrl = `/#/bookmarks/${bookmarkId}`;
+
       void reply.status(201);
-      return await reply.ok(formatBookmark(result.value));
+      return await reply.ok({
+        id: bookmarkId,
+        url: bookmarkUrl,
+        bookmark: formatBookmark(result.value),
+      });
     }
   );
 

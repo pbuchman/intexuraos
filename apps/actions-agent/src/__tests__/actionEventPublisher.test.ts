@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createActionEventPublisher } from '../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 
@@ -28,15 +28,6 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
   },
 }));
 
-vi.mock('../infra/pubsub/config.js', () => ({
-  getTopicForActionType: vi.fn((actionType: string) => {
-    if (actionType === 'research') {
-      return 'projects/test/topics/research';
-    }
-    return null;
-  }),
-}));
-
 describe('createActionEventPublisher', () => {
   const event: ActionCreatedEvent = {
     type: 'action.created',
@@ -52,8 +43,16 @@ describe('createActionEventPublisher', () => {
     timestamp: '2025-01-01T00:00:00.000Z',
   };
 
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = { ...originalEnv };
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'projects/test/topics/actions-queue';
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   it('creates publisher instance', () => {
@@ -75,15 +74,14 @@ describe('createActionEventPublisher', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('returns error when topic not configured', async () => {
+  it('returns error when queue topic not configured', async () => {
+    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'];
+
     const publisher = createActionEventPublisher({
       projectId: 'test-project',
     });
 
-    const result = await publisher.publishActionCreated({
-      ...event,
-      actionType: 'todo',
-    });
+    const result = await publisher.publishActionCreated(event);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

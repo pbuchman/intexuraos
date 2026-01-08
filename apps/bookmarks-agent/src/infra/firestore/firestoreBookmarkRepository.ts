@@ -23,6 +23,7 @@ interface OpenGraphPreviewDocument {
 
 interface BookmarkDocument {
   userId: string;
+  status: string;
   url: string;
   title: string | null;
   description: string | null;
@@ -43,6 +44,7 @@ function toBookmark(id: string, doc: BookmarkDocument): Bookmark {
   return {
     id,
     userId: doc.userId,
+    status: (doc.status || 'active') as Bookmark['status'],
     url: doc.url,
     title: doc.title,
     description: doc.description,
@@ -63,6 +65,7 @@ function toBookmark(id: string, doc: BookmarkDocument): Bookmark {
 function toBookmarkDocument(bookmark: Bookmark): BookmarkDocument {
   return {
     userId: bookmark.userId,
+    status: bookmark.status,
     url: bookmark.url,
     title: bookmark.title,
     description: bookmark.description,
@@ -90,6 +93,7 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
       const bookmark: Bookmark = {
         id: docRef.id,
         userId: input.userId,
+        status: input.status ?? 'active',
         url: input.url,
         title: input.title ?? null,
         description: input.description ?? null,
