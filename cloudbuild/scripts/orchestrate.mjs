@@ -53,9 +53,11 @@ async function getLastSuccessfulCommit() {
   }
 
   try {
-    const tokenCmd = `curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | grep -o '"access_token":"[^"]*'`;
-    const tokenJson = execSync(tokenCmd, { encoding: 'utf-8' });
-    const token = tokenJson.split(':')[1].replace(/"/g, '').trim();
+    const tokenJson = execSync(
+      `wget -qO- --header="Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"`,
+      { encoding: 'utf-8' }
+    );
+    const { access_token: token } = JSON.parse(tokenJson);
 
     console.log(`>> Querying Cloud Build API for last success on branch: ${BRANCH_NAME}...`);
     const filter = `status="SUCCESS" AND substitutions.BRANCH_NAME="${BRANCH_NAME}"`;
@@ -215,12 +217,6 @@ async function getAffectedServices() {
 
   const pipeline = {
     steps,
-    // ADD THIS BLOCK
-    substitutions: {
-      _REGION: REGION,
-      _ARTIFACT_REGISTRY_URL: ARTIFACT_URL,
-      _ENVIRONMENT: ENV_NAME,
-    },
     options: {
       logging: 'CLOUD_LOGGING_ONLY',
       machineType: 'E2_HIGHCPU_8',
