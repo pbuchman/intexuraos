@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 # IntexuraOS LLM Orchestrator Dockerfile
 # Multi-stage build with esbuild bundling.
 
@@ -11,8 +12,9 @@ COPY package*.json ./
 COPY apps/llm-orchestrator/package*.json ./apps/llm-orchestrator/
 COPY packages/*/package*.json ./packages/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (cache npm directory between builds)
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -30,7 +32,8 @@ WORKDIR /app
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/llm-orchestrator/dist/package.json ./
-RUN npm install --omit=dev
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --omit=dev --prefer-offline
 
 # Copy built file
 COPY --from=builder /app/apps/llm-orchestrator/dist/index.js ./dist/

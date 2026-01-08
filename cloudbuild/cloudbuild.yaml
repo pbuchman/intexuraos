@@ -14,15 +14,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/user-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/user-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/user-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/user-service:latest \
           -f apps/user-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- promptvault-service ---
@@ -33,15 +32,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/promptvault-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/promptvault-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
           -f apps/promptvault-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- notion-service ---
@@ -52,15 +50,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notion-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notion-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
           -f apps/notion-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- whatsapp-service ---
@@ -71,15 +68,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
           -f apps/whatsapp-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- api-docs-hub ---
@@ -90,15 +86,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
           -f apps/api-docs-hub/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- mobile-notifications-service ---
@@ -109,15 +104,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
           -f apps/mobile-notifications-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- llm-orchestrator ---
@@ -128,15 +122,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
           -f apps/llm-orchestrator/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- commands-router ---
@@ -147,15 +140,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/commands-router:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/commands-router:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
           -f apps/commands-router/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- actions-agent ---
@@ -166,15 +158,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/actions-agent:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/actions-agent:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
           -f apps/actions-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- data-insights-service ---
@@ -185,15 +176,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/data-insights-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/data-insights-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
           -f apps/data-insights-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- image-service ---
@@ -204,15 +194,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/image-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/image-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/image-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/image-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/image-service:latest \
           -f apps/image-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- notes-agent ---
@@ -223,15 +212,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notes-agent:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/notes-agent:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
           -f apps/notes-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- todos-agent ---
@@ -242,15 +230,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/todos-agent:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
           -f apps/todos-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- bookmarks-agent ---
@@ -261,15 +248,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
           -f apps/bookmarks-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # --- app-settings-service ---
@@ -280,15 +266,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/app-settings-service:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/app-settings-service:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
           -f apps/app-settings-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest
     env: ['DOCKER_BUILDKIT=1']
 
   # ============================================================================
@@ -334,7 +319,6 @@ steps:
       - '-c'
       - |
         apt-get update && apt-get install -y git
-        rm -rf node_modules
         npm ci
 
   - name: 'node:22-slim'
