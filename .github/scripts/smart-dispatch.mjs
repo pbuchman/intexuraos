@@ -131,8 +131,8 @@ function analyzeChanges(changedFiles, graph) {
   };
 
   // Check for global changes
-  const globalChange = changedFiles.some(f =>
-    GLOBAL_TRIGGERS.some(trigger => f.startsWith(trigger) || f === trigger)
+  const globalChange = changedFiles.some((f) =>
+    GLOBAL_TRIGGERS.some((trigger) => f.startsWith(trigger) || f === trigger)
   );
 
   if (globalChange) {
@@ -208,7 +208,7 @@ function decide(affected, globalChange) {
     };
   }
 
-  const targets = Array.from(affected.keys()).map(svc => `manual-${svc}`);
+  const targets = Array.from(affected.keys()).map((svc) => `manual-${svc}`);
 
   return {
     strategy: 'INDIVIDUAL',
@@ -298,8 +298,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('Smart dispatch failed:', e);
   process.exit(1);
 });
-
