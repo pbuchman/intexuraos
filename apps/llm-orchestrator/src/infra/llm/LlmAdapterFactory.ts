@@ -26,7 +26,8 @@ export function createResearchProvider(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
@@ -38,7 +39,7 @@ export function createResearchProvider(
     case 'openai':
       return new GptAdapter(apiKey, model, userId, pricing);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, pricing);
+      return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
   }
 }
 
