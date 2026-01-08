@@ -21,13 +21,14 @@ If no service is specified, list available services and ask which to document.
 | Service                        | Domain Subdirectories           |
 | ------------------------------ | ------------------------------- |
 | `actions-agent`                | models, ports, usecases         |
+| `calendar-agent`               | models, ports, useCases         |
 | `commands-router`              | events, models, ports, usecases |
 | `data-insights-service`        | dataSource                      |
 | `llm-orchestrator`             | research                        |
 | `mobile-notifications-service` | filters, notifications          |
 | `notion-service`               | integration                     |
 | `promptvault-service`          | promptvault                     |
-| `user-service`                 | identity, settings              |
+| `user-service`                 | identity, settings, oauth       |
 | `whatsapp-service`             | whatsapp                        |
 
 **Services without domain layer:** `api-docs-hub`, `web`
