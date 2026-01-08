@@ -6,15 +6,14 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
+        docker buildx create --use --name builder 2>/dev/null || docker buildx use builder
+        docker buildx build \
+          --cache-from=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache \
+          --cache-to=type=registry,ref=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:buildcache,mode=max \
+          --push \
           -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA \
           -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
           -f apps/bookmarks-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

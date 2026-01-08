@@ -37,7 +37,6 @@ steps:
       - '-c'
       - |
         apt-get update && apt-get install -y git
-        rm -rf node_modules
         npm ci
         npm run --workspace=@intexuraos/web build
     env:
