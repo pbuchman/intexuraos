@@ -73,26 +73,28 @@ Note these gaps in your synthesis.`;
 }
 
 function buildSourceIdMapSection(
-  reports: readonly SynthesisReport[],
-  additionalSources?: readonly AdditionalSource[]
+  reports: readonly (SynthesisReport | undefined)[],
+  additionalSources?: readonly (AdditionalSource | undefined)[]
 ): string {
   const rows: string[] = [];
   rows.push('SOURCE ID MAP (for Attribution)');
   rows.push('ID   | Type | Name');
   rows.push('-----|------|-----');
 
-  for (let i = 0; i < reports.length; i++) {
-    const report = reports[i];
+  let llmIndex = 1;
+  for (const report of reports) {
     if (report === undefined) continue;
-    rows.push(`S${String(i + 1)}   | LLM  | ${report.model}`);
+    rows.push(`S${String(llmIndex)}   | LLM  | ${report.model}`);
+    llmIndex++;
   }
 
   if (additionalSources !== undefined) {
-    for (let i = 0; i < additionalSources.length; i++) {
-      const source = additionalSources[i];
+    let userIndex = 1;
+    for (const source of additionalSources) {
       if (source === undefined) continue;
-      const label = source.label ?? `Source ${String(i + 1)}`;
-      rows.push(`U${String(i + 1)}   | User | ${label}`);
+      const label = source.label ?? `Source ${String(userIndex)}`;
+      rows.push(`U${String(userIndex)}   | User | ${label}`);
+      userIndex++;
     }
   }
 
@@ -121,17 +123,21 @@ Rules:
 
 function buildContextualSynthesisPrompt(
   originalPrompt: string,
-  reports: SynthesisReport[],
+  reports: (SynthesisReport | undefined)[],
   ctx: SynthesisContext,
-  additionalSources?: AdditionalSource[]
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
-  const formattedReports = reports
+  const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
+  const formattedReports = validReports
     .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
     .join('\n\n---\n\n');
 
   let additionalSourcesSection = '';
   if (additionalSources !== undefined && additionalSources.length > 0) {
-    const formattedSources = additionalSources
+    const validAdditionalSources = additionalSources.filter(
+      (s): s is AdditionalSource => s !== undefined
+    );
+    const formattedSources = validAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
         return `### U${String(idx + 1)} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
@@ -148,10 +154,14 @@ ${formattedSources}
 `;
   }
 
-  const hasAdditionalSources = additionalSources !== undefined && additionalSources.length > 0;
-  const modelsList = reports.map((r) => r.model).join(', ');
+  const validAdditionalSourcesForList =
+    additionalSources !== undefined
+      ? additionalSources.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
+  const hasAdditionalSources = validAdditionalSourcesForList.length > 0;
+  const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? additionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? validAdditionalSourcesForList.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
@@ -245,9 +255,9 @@ Write the ENTIRE synthesis in ${ctx.language.toUpperCase()}. This is the languag
  */
 export function buildSynthesisPrompt(
   originalPrompt: string,
-  reports: SynthesisReport[],
-  ctxOrAdditionalSources?: SynthesisContext | AdditionalSource[],
-  additionalSources?: AdditionalSource[]
+  reports: (SynthesisReport | undefined)[],
+  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
   if (
     ctxOrAdditionalSources !== undefined &&
@@ -266,13 +276,19 @@ export function buildSynthesisPrompt(
     ? ctxOrAdditionalSources
     : undefined;
 
-  const formattedReports = reports
+  const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
+  const formattedReports = validReports
     .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
     .join('\n\n---\n\n');
 
+  const validLegacyAdditionalSources =
+    legacyAdditionalSources !== undefined
+      ? legacyAdditionalSources.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
+
   let additionalSourcesSection = '';
-  if (legacyAdditionalSources !== undefined && legacyAdditionalSources.length > 0) {
-    const formattedSources = legacyAdditionalSources
+  if (validLegacyAdditionalSources.length > 0) {
+    const formattedSources = validLegacyAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
         return `### U${String(idx + 1)} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
@@ -289,8 +305,7 @@ ${formattedSources}
 `;
   }
 
-  const hasAdditionalSources =
-    legacyAdditionalSources !== undefined && legacyAdditionalSources.length > 0;
+  const hasAdditionalSources = validLegacyAdditionalSources.length > 0;
   const conflictGuidelines = hasAdditionalSources
     ? `
 ## Conflict Resolution Guidelines
@@ -303,9 +318,9 @@ When information conflicts between any sources:
 `
     : '';
 
-  const modelsList = reports.map((r) => r.model).join(', ');
+  const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? legacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? validLegacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
