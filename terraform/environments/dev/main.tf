@@ -995,9 +995,9 @@ module "commands_router" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID        = var.project_id
-    INTEXURAOS_USER_SERVICE_URL      = module.user_service.service_url
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE  = "intexuraos-actions-queue-${var.environment}"
+    INTEXURAOS_GCP_PROJECT_ID       = var.project_id
+    INTEXURAOS_USER_SERVICE_URL     = module.user_service.service_url
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE = "intexuraos-actions-queue-${var.environment}"
   }
 
   depends_on = [
@@ -1032,16 +1032,16 @@ module "actions_agent" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID                = var.project_id
-    INTEXURAOS_LLM_ORCHESTRATOR_URL          = module.llm_orchestrator.service_url
-    INTEXURAOS_USER_SERVICE_URL              = module.user_service.service_url
-    INTEXURAOS_COMMANDS_ROUTER_URL           = module.commands_router.service_url
-    INTEXURAOS_TODOS_AGENT_URL               = module.todos_agent.service_url
-    INTEXURAOS_NOTES_AGENT_URL               = module.notes_agent.service_url
-    INTEXURAOS_BOOKMARKS_AGENT_URL           = module.bookmarks_agent.service_url
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE = "intexuraos-actions-queue-${var.environment}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
+    INTEXURAOS_GCP_PROJECT_ID             = var.project_id
+    INTEXURAOS_LLM_ORCHESTRATOR_URL       = module.llm_orchestrator.service_url
+    INTEXURAOS_USER_SERVICE_URL           = module.user_service.service_url
+    INTEXURAOS_COMMANDS_ROUTER_URL        = module.commands_router.service_url
+    INTEXURAOS_TODOS_AGENT_URL            = module.todos_agent.service_url
+    INTEXURAOS_NOTES_AGENT_URL            = module.notes_agent.service_url
+    INTEXURAOS_BOOKMARKS_AGENT_URL        = module.bookmarks_agent.service_url
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE       = "intexuraos-actions-queue-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
   }
 
   depends_on = [
@@ -1601,9 +1601,9 @@ output "pubsub_commands_ingest_topic" {
   value       = module.pubsub_commands_ingest.topic_name
 }
 
-output "pubsub_actions_research_topic" {
-  description = "Pub/Sub topic for research action events"
-  value       = module.pubsub_actions_research.topic_name
+output "pubsub_actions_queue_topic" {
+  description = "Pub/Sub topic for unified actions queue"
+  value       = module.pubsub_actions_queue.topic_name
 }
 
 output "pubsub_research_process_topic" {

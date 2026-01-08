@@ -64,7 +64,8 @@ export function createExecuteLinkActionUseCase(
       });
     }
 
-    if (action.status !== 'awaiting_approval' && action.status !== 'failed') {
+    const validStatuses = ['pending', 'awaiting_approval', 'failed'];
+    if (!validStatuses.includes(action.status)) {
       logger.error(
         { actionId, status: action.status },
         'Cannot execute action with invalid status'
