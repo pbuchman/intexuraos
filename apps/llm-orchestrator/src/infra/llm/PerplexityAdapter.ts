@@ -4,11 +4,7 @@
  * Usage logging is handled by the client (packages/infra-perplexity).
  */
 
-import {
-  createPerplexityClient,
-  type PerplexityClient,
-  type PerplexityLogger,
-} from '@intexuraos/infra-perplexity';
+import { createPerplexityClient, type PerplexityClient } from '@intexuraos/infra-perplexity';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type {
@@ -20,19 +16,12 @@ import type {
 export class PerplexityAdapter implements LlmResearchProvider {
   private readonly client: PerplexityClient;
 
-  constructor(
-    apiKey: string,
-    model: string,
-    userId: string,
-    pricing: ModelPricing,
-    logger?: PerplexityLogger
-  ) {
+  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
     this.client = createPerplexityClient({
       apiKey,
       model,
       userId,
       pricing,
-      ...(logger !== undefined && { logger }),
     });
   }
 

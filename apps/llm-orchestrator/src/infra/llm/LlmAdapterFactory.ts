@@ -3,7 +3,6 @@
  * Usage logging is handled by the underlying clients (packages/infra-*).
  */
 
-import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
   type ModelPricing,
@@ -26,8 +25,7 @@ export function createResearchProvider(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
-  logger?: Logger
+  pricing: ModelPricing
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
@@ -39,7 +37,7 @@ export function createResearchProvider(
     case 'openai':
       return new GptAdapter(apiKey, model, userId, pricing);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
+      return new PerplexityAdapter(apiKey, model, userId, pricing);
   }
 }
 
