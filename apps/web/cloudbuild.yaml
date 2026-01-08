@@ -1,5 +1,31 @@
 # Manual trigger: Deploy web only
 steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'fetch-secrets'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Fetching secrets for web ==="
+        cat > /workspace/apps/web/.env << EOF
+        INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
+        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
+        INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
+        INTEXURAOS_USER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_USER_SERVICE_URL)
+        INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
+        INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
+        INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
+        INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
+        INTEXURAOS_LLM_ORCHESTRATOR_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_URL)
+        INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
+        INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_ACTIONS_AGENT_SERVICE_URL)
+        INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_DATA_INSIGHTS_SERVICE_URL)
+        INTEXURAOS_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
+        INTEXURAOS_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
+        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
+        EOF
+        echo "Secrets written to /workspace/apps/web/.env"
+
   - name: 'node:22-slim'
     id: 'build'
     entrypoint: 'bash'
@@ -8,12 +34,6 @@ steps:
       - |
         npm ci
         npm run --workspace=@intexuraos/web build
-    secretEnv:
-      - 'INTEXURAOS_FIREBASE_API_KEY'
-      - 'INTEXURAOS_FIREBASE_AUTH_DOMAIN'
-      - 'INTEXURAOS_FIREBASE_PROJECT_ID'
-      - 'INTEXURAOS_AUTH0_SPA_CLIENT_ID'
-      - 'INTEXURAOS_AUTH0_DOMAIN'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'
@@ -22,19 +42,6 @@ steps:
     env:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'REGION=${_REGION}'
-
-availableSecrets:
-  secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_API_KEY/versions/latest
-      env: 'INTEXURAOS_FIREBASE_API_KEY'
-    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_AUTH_DOMAIN/versions/latest
-      env: 'INTEXURAOS_FIREBASE_AUTH_DOMAIN'
-    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_FIREBASE_PROJECT_ID/versions/latest
-      env: 'INTEXURAOS_FIREBASE_PROJECT_ID'
-    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_AUTH0_SPA_CLIENT_ID/versions/latest
-      env: 'INTEXURAOS_AUTH0_SPA_CLIENT_ID'
-    - versionName: projects/$PROJECT_ID/secrets/INTEXURAOS_AUTH0_DOMAIN/versions/latest
-      env: 'INTEXURAOS_AUTH0_DOMAIN'
 
 options:
   logging: CLOUD_LOGGING_ONLY
