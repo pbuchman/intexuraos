@@ -1,61 +1,15 @@
-# IntexuraOS Dynamic Cloud Build Orchestrator
-#
-# This is the parent build that:
-# 1. Analyzes which services are affected
-# 2. Generates a tailored pipeline configuration
-# 3. Submits a child build with only the necessary steps
-#
-# Benefits over the previous monolithic approach:
-# - No container initialization for unaffected services
-# - Faster builds when only a few services change
-# - Cleaner logs with only relevant steps
-#
-# Substitutions (provided by Cloud Build trigger in Terraform):
-# - _REGION: GCP region
-# - _ARTIFACT_REGISTRY_URL: Full Artifact Registry URL
-# - _ENVIRONMENT: Environment name (dev, staging, prod)
-# - _FORCE_DEPLOY: Set to "true" to deploy all services
-
+# IntexuraOS Hyper-Fast Orchestrator
 steps:
-  # Step 1: Install dependencies for orchestrator scripts
-  - name: 'node:22-slim'
-    id: 'npm-ci'
-    entrypoint: 'npm'
-    args: ['ci']
-
-  # Step 2: Analyze workspace and generate dynamic config
-  - name: 'node:22-slim'
-    id: 'plan-pipeline'
-    waitFor: ['npm-ci']
-    entrypoint: 'bash'
+  # 1. Analyze & Generate Plan (Runs in ~5-10 seconds)
+  # Uses alpine to keep image pull fast. Installs git for diffing.
+  - name: 'node:22-alpine'
+    id: 'plan'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        echo "=== Analyzing Affected Services ==="
-
-        # 1. Create markers in .affected/
-        if [[ "${_FORCE_DEPLOY}" == "true" ]]; then
-          echo "Force deploy - marking all services as affected"
-          mkdir -p /workspace/.affected
-          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service notes-agent todos-agent bookmarks-agent app-settings-service web firestore; do
-            touch "/workspace/.affected/$svc"
-          done
-        else
-          node cloudbuild/scripts/check-affected.mjs --all
-        fi
-
-        echo "=== Affected services ==="
-        ls -la /workspace/.affected/ 2>/dev/null || echo "(none)"
-
-        # 2. Check if anything is affected
-        if [ -z "$(ls -A /workspace/.affected 2>/dev/null)" ]; then
-          echo "No services affected. Exiting."
-          exit 0
-        fi
-
-        # 3. Generate the dynamic pipeline JSON
-        echo "=== Generating Dynamic Pipeline Config ==="
-        node cloudbuild/scripts/generate-config.mjs
+        apk add --no-cache git
+        node cloudbuild/scripts/orchestrate.mjs
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -63,28 +17,26 @@ steps:
       - '_REGION=${_REGION}'
       - '_ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - '_ENVIRONMENT=${_ENVIRONMENT}'
-      - 'WORKSPACE=/workspace'
+      - '_FORCE_DEPLOY=${_FORCE_DEPLOY}'
 
-  # Step 3: Execute the Child Pipeline
+  # 2. Execute the Plan (0 startup time if skipped)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'execute-pipeline'
-    waitFor: ['plan-pipeline']
+    id: 'execute'
+    waitFor: ['plan']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [ ! -f /workspace/cloudbuild.dynamic.json ]; then
-          echo "No config generated (nothing affected), skipping execution."
+        if [ ! -f cloudbuild.dynamic.json ]; then
+          echo "No services affected. Skipping build."
           exit 0
         fi
 
-        echo "=== Dynamic Pipeline Config ==="
-        cat /workspace/cloudbuild.dynamic.json
-
-        echo ""
-        echo "=== Submitting Child Build ==="
+        echo ">> Submitting child build..."
+        # Submit the dynamic config.
+        # CRITICAL: This respects .gcloudignore to avoid uploading node_modules
         gcloud builds submit . \
-          --config=/workspace/cloudbuild.dynamic.json \
+          --config=cloudbuild.dynamic.json \
           --project=$PROJECT_ID \
           --region=${_REGION} \
           --substitutions=_REGION=${_REGION},_ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL},_ENVIRONMENT=${_ENVIRONMENT}
@@ -92,10 +44,3 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
-
-timeout: 1800s
-
-substitutions:
-  _REGION: 'europe-central2'
-  _ENVIRONMENT: 'dev'
-  _FORCE_DEPLOY: 'false'
