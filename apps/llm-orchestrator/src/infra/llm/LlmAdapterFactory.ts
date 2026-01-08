@@ -3,6 +3,7 @@
  * Usage logging is handled by the underlying clients (packages/infra-*).
  */
 
+import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
   type ModelPricing,
