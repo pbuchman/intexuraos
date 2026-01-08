@@ -3,8 +3,10 @@
  *
  * No hardcoded pricing - all costs calculated from passed ModelPricing config.
  * Original createPerplexityClient() remains for backwards compatibility.
- * * UPDATED: Uses streaming for all requests to prevent timeouts on long-running
- * reasoning models (like sonar-deep-research).
+ *
+ * STREAMING: The research() method uses SSE streaming to prevent 5-minute idle
+ * timeouts on long-running reasoning models (like sonar-deep-research).
+ * The generate() method uses standard buffered requests.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -27,6 +29,7 @@ import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type {
   PerplexityConfig,
   PerplexityError,
+  PerplexityLogger,
   PerplexityRequestBody,
   PerplexityResponse,
   PerplexityUsage,
@@ -93,12 +96,22 @@ class PerplexityApiError extends Error {
 }
 
 /**
+ * Shape of a single SSE chunk from Perplexity streaming API.
+ */
+interface PerplexityStreamChunk {
+  choices?: { delta?: { content?: string } }[];
+  usage?: PerplexityUsage;
+  citations?: string[];
+}
+
+/**
  * Helper to parse SSE (Server-Sent Events) streams from Perplexity.
  * Handles buffering incomplete lines and extracting content/usage/citations.
  */
 async function processStreamResponse(
   response: Response,
-  onUsageFound: (usage: PerplexityUsage) => void
+  onUsageFound: (usage: PerplexityUsage) => void,
+  logger?: PerplexityLogger
 ): Promise<{ content: string; citations: string[] }> {
   if (!response.body) {
     throw new Error('Response body is empty');
@@ -109,11 +122,18 @@ async function processStreamResponse(
   let content = '';
   let citations: string[] = [];
   let buffer = '';
+  let chunkCount = 0;
+
+  logger?.info('[Perplexity SSE] Starting stream processing...');
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) {
+        logger?.info('[Perplexity SSE] Stream complete', { totalChunks: chunkCount });
+        break;
+      }
+      const value = result.value as Uint8Array | undefined;
 
       // Decode current chunk and append to buffer
       buffer += decoder.decode(value, { stream: true });
@@ -125,30 +145,44 @@ async function processStreamResponse(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        if (trimmed === '' || !trimmed.startsWith('data: ')) continue;
 
         const dataStr = trimmed.slice(6); // Remove 'data: '
-        if (dataStr === '[DONE]') continue;
+        if (dataStr === '[DONE]') {
+          logger?.info('[Perplexity SSE] Received [DONE] signal');
+          continue;
+        }
 
         try {
-          const data = JSON.parse(dataStr);
+          const data = JSON.parse(dataStr) as PerplexityStreamChunk;
+          chunkCount++;
 
           // 1. Accumulate Content (Delta)
           const delta = data.choices?.[0]?.delta?.content;
-          if (delta) {
+          if (typeof delta === 'string') {
             content += delta;
+            logger?.info('[Perplexity SSE] Chunk received', {
+              chunkNumber: chunkCount,
+              deltaChars: delta.length,
+              totalChars: content.length,
+            });
           }
 
           // 2. Capture Usage (usually in the final chunk)
-          if (data.usage) {
+          if (data.usage !== undefined) {
+            logger?.info('[Perplexity SSE] Usage received', {
+              promptTokens: data.usage.prompt_tokens,
+              completionTokens: data.usage.completion_tokens,
+            });
             onUsageFound(data.usage);
           }
 
           // 3. Capture Citations (continuously updated, we overwrite to get the latest set)
-          if (data.citations) {
+          if (data.citations !== undefined) {
             citations = data.citations;
+            logger?.info('[Perplexity SSE] Citations updated', { sourceCount: citations.length });
           }
-        } catch (e) {
+        } catch {
           // Swallow parse errors for malformed intermediate chunks
         }
       }
@@ -161,7 +195,7 @@ async function processStreamResponse(
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
+  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
 
   function trackUsage(
     callType: CallType,
@@ -246,9 +280,13 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
         // --- STREAM PROCESSING ---
         let rawUsage: PerplexityUsage | undefined;
-        const { content, citations } = await processStreamResponse(response, (u) => {
-          rawUsage = u;
-        });
+        const { content, citations } = await processStreamResponse(
+          response,
+          (u) => {
+            rawUsage = u;
+          },
+          logger
+        );
 
         const usage = extractUsage(rawUsage);
 
@@ -288,7 +326,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             },
           ],
           temperature: 0.2,
-          stream: true, // ENABLED STREAMING
+          // NOTE: generate() uses standard buffered requests (no streaming)
         };
 
         const response = await fetchWithTimeout(
@@ -319,13 +357,10 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           return err(mapPerplexityError(apiError));
         }
 
-        // --- STREAM PROCESSING ---
-        let rawUsage: PerplexityUsage | undefined;
-        const { content } = await processStreamResponse(response, (u) => {
-          rawUsage = u;
-        });
-
-        const usage = extractUsage(rawUsage);
+        // --- BUFFERED JSON RESPONSE ---
+        const data = (await response.json()) as PerplexityResponse;
+        const content = data.choices[0]?.message.content ?? '';
+        const usage = extractUsage(data.usage);
 
         await auditContext.success({
           response: content,
@@ -364,21 +399,12 @@ function mapPerplexityError(error: unknown): PerplexityError {
     return { code: 'TIMEOUT', message: 'Request timed out' };
   }
   const message = getErrorMessage(error);
-  if (message.includes('timeout') || message.includes('fetch failed')) {
+  if (
+    message.includes('timeout') ||
+    message.includes('fetch failed') ||
+    message.includes('stream')
+  ) {
     return { code: 'TIMEOUT', message };
   }
   return { code: 'API_ERROR', message };
-}
-
-function extractSourcesFromResponse(response: PerplexityResponse): string[] {
-  // Kept for backward compatibility if needed, though now handled in stream helper
-  const sources: string[] = [];
-  if (response.search_results !== undefined && Array.isArray(response.search_results)) {
-    for (const result of response.search_results) {
-      if (result.url !== undefined) {
-        sources.push(result.url);
-      }
-    }
-  }
-  return [...new Set(sources)];
 }

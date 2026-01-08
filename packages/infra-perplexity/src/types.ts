@@ -6,6 +6,15 @@ export type {
 } from '@intexuraos/llm-contract';
 
 /**
+ * Logger interface for Perplexity API calls.
+ */
+export interface PerplexityLogger {
+  info: (msg: string, data?: Record<string, unknown>) => void;
+  warn: (msg: string, data?: Record<string, unknown>) => void;
+  error: (msg: string, data?: Record<string, unknown>) => void;
+}
+
+/**
  * Perplexity client configuration with explicit pricing.
  */
 export interface PerplexityConfig {
@@ -15,6 +24,8 @@ export interface PerplexityConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
+  /** Optional logger for SSE stream debugging */
+  logger?: PerplexityLogger;
 }
 
 export type SearchContextSize = 'low' | 'medium' | 'high';
@@ -27,6 +38,7 @@ export interface PerplexityRequestBody {
   }[];
   temperature?: number;
   max_tokens?: number;
+  stream?: boolean;
 }
 
 export interface PerplexitySearchResult {

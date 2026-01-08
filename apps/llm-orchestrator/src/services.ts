@@ -67,7 +67,8 @@ export interface ServiceContainer {
     model: ResearchModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing
+    pricing: ModelPricing,
+    logger?: Logger
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,

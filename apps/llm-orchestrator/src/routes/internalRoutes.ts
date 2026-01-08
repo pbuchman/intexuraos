@@ -687,7 +687,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           event.model,
           apiKey,
           event.userId,
-          services.pricingContext.getPricing(event.model)
+          services.pricingContext.getPricing(event.model),
+          request.log
         );
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt);
