@@ -11,8 +11,8 @@ output "dashboard_name" {
 output "log_metrics" {
   description = "Created log-based metrics"
   value = {
-    llm_errors             = google_logging_metric.llm_errors.name
-    pubsub_dlq             = google_logging_metric.pubsub_dlq_messages.name
+    llm_errors              = google_logging_metric.llm_errors.name
+    pubsub_dlq              = google_logging_metric.pubsub_dlq_messages.name
     whatsapp_webhook_errors = google_logging_metric.whatsapp_webhook_errors.name
   }
 }

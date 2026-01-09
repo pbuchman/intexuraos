@@ -84,7 +84,7 @@ resource "google_monitoring_dashboard" "main" {
           widget = {
             title = "All Services - Errors & Warnings"
             logsPanel = {
-              filter = "resource.type=\"cloud_run_revision\" severity>=\"WARNING\""
+              filter        = "resource.type=\"cloud_run_revision\" severity>=\"WARNING\""
               resourceNames = ["projects/${var.project_id}"]
             }
           }
@@ -316,7 +316,7 @@ resource "google_monitoring_dashboard" "main" {
                 value     = 10
                 color     = "YELLOW"
                 direction = "ABOVE"
-              }, {
+                }, {
                 value     = 50
                 color     = "RED"
                 direction = "ABOVE"
@@ -346,7 +346,7 @@ resource "google_monitoring_dashboard" "main" {
                 value     = 10
                 color     = "YELLOW"
                 direction = "ABOVE"
-              }, {
+                }, {
                 value     = 100
                 color     = "RED"
                 direction = "ABOVE"
@@ -376,7 +376,7 @@ resource "google_monitoring_dashboard" "main" {
                 value     = 100
                 color     = "YELLOW"
                 direction = "ABOVE"
-              }, {
+                }, {
                 value     = 1000
                 color     = "RED"
                 direction = "ABOVE"
@@ -406,7 +406,7 @@ resource "google_monitoring_dashboard" "main" {
                 value     = 1
                 color     = "YELLOW"
                 direction = "ABOVE"
-              }, {
+                }, {
                 value     = 10
                 color     = "RED"
                 direction = "ABOVE"
