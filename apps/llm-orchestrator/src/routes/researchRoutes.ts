@@ -22,9 +22,7 @@ import {
   enhanceResearch,
   type InputContext,
   getResearch,
-  type LabelGenerateResult,
   listResearches,
-  type LlmError,
   type PartialFailureDecision,
   type Research,
   type ResearchModel,
@@ -33,9 +31,11 @@ import {
   runSynthesis,
   submitResearch,
   unshareResearch,
+  generateContextLabels,
 } from '../domain/research/index.js';
-import { getProviderForModel, LlmModels, type Gemini25Flash } from '@intexuraos/llm-contract';
+import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
+import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import {
   approveResearchResponseSchema,
   confirmPartialFailureBodySchema,
@@ -88,47 +88,6 @@ interface EnhanceResearchBody {
   additionalContexts?: { content: string; label?: string }[];
   synthesisModel?: ResearchModel;
   removeContextIds?: string[];
-}
-
-interface ContextWithLabel {
-  content: string;
-  label?: string | undefined;
-}
-
-async function generateContextLabels(
-  contexts: ContextWithLabel[],
-  googleApiKey: string | undefined,
-  userId: string,
-  createTitleGenerator: (
-    model: Gemini25Flash,
-    apiKey: string,
-    userId: string,
-    pricing: import('@intexuraos/llm-contract').ModelPricing
-  ) => {
-    generateContextLabel: (
-      content: string
-    ) => Promise<import('@intexuraos/common-core').Result<LabelGenerateResult, LlmError>>;
-  },
-  pricing: import('@intexuraos/llm-contract').ModelPricing
-): Promise<ContextWithLabel[]> {
-  if (googleApiKey === undefined) {
-    return contexts;
-  }
-
-  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, pricing);
-
-  return await Promise.all(
-    contexts.map(async (ctx) => {
-      if (ctx.label !== undefined && ctx.label !== '') {
-        return ctx;
-      }
-      const labelResult = await generator.generateContextLabel(ctx.content);
-      return {
-        content: ctx.content,
-        label: labelResult.ok ? labelResult.value.label : undefined,
-      };
-    })
-  );
 }
 
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -596,13 +555,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         imageServiceClient,
         notificationSender,
         llmCallPublisher,
-        createSynthesizer,
-        createContextInferrer,
         shareStorage,
         shareConfig,
-        pricingContext,
+        webAppUrl,
       } = getServices();
-      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
       const existing = await getResearch(id, { researchRepo });
 
@@ -654,22 +610,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(
+          const { synthesizer, contextInferrer } = createSynthesisProviders(
             synthesisModel,
-            synthesisKey,
+            apiKeysResult.value,
             user.userId,
-            pricingContext.getPricing(synthesisModel)
+            getServices(),
+            request.log
           );
-          const contextInferrer =
-            apiKeysResult.value.google !== undefined
-              ? createContextInferrer(
-                  LlmModels.Gemini25Flash,
-                  apiKeysResult.value.google,
-                  user.userId,
-                  pricingContext.getPricing(LlmModels.Gemini25Flash),
-                  request.log
-                )
-              : undefined;
+
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
@@ -767,12 +715,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         imageServiceClient,
         notificationSender,
         llmCallPublisher,
-        createSynthesizer,
         shareStorage,
         shareConfig,
-        pricingContext,
+        webAppUrl,
       } = getServices();
-      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
       const existing = await getResearch(id, { researchRepo });
 
@@ -805,11 +751,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const synthesizer = createSynthesizer(
+      const { synthesizer, contextInferrer } = createSynthesisProviders(
         synthesisModel,
-        synthesisKey,
+        apiKeysResult.value,
         user.userId,
-        pricingContext.getPricing(synthesisModel)
+        getServices()
       );
 
       const retryResult = await retryFromFailed(id, {
@@ -817,6 +763,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         llmCallPublisher,
         synthesisDeps: {
           synthesizer,
+          ...(contextInferrer !== undefined && { contextInferrer }),
           notificationSender,
           shareStorage,
           shareConfig,
