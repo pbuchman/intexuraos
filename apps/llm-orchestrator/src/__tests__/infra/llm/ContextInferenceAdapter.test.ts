@@ -125,8 +125,9 @@ describe('ContextInferenceAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.domain).toBe('technical');
-        expect(result.value.language).toBe('en');
+        expect(result.value.context.domain).toBe('technical');
+        expect(result.value.context.language).toBe('en');
+        expect(result.value.usage.costUsd).toBe(mockUsage.costUsd);
       }
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test query'));
     });
@@ -262,8 +263,9 @@ describe('ContextInferenceAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.domain).toBe('technical');
-        expect(result.value.synthesis_goals).toContain('merge');
+        expect(result.value.context.domain).toBe('technical');
+        expect(result.value.context.synthesis_goals).toContain('merge');
+        expect(result.value.usage.costUsd).toBe(mockUsage.costUsd);
       }
     });
 

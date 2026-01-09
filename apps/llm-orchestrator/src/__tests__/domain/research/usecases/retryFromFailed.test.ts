@@ -43,8 +43,12 @@ function createMockDeps(): RetryFromFailedDeps & {
   };
 
   const mockSynthesizer = {
-    synthesize: vi.fn().mockResolvedValue(ok({ content: 'Synthesized result' })),
-    generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    synthesize: vi.fn().mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 } })
+    ),
+    generateTitle: vi.fn().mockResolvedValue(
+      ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    ),
   };
 
   const mockNotificationSender = {

@@ -18,6 +18,8 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  TitleGenerateResult,
+  LabelGenerateResult,
 } from '../../domain/research/index.js';
 
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
@@ -64,7 +66,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     };
   }
 
-  async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
+  async generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
     const builtPrompt = titlePrompt.build(
       { content: prompt },
       { wordRange: { min: 5, max: 8 }, includeExamples: true }
@@ -74,17 +76,39 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
     }
-    return { ok: true, value: result.value.content.trim() };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        title: result.value.content.trim(),
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 
-  async generateContextLabel(content: string): Promise<Result<string, LlmError>> {
+  async generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>> {
     const builtPrompt = labelPrompt.build({ content }, { contentPreviewLimit: 2000 });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
     }
-    return { ok: true, value: result.value.content.trim() };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        label: result.value.content.trim(),
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 }
 

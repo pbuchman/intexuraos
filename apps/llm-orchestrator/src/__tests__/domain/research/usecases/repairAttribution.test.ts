@@ -28,7 +28,9 @@ interface MockLogger {
 function createMockSynthesizer(): MockSynthesizer {
   return {
     synthesize: vi.fn(),
-    generateTitle: vi.fn().mockResolvedValue(ok('Title')),
+    generateTitle: vi.fn().mockResolvedValue(
+      ok({ title: 'Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    ),
   };
 }
 
@@ -54,6 +56,7 @@ describe('repairAttribution', () => {
       ok({
         content:
           'Repaired content with Attribution: Primary=S1; Secondary=; Constraints=; UNK=false',
+        usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.005 },
       })
     );
 
@@ -64,7 +67,8 @@ describe('repairAttribution', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toContain('Repaired content');
+      expect(result.value.content).toContain('Repaired content');
+      expect(result.value.usage.costUsd).toBe(0.005);
     }
     expect(logger.info).toHaveBeenCalledWith('Attempting attribution repair');
     expect(logger.info).toHaveBeenCalledWith('Attribution repair completed');

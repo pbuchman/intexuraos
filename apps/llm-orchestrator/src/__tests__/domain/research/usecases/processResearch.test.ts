@@ -48,8 +48,16 @@ function createMockDeps(): ProcessResearchDeps & {
   };
 
   const mockTitleGenerator = {
-    generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
-    generateContextLabel: vi.fn().mockResolvedValue(ok('Generated Label')),
+    generateTitle: vi
+      .fn()
+      .mockResolvedValue(
+        ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+      ),
+    generateContextLabel: vi
+      .fn()
+      .mockResolvedValue(
+        ok({ label: 'Generated Label', usage: { inputTokens: 5, outputTokens: 3, costUsd: 0.0005 } })
+      ),
   };
 
   const mockReportSuccess = vi.fn();
@@ -131,7 +139,9 @@ describe('processResearch', () => {
   it('generates title when titleGenerator is provided', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
-    deps.mockTitleGenerator.generateTitle.mockResolvedValue(ok('Generated Title'));
+    deps.mockTitleGenerator.generateTitle.mockResolvedValue(
+      ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    );
 
     await processResearch('research-1', deps);
 
@@ -145,7 +155,9 @@ describe('processResearch', () => {
     deps.mockRepo.findById.mockResolvedValue(ok(research));
 
     const mockSynthesizer = {
-      generateTitle: vi.fn().mockResolvedValue(ok('Synthesizer Title')),
+      generateTitle: vi.fn().mockResolvedValue(
+        ok({ title: 'Synthesizer Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+      ),
       synthesize: vi.fn(),
     };
 
@@ -328,8 +340,12 @@ describe('processResearch', () => {
       llmCallPublisher: deps.llmCallPublisher,
       logger: mockLogger,
       titleGenerator: {
-        generateTitle: vi.fn().mockResolvedValue(ok('Title Without Callback')),
-        generateContextLabel: vi.fn().mockResolvedValue(ok('Label Without Callback')),
+        generateTitle: vi.fn().mockResolvedValue(
+          ok({ title: 'Title Without Callback', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+        ),
+        generateContextLabel: vi.fn().mockResolvedValue(
+          ok({ label: 'Label Without Callback', usage: { inputTokens: 5, outputTokens: 3, costUsd: 0.0005 } })
+        ),
       },
     };
 
@@ -395,7 +411,9 @@ describe('processResearch', () => {
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const mockContextInferrer = {
-        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferResearchContext: vi.fn().mockResolvedValue(
+          ok({ context: mockResearchContext, usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 } })
+        ),
         inferSynthesisContext: vi.fn(),
       };
 
@@ -476,7 +494,9 @@ describe('processResearch', () => {
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const mockContextInferrer = {
-        inferResearchContext: vi.fn().mockResolvedValue(ok(mockResearchContext)),
+        inferResearchContext: vi.fn().mockResolvedValue(
+          ok({ context: mockResearchContext, usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 } })
+        ),
         inferSynthesisContext: vi.fn(),
       };
 

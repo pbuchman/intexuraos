@@ -59,6 +59,8 @@ export async function processResearch(
     startedAt: new Date().toISOString(),
   });
 
+  let auxiliaryCostUsd = 0;
+
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
   const titleModel: ResearchModel =
     deps.titleGenerator !== undefined ? LlmModels.Gemini25Flash : research.synthesisModel;
@@ -66,8 +68,12 @@ export async function processResearch(
     deps.logger.info({ researchId, model: titleModel }, '[2.3.1] Starting title generation');
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
-      await deps.researchRepo.update(researchId, { title: titleResult.value });
-      deps.logger.info({ researchId, model: titleModel }, '[2.3.2] Title generated successfully');
+      await deps.researchRepo.update(researchId, { title: titleResult.value.title });
+      auxiliaryCostUsd += titleResult.value.usage.costUsd ?? 0;
+      deps.logger.info(
+        { researchId, model: titleModel, costUsd: titleResult.value.usage.costUsd },
+        '[2.3.2] Title generated successfully'
+      );
       if (deps.reportLlmSuccess !== undefined) {
         deps.reportLlmSuccess(titleModel);
       }
@@ -85,9 +91,10 @@ export async function processResearch(
     deps.logger.info({ researchId }, '[2.4.1] Starting research context inference');
     const contextResult = await deps.contextInferrer.inferResearchContext(research.prompt);
     if (contextResult.ok) {
-      await deps.researchRepo.update(researchId, { researchContext: contextResult.value });
+      await deps.researchRepo.update(researchId, { researchContext: contextResult.value.context });
+      auxiliaryCostUsd += contextResult.value.usage.costUsd ?? 0;
       deps.logger.info(
-        { researchId, domain: contextResult.value.domain },
+        { researchId, domain: contextResult.value.context.domain, costUsd: contextResult.value.usage.costUsd },
         '[2.4.2] Research context inferred successfully'
       );
       if (deps.reportLlmSuccess !== undefined) {
@@ -99,6 +106,14 @@ export async function processResearch(
         '[2.4.2] Context inference failed, proceeding without context'
       );
     }
+  }
+
+  if (auxiliaryCostUsd > 0) {
+    await deps.researchRepo.update(researchId, { auxiliaryCostUsd });
+    deps.logger.info(
+      { researchId, auxiliaryCostUsd },
+      '[2.4.3] Auxiliary costs saved'
+    );
   }
 
   const pendingModels = research.llmResults

@@ -183,7 +183,8 @@ describe('GptAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated Title');
+        expect(result.value.title).toBe('Generated Title');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a short, concise title')

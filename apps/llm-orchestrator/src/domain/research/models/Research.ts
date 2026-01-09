@@ -106,6 +106,8 @@ export interface Research {
   shareInfo?: ShareInfo;
   sourceResearchId?: string;
   attributionStatus?: AttributionStatus;
+  auxiliaryCostUsd?: number;
+  sourceLlmCostUsd?: number;
 }
 
 export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {
@@ -207,10 +209,11 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   const now = new Date().toISOString();
   const source = params.sourceResearch;
 
-  // Copy completed results but omit usage stats - they'll be recalculated after synthesis
-  const completedResults: LlmResult[] = source.llmResults
-    .filter((r) => r.status === 'completed')
-    .map(({ inputTokens: _, outputTokens: __, costUsd: ___, ...rest }) => rest);
+  const completedResults: LlmResult[] = source.llmResults.filter((r) => r.status === 'completed');
+
+  const sourceLlmCostUsd =
+    completedResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0) +
+    (source.auxiliaryCostUsd ?? 0);
 
   const existingModels = new Set(completedResults.map((r) => r.model));
   const newModels = (params.additionalModels ?? []).filter((m) => !existingModels.has(m));
@@ -248,6 +251,7 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
     llmResults: [...completedResults, ...newResults],
     startedAt: now,
     sourceResearchId: source.id,
+    sourceLlmCostUsd,
   };
 
   if (allContexts.length > 0) {

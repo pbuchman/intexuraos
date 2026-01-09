@@ -13,6 +13,7 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  TitleGenerateResult,
 } from '../../domain/research/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
@@ -59,7 +60,7 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     };
   }
 
-  async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
+  async generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
     const builtPrompt = titlePrompt.build(
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
@@ -69,7 +70,18 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
     }
-    return { ok: true, value: result.value.content.trim() };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        title: result.value.content.trim(),
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 }
 

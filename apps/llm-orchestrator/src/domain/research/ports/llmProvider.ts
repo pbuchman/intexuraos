@@ -17,6 +17,16 @@ export interface LlmUsage {
   costUsd?: number;
 }
 
+export interface TitleGenerateResult {
+  title: string;
+  usage: LlmUsage;
+}
+
+export interface LabelGenerateResult {
+  label: string;
+  usage: LlmUsage;
+}
+
 export interface LlmResearchResult {
   content: string;
   sources?: string[];
@@ -40,10 +50,10 @@ export interface LlmSynthesisProvider {
     synthesisContext?: SynthesisContext
   ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
+  generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;
 }
 
 export interface TitleGenerator {
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
-  generateContextLabel(content: string): Promise<Result<string, LlmError>>;
+  generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;
+  generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>>;
 }
