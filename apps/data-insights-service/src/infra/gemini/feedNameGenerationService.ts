@@ -8,6 +8,7 @@ import { err, ok } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
+import { feedNamePrompt } from '@intexuraos/llm-common';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {
   FeedNameGenerationService,
@@ -16,21 +17,6 @@ import type {
 import { MAX_FEED_NAME_LENGTH } from '../../domain/compositeFeed/index.js';
 
 const NAME_GENERATION_MODEL: FastModel = LlmModels.Gemini25Flash;
-
-const NAME_PROMPT_TEMPLATE = `Generate a concise, descriptive name for a data feed based on the following information.
-
-Purpose: {PURPOSE}
-Data sources included: {SOURCES}
-Notification filters: {FILTERS}
-
-Requirements:
-- Maximum ${String(MAX_FEED_NAME_LENGTH)} characters
-- Be specific and descriptive
-- Do not include quotes around the name
-- Do not include any explanations, just the name itself
-- The name should reflect what data the feed aggregates
-
-Name:`;
 
 /**
  * Create a feed name generation service.
@@ -72,12 +58,10 @@ export function createFeedNameGenerationService(
         pricing,
       });
 
-      const sourcesText = sourceNames.length > 0 ? sourceNames.join(', ') : 'None';
-      const filtersText = filterNames.length > 0 ? filterNames.join(', ') : 'None';
-
-      const prompt = NAME_PROMPT_TEMPLATE.replace('{PURPOSE}', purpose)
-        .replace('{SOURCES}', sourcesText)
-        .replace('{FILTERS}', filtersText);
+      const prompt = feedNamePrompt.build(
+        { purpose, sourceNames, filterNames },
+        { maxLength: MAX_FEED_NAME_LENGTH }
+      );
 
       const result = await geminiClient.generate(prompt);
 

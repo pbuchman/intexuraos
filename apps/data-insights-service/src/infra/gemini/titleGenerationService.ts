@@ -7,6 +7,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
+import { titlePrompt } from '@intexuraos/llm-common';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
@@ -27,21 +28,6 @@ export interface TitleGenerationError {
 export interface TitleGenerationService {
   generateTitle(userId: string, content: string): Promise<Result<string, TitleGenerationError>>;
 }
-
-const TITLE_PROMPT_TEMPLATE = `Analyze the following content and generate a concise, descriptive title that captures the main topic or purpose of the data.
-
-Requirements:
-- Maximum ${String(MAX_TITLE_LENGTH)} characters
-- Be specific and descriptive
-- Do not include quotes around the title
-- Do not include any explanations, just the title itself
-
-Content:
----
-{CONTENT}
----
-
-Title:`;
 
 /**
  * Create a title generation service.
@@ -81,8 +67,10 @@ export function createTitleGenerationService(
         pricing,
       });
 
-      const contentPreview = content.length > 5000 ? content.slice(0, 5000) + '...' : content;
-      const prompt = TITLE_PROMPT_TEMPLATE.replace('{CONTENT}', contentPreview);
+      const prompt = titlePrompt.build(
+        { content },
+        { maxLength: MAX_TITLE_LENGTH, contentPreviewLimit: 5000 }
+      );
 
       const result = await geminiClient.generate(prompt);
 
