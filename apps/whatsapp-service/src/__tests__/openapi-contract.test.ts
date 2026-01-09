@@ -34,6 +34,8 @@ describe('whatsapp-service OpenAPI contract', () => {
     mediaCleanupSubscription: 'test-media-cleanup-sub',
     speechmaticsApiKey: 'test-speechmatics-api-key',
     gcpProjectId: 'test-project',
+    webAgentUrl: 'https://web-agent.example.com',
+    internalAuthToken: 'test-internal-auth-token',
     port: 8080,
     host: '0.0.0.0',
   };

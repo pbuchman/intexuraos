@@ -104,6 +104,16 @@ const configSchema = z.object({
   gcpProjectId: z.string().min(1, 'INTEXURAOS_GCP_PROJECT_ID is required'),
 
   /**
+   * Web-agent service URL for link preview extraction.
+   */
+  webAgentUrl: z.string().min(1, 'INTEXURAOS_WEB_AGENT_URL is required'),
+
+  /**
+   * Internal auth token for service-to-service communication.
+   */
+  internalAuthToken: z.string().min(1, 'INTEXURAOS_INTERNAL_AUTH_TOKEN is required'),
+
+  /**
    * Server port.
    */
   port: z.coerce.number().int().positive().default(8080),
@@ -132,6 +142,8 @@ export function loadConfig(): Config {
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
     speechmaticsApiKey: process.env['INTEXURAOS_SPEECHMATICS_API_KEY'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],
+    webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'],
+    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     commandsIngestTopic: process.env['INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC'],
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
@@ -157,6 +169,8 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
     'INTEXURAOS_SPEECHMATICS_API_KEY',
     'INTEXURAOS_GCP_PROJECT_ID',
+    'INTEXURAOS_WEB_AGENT_URL',
+    'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   ];
   return required.filter((key) => process.env[key] === undefined || process.env[key] === '');
 }

@@ -26,7 +26,6 @@
     "@intexuraos/infra-pubsub": "*",
     "@intexuraos/infra-whatsapp": "*",
     "@speechmatics/batch-client": "^5.1.0",
-    "cheerio": "^1.0.0",
     "fastify": "^5.1.0",
     "libphonenumber-js": "^1.12.33",
     "pino": "^10.1.0",

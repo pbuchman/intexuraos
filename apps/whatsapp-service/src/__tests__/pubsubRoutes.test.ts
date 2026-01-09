@@ -20,6 +20,8 @@ import {
 } from './fakes.js';
 import type { Config } from '../config.js';
 
+const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
+
 const testConfig: Config = {
   verifyToken: 'test-verify-token',
   appSecret: 'test-app-secret',
@@ -31,11 +33,11 @@ const testConfig: Config = {
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   speechmaticsApiKey: 'test-speechmatics-api-key',
   gcpProjectId: 'test-project',
+  webAgentUrl: 'https://web-agent.example.com',
+  internalAuthToken: INTERNAL_AUTH_TOKEN,
   port: 8080,
   host: '0.0.0.0',
 };
-
-const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
 
 function encodeEvent(event: unknown): string {
   return Buffer.from(JSON.stringify(event)).toString('base64');

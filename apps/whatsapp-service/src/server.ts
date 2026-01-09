@@ -108,6 +108,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     speechmaticsApiKey: config.speechmaticsApiKey,
+    webAgentUrl: config.webAgentUrl,
+    internalAuthToken: config.internalAuthToken,
   };
   if (config.commandsIngestTopic !== undefined) {
     (serviceConfig as { commandsIngestTopic?: string }).commandsIngestTopic =
