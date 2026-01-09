@@ -5,6 +5,30 @@
  * Pure utilities with zero infrastructure dependencies.
  */
 
+// Prompt builder types
+export { type PromptBuilder, type PromptDeps } from './types.js';
+
+// Generation prompts (title, label, feed name)
+export {
+  titlePrompt,
+  type TitlePromptInput,
+  type TitlePromptDeps,
+  labelPrompt,
+  type LabelPromptInput,
+  type LabelPromptDeps,
+  feedNamePrompt,
+  type FeedNamePromptInput,
+  type FeedNamePromptDeps,
+} from './generation/index.js';
+
+// Classification prompts
+export {
+  commandClassifierPrompt,
+  type CommandCategory,
+  type CommandClassifierPromptInput,
+  type CommandClassifierPromptDeps,
+} from './classification/index.js';
+
 // Research prompt builder
 export { buildResearchPrompt } from './researchPrompt.js';
 
