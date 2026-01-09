@@ -21,6 +21,10 @@ import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
 import { PerplexityAdapter } from './PerplexityAdapter.js';
 import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
+import {
+  InputValidationAdapter,
+  type InputValidationProvider,
+} from './InputValidationAdapter.js';
 
 export function createResearchProvider(
   model: ResearchModel,
@@ -80,3 +84,14 @@ export function createContextInferrer(
 ): ContextInferenceProvider {
   return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger);
 }
+
+export function createInputValidator(
+  model: FastModel,
+  apiKey: string,
+  userId: string,
+  pricing: ModelPricing
+): InputValidationProvider {
+  return new InputValidationAdapter(apiKey, model, userId, pricing);
+}
+
+export type { InputValidationProvider };
