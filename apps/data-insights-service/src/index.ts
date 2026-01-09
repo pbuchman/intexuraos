@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { initServices } from './services.js';
 import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepository.js';
 import { FirestoreCompositeFeedRepository } from './infra/firestore/compositeFeedRepository.js';
+import { FirestoreSnapshotRepository } from './infra/firestore/snapshotRepository.js';
 import { createUserServiceClient } from './infra/user/userServiceClient.js';
 import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
 import { createFeedNameGenerationService } from './infra/gemini/feedNameGenerationService.js';
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
       baseUrl: config.mobileNotificationsServiceUrl,
       internalAuthToken: config.internalAuthToken,
     }),
+    snapshotRepository: new FirestoreSnapshotRepository(),
   });
 
   const app = await buildServer();
