@@ -20,6 +20,8 @@ import {
 import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { supportedModelSchema, researchSchema } from './schemas/index.js';
+import { createSynthesisProviders } from './helpers/synthesisHelper.js';
+import { handleAllCompleted } from './helpers/completionHandlers.js';
 
 interface CreateDraftResearchBody {
   userId: string;
@@ -299,11 +301,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return { success: false, error: 'API key missing' };
         }
 
-        const synthesizer = services.createSynthesizer(
+        const { synthesizer, contextInferrer } = createSynthesisProviders(
           synthesisModel,
-          synthesisKey,
+          apiKeys,
           research.userId,
-          services.pricingContext.getPricing(synthesisModel)
+          services,
+          request.log
         );
 
         const deps: Parameters<typeof processResearch>[1] = {
@@ -323,13 +326,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             research.userId,
             services.pricingContext.getPricing(LlmModels.Gemini25Flash)
           );
-          deps.contextInferrer = services.createContextInferrer(
-            LlmModels.Gemini25Flash,
-            apiKeys.google,
-            research.userId,
-            services.pricingContext.getPricing(LlmModels.Gemini25Flash),
-            request.log
-          );
+        }
+
+        if (contextInferrer !== undefined) {
+          deps.contextInferrer = contextInferrer;
         }
 
         const processResult = await processResearch(event.researchId, deps);
@@ -339,7 +339,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (processResult.triggerSynthesis) {
           request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
 
-          const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
           await runSynthesis(event.researchId, {
             researchRepo,
             synthesizer,
@@ -349,7 +348,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             imageServiceClient: services.imageServiceClient,
             ...(deps.contextInferrer !== undefined && { contextInferrer: deps.contextInferrer }),
             userId: research.userId,
-            webAppUrl,
+            webAppUrl: services.webAppUrl,
             reportLlmSuccess: (): void => {
               void userServiceClient.reportLlmSuccess(research.userId, synthesisProvider);
             },
@@ -595,9 +594,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       const services = getServices();
-      const { researchRepo, userServiceClient, notificationSender, shareStorage, shareConfig } =
+      const { researchRepo, userServiceClient, notificationSender, shareStorage, shareConfig, webAppUrl } =
         services;
-      const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
       const modelProvider = getProviderForModel(event.model);
 
       try {
@@ -787,111 +785,22 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               '[3.5.1] Still waiting for other LLM providers'
             );
             break;
-          case 'all_completed': {
-            const freshResearch = await researchRepo.findById(event.researchId);
-            if (!freshResearch.ok || freshResearch.value === null) {
-              request.log.error(
-                { researchId: event.researchId },
-                '[3.5.2] Research not found for synthesis'
-              );
-              break;
-            }
-
-            if (freshResearch.value.skipSynthesis === true) {
-              request.log.info(
-                { researchId: event.researchId },
-                '[3.5.2] All LLMs completed, skipping synthesis (skipSynthesis flag)'
-              );
-              const now = new Date();
-              const startedAt = new Date(freshResearch.value.startedAt);
-              await researchRepo.update(event.researchId, {
-                status: 'completed',
-                completedAt: now.toISOString(),
-                totalDurationMs: now.getTime() - startedAt.getTime(),
-              });
-              void notificationSender.sendResearchComplete(
-                freshResearch.value.userId,
-                event.researchId,
-                freshResearch.value.title,
-                `${webAppUrl}/#/research/${event.researchId}`
-              );
-              break;
-            }
-
-            request.log.info(
-              { researchId: event.researchId },
-              '[3.5.2] All LLMs completed, triggering synthesis (Phase 4)'
-            );
-
-            const synthesisModel = freshResearch.value.synthesisModel;
-            const synthesisProvider = getProviderForModel(synthesisModel);
-            const synthesisKey = apiKeysResult.value[synthesisProvider];
-            if (synthesisKey === undefined) {
-              request.log.error(
-                { researchId: event.researchId, model: synthesisModel },
-                '[3.5.2] API key missing for synthesis model'
-              );
-              await researchRepo.update(event.researchId, {
-                status: 'failed',
-                synthesisError: `API key required for synthesis with ${synthesisModel}`,
-                completedAt: new Date().toISOString(),
-              });
-              break;
-            }
-
-            const synthesizer = services.createSynthesizer(
-              synthesisModel,
-              synthesisKey,
-              event.userId,
-              services.pricingContext.getPricing(synthesisModel)
-            );
-            const contextInferrer =
-              apiKeysResult.value.google !== undefined
-                ? services.createContextInferrer(
-                    LlmModels.Gemini25Flash,
-                    apiKeysResult.value.google,
-                    event.userId,
-                    services.pricingContext.getPricing(LlmModels.Gemini25Flash),
-                    request.log
-                  )
-                : undefined;
-            const synthesisResult = await runSynthesis(event.researchId, {
+          case 'all_completed':
+            await handleAllCompleted({
+              researchId: event.researchId,
+              userId: event.userId,
               researchRepo,
-              synthesizer,
+              apiKeys: apiKeysResult.value,
+              services,
+              userServiceClient,
               notificationSender,
               shareStorage,
               shareConfig,
               imageServiceClient: services.imageServiceClient,
-              ...(contextInferrer !== undefined && { contextInferrer }),
-              userId: event.userId,
               webAppUrl,
-              reportLlmSuccess: (): void => {
-                void userServiceClient.reportLlmSuccess(event.userId, synthesisProvider);
-              },
-              logger: {
-                info: (msg: string): void => {
-                  request.log.info({ researchId: event.researchId }, msg);
-                },
-                error: (obj: object, msg: string): void => {
-                  request.log.error({ researchId: event.researchId, ...obj }, msg);
-                },
-              },
-              imageApiKeys: apiKeysResult.value,
+              logger: request.log,
             });
-
-            if (synthesisResult.ok) {
-              request.log.info(
-                { researchId: event.researchId },
-                '[4.END] Synthesis completed successfully'
-              );
-            } else {
-              request.log.error(
-                { researchId: event.researchId, error: synthesisResult.error },
-                '[4.END] Synthesis failed'
-              );
-            }
             break;
-          }
           case 'all_failed':
             request.log.warn(
               { researchId: event.researchId },
