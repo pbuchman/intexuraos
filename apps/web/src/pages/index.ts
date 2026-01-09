@@ -3,6 +3,7 @@ export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { SystemHealthPage } from './SystemHealthPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
+export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js';
 export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
 export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
 export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';

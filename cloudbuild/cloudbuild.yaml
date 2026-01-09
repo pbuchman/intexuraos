@@ -503,6 +503,38 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===== calendar-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-calendar-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Building calendar-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          -f apps/calendar-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-calendar-agent'
+    waitFor: ['build-push-calendar-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-calendar-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'

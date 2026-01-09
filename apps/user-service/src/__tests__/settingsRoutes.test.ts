@@ -8,7 +8,11 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
+import {
+  FakeAuthTokenRepository,
+  FakeOAuthConnectionRepository,
+  FakeUserSettingsRepository,
+} from './fakes.js';
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
@@ -80,6 +84,8 @@ describe('Settings Routes', () => {
       auth0Client: null,
       encryptor: null,
       llmValidator: null,
+      oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+      googleOAuthClient: null,
     });
   });
 

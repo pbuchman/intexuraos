@@ -106,6 +106,13 @@ resource "google_service_account" "bookmarks_agent" {
   description  = "Service account for bookmarks-agent Cloud Run deployment"
 }
 
+# Service account for calendar-agent
+resource "google_service_account" "calendar_agent" {
+  account_id   = "intexuraos-calendar-${var.environment}"
+  display_name = "IntexuraOS Calendar Agent (${var.environment})"
+  description  = "Service account for calendar-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -231,6 +238,15 @@ resource "google_secret_manager_secret_iam_member" "bookmarks_agent_secrets" {
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}
+
+# Calendar Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "calendar_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.calendar_agent.email}"
 }
 
 

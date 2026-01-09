@@ -7,15 +7,18 @@ import { createEncryptor, type Encryptor } from './infra/encryption.js';
 import type { PricingContext } from '@intexuraos/llm-pricing';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
+import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oauth/index.js';
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,
+  FirestoreOAuthConnectionRepository,
 } from './infra/firestore/index.js';
 import {
   Auth0ClientImpl,
   loadAuth0Config as loadAuth0ConfigFromInfra,
 } from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
+import { GoogleOAuthClientImpl } from './infra/google/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -23,7 +26,9 @@ import { LlmValidatorImpl } from './infra/llm/index.js';
 export interface ServiceContainer {
   authTokenRepository: AuthTokenRepository;
   userSettingsRepository: UserSettingsRepository;
+  oauthConnectionRepository: OAuthConnectionRepository;
   auth0Client: Auth0Client | null;
+  googleOAuthClient: GoogleOAuthClient | null;
   encryptor: Encryptor | null;
   llmValidator: LlmValidator | null;
 }
@@ -40,6 +45,21 @@ function loadEncryptor(): Encryptor | null {
     return null;
   }
   return createEncryptor(encryptionKey);
+}
+
+/**
+ * Load Google OAuth config from environment.
+ * Returns null if not configured.
+ */
+function loadGoogleOAuthClient(): GoogleOAuthClient | null {
+  const clientId = process.env['INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID'];
+  const clientSecret = process.env['INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET'];
+
+  if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+    return null;
+  }
+
+  return new GoogleOAuthClientImpl({ clientId, clientSecret });
 }
 
 /**
@@ -75,7 +95,9 @@ export function initializeServices(pricingContext?: PricingContext): void {
   container = {
     authTokenRepository: new FirestoreAuthTokenRepository(),
     userSettingsRepository: new FirestoreUserSettingsRepository(),
+    oauthConnectionRepository: new FirestoreOAuthConnectionRepository(),
     auth0Client: auth0Config !== null ? new Auth0ClientImpl(auth0Config) : null,
+    googleOAuthClient: loadGoogleOAuthClient(),
     encryptor: loadEncryptor(),
     llmValidator,
   };
