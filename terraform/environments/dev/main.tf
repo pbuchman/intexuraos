@@ -253,6 +253,7 @@ resource "google_project_service" "apis" {
     "storage.googleapis.com",
     "compute.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "calendar-json.googleapis.com",
   ])
 
   project            = var.project_id
