@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleNoteActionUseCase } from '../domain/usecases/handleNoteAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
+
+vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
+  shouldAutoExecute: vi.fn(() => false),
+}));
+
+import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 
 const silentLogger = pino({ level: 'silent' });
 
@@ -99,5 +105,73 @@ describe('handleNoteAction usecase', () => {
 
     const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
     expect(actionStatus).toBe('awaiting_approval');
+  });
+
+  describe('auto-execute flow', () => {
+    beforeEach(() => {
+      vi.mocked(shouldAutoExecute).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.mocked(shouldAutoExecute).mockReturnValue(false);
+    });
+
+    it('auto-executes when shouldAutoExecute returns true and executeNoteAction is provided', async () => {
+      const fakeExecuteNoteAction = vi.fn().mockResolvedValue(
+        ok({ status: 'completed' as const, resource_url: '/#/notes/note-123' })
+      );
+
+      const usecase = createHandleNoteActionUseCase({
+        actionServiceClient: fakeActionClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+        executeNoteAction: fakeExecuteNoteAction,
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(isOk(result)).toBe(true);
+      expect(fakeExecuteNoteAction).toHaveBeenCalledWith('action-123');
+      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBeUndefined();
+    });
+
+    it('returns error when auto-execute fails', async () => {
+      const fakeExecuteNoteAction = vi.fn().mockResolvedValue(
+        err(new Error('Execution failed'))
+      );
+
+      const usecase = createHandleNoteActionUseCase({
+        actionServiceClient: fakeActionClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+        executeNoteAction: fakeExecuteNoteAction,
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Execution failed');
+      }
+    });
+
+    it('falls back to approval flow when executeNoteAction is not provided', async () => {
+      const usecase = createHandleNoteActionUseCase({
+        actionServiceClient: fakeActionClient,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(isOk(result)).toBe(true);
+      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
+    });
   });
 });

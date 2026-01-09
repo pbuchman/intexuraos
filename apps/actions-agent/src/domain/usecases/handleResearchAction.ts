@@ -3,12 +3,15 @@ import type { ActionServiceClient } from '../ports/actionServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
+import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
+import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleResearchActionDeps {
   actionServiceClient: ActionServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
+  executeResearchAction?: ExecuteResearchActionUseCase;
 }
 
 export interface HandleResearchActionUseCase {
@@ -18,7 +21,7 @@ export interface HandleResearchActionUseCase {
 export function createHandleResearchActionUseCase(
   deps: HandleResearchActionDeps
 ): HandleResearchActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -30,8 +33,27 @@ export function createHandleResearchActionUseCase(
           title: event.title,
           actionType: event.actionType,
         },
-        'Setting action to awaiting_approval'
+        'Processing research action'
       );
+
+      if (shouldAutoExecute(event) && executeResearchAction !== undefined) {
+        logger.info({ actionId: event.actionId }, 'Auto-executing research action');
+
+        const executeResult = await executeResearchAction(event.actionId);
+
+        if (!executeResult.ok) {
+          logger.error(
+            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
+            'Failed to auto-execute research action'
+          );
+          return err(executeResult.error);
+        }
+
+        logger.info({ actionId: event.actionId }, 'Research action auto-executed successfully');
+        return ok({ actionId: event.actionId });
+      }
+
+      logger.info({ actionId: event.actionId }, 'Setting research action to awaiting_approval');
 
       const result = await actionServiceClient.updateActionStatus(
         event.actionId,

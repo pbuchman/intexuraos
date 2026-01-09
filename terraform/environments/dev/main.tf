@@ -1656,9 +1656,9 @@ output "pubsub_commands_ingest_topic" {
   value       = module.pubsub_commands_ingest.topic_name
 }
 
-output "pubsub_actions_research_topic" {
-  description = "Pub/Sub topic for research action events"
-  value       = module.pubsub_actions_research.topic_name
+output "pubsub_actions_queue_topic" {
+  description = "Pub/Sub topic for unified actions queue"
+  value       = module.pubsub_actions_queue.topic_name
 }
 
 output "pubsub_research_process_topic" {
