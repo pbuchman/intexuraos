@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Archive,
   ArchiveRestore,
@@ -859,6 +860,18 @@ export function BookmarksListPage(): React.JSX.Element {
   } = useBookmarks();
   const [selectedBookmark, setSelectedBookmark] = useState<BookmarkType | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const bookmarkId = searchParams.get('id');
+    if (bookmarkId !== null && bookmarks.length > 0) {
+      const bookmark = bookmarks.find((b) => b.id === bookmarkId);
+      if (bookmark !== undefined) {
+        setSelectedBookmark(bookmark);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [bookmarks, searchParams, setSearchParams]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
