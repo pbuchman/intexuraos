@@ -63,6 +63,7 @@ export interface ServiceContainer {
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
   shareConfig: ShareConfig | null;
+  webAppUrl: string;
   createResearchProvider: (
     model: ResearchModel,
     apiKey: string,
@@ -217,6 +218,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
     notificationSender,
     shareStorage,
     shareConfig,
+    webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] ?? '',
     createResearchProvider,
     createSynthesizer,
     createTitleGenerator,
