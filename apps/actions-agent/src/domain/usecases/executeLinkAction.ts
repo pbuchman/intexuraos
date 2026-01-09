@@ -74,13 +74,16 @@ export function createExecuteLinkActionUseCase(
     }
 
     const urlFromPayload = typeof action.payload['url'] === 'string' ? action.payload['url'] : null;
+    const urlFromPrompt =
+      typeof action.payload['prompt'] === 'string' ? extractUrl(action.payload['prompt']) : null;
     const urlFromTitle = extractUrl(action.title);
-    const url = urlFromPayload ?? urlFromTitle;
+    const url = urlFromPayload ?? urlFromPrompt ?? urlFromTitle;
 
     logger.info(
       {
         actionId,
         urlFromPayload: urlFromPayload !== null,
+        urlFromPrompt: urlFromPrompt !== null,
         urlFromTitle: urlFromTitle !== null,
         urlResolved: url !== null,
       },
