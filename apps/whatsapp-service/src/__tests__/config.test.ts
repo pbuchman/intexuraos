@@ -73,6 +73,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_SPEECHMATICS_API_KEY'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
 
     const missing = validateConfigEnv();
     expect(missing).toHaveLength(0);
@@ -91,6 +93,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test';
     process.env['INTEXURAOS_SPEECHMATICS_API_KEY'] = 'test';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -125,6 +129,8 @@ describe('config validation', () => {
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
     process.env['INTEXURAOS_SPEECHMATICS_API_KEY'] = 'test-key';
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
 
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);

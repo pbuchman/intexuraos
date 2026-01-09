@@ -14,6 +14,8 @@ async function main(): Promise<void> {
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     speechmaticsApiKey: config.speechmaticsApiKey,
+    webAgentUrl: config.webAgentUrl,
+    internalAuthToken: config.internalAuthToken,
   };
 
   if (config.commandsIngestTopic !== undefined) {

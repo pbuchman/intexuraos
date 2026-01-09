@@ -844,6 +844,7 @@ module "whatsapp_service" {
     INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID"]
     INTEXURAOS_WHATSAPP_WABA_ID         = module.secret_manager.secret_ids["INTEXURAOS_WHATSAPP_WABA_ID"]
     INTEXURAOS_SPEECHMATICS_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_API_KEY"]
+    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   env_vars = {
@@ -855,6 +856,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
     INTEXURAOS_GCP_PROJECT_ID                    = var.project_id
+    INTEXURAOS_WEB_AGENT_URL                     = module.web_agent.service_url
   }
 
   depends_on = [
@@ -863,6 +865,7 @@ module "whatsapp_service" {
     module.secret_manager,
     module.whatsapp_media_bucket,
     module.pubsub_commands_ingest,
+    module.web_agent,
   ]
 }
 
