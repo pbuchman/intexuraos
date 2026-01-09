@@ -5,6 +5,7 @@ import type {
   CreateCompositeFeedRequest,
   UpdateCompositeFeedRequest,
   CompositeFeedData,
+  CompositeFeedSnapshot,
 } from '@/types';
 
 /**
@@ -103,4 +104,26 @@ export async function getCompositeFeedData(
     `/composite-feeds/${id}/data`,
     accessToken
   );
+}
+
+/**
+ * Get pre-computed snapshot for a composite feed.
+ * Returns cached data computed by scheduler (refreshed every 15 minutes).
+ */
+export async function getCompositeFeedSnapshot(
+  accessToken: string,
+  id: string
+): Promise<CompositeFeedSnapshot | null> {
+  try {
+    return await apiRequest<CompositeFeedSnapshot>(
+      config.dataInsightsServiceUrl,
+      `/composite-feeds/${id}/snapshot`,
+      accessToken
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('NOT_FOUND')) {
+      return null;
+    }
+    throw error;
+  }
 }

@@ -86,6 +86,10 @@
       "owner": "data-insights-service",
       "description": "User-created composite feeds aggregating data sources and notifications"
     },
+    "composite_feed_snapshots": {
+      "owner": "data-insights-service",
+      "description": "Pre-computed snapshots of composite feed data for fast LLM retrieval"
+    },
     "generated_images": {
       "owner": "image-service",
       "description": "Generated thumbnail images and their metadata"
