@@ -9,11 +9,11 @@ Generate a new release by analyzing actual code changes since the last release.
 ### 1. Read Current State
 
 ```bash
-# Current version
+# Current version from root package.json
 cat package.json | grep '"version"'
 
 # Last release in CHANGELOG
-head -30 CHANGELOG.md
+head -50 CHANGELOG.md
 ```
 
 ### 2. Find Last Release Point
@@ -77,10 +77,10 @@ git show <commit-hash>               # See actual diff
 
 ### 6. Build the Changelog Entry
 
-Read the actual code to write meaningful descriptions:
+**Format:** Unnumbered version headers with date only.
 
 ```markdown
-## [NEW_VERSION] - YYYY-MM-DD
+## YYYY-MM-DD
 
 ### Added
 
@@ -101,17 +101,55 @@ Read the actual code to write meaningful descriptions:
 ---
 ```
 
-### 7. Update Files and Commit
+**Changelog Rules:**
+
+- Use date as header, not version number
+- No numbered lists within sections — use bullet points
+- Keep descriptions concise but meaningful
+- Group related changes together
+- Most recent release at the top
+
+### 7. Update All Package Versions
+
+**CRITICAL:** All package.json files must have the same version.
 
 ```bash
-# Edit CHANGELOG.md with the new entry
-# Update version in package.json
-npm version NEW_VERSION --no-git-tag-version
+# Get new version
+NEW_VERSION="X.Y.Z"
 
-# Commit
-git add CHANGELOG.md package.json package-lock.json
+# Update root package.json
+npm version $NEW_VERSION --no-git-tag-version
+
+# Update all apps
+for app in apps/*/package.json; do
+  jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
+done
+
+# Update all packages
+for pkg in packages/*/package.json; do
+  jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
+done
+
+# Regenerate lock file
+npm install
+```
+
+### 8. Update CHANGELOG.md Header
+
+Update the "Current Version" line at the top of CHANGELOG.md:
+
+```markdown
+**Current Version:** X.Y.Z
+```
+
+### 9. Commit Release
+
+```bash
+git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json
 git commit -m "Release vNEW_VERSION"
 ```
+
+---
 
 ## Analysis Approach
 
@@ -141,3 +179,13 @@ When reading a diff:
 - Performance improvements
 - Security enhancements
 - Breaking changes (MUST be noted)
+
+## Version Strategy
+
+Use semantic versioning:
+
+- **Major (X.0.0)** — Breaking changes, major rewrites
+- **Minor (0.X.0)** — New features, significant additions
+- **Patch (0.0.X)** — Bug fixes, small improvements
+
+For early development (0.0.X), increment patch for each release until feature-complete.
