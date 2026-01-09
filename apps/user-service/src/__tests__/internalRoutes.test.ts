@@ -476,9 +476,9 @@ describe('Internal Routes', () => {
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
       fakeGoogleOAuthClient.setFailNextRefresh(true, {
-        code: 'TOKEN_REFRESH_FAILED',
+        code: 'INVALID_GRANT',
         message: 'Refresh failed',
-        details: 'invalid_grant: Token has been revoked',
+        details: '{"error": "invalid_grant"}',
       });
 
       app = await buildServer();
