@@ -53,6 +53,10 @@ import {
   saveDraftBodySchema,
   saveDraftResponseSchema,
   updateDraftBodySchema,
+  validateInputBodySchema,
+  validateInputResponseSchema,
+  improveInputBodySchema,
+  improveInputResponseSchema,
 } from './schemas/index.js';
 
 interface CreateResearchBody {
@@ -404,6 +408,130 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(updatedResult.value);
+    }
+  );
+
+  // POST /research/validate-input
+  fastify.post(
+    '/research/validate-input',
+    {
+      schema: {
+        operationId: 'validateInput',
+        summary: 'Validate research input quality',
+        description:
+          'Validates input quality and optionally returns improvement suggestion for weak prompts.',
+        tags: ['research'],
+        body: validateInputBodySchema,
+        response: {
+          200: validateInputResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const body = request.body as { prompt: string; includeImprovement?: boolean };
+      const { userServiceClient, createInputValidator, pricingContext } = getServices();
+
+      // Get Google API key
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+
+      const googleKey = apiKeysResult.value.google;
+      if (googleKey === undefined) {
+        return await reply.fail('MISCONFIGURED', 'Google API key required for validation');
+      }
+
+      const validator = createInputValidator(
+        LlmModels.Gemini25Flash,
+        googleKey,
+        user.userId,
+        pricingContext.getPricing(LlmModels.Gemini25Flash)
+      );
+
+      // Validate
+      const validationResult = await validator.validateInput(body.prompt);
+      if (!validationResult.ok) {
+        // Silent degradation - return GOOD quality if validation fails
+        return await reply.ok({
+          quality: 2,
+          reason: 'Validation unavailable',
+          improvedPrompt: null,
+        });
+      }
+
+      const { quality, reason } = validationResult.value;
+      let improvedPrompt: string | null = null;
+
+      // Get improvement if requested and quality is WEAK_BUT_VALID
+      if (body.includeImprovement === true && quality === 1) {
+        const improvementResult = await validator.improveInput(body.prompt);
+        if (improvementResult.ok) {
+          improvedPrompt = improvementResult.value.improvedPrompt;
+        }
+      }
+
+      return await reply.ok({
+        quality,
+        reason,
+        improvedPrompt,
+      });
+    }
+  );
+
+  // POST /research/improve-input
+  fastify.post(
+    '/research/improve-input',
+    {
+      schema: {
+        operationId: 'improveInput',
+        summary: 'Improve research input',
+        description: 'Force-improves input regardless of quality.',
+        tags: ['research'],
+        body: improveInputBodySchema,
+        response: {
+          200: improveInputResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const body = request.body as { prompt: string };
+      const { userServiceClient, createInputValidator, pricingContext } = getServices();
+
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+
+      const googleKey = apiKeysResult.value.google;
+      if (googleKey === undefined) {
+        return await reply.fail('MISCONFIGURED', 'Google API key required for improvement');
+      }
+
+      const validator = createInputValidator(
+        LlmModels.Gemini25Flash,
+        googleKey,
+        user.userId,
+        pricingContext.getPricing(LlmModels.Gemini25Flash)
+      );
+
+      const result = await validator.improveInput(body.prompt);
+      if (!result.ok) {
+        // Silent degradation - return original prompt
+        return await reply.ok({ improvedPrompt: body.prompt });
+      }
+
+      return await reply.ok({ improvedPrompt: result.value.improvedPrompt });
     }
   );
 
