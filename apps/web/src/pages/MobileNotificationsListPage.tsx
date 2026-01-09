@@ -141,7 +141,7 @@ function NotificationCard({
       {/* Title */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="break-all font-semibold text-slate-900">{notification.title}</h3>
+          <h3 className="break-words font-semibold text-slate-900">{notification.title}</h3>
           {/* Body text */}
           {notification.text !== '' ? (
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600 wrap-anywhere">

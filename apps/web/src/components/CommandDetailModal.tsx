@@ -111,7 +111,7 @@ export function CommandDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -125,7 +125,7 @@ export function CommandDetailModal({
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               Command Text
             </h3>
-            <div className="break-all rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="break-words rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
               {command.text}
             </div>
           </div>
@@ -148,7 +148,7 @@ export function CommandDetailModal({
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                 Classification Reasoning
               </h3>
-              <div className="break-all rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+              <div className="break-words rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
                 {command.classification.reasoning}
               </div>
             </div>

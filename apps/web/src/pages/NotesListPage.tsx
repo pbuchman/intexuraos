@@ -138,7 +138,7 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                   ))}
                 </div>
               ) : null}
-              <div className="whitespace-pre-wrap break-all text-slate-700">{note.content}</div>
+              <div className="whitespace-pre-wrap break-words text-slate-700">{note.content}</div>
               <div className="text-xs text-slate-400">
                 <span>Created: {formatDate(note.createdAt)}</span>
                 <span className="mx-2">·</span>
