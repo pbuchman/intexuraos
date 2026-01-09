@@ -5,7 +5,12 @@
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { buildSynthesisPrompt, type SynthesisContext } from '@intexuraos/llm-common';
+import {
+  buildSynthesisPrompt,
+  titlePrompt,
+  labelPrompt,
+  type SynthesisContext,
+} from '@intexuraos/llm-common';
 import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
@@ -60,29 +65,11 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const titlePrompt = `Generate a short, concise title for this research prompt.
-
-CRITICAL REQUIREMENTS:
-- Title must be 5-8 words maximum
-- Title must be in the SAME LANGUAGE as the prompt (Polish prompt → Polish title, English prompt → English title)
-- Return ONLY the title - no explanations, no options, no word counts
-- Do NOT start with "Here are options" or similar phrases
-
-GOOD EXAMPLES:
-- "Gran Canaria w Drugiej Połowie Stycznia" (for Polish prompt about Gran Canaria)
-- "Machine Learning in Healthcare Applications" (for English prompt)
-- "Paris Budget Travel Guide" (for English prompt)
-
-BAD EXAMPLES (DO NOT DO THIS):
-- "Here are a few options: 1. Gran Canaria January Trip: Worth it? (9 words)"
-- "Title: Planning Your Gran Canaria Vacation in January"
-- "Gran Canaria January Tourist Guide: What to See, Do, Stay. (10 words)"
-
-Research prompt:
-${prompt}
-
-Generate title:`;
-    const result = await this.client.generate(titlePrompt);
+    const builtPrompt = titlePrompt.build(
+      { content: prompt },
+      { wordRange: { min: 5, max: 8 }, includeExamples: true }
+    );
+    const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -91,33 +78,8 @@ Generate title:`;
   }
 
   async generateContextLabel(content: string): Promise<Result<string, LlmError>> {
-    const contentPreview = content.length > 2000 ? content.slice(0, 2000) + '...' : content;
-
-    const labelPrompt = `Generate a very short label (3-6 words) summarizing the following content.
-
-CRITICAL REQUIREMENTS:
-- Label must be 3-6 words maximum
-- Label must be in the SAME LANGUAGE as the content
-- Return ONLY the label - no explanations, no quotes
-- Describe WHAT the content is about, not its format
-
-GOOD EXAMPLES:
-- "Gran Canaria trip itinerary"
-- "Wymagania techniczne projektu"
-- "Customer feedback survey results"
-- "Analiza konkurencji rynkowej"
-
-BAD EXAMPLES:
-- "Document about travel plans for vacation" (too long)
-- "Here is a label: Trip Planning" (includes extra text)
-- "A PDF file" (describes format, not content)
-
-Content:
-${contentPreview}
-
-Generate label:`;
-
-    const result = await this.client.generate(labelPrompt);
+    const builtPrompt = labelPrompt.build({ content }, { contentPreviewLimit: 2000 });
+    const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };

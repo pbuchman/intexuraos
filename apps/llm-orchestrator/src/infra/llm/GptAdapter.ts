@@ -5,7 +5,7 @@
 
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { buildSynthesisPrompt, type SynthesisContext } from '@intexuraos/llm-common';
+import { buildSynthesisPrompt, titlePrompt, type SynthesisContext } from '@intexuraos/llm-common';
 import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
@@ -60,18 +60,11 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   }
 
   async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const titlePrompt = `Generate a short, concise title for this research prompt.
-
-CRITICAL REQUIREMENTS:
-- Title must be 5-8 words maximum
-- Title must be in the SAME LANGUAGE as the prompt (Polish prompt → Polish title, English prompt → English title)
-- Return ONLY the title - no explanations, no options, no word counts
-
-Research prompt:
-${prompt}
-
-Generate title:`;
-    const result = await this.client.generate(titlePrompt);
+    const builtPrompt = titlePrompt.build(
+      { content: prompt },
+      { wordRange: { min: 5, max: 8 } }
+    );
+    const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
