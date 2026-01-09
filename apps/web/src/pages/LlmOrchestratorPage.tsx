@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
@@ -12,7 +12,13 @@ import {
 } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
-import { getResearch, saveDraft, updateDraft } from '@/services/llmOrchestratorApi';
+import {
+  getResearch,
+  improveInput,
+  saveDraft,
+  updateDraft,
+  validateInput,
+} from '@/services/llmOrchestratorApi';
 import {
   getProviderForModel,
   type LlmProvider,
@@ -49,6 +55,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [pendingResearchId, setPendingResearchId] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const [showImprovementModal, setShowImprovementModal] = useState(false);
+  const [pendingImprovedPrompt, setPendingImprovedPrompt] = useState<string | null>(null);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
@@ -256,6 +267,29 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     }
   };
 
+  const handleAutoImprove = async (): Promise<void> => {
+    if (prompt.trim().length === 0) return;
+
+    setImproving(true);
+    setError(null);
+    setValidationWarning(null);
+
+    try {
+      const token = await getAccessToken();
+      const result = await improveInput(token, { prompt });
+      setPrompt(result.improvedPrompt);
+
+      // Trigger autosave immediately if in edit mode
+      if (isEditMode) {
+        void performAutosave();
+      }
+    } catch {
+      // Silent failure per spec
+    } finally {
+      setImproving(false);
+    }
+  };
+
   const handleModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
     setModelSelections((prev) => {
       const next = new Map(prev);
@@ -338,6 +372,40 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       return;
     }
 
+    setError(null);
+    setValidationWarning(null);
+
+    // Validate input quality if Google API key is configured
+    const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
+    if (hasGoogleKey) {
+      setValidating(true);
+      try {
+        const token = await getAccessToken();
+        const validation = await validateInput(token, { prompt, includeImprovement: true });
+
+        if (validation.quality === 0) {
+          // INVALID - block submission
+          setValidationWarning(validation.reason);
+          setValidating(false);
+          return;
+        }
+
+        if (validation.quality === 1 && validation.improvedPrompt !== null) {
+          // WEAK_BUT_VALID - show improvement modal
+          setPendingImprovedPrompt(validation.improvedPrompt);
+          setShowImprovementModal(true);
+          setValidating(false);
+          return;
+        }
+
+        // GOOD (quality === 2) - proceed with submission
+      } catch {
+        // Silent degradation - proceed with original prompt on LLM failure
+      } finally {
+        setValidating(false);
+      }
+    }
+
     await executeSubmit(isSingleModelNoContext);
   };
 
@@ -361,6 +429,27 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       setError('Failed to discard research');
       setDiscarding(false);
     }
+  };
+
+  const handleUseImprovedPrompt = (): void => {
+    if (pendingImprovedPrompt !== null) {
+      setPrompt(pendingImprovedPrompt);
+      setPendingImprovedPrompt(null);
+      setShowImprovementModal(false);
+      setValidationWarning(null);
+
+      // Proceed with submission after accepting improved prompt
+      void executeSubmit(isSingleModelNoContext);
+    }
+  };
+
+  const handleUseOriginalPrompt = (): void => {
+    setPendingImprovedPrompt(null);
+    setShowImprovementModal(false);
+    setValidationWarning(null);
+
+    // Proceed with submission using original prompt
+    void executeSubmit(isSingleModelNoContext);
   };
 
   const handleDiscardDraft = async (): Promise<void> => {
@@ -474,6 +563,18 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         </div>
       ) : null}
 
+      {validationWarning !== null && validationWarning !== '' ? (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Input Quality Issue</p>
+              <p className="mt-1 text-sm text-amber-700">{validationWarning}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-6">
         <Card title="Research Prompt">
           <div className="space-y-2">
@@ -488,7 +589,35 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               rows={8}
               disabled={submitting || savingDraft}
             />
-            <p className="text-sm text-slate-500">{String(prompt.length)}/20000 characters</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">{String(prompt.length)}/20000 characters</p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={(): void => {
+                  void handleAutoImprove();
+                }}
+                disabled={
+                  prompt.trim().length === 0 ||
+                  improving ||
+                  submitting ||
+                  savingDraft ||
+                  keys?.google === null ||
+                  keys?.google === undefined
+                }
+                isLoading={improving}
+                title={
+                  keys?.google === null || keys?.google === undefined
+                    ? 'Google API key required'
+                    : prompt.trim().length === 0
+                      ? 'Enter a prompt first'
+                      : undefined
+                }
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Auto Improve
+              </Button>
+            </div>
           </div>
         </Card>
 
@@ -628,11 +757,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             onClick={(): void => {
               void handleSubmit();
             }}
-            disabled={!canSubmit || submitting || savingDraft}
-            isLoading={submitting}
+            disabled={!canSubmit || submitting || savingDraft || validating}
+            isLoading={submitting || validating}
             title={getDisabledReason()}
           >
-            Start Research
+            {validating ? 'Validating...' : 'Start Research'}
           </Button>
         </div>
       </div>
@@ -706,6 +835,44 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               >
                 Discard
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showImprovementModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-6 w-6 flex-shrink-0 text-blue-500" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">Improved Prompt Suggestion</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Your prompt could be improved for better research results. Compare the versions
+                  below:
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 space-y-4">
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">Original:</p>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{prompt}</div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">Improved:</p>
+                <div className="rounded-lg bg-blue-50 p-3 text-sm text-slate-700">
+                  {pendingImprovedPrompt}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={handleUseOriginalPrompt}>
+                Use Original
+              </Button>
+              <Button onClick={handleUseImprovedPrompt}>Use Improved</Button>
             </div>
           </div>
         </div>

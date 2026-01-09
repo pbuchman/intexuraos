@@ -8,12 +8,14 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { err, ok } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
   createFakeContextInferrer,
+  createFakeInputValidator,
   createFailingSynthesizer,
   createFakeLlmResearchProvider,
   createFailingLlmResearchProvider,
@@ -27,6 +29,7 @@ import {
   FakeUserServiceClient,
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
+import type { InputValidationProvider } from '../infra/llm/InputValidationAdapter.js';
 
 const fakePricingContext = new FakePricingContext();
 
@@ -88,6 +91,7 @@ describe('Research Routes - Unauthenticated', () => {
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
       createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -288,6 +292,7 @@ describe('Research Routes - Authenticated', () => {
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
       createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -1634,6 +1639,7 @@ describe('Research Routes - Authenticated', () => {
         createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
         createTitleGenerator: () => createFakeTitleGenerator(),
         createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
       };
       setServices(services);
 
@@ -1904,6 +1910,7 @@ describe('Research Routes - Authenticated', () => {
         createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
         createTitleGenerator: () => createFakeTitleGenerator(),
         createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
       };
       setServices(services);
 
@@ -1949,6 +1956,645 @@ describe('Research Routes - Authenticated', () => {
       }
     });
   });
+
+  describe('POST /research/validate-input', () => {
+    it('validates input and returns quality assessment', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for validation',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { quality: number; reason: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.quality).toBe(2);
+      expect(body.data.reason).toBe('Test quality validation');
+    });
+
+    it('validates input with improvement request', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          includeImprovement: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { quality: number; reason: string; improvedPrompt?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.quality).toBe(2);
+    });
+
+    it('returns improved prompt when quality is WEAK_BUT_VALID and improvement succeeds', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      // Create a validator that returns quality=1 and succeeds on improvement
+      const weakValidator: InputValidationProvider = {
+        async validateInput(_prompt: string) {
+          return ok({
+            quality: 1,
+            reason: 'Weak but valid',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+        async improveInput(prompt: string) {
+          return ok({
+            improvedPrompt: `Much better: ${prompt}`,
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+      };
+
+      const newServices: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+      };
+      setServices(newServices);
+
+      const newApp = await buildServer();
+      try {
+        const response = await newApp.inject({
+          method: 'POST',
+          url: '/research/validate-input',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            prompt: 'Weak prompt',
+            includeImprovement: true,
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { quality: number; reason: string; improvedPrompt: string | null };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.quality).toBe(1);
+        expect(body.data.reason).toBe('Weak but valid');
+        expect(body.data.improvedPrompt).toBe('Much better: Weak prompt');
+      } finally {
+        await newApp.close();
+        setServices({
+          researchRepo: fakeRepo,
+          pricingRepo: new FakePricingRepository(),
+          pricingContext: fakePricingContext,
+          generateId: (): string => 'generated-id-123',
+          researchEventPublisher: fakeResearchEventPublisher,
+          llmCallPublisher: new FakeLlmCallPublisher(),
+          userServiceClient: fakeUserServiceClient,
+          imageServiceClient: null,
+          notificationSender: fakeNotificationSender,
+          shareStorage: null,
+          shareConfig: null,
+          createResearchProvider: () => createFakeLlmResearchProvider(),
+          createSynthesizer: () => createFakeSynthesizer(),
+          createTitleGenerator: () => createFakeTitleGenerator(),
+          createContextInferrer: () => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        });
+      }
+    });
+
+    it('does not improve when quality is WEAK_BUT_VALID but includeImprovement is false', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      // Create a validator that returns quality=1
+      const weakValidator: InputValidationProvider = {
+        async validateInput(_prompt: string) {
+          return ok({
+            quality: 1,
+            reason: 'Weak but valid',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+        async improveInput(prompt: string) {
+          return ok({
+            improvedPrompt: `Much better: ${prompt}`,
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+      };
+
+      const newServices: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+      };
+      setServices(newServices);
+
+      const newApp = await buildServer();
+      try {
+        const response = await newApp.inject({
+          method: 'POST',
+          url: '/research/validate-input',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            prompt: 'Weak prompt',
+            includeImprovement: false, // Explicitly false
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { quality: number; reason: string; improvedPrompt: string | null };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.quality).toBe(1);
+        expect(body.data.reason).toBe('Weak but valid');
+        expect(body.data.improvedPrompt).toBe(null); // Should be null when improvement not requested
+      } finally {
+        await newApp.close();
+        setServices({
+          researchRepo: fakeRepo,
+          pricingRepo: new FakePricingRepository(),
+          pricingContext: fakePricingContext,
+          generateId: (): string => 'generated-id-123',
+          researchEventPublisher: fakeResearchEventPublisher,
+          llmCallPublisher: new FakeLlmCallPublisher(),
+          userServiceClient: fakeUserServiceClient,
+          imageServiceClient: null,
+          notificationSender: fakeNotificationSender,
+          shareStorage: null,
+          shareConfig: null,
+          createResearchProvider: () => createFakeLlmResearchProvider(),
+          createSynthesizer: () => createFakeSynthesizer(),
+          createTitleGenerator: () => createFakeTitleGenerator(),
+          createContextInferrer: () => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        });
+      }
+    });
+
+    it('handles improvement failure when quality is WEAK_BUT_VALID', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      // Create a validator that returns quality=1 and fails on improvement
+      const weakValidator: InputValidationProvider = {
+        async validateInput(_prompt: string) {
+          return ok({
+            quality: 1,
+            reason: 'Weak prompt',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+        async improveInput(_prompt: string) {
+          return err({
+            code: 'API_ERROR',
+            message: 'Improvement failed',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+      };
+
+      const newServices: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+      };
+      setServices(newServices);
+
+      const newApp = await buildServer();
+      try {
+        const response = await newApp.inject({
+          method: 'POST',
+          url: '/research/validate-input',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            prompt: 'Weak prompt',
+            includeImprovement: true,
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { quality: number; reason: string; improvedPrompt: string | null };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.quality).toBe(1);
+        expect(body.data.reason).toBe('Weak prompt');
+        expect(body.data.improvedPrompt).toBe(null); // Should be null when improvement fails
+      } finally {
+        await newApp.close();
+        setServices({
+          researchRepo: fakeRepo,
+          pricingRepo: new FakePricingRepository(),
+          pricingContext: fakePricingContext,
+          generateId: (): string => 'generated-id-123',
+          researchEventPublisher: fakeResearchEventPublisher,
+          llmCallPublisher: new FakeLlmCallPublisher(),
+          userServiceClient: fakeUserServiceClient,
+          imageServiceClient: null,
+          notificationSender: fakeNotificationSender,
+          shareStorage: null,
+          shareConfig: null,
+          createResearchProvider: () => createFakeLlmResearchProvider(),
+          createSynthesizer: () => createFakeSynthesizer(),
+          createTitleGenerator: () => createFakeTitleGenerator(),
+          createContextInferrer: () => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        });
+      }
+    });
+
+    it('returns GOOD quality when validation fails (silent degradation)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      // Create a validator that fails on validation
+      const failingValidator: InputValidationProvider = {
+        async validateInput(_prompt: string) {
+          return err({
+            code: 'API_ERROR',
+            message: 'Validation failed',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+        async improveInput(_prompt: string) {
+          return ok({
+            improvedPrompt: 'Improved',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+      };
+
+      const newServices: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing) => failingValidator,
+      };
+      setServices(newServices);
+
+      const newApp = await buildServer();
+      try {
+        const response = await newApp.inject({
+          method: 'POST',
+          url: '/research/validate-input',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            prompt: 'Test prompt',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { quality: number; reason: string; improvedPrompt: string | null };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.quality).toBe(2); // Silent degradation returns GOOD
+        expect(body.data.reason).toBe('Validation unavailable');
+        expect(body.data.improvedPrompt).toBe(null);
+      } finally {
+        await newApp.close();
+        setServices({
+          researchRepo: fakeRepo,
+          pricingRepo: new FakePricingRepository(),
+          pricingContext: fakePricingContext,
+          generateId: (): string => 'generated-id-123',
+          researchEventPublisher: fakeResearchEventPublisher,
+          llmCallPublisher: new FakeLlmCallPublisher(),
+          userServiceClient: fakeUserServiceClient,
+          imageServiceClient: null,
+          notificationSender: fakeNotificationSender,
+          shareStorage: null,
+          shareConfig: null,
+          createResearchProvider: () => createFakeLlmResearchProvider(),
+          createSynthesizer: () => createFakeSynthesizer(),
+          createTitleGenerator: () => createFakeTitleGenerator(),
+          createContextInferrer: () => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        });
+      }
+    });
+
+    it('returns MISCONFIGURED when Google key is missing', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('requires authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('validates request body schema', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          // Missing required prompt field
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+  });
+
+  describe('POST /research/improve-input', () => {
+    it('improves input and returns improved prompt', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { improvedPrompt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.improvedPrompt).toBe('Improved: Test prompt');
+    });
+
+    it('returns original prompt when improvement fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      // Create a validator that fails on improvement
+      const failingValidator: InputValidationProvider = {
+        async validateInput(_prompt: string) {
+          return ok({
+            quality: 2,
+            reason: 'Good',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+        async improveInput(_prompt: string) {
+          return err({
+            code: 'API_ERROR',
+            message: 'Improvement failed',
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+          });
+        },
+      };
+
+      const newServices: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingRepo: new FakePricingRepository(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing) => failingValidator,
+      };
+      setServices(newServices);
+
+      const newApp = await buildServer();
+      try {
+        const response = await newApp.inject({
+          method: 'POST',
+          url: '/research/improve-input',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            prompt: 'Original prompt',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          data: { improvedPrompt: string };
+        };
+        expect(body.success).toBe(true);
+        expect(body.data.improvedPrompt).toBe('Original prompt'); // Should return original when improvement fails
+      } finally {
+        await newApp.close();
+        setServices({
+          researchRepo: fakeRepo,
+          pricingRepo: new FakePricingRepository(),
+          pricingContext: fakePricingContext,
+          generateId: (): string => 'generated-id-123',
+          researchEventPublisher: fakeResearchEventPublisher,
+          llmCallPublisher: new FakeLlmCallPublisher(),
+          userServiceClient: fakeUserServiceClient,
+          imageServiceClient: null,
+          notificationSender: fakeNotificationSender,
+          shareStorage: null,
+          shareConfig: null,
+          createResearchProvider: () => createFakeLlmResearchProvider(),
+          createSynthesizer: () => createFakeSynthesizer(),
+          createTitleGenerator: () => createFakeTitleGenerator(),
+          createContextInferrer: () => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        });
+      }
+    });
+
+    it('returns MISCONFIGURED when Google key is missing', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+    });
+
+    it('requires authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('validates request body schema', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          // Missing required prompt field
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns INTERNAL_ERROR when user service fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('POST /research/validate-input - additional coverage', () => {
+    it('returns INTERNAL_ERROR when user service fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
 });
 
 describe('System Endpoints', () => {
@@ -1982,6 +2628,7 @@ describe('System Endpoints', () => {
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
       createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -2048,6 +2695,7 @@ describe('Internal Routes', () => {
       createSynthesizer: () => createFakeSynthesizer(),
       createTitleGenerator: () => createFakeTitleGenerator(),
       createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -2490,6 +3138,7 @@ describe('Internal Routes', () => {
         createSynthesizer: () => createFakeSynthesizer(),
         createTitleGenerator: () => createFakeTitleGenerator(),
         createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
       };
       setServices(services);
     });
@@ -3049,6 +3698,7 @@ describe('Internal Routes', () => {
         createSynthesizer: () => createFakeSynthesizer(),
         createTitleGenerator: () => createFakeTitleGenerator(),
         createContextInferrer: () => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
       };
       setServices(services);
 
@@ -3116,4 +3766,5 @@ describe('Internal Routes', () => {
       expect(result?.error).toContain('Unexpected repository error');
     });
   });
+
 });

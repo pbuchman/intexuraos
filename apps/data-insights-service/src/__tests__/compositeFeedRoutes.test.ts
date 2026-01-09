@@ -7,6 +7,7 @@ import {
   FakeCompositeFeedRepository,
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
+  FakeSnapshotRepository,
 } from './fakes.js';
 
 vi.mock('@intexuraos/common-http', async () => {
@@ -30,6 +31,7 @@ describe('compositeFeedRoutes', () => {
   let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
   let fakeFeedNameService: FakeFeedNameGenerationService;
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
+  let fakeSnapshotRepo: FakeSnapshotRepository;
 
   beforeEach(() => {
     fakeDataSourceRepo = new FakeDataSourceRepository();
@@ -37,12 +39,14 @@ describe('compositeFeedRoutes', () => {
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
     fakeFeedNameService = new FakeFeedNameGenerationService();
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
+    fakeSnapshotRepo = new FakeSnapshotRepository();
     setServices({
       dataSourceRepository: fakeDataSourceRepo,
       titleGenerationService: fakeTitleService,
       compositeFeedRepository: fakeCompositeFeedRepo,
       feedNameGenerationService: fakeFeedNameService,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      snapshotRepository: fakeSnapshotRepo,
     });
   });
 
@@ -854,6 +858,129 @@ describe('compositeFeedRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
       expect(body.data.staticSources).toHaveLength(0);
+    });
+  });
+
+  describe('GET /composite-feeds/:id/snapshot', () => {
+    it('requires authentication', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/composite-feeds/some-id/snapshot',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns snapshot when it exists', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      await fakeSnapshotRepo.upsert(feed?.id ?? '', 'user-123', 'Test Feed', {
+        feedId: feed?.id ?? '',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: '2026-01-09T12:00:00.000Z',
+        staticSources: [],
+        notifications: [],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(true);
+      expect(body.data.feedId).toBe(feed?.id);
+      expect(body.data.feedName).toBe('Test Feed');
+      expect(body.data.generatedAt).toBeDefined();
+    });
+
+    it('returns 404 when snapshot does not exist', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 for non-existent feed', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/composite-feeds/non-existent/snapshot',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when accessing other users feed', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('other-user', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('handles repository errors', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      fakeSnapshotRepo.getByFeedId = async (): Promise<{ ok: false; error: string }> => ({
+        ok: false,
+        error: 'Database error',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 });
