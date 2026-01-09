@@ -18,7 +18,7 @@ describe('createNotesServiceHttpClient', () => {
   describe('createNote', () => {
     it('returns note on successful creation', async () => {
       nock(baseUrl)
-        .post('/internal/notes/notes')
+        .post('/internal/notes')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
@@ -49,7 +49,7 @@ describe('createNotesServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 500', async () => {
-      nock(baseUrl).post('/internal/notes/notes').reply(500, 'Internal Server Error');
+      nock(baseUrl).post('/internal/notes').reply(500, 'Internal Server Error');
 
       const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createNote({
@@ -68,7 +68,7 @@ describe('createNotesServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 401', async () => {
-      nock(baseUrl).post('/internal/notes/notes').reply(401, { error: 'Unauthorized' });
+      nock(baseUrl).post('/internal/notes').reply(401, { error: 'Unauthorized' });
 
       const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createNote({
@@ -88,7 +88,7 @@ describe('createNotesServiceHttpClient', () => {
 
     it('returns error when response success is false', async () => {
       nock(baseUrl)
-        .post('/internal/notes/notes')
+        .post('/internal/notes')
         .reply(200, {
           success: false,
           error: { code: 'VALIDATION_ERROR', message: 'Title is required' },
@@ -111,7 +111,7 @@ describe('createNotesServiceHttpClient', () => {
     });
 
     it('returns error when response data is undefined', async () => {
-      nock(baseUrl).post('/internal/notes/notes').reply(200, { success: true });
+      nock(baseUrl).post('/internal/notes').reply(200, { success: true });
 
       const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createNote({
@@ -130,7 +130,7 @@ describe('createNotesServiceHttpClient', () => {
     });
 
     it('returns error on network failure', async () => {
-      nock(baseUrl).post('/internal/notes/notes').replyWithError('Connection refused');
+      nock(baseUrl).post('/internal/notes').replyWithError('Connection refused');
 
       const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createNote({
@@ -150,7 +150,7 @@ describe('createNotesServiceHttpClient', () => {
 
     it('sends correct request body', async () => {
       const scope = nock(baseUrl)
-        .post('/internal/notes/notes', {
+        .post('/internal/notes', {
           userId: 'user-456',
           title: 'Meeting notes',
           content: 'Discussed quarterly goals',

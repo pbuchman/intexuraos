@@ -35,7 +35,7 @@ export function createNotesServiceHttpClient(
 
   return {
     async createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>> {
-      const url = `${config.baseUrl}/internal/notes/notes`;
+      const url = `${config.baseUrl}/internal/notes`;
 
       logger.info({ url, userId: request.userId }, 'Creating note via notes-agent');
 

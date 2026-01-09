@@ -36,7 +36,7 @@ export function createTodosServiceHttpClient(
 
   return {
     async createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>> {
-      const url = `${config.baseUrl}/internal/todos/todos`;
+      const url = `${config.baseUrl}/internal/todos`;
 
       logger.info({ url, userId: request.userId }, 'Creating todo via todos-agent');
 

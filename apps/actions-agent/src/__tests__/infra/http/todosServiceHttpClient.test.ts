@@ -18,7 +18,7 @@ describe('createTodosServiceHttpClient', () => {
   describe('createTodo', () => {
     it('returns todo on successful creation', async () => {
       nock(baseUrl)
-        .post('/internal/todos/todos')
+        .post('/internal/todos')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
@@ -51,7 +51,7 @@ describe('createTodosServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 500', async () => {
-      nock(baseUrl).post('/internal/todos/todos').reply(500, 'Internal Server Error');
+      nock(baseUrl).post('/internal/todos').reply(500, 'Internal Server Error');
 
       const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createTodo({
@@ -70,7 +70,7 @@ describe('createTodosServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 401', async () => {
-      nock(baseUrl).post('/internal/todos/todos').reply(401, { error: 'Unauthorized' });
+      nock(baseUrl).post('/internal/todos').reply(401, { error: 'Unauthorized' });
 
       const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createTodo({
@@ -90,7 +90,7 @@ describe('createTodosServiceHttpClient', () => {
 
     it('returns error when response success is false', async () => {
       nock(baseUrl)
-        .post('/internal/todos/todos')
+        .post('/internal/todos')
         .reply(200, {
           success: false,
           error: { code: 'VALIDATION_ERROR', message: 'Title is required' },
@@ -113,7 +113,7 @@ describe('createTodosServiceHttpClient', () => {
     });
 
     it('returns error when response data is undefined', async () => {
-      nock(baseUrl).post('/internal/todos/todos').reply(200, { success: true });
+      nock(baseUrl).post('/internal/todos').reply(200, { success: true });
 
       const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createTodo({
@@ -132,7 +132,7 @@ describe('createTodosServiceHttpClient', () => {
     });
 
     it('returns error on network failure', async () => {
-      nock(baseUrl).post('/internal/todos/todos').replyWithError('Connection refused');
+      nock(baseUrl).post('/internal/todos').replyWithError('Connection refused');
 
       const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createTodo({
@@ -152,7 +152,7 @@ describe('createTodosServiceHttpClient', () => {
 
     it('sends correct request body', async () => {
       const scope = nock(baseUrl)
-        .post('/internal/todos/todos', {
+        .post('/internal/todos', {
           userId: 'user-456',
           title: 'Buy groceries',
           description: 'Milk, eggs, bread',
