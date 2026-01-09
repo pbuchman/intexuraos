@@ -87,8 +87,10 @@ function buildDependencyGraph() {
             graph[svc].packageDeps.push(pkgName);
           }
         }
-      } catch {
-        // Ignore parse errors
+      } catch (error) {
+        console.warn(
+          `[smart-dispatch] Failed to parse dependencies for ${svc} at ${pkgPath}: ${error.message}`
+        );
       }
     }
   }
@@ -121,7 +123,10 @@ function buildPackageGraph() {
             deps[pkg].push(dep.replace('@intexuraos/', ''));
           }
         }
-      } catch {
+      } catch (error) {
+        console.warn(
+          `[smart-dispatch] Failed to parse package ${pkg} at ${pkgJsonPath}: ${error.message}`
+        );
         deps[pkg] = [];
       }
     }
@@ -176,7 +181,8 @@ function getChangedFiles(baseSha, headSha) {
         encoding: 'utf-8',
       });
       return output.split('\n').filter(Boolean);
-    } catch {
+    } catch (fallbackError) {
+      console.warn(`[smart-dispatch] Fallback git diff also failed: ${fallbackError.message}`);
       return [];
     }
   }
