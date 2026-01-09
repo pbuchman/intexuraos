@@ -13,3 +13,11 @@ export { type ErrorCode, ERROR_HTTP_STATUS, IntexuraOSError, getErrorMessage } f
 
 // Logger interface for adapters
 export type { Logger } from './logging.js';
+
+// Null safety utilities
+export {
+  ensureAllDefined,
+  getFirstOrNull,
+  toDateOrNull,
+  toISOStringOrNull,
+} from './nullability.js';

@@ -312,37 +312,37 @@ Cloud Build requires 5 changes for a new service:
 Add build and deploy steps (copy pattern from existing service like `user-service`):
 
 ```yaml
-  # ===== <service-name> =====
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-<service-name>'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "=== Building <service-name> ==="
-        docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          -f apps/<service-name>/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
-    env:
-      - 'DOCKER_BUILDKIT=1'
+# ===== <service-name> =====
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-push-<service-name>'
+  waitFor: ['-']
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      echo "=== Building <service-name> ==="
+      docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
+      docker build \
+        --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
+        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+        -f apps/<service-name>/Dockerfile .
+      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
+      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
+  env:
+    - 'DOCKER_BUILDKIT=1'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-<service-name>'
-    waitFor: ['build-push-<service-name>']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-<service-name>'
+  waitFor: ['build-push-<service-name>']
+  entrypoint: 'bash'
+  args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
+  env:
+    - 'COMMIT_SHA=$COMMIT_SHA'
+    - 'REGION=${_REGION}'
+    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+    - 'ENVIRONMENT=${_ENVIRONMENT}'
 ```
 
 #### 8b. Create Per-Service Pipeline (`apps/<service-name>/cloudbuild.yaml`)
@@ -481,7 +481,7 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
     openapiUrl: 'https://intexuraos-<service-name>-xyz.run.app/openapi.json',
   },
 ];
-````
+```
 
 Note: Get the actual Cloud Run URL after first deployment.
 
