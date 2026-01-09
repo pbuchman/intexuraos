@@ -68,3 +68,6 @@ apps/\*
 CLAUDE.md
 # But keep the root CLAUDE.md if you want
 !.claude/CLAUDE.md
+
+.playwright-mcp/
+
