@@ -36,6 +36,18 @@ export {
   type ThumbnailPromptDeps,
 } from './image/index.js';
 
+// Validation prompts (input quality and improvement)
+export {
+  inputQualityPrompt,
+  type InputQualityPromptInput,
+  type InputQualityPromptDeps,
+  inputImprovementPrompt,
+  type InputImprovementPromptInput,
+  type InputImprovementPromptDeps,
+  isInputQualityResult,
+  type InputQualityResult,
+} from './validation/index.js';
+
 // Research prompt builder
 export { buildResearchPrompt } from './researchPrompt.js';
 

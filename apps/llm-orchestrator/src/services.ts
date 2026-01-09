@@ -9,6 +9,7 @@ import { FirestoreResearchRepository } from './infra/research/index.js';
 import { FirestorePricingRepository } from './infra/pricing/index.js';
 import {
   createContextInferrer,
+  createInputValidator,
   createResearchProvider,
   createSynthesizer,
   createTitleGenerator,
@@ -39,6 +40,7 @@ import {
   type TitleGenerator,
 } from './domain/research/index.js';
 import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
+import type { InputValidationProvider } from './infra/llm/index.js';
 
 /**
  * Configuration for sharing features.
@@ -89,6 +91,12 @@ export interface ServiceContainer {
     pricing: ModelPricing,
     logger?: Logger
   ) => ContextInferenceProvider;
+  createInputValidator: (
+    model: FastModel,
+    apiKey: string,
+    userId: string,
+    pricing: ModelPricing
+  ) => InputValidationProvider;
 }
 
 let container: ServiceContainer | null = null;
@@ -221,5 +229,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
     createSynthesizer,
     createTitleGenerator,
     createContextInferrer,
+    createInputValidator,
   };
 }
