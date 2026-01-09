@@ -38,6 +38,19 @@ describe('handleNoteAction usecase', () => {
   });
 
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
+    fakeActionClient.setAction({
+      id: 'action-123',
+      userId: 'user-456',
+      commandId: 'cmd-789',
+      type: 'note',
+      confidence: 0.85,
+      title: 'Meeting notes',
+      status: 'pending',
+      payload: {},
+      createdAt: '2025-01-01T12:00:00.000Z',
+      updatedAt: '2025-01-01T12:00:00.000Z',
+    });
+
     const usecase = createHandleNoteActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
@@ -64,6 +77,19 @@ describe('handleNoteAction usecase', () => {
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
+    fakeActionClient.setAction({
+      id: 'action-123',
+      userId: 'user-456',
+      commandId: 'cmd-789',
+      type: 'note',
+      confidence: 0.85,
+      title: 'Meeting notes',
+      status: 'pending',
+      payload: {},
+      createdAt: '2025-01-01T12:00:00.000Z',
+      updatedAt: '2025-01-01T12:00:00.000Z',
+    });
+
     const usecase = createHandleNoteActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
@@ -71,7 +97,7 @@ describe('handleNoteAction usecase', () => {
       logger: silentLogger,
     });
 
-    fakeActionClient.setFailNext(true, new Error('Database unavailable'));
+    fakeActionClient.setFailOn('updateActionStatus', new Error('Database unavailable'));
 
     const event = createEvent();
     const result = await usecase.execute(event);
@@ -83,6 +109,19 @@ describe('handleNoteAction usecase', () => {
   });
 
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
+    fakeActionClient.setAction({
+      id: 'action-123',
+      userId: 'user-456',
+      commandId: 'cmd-789',
+      type: 'note',
+      confidence: 0.85,
+      title: 'Meeting notes',
+      status: 'pending',
+      payload: {},
+      createdAt: '2025-01-01T12:00:00.000Z',
+      updatedAt: '2025-01-01T12:00:00.000Z',
+    });
+
     const usecase = createHandleNoteActionUseCase({
       actionServiceClient: fakeActionClient,
       whatsappPublisher: fakeWhatsappPublisher,
@@ -107,6 +146,39 @@ describe('handleNoteAction usecase', () => {
     expect(actionStatus).toBe('awaiting_approval');
   });
 
+  it('returns success without sending notification when action already processed (idempotency)', async () => {
+    const usecase = createHandleNoteActionUseCase({
+      actionServiceClient: fakeActionClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    fakeActionClient.setAction({
+      id: 'action-123',
+      userId: 'user-456',
+      commandId: 'cmd-789',
+      type: 'note',
+      confidence: 0.85,
+      title: 'Meeting notes',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2025-01-01T12:00:00.000Z',
+      updatedAt: '2025-01-01T12:00:00.000Z',
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
+    }
+
+    expect(fakeActionClient.getStatusUpdates().size).toBe(0);
+    expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
+  });
+
   describe('auto-execute flow', () => {
     beforeEach(() => {
       vi.mocked(shouldAutoExecute).mockReturnValue(true);
@@ -117,6 +189,19 @@ describe('handleNoteAction usecase', () => {
     });
 
     it('auto-executes when shouldAutoExecute returns true and executeNoteAction is provided', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Meeting notes',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
       const fakeExecuteNoteAction = vi.fn().mockResolvedValue(
         ok({ status: 'completed' as const, resource_url: '/#/notes/note-123' })
       );
@@ -138,6 +223,19 @@ describe('handleNoteAction usecase', () => {
     });
 
     it('returns error when auto-execute fails', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Meeting notes',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
       const fakeExecuteNoteAction = vi.fn().mockResolvedValue(
         err(new Error('Execution failed'))
       );
@@ -160,6 +258,19 @@ describe('handleNoteAction usecase', () => {
     });
 
     it('falls back to approval flow when executeNoteAction is not provided', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Meeting notes',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
       const usecase = createHandleNoteActionUseCase({
         actionServiceClient: fakeActionClient,
         whatsappPublisher: fakeWhatsappPublisher,

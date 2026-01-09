@@ -34,6 +34,26 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
         'Processing link action'
       );
 
+      const actionResult = await actionServiceClient.getAction(event.actionId);
+      if (!actionResult.ok) {
+        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
+        return ok({ actionId: event.actionId });
+      }
+
+      const action = actionResult.value;
+      if (action === null) {
+        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
+        return ok({ actionId: event.actionId });
+      }
+
+      if (action.status !== 'pending') {
+        logger.info(
+          { actionId: event.actionId, currentStatus: action.status },
+          'Action already processed, skipping (idempotent)'
+        );
+        return ok({ actionId: event.actionId });
+      }
+
       if (shouldAutoExecute(event) && executeLinkAction !== undefined) {
         logger.info({ actionId: event.actionId }, 'Auto-executing link action');
 

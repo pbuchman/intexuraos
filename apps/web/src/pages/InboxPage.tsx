@@ -167,7 +167,7 @@ function CommandItem({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 break-all text-sm text-slate-800">{command.text}</p>
+          <p className="line-clamp-3 break-words text-sm text-slate-800">{command.text}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {command.classification !== undefined && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
@@ -194,7 +194,7 @@ function CommandItem({
                 onDelete(command.id);
               }}
               disabled={isDeleting}
-              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               title="Delete command"
             >
               {isDeleting ? (
@@ -210,7 +210,7 @@ function CommandItem({
                 onArchive(command.id);
               }}
               disabled={isArchiving}
-              className="rounded p-1.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
               title="Archive command"
             >
               {isArchiving ? (
@@ -272,7 +272,7 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-all font-medium text-slate-800">{action.title}</h3>
+          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
               {getTypeLabel(action.type)}
