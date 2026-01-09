@@ -6,12 +6,12 @@
 import {
   getProviderForModel,
   type LlmProvider,
-  type SupportedModel,
+  type ResearchModel,
 } from '@intexuraos/llm-contract';
-import type { ResearchContext } from '@intexuraos/common-core';
+import type { ResearchContext } from '@intexuraos/llm-common';
 
-export type { LlmProvider, SupportedModel } from '@intexuraos/llm-contract';
-export type { ResearchContext } from '@intexuraos/common-core';
+export type { LlmProvider, ResearchModel } from '@intexuraos/llm-contract';
+export type { ResearchContext } from '@intexuraos/llm-common';
 
 export type ResearchStatus =
   | 'draft'
@@ -26,7 +26,7 @@ export type ResearchStatus =
 export type PartialFailureDecision = 'proceed' | 'retry' | 'cancel';
 
 export interface PartialFailure {
-  failedModels: SupportedModel[];
+  failedModels: ResearchModel[];
   userDecision?: PartialFailureDecision;
   detectedAt: string;
   retryCount: number;
@@ -73,13 +73,21 @@ export interface ShareInfo {
   coverImageId?: string;
 }
 
+/**
+ * Status of source attribution in synthesized output.
+ * - 'complete': All sections have valid Attribution lines
+ * - 'incomplete': Some sections missing or have invalid attributions
+ * - 'repaired': Originally invalid but repair succeeded
+ */
+export type AttributionStatus = 'complete' | 'incomplete' | 'repaired';
+
 export interface Research {
   id: string;
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   status: ResearchStatus;
   llmResults: LlmResult[];
   inputContexts?: InputContext[];
@@ -97,9 +105,12 @@ export interface Research {
   researchContext?: ResearchContext;
   shareInfo?: ShareInfo;
   sourceResearchId?: string;
+  attributionStatus?: AttributionStatus;
+  auxiliaryCostUsd?: number;
+  sourceLlmCostUsd?: number;
 }
 
-export function createLlmResults(selectedModels: SupportedModel[]): LlmResult[] {
+export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {
   return selectedModels.map((model) => ({
     provider: getProviderForModel(model),
     model,
@@ -111,8 +122,8 @@ export function createResearch(params: {
   id: string;
   userId: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }): Research {
@@ -155,8 +166,8 @@ export function createDraftResearch(params: {
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   sourceActionId?: string;
   inputContexts?: InputContext[];
 }): Research {
@@ -188,9 +199,9 @@ export interface EnhanceResearchParams {
   id: string;
   userId: string;
   sourceResearch: Research;
-  additionalModels?: SupportedModel[];
+  additionalModels?: ResearchModel[];
   additionalContexts?: { content: string; label?: string | undefined }[];
-  synthesisModel?: SupportedModel;
+  synthesisModel?: ResearchModel;
   removeContextIds?: string[];
 }
 
@@ -198,17 +209,18 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
   const now = new Date().toISOString();
   const source = params.sourceResearch;
 
-  // Copy completed results but omit usage stats - they'll be recalculated after synthesis
-  const completedResults: LlmResult[] = source.llmResults
-    .filter((r) => r.status === 'completed')
-    .map(({ inputTokens: _, outputTokens: __, costUsd: ___, ...rest }) => rest);
+  const completedResults: LlmResult[] = source.llmResults.filter((r) => r.status === 'completed');
+
+  const sourceLlmCostUsd =
+    completedResults.reduce((sum, r) => sum + (r.costUsd ?? 0), 0) +
+    (source.auxiliaryCostUsd ?? 0);
 
   const existingModels = new Set(completedResults.map((r) => r.model));
   const newModels = (params.additionalModels ?? []).filter((m) => !existingModels.has(m));
   const newResults = createLlmResults(newModels);
 
   const allModels = [
-    ...new Set([...completedResults.map((r) => r.model as SupportedModel), ...newModels]),
+    ...new Set([...completedResults.map((r) => r.model as ResearchModel), ...newModels]),
   ];
 
   const removeSet = new Set(params.removeContextIds ?? []);
@@ -239,6 +251,7 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
     llmResults: [...completedResults, ...newResults],
     startedAt: now,
     sourceResearchId: source.id,
+    sourceLlmCostUsd,
   };
 
   if (allContexts.length > 0) {

@@ -46,6 +46,10 @@
       "owner": "user-service",
       "description": "Auth0 refresh tokens (AES-256-GCM encrypted)"
     },
+    "oauth_connections": {
+      "owner": "user-service",
+      "description": "Third-party OAuth tokens (Google, Microsoft) - AES-256-GCM encrypted"
+    },
     "researches": {
       "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"
@@ -89,6 +93,18 @@
     "notes": {
       "owner": "notes-agent",
       "description": "User-scoped notes with tags and source tracking"
+    },
+    "settings": {
+      "owner": "app-settings-service",
+      "description": "Application settings including LLM pricing per provider"
+    },
+    "todos": {
+      "owner": "todos-agent",
+      "description": "User-scoped todos with items, priority, and due dates"
+    },
+    "bookmarks": {
+      "owner": "bookmarks-agent",
+      "description": "User-scoped bookmarks with OG metadata, AI summaries, and tags"
     }
   }
 }

@@ -15,10 +15,10 @@ export {
   err,
   isOk,
   isErr,
-  redactToken,
-  redactObject,
-  SENSITIVE_FIELDS,
 } from '@intexuraos/common-core';
+
+// Re-export llm-common redaction utilities for convenience
+export { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common';
 
 // HTTP response types and helpers
 export {

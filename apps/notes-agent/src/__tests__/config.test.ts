@@ -49,7 +49,7 @@ describe('config', () => {
     });
 
     it('returns empty string for internalAuthKey when not set', () => {
-      delete process.env['INTEXURAOS_INTERNAL_AUTH_KEY'];
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
       const config = loadConfig();
 
@@ -57,7 +57,7 @@ describe('config', () => {
     });
 
     it('uses internalAuthKey from environment variable', () => {
-      process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] = 'secret-key-123';
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-key-123';
 
       const config = loadConfig();
 
@@ -93,7 +93,7 @@ describe('config', () => {
     it('returns complete config with all values', () => {
       process.env['PORT'] = '3000';
       process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'prod-project';
-      process.env['INTEXURAOS_INTERNAL_AUTH_KEY'] = 'prod-secret';
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'prod-secret';
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/jwks';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
       process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'notes-agent';

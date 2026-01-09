@@ -1,42 +1,33 @@
+/**
+ * GPT Client - with parameterized pricing.
+ *
+ * All costs calculated from passed ModelPricing config.
+ */
+
 import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
-import {
-  buildResearchPrompt,
-  err,
-  getErrorMessage,
-  ok,
-  type Result,
-} from '@intexuraos/common-core';
+import { buildResearchPrompt } from '@intexuraos/llm-common';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type {
-  LLMClient,
-  NormalizedUsage,
-  ImageGenerateOptions,
-  ImageGenerationResult,
-  GenerateResult,
+import {
+  LlmModels,
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type ImageGenerateOptions,
+  type ImageGenerationResult,
+  type GenerateResult,
+  type ImageSize,
 } from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
+import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 
 export type GptClient = LLMClient;
 
 const MAX_TOKENS = 8192;
-const IMAGE_MODEL = 'dall-e-3';
-const DEFAULT_IMAGE_COST = 0.04;
-const WEB_SEARCH_COST_PER_CALL = 0.025;
-
-const GPT_PRICING: Record<string, { input: number; output: number }> = {
-  'gpt-4o': { input: 2.5, output: 10.0 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4.1': { input: 2.0, output: 8.0 },
-  'gpt-4.1-mini': { input: 0.4, output: 1.6 },
-  'gpt-4.1-nano': { input: 0.1, output: 0.4 },
-  'gpt-5.2': { input: 1.75, output: 14.0 },
-  o1: { input: 15.0, output: 60.0 },
-  'o1-mini': { input: 1.1, output: 4.4 },
-  'o3-mini': { input: 1.1, output: 4.4 },
-  'o4-mini-deep-research': { input: 1.1, output: 4.4 },
-};
+const IMAGE_MODEL = LlmModels.GPTImage1;
+const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 function createRequestContext(
   method: string,
@@ -46,7 +37,7 @@ function createRequestContext(
   const requestId = randomUUID();
   const startTime = new Date();
   const auditContext = createAuditContext({
-    provider: 'openai',
+    provider: LlmProviders.OpenAI,
     model,
     method,
     prompt,
@@ -55,64 +46,9 @@ function createRequestContext(
   return { requestId, startTime, auditContext };
 }
 
-function calculateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  webSearchCalls: number,
-  cachedTokens: number
-): number {
-  const pricing = GPT_PRICING[model] ?? { input: 2.5, output: 10.0 };
-  const effectiveInputTokens = inputTokens - cachedTokens * 0.5;
-  const inputCost = (effectiveInputTokens / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  const webSearchCost = webSearchCalls * WEB_SEARCH_COST_PER_CALL;
-  return Math.round((inputCost + outputCost + webSearchCost) * 1_000_000) / 1_000_000;
-}
-
-function normalizeUsage(
-  model: string,
-  usage: OpenAI.Responses.ResponseUsage | OpenAI.CompletionUsage | undefined,
-  webSearchCalls: number
-): NormalizedUsage {
-  if (usage === undefined) {
-    return {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      costUsd: 0,
-    };
-  }
-
-  const inputTokens = 'input_tokens' in usage ? usage.input_tokens : usage.prompt_tokens;
-  const outputTokens = 'output_tokens' in usage ? usage.output_tokens : usage.completion_tokens;
-
-  const cachedTokens =
-    'input_tokens_details' in usage
-      ? ((usage as { input_tokens_details?: { cached_tokens?: number } }).input_tokens_details
-          ?.cached_tokens ?? 0)
-      : 0;
-
-  const reasoningTokens =
-    'output_tokens_details' in usage
-      ? (usage as { output_tokens_details?: { reasoning_tokens?: number } }).output_tokens_details
-          ?.reasoning_tokens
-      : undefined;
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
-    costUsd: calculateCost(model, inputTokens, outputTokens, webSearchCalls, cachedTokens),
-    ...(cachedTokens > 0 && { cacheTokens: cachedTokens }),
-    ...(reasoningTokens !== undefined && reasoningTokens > 0 && { reasoningTokens }),
-    ...(webSearchCalls > 0 && { webSearchCalls }),
-  };
-}
-
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, userId } = config;
+  const { model, userId, pricing, imagePricing } = config;
 
   function trackUsage(
     callType: CallType,
@@ -122,13 +58,43 @@ export function createGptClient(config: GptConfig): GptClient {
   ): void {
     void logUsage({
       userId,
-      provider: 'openai',
+      provider: LlmProviders.OpenAI,
       model,
       callType,
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
     });
+  }
+
+  function extractUsageDetails(
+    usage: OpenAI.Responses.ResponseUsage | OpenAI.CompletionUsage | undefined
+  ): {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    reasoningTokens: number | undefined;
+  } {
+    if (usage === undefined) {
+      return { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: undefined };
+    }
+
+    const inputTokens = 'input_tokens' in usage ? usage.input_tokens : usage.prompt_tokens;
+    const outputTokens = 'output_tokens' in usage ? usage.output_tokens : usage.completion_tokens;
+
+    const cachedTokens =
+      'input_tokens_details' in usage
+        ? ((usage as { input_tokens_details?: { cached_tokens?: number } }).input_tokens_details
+            ?.cached_tokens ?? 0)
+        : 0;
+
+    const reasoningTokens =
+      'output_tokens_details' in usage
+        ? (usage as { output_tokens_details?: { reasoning_tokens?: number } }).output_tokens_details
+            ?.reasoning_tokens
+        : undefined;
+
+    return { inputTokens, outputTokens, cachedTokens, reasoningTokens };
   }
 
   return {
@@ -148,7 +114,15 @@ export function createGptClient(config: GptConfig): GptClient {
         const content = response.output_text;
         const sources = extractSourcesFromResponse(response);
         const webSearchCalls = countWebSearchCalls(response);
-        const usage = normalizeUsage(model, response.usage, webSearchCalls);
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cachedTokens,
+          webSearchCalls,
+          usageDetails.reasoningTokens,
+          pricing
+        );
 
         const successParams: Parameters<typeof auditContext.success>[0] = {
           response: content,
@@ -187,7 +161,15 @@ export function createGptClient(config: GptConfig): GptClient {
         });
 
         const text = response.choices[0]?.message.content ?? '';
-        const usage = normalizeUsage(model, response.usage, 0);
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cachedTokens,
+          0,
+          usageDetails.reasoningTokens,
+          pricing
+        );
 
         await auditContext.success({
           response: text,
@@ -218,32 +200,50 @@ export function createGptClient(config: GptConfig): GptClient {
       const { auditContext } = createRequestContext('generateImage', IMAGE_MODEL, prompt);
 
       try {
+        const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
+        // gpt-image-1 returns base64 data in response.data[0].b64_json by default
         const response = await client.images.generate({
           model: IMAGE_MODEL,
           prompt,
           n: 1,
-          size: options?.size ?? '1024x1024',
-          response_format: 'b64_json',
+          size,
         });
 
-        const b64Data = response.data?.[0]?.b64_json;
+        // gpt-image-1 returns b64_json in the response
+        const imageData = response.data?.[0];
+        const b64Data = imageData?.b64_json ?? imageData?.url;
+
         if (b64Data === undefined) {
           const errorMsg = 'No image data in response';
           await auditContext.error({ error: errorMsg });
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
-        const imageBuffer = Buffer.from(b64Data, 'base64');
+        // If we got a URL, fetch the image data
+        let imageBuffer: Buffer;
+        if (imageData?.b64_json !== undefined) {
+          imageBuffer = Buffer.from(imageData.b64_json, 'base64');
+        } else {
+          // Must be URL since we passed the b64Data check above (b64Data = b64_json ?? url)
+          const imageUrl = imageData?.url as string;
+          const imageResponse = await fetch(imageUrl);
+          const arrayBuffer = await imageResponse.arrayBuffer();
+          imageBuffer = Buffer.from(arrayBuffer);
+        }
+
+        const pricingConfig = imagePricing ?? pricing;
+        const imageCost = calculateImageCost(size, pricingConfig);
+
         const usage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
-          costUsd: DEFAULT_IMAGE_COST,
+          costUsd: imageCost,
         };
 
         await auditContext.success({
           response: '[image-generated]',
-          imageCostUsd: DEFAULT_IMAGE_COST,
+          imageCostUsd: imageCost,
         });
         trackUsage('image_generation', usage, true);
 
@@ -282,7 +282,7 @@ function extractSourcesFromResponse(response: OpenAI.Responses.Response): string
   for (const item of response.output) {
     if (item.type === 'web_search_call' && 'results' in item) {
       const results = item.results as { url?: string }[] | undefined;
-      if (results !== undefined) {
+      if (Array.isArray(results)) {
         for (const result of results) {
           if (result.url !== undefined) {
             sources.push(result.url);

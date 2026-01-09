@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/commands-router",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,7 +24,9 @@
     "@intexuraos/infra-firestore": "*",
     "@intexuraos/infra-gemini": "*",
     "@intexuraos/infra-pubsub": "*",
+    "@intexuraos/llm-common": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
     "jose": "^5.9.6",
     "pino": "^10.1.0",

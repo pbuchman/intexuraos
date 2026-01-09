@@ -9,7 +9,14 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeEncryptor, FakeUserSettingsRepository } from './fakes.js';
+import {
+  FakeAuthTokenRepository,
+  FakeEncryptor,
+  FakeUserSettingsRepository,
+  FakeOAuthConnectionRepository,
+  FakeGoogleOAuthClient,
+} from './fakes.js';
+import { OAuthProviders } from '../domain/oauth/index.js';
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
@@ -25,6 +32,8 @@ describe('Internal Routes', () => {
   let fakeAuthTokenRepo: FakeAuthTokenRepository;
   let fakeSettingsRepo: FakeUserSettingsRepository;
   let fakeEncryptor: FakeEncryptor;
+  let fakeOAuthRepo: FakeOAuthConnectionRepository;
+  let fakeGoogleOAuthClient: FakeGoogleOAuthClient;
 
   beforeAll(async () => {
     const { publicKey } = await jose.generateKeyPair('RS256');
@@ -66,10 +75,14 @@ describe('Internal Routes', () => {
     fakeAuthTokenRepo = new FakeAuthTokenRepository();
     fakeSettingsRepo = new FakeUserSettingsRepository();
     fakeEncryptor = new FakeEncryptor();
+    fakeOAuthRepo = new FakeOAuthConnectionRepository();
+    fakeGoogleOAuthClient = new FakeGoogleOAuthClient();
     setServices({
       authTokenRepository: fakeAuthTokenRepo,
       userSettingsRepository: fakeSettingsRepo,
+      oauthConnectionRepository: fakeOAuthRepo,
       auth0Client: null,
+      googleOAuthClient: fakeGoogleOAuthClient,
       encryptor: fakeEncryptor,
       llmValidator: null,
     });
@@ -279,6 +292,301 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(204);
       expect(response.body).toBe('');
+    });
+  });
+
+  describe('GET /internal/users/:uid/oauth/google/token', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/oauth/google/token',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when internal auth token is wrong', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/oauth/google/token',
+        headers: {
+          'x-internal-auth': 'wrong-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 500 when Google OAuth is not configured', async () => {
+      setServices({
+        authTokenRepository: fakeAuthTokenRepo,
+        userSettingsRepository: fakeSettingsRepo,
+        oauthConnectionRepository: fakeOAuthRepo,
+        auth0Client: null,
+        googleOAuthClient: null,
+        encryptor: fakeEncryptor,
+        llmValidator: null,
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/oauth/google/token',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string; code: string };
+      expect(body.code).toBe('CONFIGURATION_ERROR');
+    });
+
+    it('returns 404 when no connection exists', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-no-connection/oauth/google/token',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { error: string; code: string };
+      expect(body.code).toBe('CONNECTION_NOT_FOUND');
+    });
+
+    it('returns valid access token when connection exists and token is fresh', async () => {
+      const userId = 'user-with-token';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'valid-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          scope: 'calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { accessToken: string; email: string };
+      expect(body.accessToken).toBe('valid-access-token');
+      expect(body.email).toBe('user@example.com');
+    });
+
+    it('refreshes token when expired and returns new token', async () => {
+      const userId = 'user-expired-token';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'expired-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() - 60000).toISOString(),
+          scope: 'calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { accessToken: string; email: string };
+      expect(body.accessToken).toBe('new-fake-access-token');
+    });
+
+    it('returns 500 when refresh fails', async () => {
+      const userId = 'user-refresh-fail';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'expired-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() - 60000).toISOString(),
+          scope: 'calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeGoogleOAuthClient.setFailNextRefresh(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { code: string };
+      expect(body.code).toBe('TOKEN_REFRESH_FAILED');
+    });
+
+    it('returns 404 and deletes connection when refresh returns invalid_grant', async () => {
+      const userId = 'user-invalid-grant';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'expired-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() - 60000).toISOString(),
+          scope: 'calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeGoogleOAuthClient.setFailNextRefresh(true, {
+        code: 'INVALID_GRANT',
+        message: 'Refresh failed',
+        details: '{"error": "invalid_grant"}',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { code: string };
+      expect(body.code).toBe('CONNECTION_NOT_FOUND');
+
+      const connection = fakeOAuthRepo.getStoredConnection(userId, 'google');
+      expect(connection).toBeUndefined();
+    });
+
+    it('returns 500 when getConnection fails', async () => {
+      fakeOAuthRepo.setFailNextGet(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-error/oauth/google/token',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { code: string };
+      expect(body.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('still returns token when updateTokens fails after refresh', async () => {
+      const userId = 'user-update-fail';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'expired-access-token',
+          refreshToken: 'refresh-token',
+          expiresAt: new Date(Date.now() - 60000).toISOString(),
+          scope: 'calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeOAuthRepo.setFailNextUpdate(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { accessToken: string; email: string };
+      expect(body.accessToken).toBe('new-fake-access-token');
+      expect(body.email).toBe('user@example.com');
+    });
+
+    it('uses existing refreshToken and scope when refresh does not return them', async () => {
+      const userId = 'user-partial-refresh';
+      fakeOAuthRepo.setConnection(userId, 'google', {
+        userId,
+        provider: OAuthProviders.GOOGLE,
+        email: 'user@example.com',
+        tokens: {
+          accessToken: 'expired-access-token',
+          refreshToken: 'original-refresh-token',
+          expiresAt: new Date(Date.now() - 60000).toISOString(),
+          scope: 'original-scope calendar.readonly',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      fakeGoogleOAuthClient.setCustomRefreshResponse({
+        accessToken: 'new-access-from-partial-refresh',
+        expiresIn: 3600,
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/oauth/google/token`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { accessToken: string; email: string };
+      expect(body.accessToken).toBe('new-access-from-partial-refresh');
+
+      const updatedConnection = fakeOAuthRepo.getStoredConnection(userId, 'google');
+      expect(updatedConnection?.tokens.refreshToken).toBe('original-refresh-token');
+      expect(updatedConnection?.tokens.scope).toBe('original-scope calendar.readonly');
     });
   });
 });

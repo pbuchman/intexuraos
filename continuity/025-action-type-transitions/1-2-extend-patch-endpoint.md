@@ -2,7 +2,7 @@
 
 ## Objective
 
-Extend `PATCH /router/actions/:actionId` to accept optional `type` field.
+Extend `PATCH /actions/:actionId` to accept optional `type` field.
 
 ## Current State
 

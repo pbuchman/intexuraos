@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 import {
@@ -34,6 +36,7 @@ describe('Internal Routes', () => {
       generatedImageRepository: fakeRepo,
       imageStorage: fakeStorage,
       userServiceClient: fakeUserClient,
+      pricingContext: new FakePricingContext(),
       createPromptGenerator: () => fakePromptGenerator,
       createImageGenerator: () => fakeGenerator,
       generateId: () => 'test-uuid',
@@ -157,7 +160,7 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload) as { error: { message: string } };
-      expect(body.error.message).toContain('openai');
+      expect(body.error.message).toContain(LlmProviders.OpenAI);
     });
 
     it('returns 429 when LLM is rate limited', async () => {
@@ -225,7 +228,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           text: 'This is a test article about machine learning.',
-          model: 'gemini-2.5-pro',
+          model: LlmModels.Gemini25Pro,
           userId: TEST_USER_ID,
         },
       });
@@ -241,7 +244,7 @@ describe('Internal Routes', () => {
         url: '/internal/images/generate',
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -256,7 +259,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': 'wrong-token' },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -271,7 +274,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'short',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -301,7 +304,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
         },
       });
 
@@ -317,7 +320,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -334,7 +337,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -354,7 +357,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -372,7 +375,29 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to save image record');
+    });
+
+    it('logs error but still returns 500 when both DB save and cleanup fail', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeRepo.setFailNextSave(true);
+      fakeStorage.setFailNextDelete(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -392,7 +417,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
         },
       });
@@ -421,7 +446,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           userId: TEST_USER_ID,
         },
       });
@@ -437,7 +462,7 @@ describe('Internal Routes', () => {
       prompt: 'Test prompt',
       thumbnailUrl: 'https://example.com/thumb.jpg',
       fullSizeUrl: 'https://example.com/full.png',
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       createdAt: '2024-01-01T00:00:00.000Z',
     };
 

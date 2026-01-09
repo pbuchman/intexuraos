@@ -4,7 +4,12 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { getProviderForModel, type SupportedModel } from '@intexuraos/llm-contract';
+import {
+  getProviderForModel,
+  type ModelPricing,
+  type ResearchModel,
+  type FastModel,
+} from '@intexuraos/llm-contract';
 import type {
   LlmResearchProvider,
   LlmSynthesisProvider,
@@ -18,56 +23,60 @@ import { PerplexityAdapter } from './PerplexityAdapter.js';
 import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 
 export function createResearchProvider(
-  model: SupportedModel,
+  model: ResearchModel,
   apiKey: string,
-  userId: string
+  userId: string,
+  pricing: ModelPricing
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId);
+      return new GeminiAdapter(apiKey, model, userId, pricing);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId);
+      return new ClaudeAdapter(apiKey, model, userId, pricing);
     case 'openai':
-      return new GptAdapter(apiKey, model, userId);
+      return new GptAdapter(apiKey, model, userId, pricing);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId);
+      return new PerplexityAdapter(apiKey, model, userId, pricing);
   }
 }
 
 export function createSynthesizer(
-  model: SupportedModel,
+  model: ResearchModel,
   apiKey: string,
-  userId: string
+  userId: string,
+  pricing: ModelPricing
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId);
+      return new GeminiAdapter(apiKey, model, userId, pricing);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, userId);
+      return new GptAdapter(apiKey, model, userId, pricing);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
   }
 }
 
 export function createTitleGenerator(
-  model: string,
+  model: FastModel,
   apiKey: string,
-  userId: string
+  userId: string,
+  pricing: ModelPricing
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId);
+  return new GeminiAdapter(apiKey, model, userId, pricing);
 }
 
 export function createContextInferrer(
-  model: string,
+  model: FastModel,
   apiKey: string,
   userId: string,
+  pricing: ModelPricing,
   logger?: Logger
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, userId, logger);
+  return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger);
 }

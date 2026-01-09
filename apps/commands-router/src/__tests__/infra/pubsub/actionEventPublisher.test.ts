@@ -1,5 +1,9 @@
+import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActionEventPublisher } from '../../../infra/pubsub/actionEventPublisher.js';
+import {
+  ActionEventPublisher,
+  createActionEventPublisher,
+} from '../../../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
 
 const mockPublishToTopic = vi.fn();
@@ -33,17 +37,17 @@ describe('ActionEventPublisher', () => {
   beforeEach(() => {
     mockPublishToTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
-    process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'] = 'test-research-topic';
+    process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'test-actions-queue';
     publisher = new ActionEventPublisher({ projectId: 'test-project' });
   });
 
   afterEach(() => {
-    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC'];
+    delete process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'];
     vi.clearAllMocks();
   });
 
   describe('publishActionCreated', () => {
-    it('publishes research action event successfully', async () => {
+    it('publishes research action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -54,7 +58,7 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'What are the latest AI trends?',
           confidence: 0.95,
-          selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
+          selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -62,13 +66,13 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('test-research-topic', event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'research',
       });
     });
 
-    it('skips publish for action types without configured topic', async () => {
+    it('publishes todo action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -86,13 +90,13 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'todo',
       });
     });
 
-    it('skips publish for note action type', async () => {
+    it('publishes note action event to unified queue', async () => {
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: 'action-123',
@@ -110,7 +114,7 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, {
+      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'note',
       });
@@ -156,7 +160,11 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'Compare AI models',
           confidence: 0.92,
-          selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+          selectedModels: [
+            LlmModels.Gemini25Pro,
+            LlmModels.O4MiniDeepResearch,
+            LlmModels.ClaudeOpus45,
+          ],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -168,10 +176,36 @@ describe('ActionEventPublisher', () => {
 
       const [, publishedData] = mockPublishToTopic.mock.calls[0] as [string, ActionCreatedEvent];
       expect(publishedData.payload.selectedModels).toEqual([
-        'gemini-2.5-pro',
-        'o4-mini-deep-research',
-        'claude-opus-4-5-20251101',
+        LlmModels.Gemini25Pro,
+        LlmModels.O4MiniDeepResearch,
+        LlmModels.ClaudeOpus45,
       ]);
+    });
+  });
+
+  describe('createActionEventPublisher', () => {
+    it('creates an ActionEventPublisher instance', async () => {
+      const publisher = createActionEventPublisher({ projectId: 'test-project' });
+
+      expect(publisher).toBeInstanceOf(ActionEventPublisher);
+      expect(publisher.publishActionCreated).toBeDefined();
+
+      const event: ActionCreatedEvent = {
+        type: 'action.created',
+        actionId: 'action-factory-test',
+        userId: 'user-123',
+        commandId: 'cmd-456',
+        actionType: 'research',
+        title: 'Factory test',
+        payload: {
+          prompt: 'Test prompt',
+          confidence: 0.9,
+        },
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+
+      const result = await publisher.publishActionCreated(event);
+      expect(result.ok).toBe(true);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
   Card,
@@ -22,7 +23,7 @@ import {
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
 
 export function LlmOrchestratorPage(): React.JSX.Element {
   const navigate = useNavigate();

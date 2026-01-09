@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   checkLlmCompletion,
   type CheckLlmCompletionDeps,
@@ -40,11 +41,11 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
-      { provider: 'google', model: 'gemini-2.5-pro', status: 'pending' },
-      { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+      { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+      { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -85,8 +86,13 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are still in pending state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.5-pro', status: 'completed', result: 'Result' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'completed',
+          result: 'Result',
+        },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -100,8 +106,17 @@ describe('checkLlmCompletion', () => {
   it('returns pending when LLMs are in processing state', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.5-pro', status: 'completed', result: 'Result' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'processing' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'completed',
+          result: 'Result',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'processing',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -116,14 +131,14 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google Result',
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'OpenAI Result',
         },
@@ -140,10 +155,15 @@ describe('checkLlmCompletion', () => {
   it('returns all_failed and updates research when all LLMs failed', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.5-pro', status: 'failed', error: 'API Error' },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
+          status: 'failed',
+          error: 'API Error',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'failed',
           error: 'Rate limit',
         },
@@ -165,14 +185,14 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google Result',
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'failed',
           error: 'Rate limit',
         },
@@ -182,11 +202,14 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedModels: ['o4-mini-deep-research'] });
+    expect(result).toEqual({
+      type: 'partial_failure',
+      failedModels: [LlmModels.O4MiniDeepResearch],
+    });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
-        failedModels: ['o4-mini-deep-research'],
+        failedModels: [LlmModels.O4MiniDeepResearch],
         detectedAt: '2024-01-01T12:00:00.000Z',
         retryCount: 0,
       },
@@ -196,20 +219,20 @@ describe('checkLlmCompletion', () => {
   it('preserves retry count from previous partial failure', async () => {
     const research = createTestResearch({
       partialFailure: {
-        failedModels: ['o4-mini-deep-research'],
+        failedModels: [LlmModels.O4MiniDeepResearch],
         detectedAt: '2024-01-01T10:00:00Z',
         retryCount: 1,
       },
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google Result',
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'failed',
           error: 'Rate limit again',
         },
@@ -219,11 +242,14 @@ describe('checkLlmCompletion', () => {
 
     const result = await checkLlmCompletion('research-1', deps);
 
-    expect(result).toEqual({ type: 'partial_failure', failedModels: ['o4-mini-deep-research'] });
+    expect(result).toEqual({
+      type: 'partial_failure',
+      failedModels: [LlmModels.O4MiniDeepResearch],
+    });
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
       status: 'awaiting_confirmation',
       partialFailure: {
-        failedModels: ['o4-mini-deep-research'],
+        failedModels: [LlmModels.O4MiniDeepResearch],
         detectedAt: '2024-01-01T12:00:00.000Z',
         retryCount: 1,
       },
@@ -232,18 +258,23 @@ describe('checkLlmCompletion', () => {
 
   it('handles multiple failed providers', async () => {
     const research = createTestResearch({
-      selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error 1' },
         {
-          provider: 'anthropic',
-          model: 'claude-opus-4-5-20251101',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error 1',
+        },
+        {
+          provider: LlmProviders.Anthropic,
+          model: LlmModels.ClaudeOpus45,
           status: 'failed',
           error: 'Error 2',
         },
@@ -255,22 +286,22 @@ describe('checkLlmCompletion', () => {
 
     expect(result).toEqual({
       type: 'partial_failure',
-      failedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+      failedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
     });
   });
 
   it('ignores stale llmResults for providers not in selectedModels', async () => {
     const research = createTestResearch({
-      selectedModels: ['gemini-2.5-pro'],
+      selectedModels: [LlmModels.Gemini25Pro],
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google Result',
         },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'pending' },
-        { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));

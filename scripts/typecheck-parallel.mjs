@@ -47,14 +47,20 @@ function getWorkspaces() {
   return workspaceNames;
 }
 
-// Run typecheck for a single workspace
-function typecheckWorkspace(workspaceName) {
+// Run typecheck for a single workspace, returning process handle
+function typecheckWorkspace(workspaceName, activeProcesses) {
   return new Promise((resolve, reject) => {
     const proc = spawn('npm', ['run', 'typecheck', '--workspace', workspaceName], {
       stdio: 'inherit',
     });
 
+    activeProcesses.push(proc);
+
     proc.on('close', (code) => {
+      // Remove from active list
+      const idx = activeProcesses.indexOf(proc);
+      if (idx !== -1) activeProcesses.splice(idx, 1);
+
       if (code !== 0) {
         reject(new Error(`${workspaceName} typecheck failed`));
       } else {
@@ -68,11 +74,19 @@ function typecheckWorkspace(workspaceName) {
 (async () => {
   try {
     const workspaces = getWorkspaces();
+    const activeProcesses = [];
 
     console.log(`Running typecheck for ${workspaces.length} workspaces in parallel...\n`);
 
-    // Run all typechecks in parallel
-    await Promise.all(workspaces.map((ws) => typecheckWorkspace(ws)));
+    try {
+      await Promise.all(workspaces.map((ws) => typecheckWorkspace(ws, activeProcesses)));
+    } catch (error) {
+      // Kill remaining processes on failure
+      for (const proc of activeProcesses) {
+        proc.kill('SIGTERM');
+      }
+      throw error;
+    }
 
     console.log('\n✅ All typechecks passed\n');
     process.exit(0);

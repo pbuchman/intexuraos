@@ -8,7 +8,15 @@ export type {
   LlmSynthesisResult,
   LlmUsage,
   TitleGenerator,
+  TitleGenerateResult,
+  LabelGenerateResult,
 } from './llmProvider.js';
+
+export type {
+  ContextInferenceProvider,
+  ResearchContextResult,
+  SynthesisContextResult,
+} from './contextInference.js';
 
 export type { NotificationError, NotificationSender } from './notification.js';
 

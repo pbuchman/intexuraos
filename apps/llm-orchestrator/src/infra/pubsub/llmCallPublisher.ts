@@ -1,12 +1,12 @@
 import type { Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
-import type { SupportedModel } from '../../domain/research/models/Research.js';
+import type { ResearchModel } from '../../domain/research/models/Research.js';
 
 export interface LlmCallEvent {
   type: 'llm.call';
   researchId: string;
   userId: string;
-  model: SupportedModel;
+  model: ResearchModel;
   prompt: string;
 }
 

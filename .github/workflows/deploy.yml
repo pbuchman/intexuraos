@@ -6,28 +6,69 @@ on:
       - development
   workflow_dispatch:
     inputs:
-      force_deploy:
-        description: 'Force deploy all services (ignore change detection)'
+      force_strategy:
+        description: 'Force a specific strategy'
         required: false
-        default: 'false'
         type: choice
         options:
-          - 'false'
-          - 'true'
+          - 'auto'
+          - 'monolith'
+        default: 'auto'
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  deploy:
-    name: Deploy to Dev
+  analyze:
+    name: Analyze Changes
     runs-on: ubuntu-latest
+    outputs:
+      strategy: ${{ steps.dispatch.outputs.strategy }}
+      targets: ${{ steps.dispatch.outputs.targets }}
+      affected_count: ${{ steps.dispatch.outputs.affected_count }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Get base commit
+        id: base
+        run: |
+          # For push events, compare with the commit before the push
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            BASE_SHA="${{ github.event.before }}"
+            # Handle initial push (before is all zeros)
+            if [[ "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_SHA="HEAD~1"
+            fi
+          else
+            BASE_SHA="HEAD~1"
+          fi
+          echo "base_sha=$BASE_SHA" >> $GITHUB_OUTPUT
+          echo "Base SHA: $BASE_SHA"
+
+      - name: Run Smart Dispatch
+        id: dispatch
+        env:
+          BASE_SHA: ${{ steps.base.outputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node .github/scripts/smart-dispatch.mjs
+
+  deploy-monolith:
+    name: Deploy All Services
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'MONOLITH' || github.event.inputs.force_strategy == 'monolith'
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -37,9 +78,120 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Trigger Cloud Build
+      - name: Trigger Full Rebuild
+        id: trigger
         run: |
-          gcloud builds triggers run intexuraos-dev-deploy \
+          echo "🚀 Triggering MONOLITH build (all services)"
+          BUILD_ID=$(gcloud builds triggers run intexuraos-dev-deploy \
             --branch="${GITHUB_REF_NAME}" \
             --region=europe-central2 \
-            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME},_FORCE_DEPLOY=${{ inputs.force_deploy || 'false' }}"
+            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
+            --format="value(metadata.build.id)")
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "Build ID: $BUILD_ID"
+
+      - name: Wait for Build Completion
+        timeout-minutes: 45
+        run: |
+          BUILD_ID="${{ steps.trigger.outputs.build_id }}"
+          echo "Waiting for build $BUILD_ID..."
+
+          while true; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
+            echo "Build status: $STATUS"
+
+            case "$STATUS" in
+              SUCCESS)
+                echo "✅ Build completed successfully"
+                exit 0
+                ;;
+              FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
+                echo "❌ Build failed with status: $STATUS"
+                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
+                echo "Logs: $LOGS_URL"
+                exit 1
+                ;;
+              QUEUED|WORKING)
+                sleep 30
+                ;;
+              *)
+                echo "Unknown status: $STATUS"
+                sleep 30
+                ;;
+            esac
+          done
+
+  deploy-individual:
+    name: Deploy Individual Services
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'INDIVIDUAL'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.analyze.outputs.targets) }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Trigger ${{ matrix.target }}
+        id: trigger
+        run: |
+          echo "🎯 Triggering individual build: ${{ matrix.target }}"
+          BUILD_ID=$(gcloud builds triggers run ${{ matrix.target }} \
+            --branch="${GITHUB_REF_NAME}" \
+            --region=europe-central2 \
+            --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
+            --format="value(metadata.build.id)")
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "Build ID: $BUILD_ID"
+
+      - name: Wait for Build Completion
+        timeout-minutes: 15
+        run: |
+          BUILD_ID="${{ steps.trigger.outputs.build_id }}"
+          echo "Waiting for build $BUILD_ID (${{ matrix.target }})..."
+
+          while true; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
+            echo "Build status: $STATUS"
+
+            case "$STATUS" in
+              SUCCESS)
+                echo "✅ Build completed successfully"
+                exit 0
+                ;;
+              FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
+                echo "❌ Build failed with status: $STATUS"
+                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
+                echo "Logs: $LOGS_URL"
+                exit 1
+                ;;
+              QUEUED|WORKING)
+                sleep 30
+                ;;
+              *)
+                echo "Unknown status: $STATUS"
+                sleep 30
+                ;;
+            esac
+          done
+
+  skip-deploy:
+    name: No Changes to Deploy
+    needs: analyze
+    if: needs.analyze.outputs.strategy == 'NONE'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report
+        run: |
+          echo "✅ No deployable changes detected"
+          echo "Affected services: ${{ needs.analyze.outputs.affected_count }}"

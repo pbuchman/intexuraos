@@ -6,7 +6,12 @@ import type { FastifyInstance } from 'fastify';
 import { err, ok } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeAuth0Client, FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
+import {
+  FakeAuth0Client,
+  FakeAuthTokenRepository,
+  FakeOAuthConnectionRepository,
+  FakeUserSettingsRepository,
+} from './fakes.js';
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
@@ -111,6 +116,8 @@ describe('Token Refresh Routes', () => {
           auth0Client: null,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
 
         app = await buildServer();
@@ -143,6 +150,8 @@ describe('Token Refresh Routes', () => {
           auth0Client: fakeAuth0Client,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
       });
 
@@ -194,6 +203,8 @@ describe('Token Refresh Routes', () => {
           auth0Client: fakeAuth0Client,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
       });
 
@@ -249,6 +260,8 @@ describe('Token Refresh Routes', () => {
           auth0Client: fakeAuth0Client,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
 
         // Store a refresh token for tests
@@ -344,6 +357,8 @@ describe('Token Refresh Routes', () => {
           auth0Client: fakeAuth0Client,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
 
         // Store a refresh token for tests

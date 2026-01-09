@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import {
   GoogleImageGenerator,
   createGoogleImageGenerator,
@@ -23,6 +24,17 @@ vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
 }));
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 0.3,
+  outputPricePerMillion: 2.5,
+};
+
+const testImagePricing: ModelPricing = {
+  inputPricePerMillion: 0,
+  outputPricePerMillion: 0,
+  imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
+};
+
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
@@ -42,7 +54,7 @@ function createMockStorage(): ImageStorage & {
 
 describe('GoogleImageGenerator', () => {
   const testApiKey = 'test-api-key';
-  const testModel = 'gemini-2.5-flash-image' as const;
+  const testModel = LlmModels.Gemini25FlashImage;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
 
@@ -60,7 +72,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -78,6 +90,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -100,7 +114,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -113,6 +127,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       await generator.generate(testPrompt);
@@ -128,7 +144,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -141,6 +157,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -165,6 +183,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -183,7 +203,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -198,6 +218,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -219,6 +241,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -239,6 +263,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -259,6 +285,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -281,6 +309,8 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -298,7 +328,7 @@ describe('GoogleImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
         })
       );
@@ -310,6 +340,8 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -331,6 +363,8 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);

@@ -4,14 +4,14 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { createResearch, type Research, type SupportedModel } from '../models/index.js';
+import { createResearch, type Research, type ResearchModel } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface SubmitResearchParams {
   userId: string;
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel: ResearchModel;
   inputContexts?: { content: string; label?: string | undefined }[];
   skipSynthesis?: boolean;
 }

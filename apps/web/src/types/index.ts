@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
  */
@@ -175,6 +176,10 @@ export interface AppConfig {
   commandsRouterServiceUrl: string;
   actionsAgentUrl: string;
   dataInsightsServiceUrl: string;
+  notesAgentUrl: string;
+  todosAgentUrl: string;
+  bookmarksAgentUrl: string;
+  appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -487,4 +492,300 @@ export interface CompositeFeedData {
   generatedAt: string;
   staticSources: CompositeFeedStaticSource[];
   notifications: CompositeFeedFilteredNotifications[];
+}
+
+/**
+ * Note from notes-agent
+ */
+export interface Note {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  sourceId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a note
+ */
+export interface CreateNoteRequest {
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  sourceId: string;
+}
+
+/**
+ * Request to update a note
+ */
+export interface UpdateNoteRequest {
+  title?: string;
+  content?: string;
+  tags?: string[];
+}
+
+/**
+ * Todo priority levels
+ */
+export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+/**
+ * Todo status values
+ */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+/**
+ * Todo item (nested within a todo)
+ */
+export interface TodoItem {
+  id: string;
+  title: string;
+  status: TodoStatus;
+  priority: TodoPriority | null;
+  dueDate: string | null;
+  position: number;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Todo from todos-agent
+ */
+export interface Todo {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  tags: string[];
+  priority: TodoPriority;
+  dueDate: string | null;
+  source: string;
+  sourceId: string;
+  status: TodoStatus;
+  archived: boolean;
+  items: TodoItem[];
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a todo
+ */
+export interface CreateTodoRequest {
+  title: string;
+  description?: string | null;
+  tags: string[];
+  priority?: TodoPriority;
+  dueDate?: string | null;
+  source: string;
+  sourceId: string;
+  items?: {
+    title: string;
+    priority?: TodoPriority | null;
+    dueDate?: string | null;
+  }[];
+}
+
+/**
+ * Request to update a todo
+ */
+export interface UpdateTodoRequest {
+  title?: string;
+  description?: string | null;
+  tags?: string[];
+  priority?: TodoPriority;
+  dueDate?: string | null;
+}
+
+/**
+ * Request to create a todo item
+ */
+export interface CreateTodoItemRequest {
+  title: string;
+  priority?: TodoPriority | null;
+  dueDate?: string | null;
+}
+
+/**
+ * Request to update a todo item
+ */
+export interface UpdateTodoItemRequest {
+  title?: string;
+  status?: TodoStatus;
+  priority?: TodoPriority | null;
+  dueDate?: string | null;
+}
+
+/**
+ * LLM provider type
+ */
+export type { LlmProvider };
+
+/**
+ * Image size for pricing
+ */
+export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
+
+/**
+ * Model pricing information
+ */
+export interface ModelPricing {
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  cacheReadMultiplier?: number;
+  cacheWriteMultiplier?: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  imagePricing?: Record<ImageSize, number>;
+  useProviderCost?: boolean;
+}
+
+/**
+ * Provider pricing information
+ */
+export interface ProviderPricing {
+  provider: LlmProvider;
+  models: Record<string, ModelPricing>;
+  updatedAt: string;
+}
+
+/**
+ * All providers pricing response
+ */
+export interface AllProvidersPricing {
+  google: ProviderPricing;
+  openai: ProviderPricing;
+  anthropic: ProviderPricing;
+  perplexity: ProviderPricing;
+}
+
+/**
+ * Open Graph preview data for bookmarks
+ */
+export interface OpenGraphPreview {
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+  type?: string;
+  favicon?: string;
+}
+
+/**
+ * OG fetch status for bookmarks
+ */
+export type OgFetchStatus = 'pending' | 'processed' | 'failed';
+
+/**
+ * Bookmark from bookmarks-agent
+ */
+export interface Bookmark {
+  id: string;
+  userId: string;
+  url: string;
+  title: string | null;
+  description: string | null;
+  tags: string[];
+  ogPreview: OpenGraphPreview | null;
+  ogFetchedAt: string | null;
+  ogFetchStatus: OgFetchStatus;
+  aiSummary: string | null;
+  aiSummarizedAt: string | null;
+  source: string;
+  sourceId: string;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a bookmark
+ */
+export interface CreateBookmarkRequest {
+  url: string;
+  title?: string | null;
+  description?: string | null;
+  tags?: string[];
+  source: string;
+  sourceId: string;
+}
+
+/**
+ * Request to update a bookmark
+ */
+export interface UpdateBookmarkRequest {
+  title?: string | null;
+  description?: string | null;
+  tags?: string[];
+  archived?: boolean;
+}
+
+/**
+ * Google Calendar connection status from user-service
+ */
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  email?: string;
+  scopes?: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * Google Calendar OAuth initiate response
+ */
+export interface GoogleCalendarInitiateResponse {
+  authorizationUrl: string;
+}
+
+/**
+ * Monthly cost breakdown for LLM usage
+ */
+export interface MonthlyCost {
+  month: string;
+  costUsd: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  percentage: number;
+}
+
+/**
+ * Cost breakdown by LLM model
+ */
+export interface ModelCost {
+  model: string;
+  costUsd: number;
+  calls: number;
+  percentage: number;
+}
+
+/**
+ * Cost breakdown by call type
+ */
+export interface CallTypeCost {
+  callType: string;
+  costUsd: number;
+  calls: number;
+  percentage: number;
+}
+
+/**
+ * Aggregated LLM usage costs for a user
+ */
+export interface AggregatedCosts {
+  totalCostUsd: number;
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  monthlyBreakdown: MonthlyCost[];
+  byModel: ModelCost[];
+  byCallType: CallTypeCost[];
 }

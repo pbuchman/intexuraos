@@ -1,9 +1,10 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * LLM Pricing Types.
  * Shared types for cost calculation across all LLM providers.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+export type { LlmProvider };
 
 export interface LlmPricing {
   provider: LlmProvider;

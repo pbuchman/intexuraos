@@ -1,12 +1,14 @@
 import { err, type Result } from '@intexuraos/common-core';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { generateThumbnailPrompt } from '@intexuraos/llm-contract';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
 
 export interface GptPromptAdapterConfig {
   apiKey: string;
   userId: string;
+  pricing: ModelPricing;
   model?: string;
 }
 
@@ -16,11 +18,13 @@ export class GptPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
   private readonly userId: string;
   private readonly model: string;
+  private readonly pricing: ModelPricing;
 
   constructor(config: GptPromptAdapterConfig) {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
     this.model = config.model ?? DEFAULT_MODEL;
+    this.pricing = config.pricing;
   }
 
   async generateThumbnailPrompt(
@@ -30,6 +34,7 @@ export class GptPromptAdapter implements PromptGenerator {
       apiKey: this.apiKey,
       model: this.model,
       userId: this.userId,
+      pricing: this.pricing,
     });
 
     const result = await generateThumbnailPrompt(client, text);

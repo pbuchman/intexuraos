@@ -2,6 +2,7 @@
  * Tests for FirestoreResearchRepository.
  */
 
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Research } from '../../../domain/research/index.js';
 
@@ -52,8 +53,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-pro' as const],
-        synthesisModel: 'gemini-2.5-pro' as const,
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'pending' as const,
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -124,8 +125,8 @@ describe('FirestoreResearchRepository', () => {
           userId: 'user-1',
           title: 'Test Research 1',
           prompt: 'Test',
-          selectedModels: ['gemini-2.5-pro'],
-          synthesisModel: 'gemini-2.5-pro',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
           status: 'pending',
           llmResults: [],
           startedAt: '2024-01-01T00:00:00Z',
@@ -135,8 +136,8 @@ describe('FirestoreResearchRepository', () => {
           userId: 'user-1',
           title: 'Test Research 2',
           prompt: 'Test',
-          selectedModels: ['gemini-2.5-pro'],
-          synthesisModel: 'gemini-2.5-pro',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
           status: 'pending',
           llmResults: [],
           startedAt: '2024-01-01T00:00:00Z',
@@ -247,8 +248,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'New Title',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'pending',
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -305,12 +306,12 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro', 'claude-opus-4-5-20251101'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'pending',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.5-pro', status: 'pending' },
-          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -320,7 +321,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'gemini-2.5-pro', {
+      const result = await repository.updateLlmResult('research-1', LlmModels.Gemini25Pro, {
         status: 'completed',
         result: 'Result content',
       });
@@ -329,12 +330,12 @@ describe('FirestoreResearchRepository', () => {
       expect(mockDocUpdate).toHaveBeenCalledWith({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.5-pro',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
             status: 'completed',
             result: 'Result content',
           },
-          { provider: 'anthropic', model: 'claude-opus-4-5-20251101', status: 'pending' },
+          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
         ],
       });
     });
@@ -342,7 +343,7 @@ describe('FirestoreResearchRepository', () => {
     it('returns NOT_FOUND when research does not exist', async () => {
       mockDocGet.mockResolvedValue({ exists: false });
 
-      const result = await repository.updateLlmResult('nonexistent', 'gemini-2.0-flash', {
+      const result = await repository.updateLlmResult('nonexistent', LlmModels.Gemini20Flash, {
         status: 'completed',
       });
 
@@ -358,11 +359,16 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'failed',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Rate limit',
+          },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -372,7 +378,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
+      const result = await repository.updateLlmResult('research-1', LlmModels.Gemini20Flash, {
         status: 'pending',
       });
 
@@ -380,8 +386,8 @@ describe('FirestoreResearchRepository', () => {
       expect(mockDocUpdate).toHaveBeenCalledWith({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'pending',
           },
         ],
@@ -394,11 +400,16 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'retrying',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Rate limit' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Rate limit',
+          },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -408,7 +419,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
+      const result = await repository.updateLlmResult('research-1', LlmModels.Gemini20Flash, {
         status: 'processing',
       });
 
@@ -416,8 +427,8 @@ describe('FirestoreResearchRepository', () => {
       expect(mockDocUpdate).toHaveBeenCalledWith({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'processing',
           },
         ],
@@ -430,10 +441,12 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'processing',
-        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'processing' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' },
+        ],
         startedAt: '2024-01-01T00:00:00Z',
       };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });
@@ -442,7 +455,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
+      const result = await repository.updateLlmResult('research-1', LlmModels.Gemini20Flash, {
         status: 'failed',
         error: 'New error',
       });
@@ -451,8 +464,8 @@ describe('FirestoreResearchRepository', () => {
       expect(mockDocUpdate).toHaveBeenCalledWith({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'failed',
             error: 'New error',
           },
@@ -466,10 +479,12 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'processing',
-        llmResults: [{ provider: 'google', model: 'gemini-2.0-flash', status: 'processing' }],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'processing' },
+        ],
         startedAt: '2024-01-01T00:00:00Z',
       };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });
@@ -478,7 +493,7 @@ describe('FirestoreResearchRepository', () => {
       const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
       mockDoc.mockReturnValue(mockDocRef);
 
-      const result = await repository.updateLlmResult('research-1', 'gemini-2.0-flash', {
+      const result = await repository.updateLlmResult('research-1', LlmModels.Gemini20Flash, {
         status: 'completed',
       });
 
@@ -528,8 +543,8 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: ['gemini-2.5-pro'],
-        synthesisModel: 'gemini-2.5-pro',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
         status: 'completed',
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',

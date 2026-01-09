@@ -6,14 +6,19 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { decryptToken, encryptToken, generateEncryptionKey } from '../infra/firestore/index.js';
 
 describe('encryption', () => {
-  const originalEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+  const originalKeyEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+  const originalNodeEnv = process.env['NODE_ENV'];
 
   afterEach(() => {
-    // Restore original env
-    if (originalEnv !== undefined) {
-      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = originalEnv;
+    if (originalKeyEnv !== undefined) {
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = originalKeyEnv;
     } else {
       delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+    }
+    if (originalNodeEnv !== undefined) {
+      process.env['NODE_ENV'] = originalNodeEnv;
+    } else {
+      delete process.env['NODE_ENV'];
     }
   });
 
@@ -198,6 +203,24 @@ describe('encryption', () => {
       const decrypted = decryptToken(encrypted);
 
       expect(decrypted).toBe(token);
+    });
+
+    it('throws in production when key is missing', () => {
+      delete process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+      process.env['NODE_ENV'] = 'production';
+
+      expect(() => encryptToken('test')).toThrow(
+        'INTEXURAOS_TOKEN_ENCRYPTION_KEY is required in production'
+      );
+    });
+
+    it('throws in production when key has wrong length', () => {
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = Buffer.from('short').toString('base64');
+      process.env['NODE_ENV'] = 'production';
+
+      expect(() => encryptToken('test')).toThrow(
+        /Invalid INTEXURAOS_TOKEN_ENCRYPTION_KEY: expected 32 bytes, got \d+/
+      );
     });
   });
 });

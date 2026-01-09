@@ -54,7 +54,7 @@ mkdir -p packages/infra-gpt/src
 ```json
 {
   "name": "@intexuraos/infra-gpt",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

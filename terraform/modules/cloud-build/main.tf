@@ -98,12 +98,6 @@ resource "google_project_iam_member" "cloud_build_secret_accessor" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
-# Cloud Build needs to query previous builds (for affected service detection)
-resource "google_project_iam_member" "cloud_build_viewer" {
-  project = var.project_id
-  role    = "roles/cloudbuild.builds.viewer"
-  member  = "serviceAccount:${google_service_account.cloud_build.email}"
-}
 
 # Cloud Build needs to trigger builds via API (for GitHub Actions integration)
 resource "google_project_iam_member" "cloud_build_builds_editor" {
@@ -127,7 +121,7 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
 
 resource "google_cloudbuild_trigger" "manual_main" {
   name        = "intexuraos-${var.environment}-deploy"
-  description = "Deploy trigger - invoked by GitHub Actions for any branch"
+  description = "Deploy trigger - builds and deploys all services unconditionally"
   location    = var.region
 
   source_to_build {
@@ -142,8 +136,107 @@ resource "google_cloudbuild_trigger" "manual_main" {
     _REGION                = var.region
     _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
     _ENVIRONMENT           = var.environment
-    _FORCE_DEPLOY          = "true"
   }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# -----------------------------------------------------------------------------
+# Manual Per-Service Triggers (R2)
+# -----------------------------------------------------------------------------
+# These triggers are for manual execution only (via GCP Console).
+# They deploy a single service without triggering on git push.
+# The `ignored_files = ["**"]` pattern ensures no automatic execution.
+
+locals {
+  # Docker-based services (build + deploy)
+  docker_services = [
+    "user-service",
+    "promptvault-service",
+    "notion-service",
+    "whatsapp-service",
+    "api-docs-hub",
+    "mobile-notifications-service",
+    "llm-orchestrator",
+    "commands-router",
+    "actions-agent",
+    "data-insights-service",
+    "image-service",
+    "notes-agent",
+    "todos-agent",
+    "bookmarks-agent",
+    "app-settings-service",
+    "calendar-agent",
+  ]
+}
+
+# Manual triggers for Docker-based services
+resource "google_cloudbuild_trigger" "manual_service" {
+  for_each = toset(local.docker_services)
+
+  name        = "manual-${each.key}"
+  description = "Manual trigger: Deploy ${each.key} only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  # Ignore all files to prevent automatic triggering on push
+  ignored_files = ["**"]
+
+  filename = "apps/${each.key}/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                = var.region
+    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
+    _ENVIRONMENT           = var.environment
+  }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# Manual trigger for web (special: npm build + secrets)
+resource "google_cloudbuild_trigger" "manual_web" {
+  name        = "manual-web"
+  description = "Manual trigger: Deploy web frontend only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "apps/web/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION      = var.region
+    _ENVIRONMENT = var.environment
+  }
+
+  service_account = google_service_account.cloud_build.id
+}
+
+# Manual trigger for Firestore migrations
+resource "google_cloudbuild_trigger" "manual_firestore" {
+  name        = "manual-firestore"
+  description = "Manual trigger: Deploy Firestore migrations only"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "cloudbuild/cloudbuild-firestore.yaml"
 
   service_account = google_service_account.cloud_build.id
 }

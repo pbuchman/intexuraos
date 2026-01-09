@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { FakeNoteRepository } from '../infra/firestore/fakeNoteRepository.js';
+import { FakeNoteRepository } from './fakeNoteRepository.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';

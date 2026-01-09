@@ -63,10 +63,13 @@ jobs:
           mkdir -p coverage-base
           if [ -f base-branch/coverage/coverage-summary.json ]; then
             cp base-branch/coverage/coverage-summary.json coverage-base/coverage-summary.json
+            echo "exists=true" >> $GITHUB_OUTPUT
             echo "Base coverage available for trend comparison"
           else
+            echo "exists=false" >> $GITHUB_OUTPUT
             echo "No base coverage found - trend comparison will be skipped"
           fi
+        id: check-base-coverage
 
       - name: Report Coverage
         if: always()
@@ -75,4 +78,4 @@ jobs:
           threshold-icons: "{75: '🔴', 85: '🟠', 90: '🟢'}"
           github-token: ${{ secrets.PAT_TOKEN }}
           file-coverage-mode: all
-          json-summary-compare-path: coverage-base/coverage-summary.json
+          json-summary-compare-path: ${{ steps.check-base-coverage.outputs.exists == 'true' && 'coverage-base/coverage-summary.json' || '' }}

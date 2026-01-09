@@ -1,26 +1,30 @@
 import { err, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { generateThumbnailPrompt } from '@intexuraos/llm-contract';
+import { generateThumbnailPrompt, LlmModels } from '@intexuraos/llm-contract';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
 
 export interface GeminiPromptAdapterConfig {
   apiKey: string;
   userId: string;
+  pricing: ModelPricing;
   model?: string;
 }
 
-const DEFAULT_MODEL = 'gemini-2.5-pro';
+const DEFAULT_MODEL = LlmModels.Gemini25Pro;
 
 export class GeminiPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
   private readonly userId: string;
   private readonly model: string;
+  private readonly pricing: ModelPricing;
 
   constructor(config: GeminiPromptAdapterConfig) {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
     this.model = config.model ?? DEFAULT_MODEL;
+    this.pricing = config.pricing;
   }
 
   async generateThumbnailPrompt(
@@ -30,6 +34,7 @@ export class GeminiPromptAdapter implements PromptGenerator {
       apiKey: this.apiKey,
       model: this.model,
       userId: this.userId,
+      pricing: this.pricing,
     });
 
     const result = await generateThumbnailPrompt(client, text);

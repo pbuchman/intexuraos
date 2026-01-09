@@ -37,6 +37,7 @@ export default defineConfig({
         // JUSTIFIED: TypeScript interfaces only, no executable code
         'packages/infra-*/src/types.ts',
         'packages/llm-*/src/types.ts',
+        'packages/llm-contract/src/pricing.ts',
 
         // Type-only files with no runtime code
         // JUSTIFIED: Interfaces and types only, no executable code

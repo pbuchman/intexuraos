@@ -3,9 +3,10 @@
  * Dispatches LLM calls to Pub/Sub for parallel processing in separate Cloud Run instances.
  */
 
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { SupportedModel } from '../models/index.js';
+import type { ResearchModel } from '../models/index.js';
 import type { LlmSynthesisProvider, ResearchRepository, TitleGenerator } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
 
@@ -20,7 +21,7 @@ export interface LlmCallPublisher {
     type: 'llm.call';
     researchId: string;
     userId: string;
-    model: SupportedModel;
+    model: ResearchModel;
     prompt: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -32,7 +33,7 @@ export interface ProcessResearchDeps {
   titleGenerator?: TitleGenerator;
   synthesizer?: LlmSynthesisProvider;
   contextInferrer?: ContextInferenceProvider;
-  reportLlmSuccess?: (model: SupportedModel) => void;
+  reportLlmSuccess?: (model: ResearchModel) => void;
 }
 
 export interface ProcessResearchResult {
@@ -58,15 +59,21 @@ export async function processResearch(
     startedAt: new Date().toISOString(),
   });
 
+  let auxiliaryCostUsd = 0;
+
   const titleGen = deps.titleGenerator ?? deps.synthesizer;
-  const titleModel: SupportedModel =
-    deps.titleGenerator !== undefined ? 'gemini-2.5-flash' : research.synthesisModel;
+  const titleModel: ResearchModel =
+    deps.titleGenerator !== undefined ? LlmModels.Gemini25Flash : research.synthesisModel;
   if (titleGen !== undefined) {
     deps.logger.info({ researchId, model: titleModel }, '[2.3.1] Starting title generation');
     const titleResult = await titleGen.generateTitle(research.prompt);
     if (titleResult.ok) {
-      await deps.researchRepo.update(researchId, { title: titleResult.value });
-      deps.logger.info({ researchId, model: titleModel }, '[2.3.2] Title generated successfully');
+      await deps.researchRepo.update(researchId, { title: titleResult.value.title });
+      auxiliaryCostUsd += titleResult.value.usage.costUsd ?? 0;
+      deps.logger.info(
+        { researchId, model: titleModel, costUsd: titleResult.value.usage.costUsd },
+        '[2.3.2] Title generated successfully'
+      );
       if (deps.reportLlmSuccess !== undefined) {
         deps.reportLlmSuccess(titleModel);
       }
@@ -84,13 +91,14 @@ export async function processResearch(
     deps.logger.info({ researchId }, '[2.4.1] Starting research context inference');
     const contextResult = await deps.contextInferrer.inferResearchContext(research.prompt);
     if (contextResult.ok) {
-      await deps.researchRepo.update(researchId, { researchContext: contextResult.value });
+      await deps.researchRepo.update(researchId, { researchContext: contextResult.value.context });
+      auxiliaryCostUsd += contextResult.value.usage.costUsd ?? 0;
       deps.logger.info(
-        { researchId, domain: contextResult.value.domain },
+        { researchId, domain: contextResult.value.context.domain, costUsd: contextResult.value.usage.costUsd },
         '[2.4.2] Research context inferred successfully'
       );
       if (deps.reportLlmSuccess !== undefined) {
-        deps.reportLlmSuccess('gemini-2.5-flash');
+        deps.reportLlmSuccess(LlmModels.Gemini25Flash);
       }
     } else {
       deps.logger.warn(
@@ -100,9 +108,17 @@ export async function processResearch(
     }
   }
 
+  if (auxiliaryCostUsd > 0) {
+    await deps.researchRepo.update(researchId, { auxiliaryCostUsd });
+    deps.logger.info(
+      { researchId, auxiliaryCostUsd },
+      '[2.4.3] Auxiliary costs saved'
+    );
+  }
+
   const pendingModels = research.llmResults
     .filter((r) => r.status === 'pending')
-    .map((r) => r.model as SupportedModel);
+    .map((r) => r.model as ResearchModel);
 
   deps.logger.info(
     {

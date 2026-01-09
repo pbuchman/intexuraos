@@ -66,7 +66,7 @@ packages/http-contracts/
 ```json
 {
   "name": "@intexuraos/http-contracts",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
@@ -129,7 +129,7 @@ packages/http-server/
 ```json
 {
   "name": "@intexuraos/http-server",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },

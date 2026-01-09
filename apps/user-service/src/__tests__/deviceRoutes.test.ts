@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeAuthTokenRepository, FakeUserSettingsRepository } from './fakes.js';
+import { FakeAuthTokenRepository, FakeUserSettingsRepository, FakeOAuthConnectionRepository } from './fakes.js';
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH0_CLIENT_ID = 'test-client-id';
@@ -295,7 +295,9 @@ describe('Device Authorization Flow', () => {
         setServices({
           authTokenRepository: fakeTokenRepo,
           userSettingsRepository: new FakeUserSettingsRepository(),
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
           auth0Client: null, // Not used in device flow (uses direct HTTP calls)
+          googleOAuthClient: null,
           encryptor: null,
           llmValidator: null,
         });

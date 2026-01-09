@@ -30,12 +30,22 @@ apps/<service-name>/
     └── routes/           # HTTP transport layer
 ```
 
+### Route Naming Convention
+
+When creating routes for your service:
+
+- **Public routes:** `/{resource-name}` (e.g., `/todos`, `/bookmarks/:id`)
+- **Internal routes:** `/internal/{resource-name}` (e.g., `/internal/todos`, `/internal/bookmarks/:id`)
+- **HTTP methods:** Use `PATCH` for partial updates, `PUT` for full replacement
+
+Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/todos`.
+
 ### 2. Create package.json
 
 ```json
 {
   "name": "@intexuraos/<service-name>",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -293,20 +303,109 @@ module "iam" {
 }
 ```
 
-### 8. Add CloudBuild Trigger
+### 8. Add Cloud Build Configuration
 
-Edit `cloudbuild/cloudbuild.yaml`, add to `_SERVICE_CONFIGS`:
+Cloud Build requires 5 changes for a new service:
+
+#### 8a. Add to Main Pipeline (`cloudbuild/cloudbuild.yaml`)
+
+Add build and deploy steps (copy pattern from existing service like `user-service`):
 
 ```yaml
-substitutions:
-  _SERVICE_CONFIGS: |
-    {
-      # ... existing services ...
-      "intexuraos-<service-name>": {
-        "path": "apps/<service-name>",
-        "dockerfile": "apps/<service-name>/Dockerfile"
-      }
-    }
+# ===== <service-name> =====
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-push-<service-name>'
+  waitFor: ['-']
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      echo "=== Building <service-name> ==="
+      docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
+      docker build \
+        --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
+        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+        -f apps/<service-name>/Dockerfile .
+      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
+      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
+  env:
+    - 'DOCKER_BUILDKIT=1'
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'deploy-<service-name>'
+  waitFor: ['build-push-<service-name>']
+  entrypoint: 'bash'
+  args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
+  env:
+    - 'COMMIT_SHA=$COMMIT_SHA'
+    - 'REGION=${_REGION}'
+    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+    - 'ENVIRONMENT=${_ENVIRONMENT}'
+```
+
+#### 8b. Create Per-Service Pipeline (`apps/<service-name>/cloudbuild.yaml`)
+
+```yaml
+# Manual trigger: Deploy <service-name> only
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
+          -f apps/<service-name>/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
+    env: ['DOCKER_BUILDKIT=1']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy'
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: '600s'
+```
+
+#### 8c. Add to Terraform Trigger List
+
+Edit `terraform/modules/cloud-build/main.tf`, add to `docker_services` local:
+
+```hcl
+locals {
+  docker_services = [
+    # ... existing services ...
+    "<service-name>",
+  ]
+}
+```
+
+#### 8d. Add to Smart Dispatch
+
+Edit `.github/scripts/smart-dispatch.mjs`, add to `SERVICES` array:
+
+```javascript
+const SERVICES = [
+  // ... existing services ...
+  '<service-name>',
+];
 ```
 
 ### 9. Create Cloud Build Deployment Script
@@ -473,7 +572,11 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] CORS enabled
 - [ ] Terraform module created
 - [ ] Service account in IAM module
-- [ ] CloudBuild trigger configured
+- [ ] Build steps added to `cloudbuild/cloudbuild.yaml`
+- [ ] Per-service `apps/<service>/cloudbuild.yaml` created
+- [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
+- [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
+- [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
 - [ ] Registered in api-docs-hub
 - [ ] Service URL secret created (post-deployment)
 - [ ] Added to `.envrc.local.example`

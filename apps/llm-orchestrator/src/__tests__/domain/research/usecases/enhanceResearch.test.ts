@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   enhanceResearch,
   type EnhanceResearchDeps,
@@ -42,18 +43,18 @@ function createCompletedResearch(overrides: Partial<Research> = {}): Research {
     title: 'Original Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         status: 'completed',
         result: 'Google result',
       },
       {
-        provider: 'openai',
-        model: 'o4-mini-deep-research',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
         status: 'completed',
         result: 'OpenAI result',
       },
@@ -81,7 +82,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'nonexistent',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -100,7 +101,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'research-1',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -118,7 +119,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -136,7 +137,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -173,7 +174,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -182,7 +183,7 @@ describe('enhanceResearch', () => {
     if (result.ok) {
       expect(result.value.id).toBe('generated-id');
       expect(result.value.sourceResearchId).toBe('source-research-id');
-      expect(result.value.selectedModels).toContain('claude-opus-4-5-20251101');
+      expect(result.value.selectedModels).toContain(LlmModels.ClaudeOpus45);
       expect(result.value.llmResults).toHaveLength(3);
     }
     expect(deps.mockRepo.save).toHaveBeenCalledOnce();
@@ -196,14 +197,14 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: 'claude-opus-4-5-20251101',
+      synthesisModel: LlmModels.ClaudeOpus45,
     };
 
     const result = await enhanceResearch(params, deps);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.synthesisModel).toBe('claude-opus-4-5-20251101');
+      expect(result.value.synthesisModel).toBe(LlmModels.ClaudeOpus45);
     }
   });
 
@@ -256,7 +257,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
+      additionalModels: [LlmModels.ClaudeOpus45],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -275,8 +276,8 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: ['claude-opus-4-5-20251101'],
-      synthesisModel: 'gemini-2.5-flash',
+      additionalModels: [LlmModels.ClaudeOpus45],
+      synthesisModel: LlmModels.Gemini25Flash,
     };
 
     const result = await enhanceResearch(params, deps);
@@ -286,8 +287,8 @@ describe('enhanceResearch', () => {
       expect.objectContaining({
         llmResults: expect.arrayContaining([
           expect.objectContaining({
-            provider: 'anthropic',
-            model: 'claude-opus-4-5-20251101',
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
           }),
         ]),
       })
@@ -298,8 +299,8 @@ describe('enhanceResearch', () => {
     const source = createCompletedResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-pro',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Pro,
           status: 'completed',
           result: 'Google result',
           inputTokens: 1000,
@@ -307,8 +308,8 @@ describe('enhanceResearch', () => {
           costUsd: 0.05,
         },
         {
-          provider: 'openai',
-          model: 'o4-mini-deep-research',
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'OpenAI result',
           inputTokens: 2000,
@@ -323,19 +324,21 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: 'claude-opus-4-5-20251101',
+      synthesisModel: LlmModels.ClaudeOpus45,
     };
 
     const result = await enhanceResearch(params, deps);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Copied results should not have token/cost data
+      // Copied results preserve token/cost data for accurate totals
       for (const llmResult of result.value.llmResults) {
-        expect(llmResult.inputTokens).toBeUndefined();
-        expect(llmResult.outputTokens).toBeUndefined();
-        expect(llmResult.costUsd).toBeUndefined();
+        expect(llmResult.inputTokens).toBeDefined();
+        expect(llmResult.outputTokens).toBeDefined();
+        expect(llmResult.costUsd).toBeDefined();
       }
+      // Source costs are tracked in sourceLlmCostUsd for aggregation
+      expect(result.value.sourceLlmCostUsd).toBe(0.2); // 0.05 + 0.15
     }
   });
 });

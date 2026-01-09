@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
@@ -15,21 +15,27 @@ import { config } from '@/config';
 
 import {
   ApiKeysSettingsPage,
+  BookmarksListPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataSourceFormPage,
   DataSourcesListPage,
+  GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
+  LlmCostsPage,
   LlmOrchestratorPage,
+  LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
+  NotesListPage,
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
   ShareTargetPage,
   SystemHealthPage,
+  TodosListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
 } from '@/pages';
@@ -88,6 +94,21 @@ function HomeRoute(): React.JSX.Element {
   return <HomePage />;
 }
 
+function NoteDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-notes?id=${id ?? ''}`} replace />;
+}
+
+function TodoDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-todos?id=${id ?? ''}`} replace />;
+}
+
+function BookmarkDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
+}
+
 function AppRoutes(): React.JSX.Element {
   return (
     <Routes>
@@ -134,10 +155,34 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/settings/calendar"
+        element={
+          <ProtectedRoute>
+            <GoogleCalendarConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings/api-keys"
         element={
           <ProtectedRoute>
             <ApiKeysSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/llm-pricing"
+        element={
+          <ProtectedRoute>
+            <LlmPricingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/usage-costs"
+        element={
+          <ProtectedRoute>
+            <LlmCostsPage />
           </ProtectedRoute>
         }
       />
@@ -237,6 +282,54 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <WhatsAppNotesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-notes"
+        element={
+          <ProtectedRoute>
+            <NotesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notes/:id"
+        element={
+          <ProtectedRoute>
+            <NoteDetailRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-todos"
+        element={
+          <ProtectedRoute>
+            <TodosListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/todos/:id"
+        element={
+          <ProtectedRoute>
+            <TodoDetailRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-bookmarks"
+        element={
+          <ProtectedRoute>
+            <BookmarksListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bookmarks/:id"
+        element={
+          <ProtectedRoute>
+            <BookmarkDetailRedirect />
           </ProtectedRoute>
         }
       />

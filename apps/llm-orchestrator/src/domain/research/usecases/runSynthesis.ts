@@ -4,6 +4,13 @@
  * Triggered when all LLMs complete OR when user confirms 'proceed' with partial failure.
  */
 
+import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
+import {
+  buildSourceMap,
+  validateSynthesisAttributions,
+  parseSections,
+  generateBreakdown,
+} from '@intexuraos/llm-common';
 import type {
   LlmSynthesisProvider,
   NotificationSender,
@@ -11,10 +18,11 @@ import type {
   ShareStoragePort,
 } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
-import type { ShareInfo } from '../models/Research.js';
+import type { ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
+import { repairAttribution } from './repairAttribution.js';
 
 export interface ShareConfig {
   shareBaseUrl: string;
@@ -123,6 +131,8 @@ export async function runSynthesis(
   });
 
   let synthesisContext = undefined;
+  let additionalCostUsd = 0;
+
   if (contextInferrer !== undefined) {
     logger?.info('[4.2.1] Starting synthesis context inference');
     const contextResult = await contextInferrer.inferSynthesisContext({
@@ -131,8 +141,11 @@ export async function runSynthesis(
       additionalSources,
     });
     if (contextResult.ok) {
-      synthesisContext = contextResult.value;
-      logger?.info('[4.2.2] Synthesis context inferred successfully');
+      synthesisContext = contextResult.value.context;
+      additionalCostUsd += contextResult.value.usage.costUsd ?? 0;
+      logger?.info(
+        `[4.2.2] Synthesis context inferred successfully (costUsd: ${String(contextResult.value.usage.costUsd)})`
+      );
     } else {
       logger?.error(
         { error: contextResult.error },
@@ -164,6 +177,50 @@ export async function runSynthesis(
 
   logger?.info(`[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
 
+  // [4.3.3] Post-process synthesis for attribution
+  logger?.info('[4.3.3] Starting attribution post-processing');
+
+  const sourceMap = buildSourceMap(reports, additionalSources);
+  let processedContent = synthesisContent;
+  let attributionStatus: AttributionStatus = 'incomplete';
+
+  const validation = validateSynthesisAttributions(synthesisContent, sourceMap);
+
+  if (validation.valid) {
+    attributionStatus = 'complete';
+    logger?.info('[4.3.3a] Attribution validation passed');
+  } else {
+    logger?.info(`[4.3.3b] Attribution validation failed: ${validation.errors.join(', ')}`);
+
+    const repairResult = await repairAttribution(synthesisContent, sourceMap, {
+      synthesizer,
+      logger,
+    });
+
+    if (repairResult.ok) {
+      const revalidation = validateSynthesisAttributions(repairResult.value.content, sourceMap);
+      if (revalidation.valid) {
+        processedContent = repairResult.value.content;
+        attributionStatus = 'repaired';
+        additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
+        logger?.info(
+          `[4.3.3c] Attribution repair succeeded (costUsd: ${String(repairResult.value.usage.costUsd)})`
+        );
+      } else {
+        additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
+        logger?.info('[4.3.3c] Attribution repair did not fix all issues');
+      }
+    } else {
+      logger?.info('[4.3.3c] Attribution repair failed');
+    }
+  }
+
+  const sections = parseSections(processedContent);
+  const breakdown = generateBreakdown(sections, sourceMap);
+  processedContent = `${processedContent}\n\n${breakdown}`;
+
+  logger?.info(`[4.3.4] Attribution status: ${attributionStatus}`);
+
   // Calculate aggregate totals from all LLM results + synthesis
   const llmTotals = research.llmResults.reduce(
     (acc, r) => ({
@@ -176,10 +233,15 @@ export async function runSynthesis(
 
   const totalInputTokens = llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0);
   const totalOutputTokens = llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0);
-  const totalCostUsd = llmTotals.costUsd + (synthesisUsage?.costUsd ?? 0);
+  const totalCostUsd =
+    llmTotals.costUsd +
+    (synthesisUsage?.costUsd ?? 0) +
+    (research.auxiliaryCostUsd ?? 0) +
+    (research.sourceLlmCostUsd ?? 0) +
+    additionalCostUsd;
 
   logger?.info(
-    `[4.3.3] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)}`
+    `[4.3.5] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)} (llm=${llmTotals.costUsd.toFixed(6)}, synth=${(synthesisUsage?.costUsd ?? 0).toFixed(6)}, aux=${(research.auxiliaryCostUsd ?? 0).toFixed(6)}, source=${(research.sourceLlmCostUsd ?? 0).toFixed(6)}, add=${additionalCostUsd.toFixed(6)})`
   );
 
   const now = new Date();
@@ -193,7 +255,7 @@ export async function runSynthesis(
     logger?.info('[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
-      synthesisContent,
+      processedContent,
       userId,
       imageApiKeys,
       research.synthesisModel,
@@ -227,7 +289,7 @@ export async function runSynthesis(
 
     const html = generateShareableHtml({
       title: research.title,
-      synthesizedResult: synthesisContent,
+      synthesizedResult: processedContent,
       shareUrl,
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
@@ -256,12 +318,13 @@ export async function runSynthesis(
   logger?.info('[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
-    synthesizedResult: synthesisContent,
+    synthesizedResult: processedContent,
     completedAt: now.toISOString(),
     totalDurationMs,
     totalInputTokens,
     totalOutputTokens,
     totalCostUsd,
+    attributionStatus,
     ...(shareInfo !== undefined && { shareInfo }),
   });
 
@@ -280,7 +343,7 @@ export async function runSynthesis(
   return { ok: true };
 }
 
-type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+type ImageModel = GPTImage1 | Gemini25FlashImage;
 
 /**
  * Select image generation model based on available API keys and synthesis model.
@@ -298,11 +361,11 @@ function selectImageModel(
   const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
 
   if (preferOpenAi) {
-    if (hasOpenAiKey) return 'gpt-image-1';
-    if (hasGoogleKey) return 'gemini-2.5-flash-image';
+    if (hasOpenAiKey) return LlmModels.GPTImage1;
+    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
   } else {
-    if (hasGoogleKey) return 'gemini-2.5-flash-image';
-    if (hasOpenAiKey) return 'gpt-image-1';
+    if (hasGoogleKey) return LlmModels.Gemini25FlashImage;
+    if (hasOpenAiKey) return LlmModels.GPTImage1;
   }
 
   return null;
@@ -316,7 +379,7 @@ async function generateCoverImage(
   synthesisModel: string | undefined,
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
 ): Promise<GeneratedImageData | null> {
-  const promptModel = 'gemini-2.5-pro';
+  const promptModel = LlmModels.Gemini25Pro;
   const imageModel = selectImageModel(imageApiKeys, synthesisModel);
 
   if (imageModel === null) {

@@ -3,6 +3,7 @@
  * Provides access to thumbnail prompt generation, image generation, and deletion.
  */
 
+import type { Gemini25Pro, GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 
@@ -37,8 +38,8 @@ export interface GeneratedImageData {
   fullSizeUrl: string;
 }
 
-export type PromptModel = 'gpt-4.1' | 'gemini-2.5-pro';
-export type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+export type PromptModel = 'gpt-4.1' | Gemini25Pro;
+export type ImageModel = GPTImage1 | Gemini25FlashImage;
 
 export interface GenerateImageOptions {
   title?: string;

@@ -9,16 +9,26 @@ import type {
   InferSynthesisContextParams,
   ResearchContext,
   SynthesisContext,
-} from '@intexuraos/common-core';
-import type { LlmError } from './llmProvider.js';
+} from '@intexuraos/llm-common';
+import type { LlmError, LlmUsage } from './llmProvider.js';
+
+export interface ResearchContextResult {
+  context: ResearchContext;
+  usage: LlmUsage;
+}
+
+export interface SynthesisContextResult {
+  context: SynthesisContext;
+  usage: LlmUsage;
+}
 
 export interface ContextInferenceProvider {
   inferResearchContext(
     userQuery: string,
     opts?: InferResearchContextOptions
-  ): Promise<Result<ResearchContext, LlmError>>;
+  ): Promise<Result<ResearchContextResult, LlmError>>;
 
   inferSynthesisContext(
     params: InferSynthesisContextParams
-  ): Promise<Result<SynthesisContext, LlmError>>;
+  ): Promise<Result<SynthesisContextResult, LlmError>>;
 }
