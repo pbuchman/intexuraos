@@ -646,6 +646,34 @@ describe('runSynthesis', () => {
         undefined
       );
     });
+
+    it('tracks cost when synthesis context inference fails but includes usage data', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn(),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          err({
+            code: 'API_ERROR',
+            message: 'Response does not match expected schema',
+            usage: { inputTokens: 6272, outputTokens: 334, costUsd: 0.002717 },
+          })
+        ),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer: mockContextInferrer,
+        logger: mockLogger,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ costUsd: 0.002717 }),
+        '[4.2.2] Synthesis context inference failed but cost tracked'
+      );
+    });
   });
 
   describe('with share storage', () => {
