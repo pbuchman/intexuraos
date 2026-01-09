@@ -813,5 +813,25 @@ describe('createPerplexityClient', () => {
 
       expect(capturedBody?.['stream']).toBeUndefined();
     });
+
+    it('handles AbortError from fetch as timeout', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      nock(API_BASE_URL).post('/chat/completions').replyWithError(abortError);
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toBe('Request timed out');
+      }
+    });
   });
 });

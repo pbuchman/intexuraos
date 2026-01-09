@@ -386,6 +386,28 @@ describe('Internal Routes', () => {
       expect(body.error.message).toBe('Failed to save image record');
     });
 
+    it('logs error but still returns 500 when both DB save and cleanup fail', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeRepo.setFailNextSave(true);
+      fakeStorage.setFailNextDelete(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to save image record');
+    });
+
     it('generates image successfully with openai model', async () => {
       fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
 
