@@ -167,6 +167,7 @@ locals {
     "bookmarks-agent",
     "app-settings-service",
     "calendar-agent",
+    "web-agent",
   ]
 }
 

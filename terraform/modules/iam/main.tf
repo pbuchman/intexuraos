@@ -113,6 +113,13 @@ resource "google_service_account" "calendar_agent" {
   description  = "Service account for calendar-agent Cloud Run deployment"
 }
 
+# Service account for web-agent
+resource "google_service_account" "web_agent" {
+  account_id   = "intexuraos-web-agent-${var.environment}"
+  display_name = "IntexuraOS Web Agent (${var.environment})"
+  description  = "Service account for web-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -247,6 +254,15 @@ resource "google_secret_manager_secret_iam_member" "calendar_agent_secrets" {
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.calendar_agent.email}"
+}
+
+# Web Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "web_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.web_agent.email}"
 }
 
 
@@ -472,4 +488,18 @@ resource "google_project_iam_member" "bookmarks_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}
+
+# Calendar Agent: Cloud Logging
+resource "google_project_iam_member" "calendar_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.calendar_agent.email}"
+}
+
+# Web Agent: Cloud Logging
+resource "google_project_iam_member" "web_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.web_agent.email}"
 }
