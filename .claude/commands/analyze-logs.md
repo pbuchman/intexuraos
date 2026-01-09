@@ -184,6 +184,65 @@ After user confirmation:
 
 ---
 
+## Phase 7: Store Resolution Trace
+
+**MANDATORY:** After resolving an issue, store a trace for future reference using claude-mem MCP.
+
+### What to Store
+
+Use `mcp__plugin_claude-mem_mcp-search__` tools to save the resolution:
+
+```
+Observation to store:
+- Type: bugfix
+- Title: [Service] [Brief issue description]
+- Content: Full resolution details including:
+  - Root cause analysis
+  - Files modified
+  - Fix applied
+  - Verification steps taken
+  - Lessons learned / prevention tips
+```
+
+### Trace Format
+
+```markdown
+## Issue: [Issue Name]
+
+**Service:** [service-name]
+**Priority:** P[0-9]
+**Detected:** [timestamp]
+**Resolved:** [timestamp]
+
+### Symptoms
+
+- [What was observed in logs]
+- [Error patterns]
+
+### Root Cause
+
+[Explanation of why this happened]
+
+### Resolution
+
+- Files changed: `path/to/file.ts`
+- Fix: [Brief description]
+
+### Prevention
+
+- [What could prevent this in future]
+- [Monitoring/alerting recommendations]
+```
+
+### Why Store Traces
+
+1. **Pattern Recognition** — Similar issues can be quickly identified
+2. **Onboarding** — New sessions have context about past incidents
+3. **Prevention** — Recurring issues become visible
+4. **Audit Trail** — Track what was fixed and when
+
+---
+
 ## Services Reference
 
 | Service                      | Cloud Run Name                          |
