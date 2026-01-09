@@ -130,11 +130,11 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       const errorRedirect = (msg: string): string =>
         `${webAppUrl}/#/settings/google-calendar?status=error&message=${encodeURIComponent(msg)}`;
 
-      if (query.error !== undefined) {
+      if (query.error !== undefined && query.error !== '') {
         return await reply.redirect(errorRedirect(query.error));
       }
 
-      if (query.code === undefined || query.state === undefined) {
+      if (query.code === undefined || query.code === '' || query.state === undefined || query.state === '') {
         return await reply.redirect(errorRedirect('Missing code or state parameter'));
       }
 

@@ -124,8 +124,15 @@ export class GoogleOAuthClientImpl implements GoogleOAuthClient {
 
       if (!response.ok) {
         const errorBody = await response.text();
+        let googleError: string | undefined;
+        try {
+          const parsed = JSON.parse(errorBody) as { error?: string };
+          googleError = parsed.error;
+        } catch {
+          // Error body is not JSON
+        }
         return err({
-          code: 'TOKEN_REFRESH_FAILED',
+          code: googleError === 'invalid_grant' ? 'INVALID_GRANT' : 'TOKEN_REFRESH_FAILED',
           message: `Token refresh failed: ${String(response.status)}`,
           details: errorBody,
         });

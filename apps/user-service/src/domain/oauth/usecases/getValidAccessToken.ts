@@ -65,10 +65,7 @@ export async function getValidAccessToken(
 
   const refreshResult = await googleOAuthClient.refreshAccessToken(connection.tokens.refreshToken);
   if (!refreshResult.ok) {
-    if (
-      refreshResult.error.code === 'TOKEN_REFRESH_FAILED' &&
-      String(refreshResult.error.details).includes('invalid_grant')
-    ) {
+    if (refreshResult.error.code === 'INVALID_GRANT') {
       await oauthConnectionRepository.deleteConnection(userId, provider);
       return err({
         code: 'CONNECTION_NOT_FOUND',
