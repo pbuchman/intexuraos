@@ -260,6 +260,7 @@ resource "google_project_service" "apis" {
     "storage.googleapis.com",
     "compute.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "calendar-json.googleapis.com",
   ])
 
   project            = var.project_id
@@ -1525,6 +1526,75 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
     google_project_service.apis,
     google_cloud_run_service_iam_member.scheduler_invokes_actions_agent,
     module.actions_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Data Insights - Snapshot Refresh
+# -----------------------------------------------------------------------------
+
+# Pub/Sub push subscription for snapshot refresh
+module "snapshot_refresh_pubsub" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "snapshot-refresh-${var.environment}"
+
+  push_endpoint              = "${module.data_insights_service.service_url}/internal/snapshots/refresh"
+  push_service_account_email = google_service_account.cloud_scheduler.email
+  push_audience              = module.data_insights_service.service_url
+
+  # Longer ack deadline for batch processing (up to 10 minutes)
+  ack_deadline_seconds = 600
+
+  publisher_service_accounts = {
+    cloud_scheduler = google_service_account.cloud_scheduler.email
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    module.data_insights_service,
+  ]
+}
+
+# Grant scheduler permission to invoke data-insights-service
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_data_insights" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.data_insights_service.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.data_insights_service]
+}
+
+# Cloud Scheduler job - triggers snapshot refresh every 15 minutes
+resource "google_cloud_scheduler_job" "refresh_snapshots" {
+  name        = "intexuraos-refresh-snapshots-${var.environment}"
+  description = "Refresh all composite feed snapshots every 15 minutes"
+  schedule    = "*/15 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  pubsub_target {
+    topic_name = module.snapshot_refresh_pubsub.topic_id
+    data       = base64encode(jsonencode({ trigger = "scheduled" }))
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.snapshot_refresh_pubsub,
+    module.data_insights_service,
   ]
 }
 

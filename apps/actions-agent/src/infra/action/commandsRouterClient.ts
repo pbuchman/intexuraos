@@ -1,6 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../../domain/ports/actionServiceClient.js';
+import type { Action } from '../../domain/models/action.js';
 import pino from 'pino';
 
 export interface CommandsRouterClientConfig {
@@ -17,6 +18,56 @@ export function createCommandsRouterClient(
   config: CommandsRouterClientConfig
 ): ActionServiceClient {
   return {
+    async getAction(actionId: string): Promise<Result<Action | null>> {
+      try {
+        logger.info(
+          {
+            actionId,
+            endpoint: `${config.baseUrl}/internal/actions/${actionId}`,
+          },
+          'Calling GET /internal/actions/:actionId to get action'
+        );
+
+        const response = await fetch(`${config.baseUrl}/internal/actions/${actionId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            logger.info({ actionId }, 'Action not found (404)');
+            return ok(null);
+          }
+          logger.error(
+            {
+              actionId,
+              httpStatus: response.status,
+              statusText: response.statusText,
+            },
+            'Failed to get action - HTTP error'
+          );
+          return err(new Error(`HTTP ${String(response.status)}: Failed to get action`));
+        }
+
+        const action = (await response.json()) as Action;
+        logger.info({ actionId, status: action.status }, 'Successfully got action');
+
+        return ok(action);
+      } catch (error) {
+        logger.error(
+          {
+            actionId,
+            error: getErrorMessage(error),
+          },
+          'Failed to get action - network error'
+        );
+        return err(new Error(`Network error: ${getErrorMessage(error)}`));
+      }
+    },
+
     async updateActionStatus(actionId: string, status: string): Promise<Result<void>> {
       try {
         logger.info(

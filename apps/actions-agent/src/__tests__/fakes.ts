@@ -42,10 +42,16 @@ import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import pino from 'pino';
 
 export class FakeActionServiceClient implements ActionServiceClient {
+  private actions = new Map<string, Action>();
   private statusUpdates = new Map<string, string>();
   private actionUpdates = new Map<string, { status: string; payload?: Record<string, unknown> }>();
   private failNext = false;
   private failError: Error | null = null;
+  private failOn: 'getAction' | 'updateActionStatus' | 'updateAction' | null = null;
+
+  setAction(action: Action): void {
+    this.actions.set(action.id, action);
+  }
 
   getStatusUpdates(): Map<string, string> {
     return this.statusUpdates;
@@ -60,8 +66,22 @@ export class FakeActionServiceClient implements ActionServiceClient {
     this.failError = error ?? null;
   }
 
+  setFailOn(operation: 'getAction' | 'updateActionStatus' | 'updateAction' | null, error?: Error): void {
+    this.failOn = operation;
+    this.failError = error ?? null;
+  }
+
+  async getAction(actionId: string): Promise<Result<Action | null>> {
+    if (this.failNext || this.failOn === 'getAction') {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    const action = this.actions.get(actionId) ?? null;
+    return ok(action);
+  }
+
   async updateActionStatus(actionId: string, status: string): Promise<Result<void>> {
-    if (this.failNext) {
+    if (this.failNext || this.failOn === 'updateActionStatus') {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
@@ -73,7 +93,7 @@ export class FakeActionServiceClient implements ActionServiceClient {
     actionId: string,
     update: { status: string; payload?: Record<string, unknown> }
   ): Promise<Result<void>> {
-    if (this.failNext) {
+    if (this.failNext || this.failOn === 'updateAction') {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }

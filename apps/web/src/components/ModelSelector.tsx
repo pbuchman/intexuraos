@@ -44,7 +44,7 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     models: [
       { id: LlmModels.Sonar, name: 'Sonar' },
       { id: LlmModels.SonarPro, name: 'Sonar Pro' },
-      { id: LlmModels.SonarDeepResearch, name: 'Deep Research' },
+      { id: LlmModels.SonarDeepResearch, name: 'Sonar Deep Research' },
     ],
   },
 ];

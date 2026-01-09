@@ -36,7 +36,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
               data: {
                 type: 'object',
                 properties: {
-                  redirectUrl: { type: 'string' },
+                  authorizationUrl: { type: 'string' },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -92,7 +92,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       }
 
       return await reply.ok({
-        redirectUrl: result.value.authorizationUrl,
+        authorizationUrl: result.value.authorizationUrl,
       });
     }
   );
@@ -126,9 +126,9 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       const query = request.query as { code?: string; state?: string; error?: string };
 
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? 'http://localhost:5173';
-      const successRedirect = `${webAppUrl}/#/settings/google-calendar?status=connected`;
+      const successRedirect = `${webAppUrl}/#/settings/calendar?oauth_success=true`;
       const errorRedirect = (msg: string): string =>
-        `${webAppUrl}/#/settings/google-calendar?status=error&message=${encodeURIComponent(msg)}`;
+        `${webAppUrl}/#/settings/calendar?oauth_error=${encodeURIComponent(msg)}`;
 
       if (query.error !== undefined && query.error !== '') {
         return await reply.redirect(errorRedirect(query.error));

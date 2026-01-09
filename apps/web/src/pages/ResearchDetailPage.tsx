@@ -168,7 +168,7 @@ interface MarkdownContentProps {
 
 function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   return (
-    <div className="prose prose-slate max-w-none">
+    <div className="prose prose-slate max-w-none overflow-x-auto">
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
         {content}
       </ReactMarkdown>
@@ -1595,7 +1595,7 @@ function CollapsibleInputContext({
           {showFull ? (
             <MarkdownContent content={ctx.content} />
           ) : (
-            <p className="break-all text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
+            <p className="break-words text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
           )}
         </div>
       ) : null}

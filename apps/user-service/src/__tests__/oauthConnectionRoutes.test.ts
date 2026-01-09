@@ -131,9 +131,9 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { redirectUrl: string } };
+      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
-      expect(body.data.redirectUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
     });
 
     it('returns 503 when Google OAuth is not configured', async () => {
@@ -186,8 +186,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
-      expect(response.headers.location).toContain('message=access_denied');
+      expect(response.headers.location).toContain('oauth_error=access_denied');
     });
 
     it('redirects with error when code is missing', async () => {
@@ -199,7 +198,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
       expect(response.headers.location).toContain('Missing%20code%20or%20state%20parameter');
     });
 
@@ -212,7 +211,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
     });
 
     it('redirects with error when Google OAuth is not configured', async () => {
@@ -235,7 +234,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
       expect(response.headers.location).toContain('not%20configured');
     });
 
@@ -249,7 +248,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=connected');
+      expect(response.headers.location).toContain('oauth_success=true');
 
       const connection = fakeOAuthRepo.getStoredConnection('user-123', 'google');
       expect(connection).toBeDefined();
@@ -267,7 +266,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
     });
 
     it('redirects with error when state is invalid', async () => {
@@ -279,7 +278,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
       expect(response.headers.location).toContain('Invalid%20OAuth%20state');
     });
 
@@ -301,7 +300,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
       expect(response.headers.location).toContain('expired');
     });
 
@@ -316,7 +315,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
     });
 
     it('redirects with error when save fails', async () => {
@@ -330,7 +329,7 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(302);
-      expect(response.headers.location).toContain('status=error');
+      expect(response.headers.location).toContain('oauth_error=');
     });
   });
 
