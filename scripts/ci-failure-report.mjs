@@ -145,7 +145,9 @@ function formatMarkdownReport(stats, firstRunOnly, days) {
   lines.push(`| Total CI Runs | ${stats.totalRuns} |`);
   lines.push(`| Failed Runs | ${stats.failedRuns} |`);
   lines.push(`| Total Failures | ${stats.totalFailures} |`);
-  lines.push(`| Failure Rate | ${stats.totalRuns > 0 ? ((stats.failedRuns / stats.totalRuns) * 100).toFixed(1) : 0}% |`);
+  lines.push(
+    `| Failure Rate | ${stats.totalRuns > 0 ? ((stats.failedRuns / stats.totalRuns) * 100).toFixed(1) : 0}% |`
+  );
   lines.push(``);
 
   if (stats.topCodes.length === 0) {
@@ -161,7 +163,7 @@ function formatMarkdownReport(stats, firstRunOnly, days) {
     const entry = stats.topCodes[i];
     const example = entry.example?.snippet
       ? `\`${entry.example.snippet.slice(0, 50)}${entry.example.snippet.length > 50 ? '...' : ''}\``
-      : entry.example?.message?.slice(0, 50) ?? '-';
+      : (entry.example?.message?.slice(0, 50) ?? '-');
     lines.push(`| ${i + 1} | ${entry.type} | ${entry.code} | ${entry.count} | ${example} |`);
   }
   lines.push(``);
@@ -195,7 +197,9 @@ function formatMarkdownReport(stats, firstRunOnly, days) {
   }
 
   lines.push(`## Suggested CLAUDE.md Additions\n`);
-  lines.push(`Based on the most frequent failures, consider adding these to the Code Smells table:\n`);
+  lines.push(
+    `Based on the most frequent failures, consider adding these to the Code Smells table:\n`
+  );
   lines.push(`| Smell | ❌ Wrong | ✅ Fix |`);
   lines.push(`|-------|----------|--------|`);
 

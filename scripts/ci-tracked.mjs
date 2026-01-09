@@ -74,11 +74,14 @@ function getCodeSnippet(filePath, line, contextLines = 2) {
     const start = Math.max(0, lineIndex - contextLines);
     const end = Math.min(lines.length - 1, lineIndex + contextLines);
 
-    const snippet = lines.slice(start, end + 1).map((l, i) => {
-      const lineNum = start + i + 1;
-      const marker = lineNum === line ? '>' : ' ';
-      return `${marker}${lineNum}: ${l}`;
-    }).join('\n');
+    const snippet = lines
+      .slice(start, end + 1)
+      .map((l, i) => {
+        const lineNum = start + i + 1;
+        const marker = lineNum === line ? '>' : ' ';
+        return `${marker}${lineNum}: ${l}`;
+      })
+      .join('\n');
 
     return {
       targetLine: lines[lineIndex]?.trim() ?? null,

@@ -11,6 +11,7 @@ This directory stores CI failure data for LLM learning purposes.
 ## File Naming
 
 Files are named `{project}-{branch}.jsonl`:
+
 - `intexuraos-2-development.jsonl` - intexuraos-2 project, development branch
 - `intexuraos-2-feature-xyz.jsonl` - intexuraos-2 project, feature-xyz branch
 
