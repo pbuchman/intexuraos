@@ -36,6 +36,11 @@ import type {
   ResearchContextResult,
   SynthesisContextResult,
 } from '../domain/research/ports/contextInference.js';
+import type {
+  InputValidationProvider,
+  ValidationResult,
+  ImprovementResult,
+} from '../infra/llm/InputValidationAdapter.js';
 import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
@@ -602,6 +607,27 @@ export function createFailingContextInferrerWithUsage(
       _params: InferSynthesisContextParams
     ): Promise<Result<SynthesisContextResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage, usage });
+    },
+  };
+}
+
+/**
+ * Create a fake InputValidationProvider for testing.
+ */
+export function createFakeInputValidator(): InputValidationProvider {
+  return {
+    async validateInput(_prompt: string): Promise<Result<ValidationResult, LlmError>> {
+      return ok({
+        quality: 2,
+        reason: 'Test quality validation',
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      });
+    },
+    async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
+      return ok({
+        improvedPrompt: `Improved: ${prompt}`,
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      });
     },
   };
 }

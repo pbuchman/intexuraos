@@ -10,12 +10,9 @@ export interface InputImprovementPromptInput {
   prompt: string;
 }
 
-export interface InputImprovementPromptDeps extends PromptDeps {}
+export type InputImprovementPromptDeps = PromptDeps;
 
-export const inputImprovementPrompt: PromptBuilder<
-  InputImprovementPromptInput,
-  InputImprovementPromptDeps
-> = {
+export const inputImprovementPrompt: PromptBuilder<InputImprovementPromptInput> = {
   name: 'input-improvement',
   description: 'Improves a research prompt while preserving intent and language',
 

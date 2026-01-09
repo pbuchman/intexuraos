@@ -10,12 +10,9 @@ export interface InputQualityPromptInput {
   prompt: string;
 }
 
-export interface InputQualityPromptDeps extends PromptDeps {}
+export type InputQualityPromptDeps = PromptDeps;
 
-export const inputQualityPrompt: PromptBuilder<
-  InputQualityPromptInput,
-  InputQualityPromptDeps
-> = {
+export const inputQualityPrompt: PromptBuilder<InputQualityPromptInput> = {
   name: 'input-quality-validation',
   description: 'Validates research prompt quality and returns quality score with reason',
 

@@ -283,9 +283,8 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       if (isEditMode) {
         void performAutosave();
       }
-    } catch (err) {
-      // Silent failure per spec - just log to console
-      console.error('Failed to improve input:', err);
+    } catch {
+      // Silent failure per spec
     } finally {
       setImproving(false);
     }
@@ -377,7 +376,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setValidationWarning(null);
 
     // Validate input quality if Google API key is configured
-    const hasGoogleKey = keys !== null && keys['google'] !== null;
+    const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
     if (hasGoogleKey) {
       setValidating(true);
       try {
@@ -400,9 +399,8 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         }
 
         // GOOD (quality === 2) - proceed with submission
-      } catch (err) {
+      } catch {
         // Silent degradation - proceed with original prompt on LLM failure
-        console.error('Validation failed, proceeding anyway:', err);
       } finally {
         setValidating(false);
       }
@@ -604,12 +602,12 @@ export function LlmOrchestratorPage(): React.JSX.Element {
                   improving ||
                   submitting ||
                   savingDraft ||
-                  keys === null ||
-                  keys['google'] === null
+                  keys?.google === null ||
+                  keys?.google === undefined
                 }
                 isLoading={improving}
                 title={
-                  keys === null || keys['google'] === null
+                  keys?.google === null || keys?.google === undefined
                     ? 'Google API key required'
                     : prompt.trim().length === 0
                       ? 'Enter a prompt first'
