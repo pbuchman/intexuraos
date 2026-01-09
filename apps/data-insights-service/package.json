@@ -22,6 +22,7 @@
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@intexuraos/infra-gemini": "*",
+    "@intexuraos/llm-common": "*",
     "@intexuraos/llm-contract": "*",
     "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
