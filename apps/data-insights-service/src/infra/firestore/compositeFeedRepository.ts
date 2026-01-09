@@ -122,6 +122,23 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
     }
   }
 
+  async listAll(): Promise<Result<CompositeFeed[], string>> {
+    try {
+      const db = getFirestore();
+      const snapshot = await db.collection(COLLECTION_NAME).orderBy('createdAt', 'desc').get();
+
+      const feeds = snapshot.docs.map((doc) =>
+        toCompositeFeed(doc.id, doc.data() as CompositeFeedDoc)
+      );
+
+      return ok(feeds);
+    } catch (error) {
+      return err(
+        `Failed to list all composite feeds: ${getErrorMessage(error, 'Unknown Firestore error')}`
+      );
+    }
+  }
+
   async update(
     id: string,
     userId: string,

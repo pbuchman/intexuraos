@@ -34,6 +34,12 @@ export interface CompositeFeedRepository {
   listByUserId(userId: string): Promise<Result<CompositeFeed[], string>>;
 
   /**
+   * List ALL composite feeds across all users.
+   * Used by scheduler for batch refresh operations.
+   */
+  listAll(): Promise<Result<CompositeFeed[], string>>;
+
+  /**
    * Update an existing composite feed.
    * Only updates if owned by the specified user.
    */
