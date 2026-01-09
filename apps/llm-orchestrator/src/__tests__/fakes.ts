@@ -582,3 +582,26 @@ export function createFailingContextInferrer(
     },
   };
 }
+
+/**
+ * Create a fake ContextInferenceProvider that fails but includes usage data
+ * (simulating LLM call success but parsing failure).
+ */
+export function createFailingContextInferrerWithUsage(
+  errorMessage = 'Test parsing failure',
+  usage = { inputTokens: 1000, outputTokens: 500, costUsd: 0.005 }
+): ContextInferenceProvider {
+  return {
+    async inferResearchContext(
+      _userQuery: string,
+      _opts?: InferResearchContextOptions
+    ): Promise<Result<ResearchContextResult, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage, usage });
+    },
+    async inferSynthesisContext(
+      _params: InferSynthesisContextParams
+    ): Promise<Result<SynthesisContextResult, LlmError>> {
+      return err({ code: 'API_ERROR', message: errorMessage, usage });
+    },
+  };
+}
