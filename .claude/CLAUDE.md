@@ -152,15 +152,15 @@ Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards
 
 ### File Locations
 
-| Purpose                     | File                                         |
-| --------------------------- | -------------------------------------------- |
-| CI workflow                 | `.github/workflows/ci.yml`                   |
-| Deploy workflow             | `.github/workflows/deploy.yml`               |
-| Smart dispatch              | `.github/scripts/smart-dispatch.mjs`         |
-| Main pipeline (all)         | `cloudbuild/cloudbuild.yaml`                 |
-| Per-service pipeline        | `apps/<service>/cloudbuild.yaml`             |
-| Deploy scripts              | `cloudbuild/scripts/deploy-<service>.sh`     |
-| Trigger definitions (TF)    | `terraform/modules/cloud-build/main.tf`      |
+| Purpose                  | File                                     |
+| ------------------------ | ---------------------------------------- |
+| CI workflow              | `.github/workflows/ci.yml`               |
+| Deploy workflow          | `.github/workflows/deploy.yml`           |
+| Smart dispatch           | `.github/scripts/smart-dispatch.mjs`     |
+| Main pipeline (all)      | `cloudbuild/cloudbuild.yaml`             |
+| Per-service pipeline     | `apps/<service>/cloudbuild.yaml`         |
+| Deploy scripts           | `cloudbuild/scripts/deploy-<service>.sh` |
+| Trigger definitions (TF) | `terraform/modules/cloud-build/main.tf`  |
 
 ### Adding a New Service to Cloud Build
 
@@ -253,7 +253,6 @@ Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with t
 | Service          | Method | Path                         | Change               |
 | ---------------- | ------ | ---------------------------- | -------------------- |
 | whatsapp-service | POST   | `/internal/.../send-message` | Remove `phoneNumber` |
-
 
 <claude-mem-context>
 # Recent Activity
