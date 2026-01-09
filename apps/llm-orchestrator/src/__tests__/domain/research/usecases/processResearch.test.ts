@@ -514,5 +514,42 @@ describe('processResearch', () => {
         researchContext: mockResearchContext,
       });
     });
+
+    it('tracks cost when context inference fails but includes usage data', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockContextInferrer = {
+        inferResearchContext: vi.fn().mockResolvedValue(
+          err({
+            code: 'API_ERROR',
+            message: 'Response does not match expected schema',
+            usage: { inputTokens: 1090, outputTokens: 1020, costUsd: 0.002877 },
+          })
+        ),
+        inferSynthesisContext: vi.fn(),
+      };
+
+      const depsWithInferrer: ProcessResearchDeps = {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+        logger: mockLogger,
+        contextInferrer: mockContextInferrer,
+      };
+
+      await processResearch('research-1', depsWithInferrer);
+
+      expect(mockContextInferrer.inferResearchContext).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          researchId: 'research-1',
+          costUsd: 0.002877,
+        }),
+        '[2.4.2] Context inference failed but cost tracked'
+      );
+      expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+        auxiliaryCostUsd: 0.002877,
+      });
+    });
   });
 });
