@@ -166,6 +166,7 @@ locals {
     "todos-agent",
     "bookmarks-agent",
     "app-settings-service",
+    "calendar-agent",
   ]
 }
 

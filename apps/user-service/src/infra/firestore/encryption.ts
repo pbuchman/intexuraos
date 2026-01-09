@@ -12,20 +12,26 @@ const IV_LENGTH = 16; // 128 bits
 /**
  * Get encryption key from environment.
  * Falls back to a deterministic key for local dev (NOT SECURE).
+ * Throws in production if key is missing or invalid.
  */
 function getEncryptionKey(): Buffer {
   const keyEnv = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'];
+  const isProduction = process.env['NODE_ENV'] === 'production';
 
   if (keyEnv !== undefined && keyEnv !== '') {
-    // Key should be base64-encoded 32-byte key
     const key = Buffer.from(keyEnv, 'base64');
     if (key.length === KEY_LENGTH) {
       return key;
     }
+    if (isProduction) {
+      throw new Error(
+        `Invalid INTEXURAOS_TOKEN_ENCRYPTION_KEY: expected ${String(KEY_LENGTH)} bytes, got ${String(key.length)}`
+      );
+    }
+  } else if (isProduction) {
+    throw new Error('INTEXURAOS_TOKEN_ENCRYPTION_KEY is required in production');
   }
 
-  // Development fallback: deterministic key (NOT SECURE FOR PRODUCTION)
-  // This allows local dev without setting up encryption keys
   const devKey = Buffer.alloc(KEY_LENGTH);
   devKey.write('intexuraos-dev-key-not-for-production');
   return devKey;

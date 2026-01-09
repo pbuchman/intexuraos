@@ -64,6 +64,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL',
     displayName: 'Bookmarks Agent API',
   },
+  {
+    key: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
+    displayName: 'Calendar Agent API',
+  },
 ];
 
 /**

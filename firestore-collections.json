@@ -46,6 +46,10 @@
       "owner": "user-service",
       "description": "Auth0 refresh tokens (AES-256-GCM encrypted)"
     },
+    "oauth_connections": {
+      "owner": "user-service",
+      "description": "Third-party OAuth tokens (Google, Microsoft) - AES-256-GCM encrypted"
+    },
     "researches": {
       "owner": "llm-orchestrator",
       "description": "LLM research queries, responses, and synthesized results"

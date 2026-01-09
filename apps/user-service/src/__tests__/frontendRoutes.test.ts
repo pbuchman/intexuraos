@@ -226,7 +226,11 @@ describe('Frontend Auth Routes', () => {
         process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         const { setServices, resetServices } = await import('../services.js');
-        const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');
+        const {
+          FakeAuthTokenRepository,
+          FakeOAuthConnectionRepository,
+          FakeUserSettingsRepository,
+        } = await import('./fakes.js');
 
         const fakeTokenRepo = new FakeAuthTokenRepository();
         fakeTokenRepo.setThrowOnDeleteTokens(true);
@@ -236,6 +240,8 @@ describe('Frontend Auth Routes', () => {
           auth0Client: null,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
 
         app = await buildServer();
@@ -370,7 +376,11 @@ describe('Frontend Auth Routes', () => {
         process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
 
         const { setServices } = await import('../services.js');
-        const { FakeAuthTokenRepository, FakeUserSettingsRepository } = await import('./fakes.js');
+        const {
+          FakeAuthTokenRepository,
+          FakeOAuthConnectionRepository,
+          FakeUserSettingsRepository,
+        } = await import('./fakes.js');
 
         setServices({
           authTokenRepository: new FakeAuthTokenRepository(),
@@ -378,6 +388,8 @@ describe('Frontend Auth Routes', () => {
           auth0Client: null,
           encryptor: null,
           llmValidator: null,
+          oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+          googleOAuthClient: null,
         });
       });
 
@@ -459,8 +471,11 @@ describe('Frontend Auth Routes', () => {
         { timeout: 20000 },
         async () => {
           const { setServices, resetServices } = await import('../services.js');
-          const { FakeAuthTokenRepository, FakeUserSettingsRepository } =
-            await import('./fakes.js');
+          const {
+            FakeAuthTokenRepository,
+            FakeOAuthConnectionRepository,
+            FakeUserSettingsRepository,
+          } = await import('./fakes.js');
 
           const fakeTokenRepo = new FakeAuthTokenRepository();
           fakeTokenRepo.setThrowOnHasRefreshToken(true);
@@ -470,6 +485,8 @@ describe('Frontend Auth Routes', () => {
             auth0Client: null,
             encryptor: null,
             llmValidator: null,
+            oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+            googleOAuthClient: null,
           });
 
           app = await buildServer();
