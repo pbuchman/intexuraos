@@ -7,6 +7,7 @@ import {
   FakeCompositeFeedRepository,
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
+  FakeSnapshotRepository,
 } from './fakes.js';
 
 vi.mock('@intexuraos/common-http', async () => {
@@ -30,6 +31,7 @@ describe('dataSourceRoutes', () => {
   let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
   let fakeFeedNameService: FakeFeedNameGenerationService;
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
+  let fakeSnapshotRepo: FakeSnapshotRepository;
 
   beforeEach(() => {
     fakeRepo = new FakeDataSourceRepository();
@@ -37,12 +39,14 @@ describe('dataSourceRoutes', () => {
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
     fakeFeedNameService = new FakeFeedNameGenerationService();
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
+    fakeSnapshotRepo = new FakeSnapshotRepository();
     setServices({
       dataSourceRepository: fakeRepo,
       titleGenerationService: fakeTitleService,
       compositeFeedRepository: fakeCompositeFeedRepo,
       feedNameGenerationService: fakeFeedNameService,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      snapshotRepository: fakeSnapshotRepo,
     });
   });
 

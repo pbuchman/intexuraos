@@ -26,6 +26,9 @@ import type {
   MobileNotificationItem,
   NotificationFilterConfig,
 } from '../domain/compositeFeed/index.js';
+import type { DataInsightSnapshot, SnapshotRepository } from '../domain/snapshot/index.js';
+import type { CompositeFeedData } from '../domain/compositeFeed/schemas/index.js';
+import { SNAPSHOT_TTL_MS } from '../domain/snapshot/models/index.js';
 
 /**
  * Fake DataSource repository for testing.
@@ -281,6 +284,19 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
     return Promise.resolve(ok(feeds));
   }
 
+  listAll(): Promise<Result<CompositeFeed[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return Promise.resolve(err('Simulated list all failure'));
+    }
+
+    const feeds = Array.from(this.feeds.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
+
+    return Promise.resolve(ok(feeds));
+  }
+
   update(
     id: string,
     userId: string,
@@ -412,5 +428,115 @@ export class FakeMobileNotificationsClient implements MobileNotificationsClient 
       return Promise.resolve(err(error));
     }
     return Promise.resolve(ok(this.notifications));
+  }
+}
+
+/**
+ * Fake Snapshot repository for testing.
+ */
+export class FakeSnapshotRepository implements SnapshotRepository {
+  private snapshots = new Map<string, DataInsightSnapshot>();
+  private shouldFailGet = false;
+  private shouldFailUpsert = false;
+  private shouldFailDelete = false;
+  private shouldFailList = false;
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextUpsert(fail: boolean): void {
+    this.shouldFailUpsert = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  setFailNextList(fail: boolean): void {
+    this.shouldFailList = fail;
+  }
+
+  clear(): void {
+    this.snapshots.clear();
+  }
+
+  getByFeedId(feedId: string, userId: string): Promise<Result<DataInsightSnapshot | null, string>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return Promise.resolve(err('Simulated get failure'));
+    }
+
+    const snapshot = this.snapshots.get(feedId);
+    if (snapshot === undefined || snapshot.userId !== userId) {
+      return Promise.resolve(ok(null));
+    }
+
+    return Promise.resolve(ok(snapshot));
+  }
+
+  upsert(
+    feedId: string,
+    userId: string,
+    feedName: string,
+    data: CompositeFeedData
+  ): Promise<Result<DataInsightSnapshot, string>> {
+    if (this.shouldFailUpsert) {
+      this.shouldFailUpsert = false;
+      return Promise.resolve(err('Simulated upsert failure'));
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + SNAPSHOT_TTL_MS);
+
+    const snapshot: DataInsightSnapshot = {
+      id: feedId,
+      userId,
+      feedId,
+      feedName,
+      data,
+      generatedAt: now,
+      expiresAt,
+    };
+
+    this.snapshots.set(feedId, snapshot);
+    return Promise.resolve(ok(snapshot));
+  }
+
+  delete(feedId: string, userId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err('Simulated delete failure'));
+    }
+
+    const snapshot = this.snapshots.get(feedId);
+    if (snapshot !== undefined && snapshot.userId === userId) {
+      this.snapshots.delete(feedId);
+    }
+
+    return Promise.resolve(ok(undefined));
+  }
+
+  deleteByFeedId(feedId: string): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return Promise.resolve(err('Simulated delete by feed ID failure'));
+    }
+
+    this.snapshots.delete(feedId);
+    return Promise.resolve(ok(undefined));
+  }
+
+  listByUserId(userId: string): Promise<Result<DataInsightSnapshot[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return Promise.resolve(err('Simulated list failure'));
+    }
+
+    const snapshots = Array.from(this.snapshots.values())
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
+
+    return Promise.resolve(ok(snapshots));
   }
 }
