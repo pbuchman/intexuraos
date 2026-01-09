@@ -152,6 +152,46 @@ describe('generateShareableHtml', () => {
 
       expect(html).not.toContain('Individual Provider Reports');
     });
+
+    it('renders sources section when LLM result has sources', () => {
+      const html = generateShareableHtml({
+        ...baseInput,
+        llmResults: [
+          {
+            provider: LlmProviders.Perplexity,
+            model: LlmModels.SonarPro,
+            status: 'completed',
+            result: 'Research result with citations',
+            sources: [
+              'https://example.com/source1',
+              'https://example.com/source2',
+            ],
+          },
+        ],
+      });
+
+      expect(html).toContain('class="sources"');
+      expect(html).toContain('<h4>Sources</h4>');
+      expect(html).toContain('https://example.com/source1');
+      expect(html).toContain('https://example.com/source2');
+    });
+
+    it('does not render sources when sources array is empty', () => {
+      const html = generateShareableHtml({
+        ...baseInput,
+        llmResults: [
+          {
+            provider: LlmProviders.Perplexity,
+            model: LlmModels.SonarPro,
+            status: 'completed',
+            result: 'Research result without citations',
+            sources: [],
+          },
+        ],
+      });
+
+      expect(html).not.toContain('class="sources"');
+    });
   });
 
   describe('inputContexts section', () => {
