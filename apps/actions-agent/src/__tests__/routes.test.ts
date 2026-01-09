@@ -319,6 +319,39 @@ describe('Research Agent Routes', () => {
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toContain('Failed to update action status');
     });
+
+    it('returns 400 for unsupported action type', async () => {
+      const event = {
+        type: 'action.created',
+        actionId: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        actionType: 'unknown_type',
+        title: 'Test Action',
+        payload: { prompt: 'test', confidence: 0.9 },
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/unknown_type',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'pubsub-msg-unsupported',
+            publishTime: '2025-01-01T12:00:00.000Z',
+          },
+          subscription: 'projects/test/subscriptions/actions-unknown',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unsupported action type: unknown_type');
+    });
   });
 
   describe('POST /internal/actions (action creation endpoint)', () => {

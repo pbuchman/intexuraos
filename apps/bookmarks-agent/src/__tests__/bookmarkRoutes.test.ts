@@ -331,6 +331,17 @@ describe('Bookmark Routes', () => {
       expect(body.data.title).toBe('Updated Title');
     });
 
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/bookmarks/bookmark-123',
+        headers: { 'content-type': 'application/json' },
+        payload: { title: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 404 for non-existent bookmark', async () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -425,6 +436,15 @@ describe('Bookmark Routes', () => {
       expect(ctx.bookmarkRepository.getAll()).toHaveLength(0);
     });
 
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/bookmarks/bookmark-123',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 404 for non-existent bookmark', async () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -506,6 +526,15 @@ describe('Bookmark Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.archived).toBe(true);
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks/bookmark-123/archive',
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns 404 for non-existent bookmark', async () => {
@@ -593,6 +622,15 @@ describe('Bookmark Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.archived).toBe(false);
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks/bookmark-123/unarchive',
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns 404 for non-existent bookmark', async () => {
