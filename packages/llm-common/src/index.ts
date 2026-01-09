@@ -29,6 +29,13 @@ export {
   type CommandClassifierPromptDeps,
 } from './classification/index.js';
 
+// Image prompts (thumbnail generation)
+export {
+  thumbnailPrompt,
+  type ThumbnailPromptInput,
+  type ThumbnailPromptDeps,
+} from './image/index.js';
+
 // Research prompt builder
 export { buildResearchPrompt } from './researchPrompt.js';
 
