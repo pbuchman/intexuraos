@@ -431,6 +431,61 @@ describe('dataSourceRoutes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('returns 409 when data source is used by composite feeds', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeRepo.create('user-123', {
+        title: 'Test',
+        content: 'Content',
+      });
+      const dataSource = createResult.ok ? createResult.value : null;
+
+      fakeCompositeFeedRepo.addFeed({
+        id: 'cf-1',
+        userId: 'user-123',
+        name: 'Test Feed',
+        purpose: 'Testing',
+        staticSourceIds: [dataSource?.id ?? 'missing'],
+        notificationFilters: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/data-sources/${dataSource?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('Test Feed');
+    });
+
+    it('handles findByStaticSourceId errors', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeRepo.create('user-123', {
+        title: 'Test',
+        content: 'Content',
+      });
+      const dataSource = createResult.ok ? createResult.value : null;
+
+      fakeCompositeFeedRepo.setFailNextFindBySource(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/data-sources/${dataSource?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+    });
   });
 
   describe('POST /data-sources/generate-title', () => {
