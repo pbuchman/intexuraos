@@ -14,6 +14,7 @@ import {
   type SynthesisContext,
 } from '@intexuraos/llm-common';
 import type {
+  LabelGenerateResult,
   LlmError,
   LlmPricing,
   LlmProvider,
@@ -27,9 +28,14 @@ import type {
   RepositoryError,
   Research,
   ResearchRepository,
+  TitleGenerateResult,
   TitleGenerator,
 } from '../domain/research/index.js';
-import type { ContextInferenceProvider } from '../domain/research/ports/contextInference.js';
+import type {
+  ContextInferenceProvider,
+  ResearchContextResult,
+  SynthesisContextResult,
+} from '../domain/research/ports/contextInference.js';
 import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
@@ -350,8 +356,8 @@ export function createFakeSynthesizer(
     ): Promise<Result<LlmSynthesisResult, LlmError>> {
       return ok({ content: synthesisResult });
     },
-    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
-      return ok(titleResult);
+    async generateTitle(_prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
+      return ok({ title: titleResult, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } });
     },
   };
 }
@@ -371,7 +377,7 @@ export function createFailingSynthesizer(
     ): Promise<Result<LlmSynthesisResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
-    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
+    async generateTitle(_prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
   };
@@ -385,11 +391,11 @@ export function createFakeTitleGenerator(
   contextLabel = 'Generated Label'
 ): TitleGenerator {
   return {
-    async generateTitle(_prompt: string): Promise<Result<string, LlmError>> {
-      return ok(title);
+    async generateTitle(_prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
+      return ok({ title, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } });
     },
-    async generateContextLabel(_content: string): Promise<Result<string, LlmError>> {
-      return ok(contextLabel);
+    async generateContextLabel(_content: string): Promise<Result<LabelGenerateResult, LlmError>> {
+      return ok({ label: contextLabel, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } });
     },
   };
 }
@@ -539,13 +545,19 @@ export function createFakeContextInferrer(): ContextInferenceProvider {
     async inferResearchContext(
       _userQuery: string,
       _opts?: InferResearchContextOptions
-    ): Promise<Result<ResearchContext, LlmError>> {
-      return ok(defaultResearchContext);
+    ): Promise<Result<ResearchContextResult, LlmError>> {
+      return ok({
+        context: defaultResearchContext,
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      });
     },
     async inferSynthesisContext(
       _params: InferSynthesisContextParams
-    ): Promise<Result<SynthesisContext, LlmError>> {
-      return ok(defaultSynthesisContext);
+    ): Promise<Result<SynthesisContextResult, LlmError>> {
+      return ok({
+        context: defaultSynthesisContext,
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      });
     },
   };
 }
@@ -560,12 +572,12 @@ export function createFailingContextInferrer(
     async inferResearchContext(
       _userQuery: string,
       _opts?: InferResearchContextOptions
-    ): Promise<Result<ResearchContext, LlmError>> {
+    ): Promise<Result<ResearchContextResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
     async inferSynthesisContext(
       _params: InferSynthesisContextParams
-    ): Promise<Result<SynthesisContext, LlmError>> {
+    ): Promise<Result<SynthesisContextResult, LlmError>> {
       return err({ code: 'API_ERROR', message: errorMessage });
     },
   };

@@ -40,8 +40,12 @@ function createMockDeps(): RunSynthesisDeps & {
   };
 
   const mockSynthesizer = {
-    synthesize: vi.fn().mockResolvedValue(ok({ content: 'Synthesized result' })),
-    generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    synthesize: vi.fn().mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 } })
+    ),
+    generateTitle: vi.fn().mockResolvedValue(
+      ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    ),
   };
 
   const mockNotificationSender = {
@@ -252,14 +256,14 @@ describe('runSynthesis', () => {
     const result = await runSynthesis('research-1', deps);
 
     expect(result).toEqual({ ok: true });
-    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+    expect(deps.mockRepo.update).toHaveBeenNthCalledWith(2, 'research-1', {
       status: 'completed',
       synthesizedResult: expect.stringContaining('Synthesized result'),
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalCostUsd: 0,
+      totalInputTokens: 500,
+      totalOutputTokens: 200,
+      totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
       attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
     });
   });
@@ -545,7 +549,9 @@ describe('runSynthesis', () => {
 
       const mockContextInferrer = {
         inferResearchContext: vi.fn(),
-        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({ context: mockSynthesisContext, usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.003 } })
+        ),
       };
 
       await runSynthesis('research-1', {
@@ -563,7 +569,7 @@ describe('runSynthesis', () => {
         additionalSources: undefined,
       });
       expect(mockLogger.info).toHaveBeenCalledWith(
-        '[4.2.2] Synthesis context inferred successfully'
+        '[4.2.2] Synthesis context inferred successfully (costUsd: 0.003)'
       );
     });
 
@@ -573,7 +579,9 @@ describe('runSynthesis', () => {
 
       const mockContextInferrer = {
         inferResearchContext: vi.fn(),
-        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({ context: mockSynthesisContext, usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.003 } })
+        ),
       };
 
       await runSynthesis('research-1', {
@@ -694,9 +702,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.objectContaining({
           shareToken: expect.any(String),
           slug: 'test-research',
@@ -756,9 +764,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
       });
     });
 
@@ -811,9 +819,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
         }),
@@ -920,9 +928,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -961,9 +969,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -1000,9 +1008,9 @@ describe('runSynthesis', () => {
         attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),

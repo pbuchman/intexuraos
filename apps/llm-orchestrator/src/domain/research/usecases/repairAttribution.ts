@@ -5,11 +5,16 @@
 
 import { type Result, ok, err } from '@intexuraos/common-core';
 import type { SourceMapItem } from '@intexuraos/llm-common';
-import type { LlmSynthesisProvider } from '../ports/llmProvider.js';
+import type { LlmSynthesisProvider, LlmUsage } from '../ports/llmProvider.js';
 
 export interface RepairAttributionDeps {
   synthesizer: LlmSynthesisProvider;
   logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void } | undefined;
+}
+
+export interface RepairAttributionResult {
+  content: string;
+  usage: LlmUsage;
 }
 
 function buildRepairPrompt(rawContent: string, sourceMap: readonly SourceMapItem[]): string {
@@ -38,7 +43,7 @@ export async function repairAttribution(
   rawContent: string,
   sourceMap: readonly SourceMapItem[],
   deps: RepairAttributionDeps
-): Promise<Result<string>> {
+): Promise<Result<RepairAttributionResult>> {
   const { synthesizer, logger } = deps;
 
   if (sourceMap.length === 0) {
@@ -59,5 +64,8 @@ export async function repairAttribution(
   }
 
   logger?.info('Attribution repair completed');
-  return ok(result.value.content);
+  return ok({
+    content: result.value.content,
+    usage: result.value.usage ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+  });
 }

@@ -187,7 +187,8 @@ describe('GeminiAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated Title');
+        expect(result.value.title).toBe('Generated Title');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a short, concise title')
@@ -222,7 +223,8 @@ describe('GeminiAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Context label');
+        expect(result.value.label).toBe('Context label');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a very short label')

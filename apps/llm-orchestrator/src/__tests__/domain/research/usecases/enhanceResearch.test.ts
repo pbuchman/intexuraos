@@ -331,12 +331,14 @@ describe('enhanceResearch', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Copied results should not have token/cost data
+      // Copied results preserve token/cost data for accurate totals
       for (const llmResult of result.value.llmResults) {
-        expect(llmResult.inputTokens).toBeUndefined();
-        expect(llmResult.outputTokens).toBeUndefined();
-        expect(llmResult.costUsd).toBeUndefined();
+        expect(llmResult.inputTokens).toBeDefined();
+        expect(llmResult.outputTokens).toBeDefined();
+        expect(llmResult.costUsd).toBeDefined();
       }
+      // Source costs are tracked in sourceLlmCostUsd for aggregation
+      expect(result.value.sourceLlmCostUsd).toBe(0.2); // 0.05 + 0.15
     }
   });
 });

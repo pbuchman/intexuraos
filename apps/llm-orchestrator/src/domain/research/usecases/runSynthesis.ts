@@ -131,6 +131,8 @@ export async function runSynthesis(
   });
 
   let synthesisContext = undefined;
+  let additionalCostUsd = 0;
+
   if (contextInferrer !== undefined) {
     logger?.info('[4.2.1] Starting synthesis context inference');
     const contextResult = await contextInferrer.inferSynthesisContext({
@@ -139,8 +141,11 @@ export async function runSynthesis(
       additionalSources,
     });
     if (contextResult.ok) {
-      synthesisContext = contextResult.value;
-      logger?.info('[4.2.2] Synthesis context inferred successfully');
+      synthesisContext = contextResult.value.context;
+      additionalCostUsd += contextResult.value.usage.costUsd ?? 0;
+      logger?.info(
+        `[4.2.2] Synthesis context inferred successfully (costUsd: ${String(contextResult.value.usage.costUsd)})`
+      );
     } else {
       logger?.error(
         { error: contextResult.error },
@@ -193,12 +198,16 @@ export async function runSynthesis(
     });
 
     if (repairResult.ok) {
-      const revalidation = validateSynthesisAttributions(repairResult.value, sourceMap);
+      const revalidation = validateSynthesisAttributions(repairResult.value.content, sourceMap);
       if (revalidation.valid) {
-        processedContent = repairResult.value;
+        processedContent = repairResult.value.content;
         attributionStatus = 'repaired';
-        logger?.info('[4.3.3c] Attribution repair succeeded');
+        additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
+        logger?.info(
+          `[4.3.3c] Attribution repair succeeded (costUsd: ${String(repairResult.value.usage.costUsd)})`
+        );
       } else {
+        additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
         logger?.info('[4.3.3c] Attribution repair did not fix all issues');
       }
     } else {
@@ -224,10 +233,15 @@ export async function runSynthesis(
 
   const totalInputTokens = llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0);
   const totalOutputTokens = llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0);
-  const totalCostUsd = llmTotals.costUsd + (synthesisUsage?.costUsd ?? 0);
+  const totalCostUsd =
+    llmTotals.costUsd +
+    (synthesisUsage?.costUsd ?? 0) +
+    (research.auxiliaryCostUsd ?? 0) +
+    (research.sourceLlmCostUsd ?? 0) +
+    additionalCostUsd;
 
   logger?.info(
-    `[4.3.3] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)}`
+    `[4.3.5] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)} (llm=${llmTotals.costUsd.toFixed(6)}, synth=${(synthesisUsage?.costUsd ?? 0).toFixed(6)}, aux=${(research.auxiliaryCostUsd ?? 0).toFixed(6)}, source=${(research.sourceLlmCostUsd ?? 0).toFixed(6)}, add=${additionalCostUsd.toFixed(6)})`
   );
 
   const now = new Date();

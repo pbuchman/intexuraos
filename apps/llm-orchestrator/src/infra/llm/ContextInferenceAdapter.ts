@@ -12,12 +12,14 @@ import {
   isSynthesisContext,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
-  type ResearchContext,
-  type SynthesisContext,
 } from '@intexuraos/llm-common';
 import { getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
-import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
+import type {
+  ContextInferenceProvider,
+  ResearchContextResult,
+  SynthesisContextResult,
+} from '../../domain/research/ports/contextInference.js';
 import type { Logger } from '@intexuraos/common-core';
 
 export class ContextInferenceAdapter implements ContextInferenceProvider {
@@ -38,7 +40,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
   async inferResearchContext(
     userQuery: string,
     opts?: InferResearchContextOptions
-  ): Promise<Result<ResearchContext, LlmError>> {
+  ): Promise<Result<ResearchContextResult, LlmError>> {
     const prompt = buildInferResearchContextPrompt(userQuery, opts);
     const result = await this.client.generate(prompt);
 
@@ -46,18 +48,29 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson<ResearchContext>(result.value.content, isResearchContext);
+    const parsed = parseJson(result.value.content, isResearchContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse research context');
       return { ok: false, error: { code: 'API_ERROR', message: parsed.error } };
     }
 
-    return { ok: true, value: parsed.value };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        context: parsed.value,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 
   async inferSynthesisContext(
     params: InferSynthesisContextParams
-  ): Promise<Result<SynthesisContext, LlmError>> {
+  ): Promise<Result<SynthesisContextResult, LlmError>> {
     const prompt = buildInferSynthesisContextPrompt(params);
     const result = await this.client.generate(prompt);
 
@@ -65,13 +78,24 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson<SynthesisContext>(result.value.content, isSynthesisContext);
+    const parsed = parseJson(result.value.content, isSynthesisContext);
     if (!parsed.ok) {
       this.logger?.warn({ error: parsed.error }, 'Failed to parse synthesis context');
       return { ok: false, error: { code: 'API_ERROR', message: parsed.error } };
     }
 
-    return { ok: true, value: parsed.value };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        context: parsed.value,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 }
 

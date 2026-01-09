@@ -22,7 +22,9 @@ import {
   enhanceResearch,
   type InputContext,
   getResearch,
+  type LabelGenerateResult,
   listResearches,
+  type LlmError,
   type PartialFailureDecision,
   type Research,
   type ResearchModel,
@@ -102,7 +104,11 @@ async function generateContextLabels(
     apiKey: string,
     userId: string,
     pricing: import('@intexuraos/llm-contract').ModelPricing
-  ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> },
+  ) => {
+    generateContextLabel: (
+      content: string
+    ) => Promise<import('@intexuraos/common-core').Result<LabelGenerateResult, LlmError>>;
+  },
   pricing: import('@intexuraos/llm-contract').ModelPricing
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
@@ -119,7 +125,7 @@ async function generateContextLabels(
       const labelResult = await generator.generateContextLabel(ctx.content);
       return {
         content: ctx.content,
-        label: labelResult.ok && labelResult.value !== undefined ? labelResult.value : undefined,
+        label: labelResult.ok ? labelResult.value.label : undefined,
       };
     })
   );
@@ -236,7 +242,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
-        title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+        title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
       } else {
         // Fallback: use first 60 chars of prompt
         title = body.prompt.slice(0, 60);
@@ -348,7 +354,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             pricingContext.getPricing(LlmModels.Gemini25Flash)
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
-          title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+          title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
         } else {
           title = body.prompt.slice(0, 60);
         }
