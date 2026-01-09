@@ -101,10 +101,18 @@ export async function processResearch(
         deps.reportLlmSuccess(LlmModels.Gemini25Flash);
       }
     } else {
-      deps.logger.warn(
-        { researchId, error: contextResult.error },
-        '[2.4.2] Context inference failed, proceeding without context'
-      );
+      if (contextResult.error.usage !== undefined) {
+        auxiliaryCostUsd += contextResult.error.usage.costUsd ?? 0;
+        deps.logger.warn(
+          { researchId, error: contextResult.error, costUsd: contextResult.error.usage.costUsd },
+          '[2.4.2] Context inference failed but cost tracked'
+        );
+      } else {
+        deps.logger.warn(
+          { researchId, error: contextResult.error },
+          '[2.4.2] Context inference failed, proceeding without context'
+        );
+      }
     }
   }
 

@@ -9,6 +9,7 @@ import type { SynthesisContext } from '@intexuraos/llm-common';
 export interface LlmError {
   code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED';
   message: string;
+  usage?: LlmUsage;
 }
 
 export interface LlmUsage {

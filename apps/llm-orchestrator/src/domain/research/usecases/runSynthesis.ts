@@ -147,10 +147,18 @@ export async function runSynthesis(
         `[4.2.2] Synthesis context inferred successfully (costUsd: ${String(contextResult.value.usage.costUsd)})`
       );
     } else {
-      logger?.error(
-        { error: contextResult.error },
-        '[4.2.2] Synthesis context inference failed, proceeding without context'
-      );
+      if (contextResult.error.usage !== undefined) {
+        additionalCostUsd += contextResult.error.usage.costUsd ?? 0;
+        logger?.error(
+          { error: contextResult.error, costUsd: contextResult.error.usage.costUsd },
+          '[4.2.2] Synthesis context inference failed but cost tracked'
+        );
+      } else {
+        logger?.error(
+          { error: contextResult.error },
+          '[4.2.2] Synthesis context inference failed, proceeding without context'
+        );
+      }
     }
   }
 
