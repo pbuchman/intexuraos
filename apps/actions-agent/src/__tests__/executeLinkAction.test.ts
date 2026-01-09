@@ -157,6 +157,35 @@ describe('executeLinkAction usecase', () => {
     expect(createdBookmarks[0]?.url).toBe('https://news.site.com/story');
   });
 
+  it('extracts URL from payload.prompt when not in title or url field', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      title: 'Threads Post Link',
+      payload: { prompt: 'save this https://threads.net/post/123' },
+    });
+    await fakeActionRepo.save(action);
+    fakeBookmarksClient.setNextBookmarkId('prompt-extracted-bookmark');
+
+    const usecase = createExecuteLinkActionUseCase({
+      actionRepository: fakeActionRepo,
+      bookmarksServiceClient: fakeBookmarksClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.resource_url).toBe('/#/bookmarks/prompt-extracted-bookmark');
+    }
+
+    const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
+    expect(createdBookmarks[0]?.url).toBe('https://threads.net/post/123');
+  });
+
   it('fails when no URL can be extracted', async () => {
     const action = createAction({
       status: 'awaiting_approval',
