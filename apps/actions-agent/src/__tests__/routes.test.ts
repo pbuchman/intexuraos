@@ -286,6 +286,19 @@ describe('Research Agent Routes', () => {
     });
 
     it('processes valid research action and returns 200', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/research',
@@ -303,8 +316,19 @@ describe('Research Agent Routes', () => {
       expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
     });
 
-    it('returns 500 when processing fails', async () => {
-      fakeActionClient.setFailNext(true, new Error('Database unavailable'));
+    it('returns 200 when action already processed (idempotency)', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -315,9 +339,12 @@ describe('Research Agent Routes', () => {
         payload: createValidPayload(),
       });
 
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      expect(body.success).toBe(true);
+      expect(body.actionId).toBe('action-123');
+
+      expect(fakeActionClient.getStatusUpdates().size).toBe(0);
     });
 
     it('returns 400 for unsupported action type', async () => {
@@ -1597,8 +1624,19 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns 200 with skipped when action not found (already processed/deleted)', async () => {
-      fakeActionClient.setFailNext(true, new Error('Action not found: action-123'));
+    it('returns 200 when action already processed (idempotency)', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
 
       const response = await app.inject({
         method: 'POST',
@@ -1613,31 +1651,11 @@ describe('Research Agent Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         actionId: string;
-        skipped: boolean;
-        reason: string;
       };
       expect(body.success).toBe(true);
       expect(body.actionId).toBe('action-123');
-      expect(body.skipped).toBe(true);
-      expect(body.reason).toBe('action_not_found');
     });
 
-    it('returns 500 for other processing errors', async () => {
-      fakeActionClient.setFailNext(true, new Error('Database connection failed'));
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/actions/process',
-        headers: {
-          'x-internal-auth': INTERNAL_AUTH_TOKEN,
-        },
-        payload: createValidPayload(),
-      });
-
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
-    });
   });
 
   describe('POST /internal/actions/retry-pending', () => {

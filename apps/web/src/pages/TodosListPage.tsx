@@ -237,7 +237,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
       </button>
       <div className="min-w-0 flex-1">
         <p
-          className={`break-all text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}
+          className={`break-words text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}
         >
           {item.title}
         </p>
@@ -501,7 +501,7 @@ function TodoModal({
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start gap-2">
-                <h3 className="break-all text-xl font-semibold text-slate-900">
+                <h3 className="break-words text-xl font-semibold text-slate-900">
                   {currentTodo.title}
                 </h3>
                 {currentTodo.archived ? (
@@ -535,7 +535,7 @@ function TodoModal({
                 </div>
               ) : null}
               {currentTodo.description !== null && currentTodo.description !== '' ? (
-                <div className="whitespace-pre-wrap break-all text-slate-700">
+                <div className="whitespace-pre-wrap break-words text-slate-700">
                   {currentTodo.description}
                 </div>
               ) : null}

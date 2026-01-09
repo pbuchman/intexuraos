@@ -14,6 +14,18 @@ export function createLocalActionServiceClient(
   actionRepository: ActionRepository
 ): ActionServiceClient {
   return {
+    async getAction(actionId: string): Promise<Result<Action | null>> {
+      try {
+        logger.info({ actionId }, 'Getting action via local repository');
+        const action = await actionRepository.getById(actionId);
+        return ok(action);
+      } catch (error) {
+        const message = getErrorMessage(error, 'Unknown error');
+        logger.error({ actionId, error: message }, 'Failed to get action');
+        return err(new Error(`Failed to get action: ${message}`));
+      }
+    },
+
     async updateActionStatus(actionId: string, status: string): Promise<Result<void>> {
       try {
         logger.info({ actionId, status }, 'Updating action status via local repository');
