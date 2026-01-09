@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
@@ -92,6 +92,21 @@ function HomeRoute(): React.JSX.Element {
   }
 
   return <HomePage />;
+}
+
+function NoteDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-notes?id=${id ?? ''}`} replace />;
+}
+
+function TodoDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-todos?id=${id ?? ''}`} replace />;
+}
+
+function BookmarkDetailRedirect(): React.JSX.Element {
+  const { id } = useParams();
+  return <Navigate to={`/my-bookmarks?id=${id ?? ''}`} replace />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -279,6 +294,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/notes/:id"
+        element={
+          <ProtectedRoute>
+            <NoteDetailRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/my-todos"
         element={
           <ProtectedRoute>
@@ -287,10 +310,26 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/todos/:id"
+        element={
+          <ProtectedRoute>
+            <TodoDetailRedirect />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/my-bookmarks"
         element={
           <ProtectedRoute>
             <BookmarksListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bookmarks/:id"
+        element={
+          <ProtectedRoute>
+            <BookmarkDetailRedirect />
           </ProtectedRoute>
         }
       />

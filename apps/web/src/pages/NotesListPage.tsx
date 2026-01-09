@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Edit2, FileText, Plus, Tag, Trash2, X } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useNotes } from '@/hooks';
@@ -441,6 +442,18 @@ export function NotesListPage(): React.JSX.Element {
   const { notes, loading, error, createNote, updateNote, deleteNote } = useNotes();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const noteId = searchParams.get('id');
+    if (noteId !== null && notes.length > 0) {
+      const note = notes.find((n) => n.id === noteId);
+      if (note !== undefined) {
+        setSelectedNote(note);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [notes, searchParams, setSearchParams]);
 
   if (loading) {
     return (

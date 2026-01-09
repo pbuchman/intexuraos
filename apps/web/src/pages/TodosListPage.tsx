@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Archive,
@@ -971,6 +972,18 @@ export function TodosListPage(): React.JSX.Element {
   } = useTodos();
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const todoId = searchParams.get('id');
+    if (todoId !== null && todos.length > 0) {
+      const todo = todos.find((t) => t.id === todoId);
+      if (todo !== undefined) {
+        setSelectedTodo(todo);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [todos, searchParams, setSearchParams]);
 
   if (loading) {
     return (
