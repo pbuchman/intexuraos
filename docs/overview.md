@@ -2,10 +2,10 @@
 
 <!-- This file is updated by /document-service runs -->
 
-*Documentation overview coming soon. Run `/document-service <service-name>` to populate.*
+_Documentation overview coming soon. Run `/document-service <service-name>` to populate._
 
 ## Services
 
-| Service | Purpose | Docs |
-|---------|---------|------|
-| *none documented yet* | | |
+| Service               | Purpose | Docs |
+| --------------------- | ------- | ---- |
+| _none documented yet_ |         |      |

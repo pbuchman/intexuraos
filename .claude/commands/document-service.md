@@ -15,10 +15,10 @@ Generate professional documentation for a service, then update project-level doc
 
 This skill produces two documentation files per service:
 
-| File | Purpose | Audience |
-|------|---------|----------|
-| `features.md` | Value propositions, capabilities, use cases | Users, marketing |
-| `technical.md` | Architecture, APIs, patterns, gotchas | Developers, AI agents |
+| File           | Purpose                                     | Audience              |
+| -------------- | ------------------------------------------- | --------------------- |
+| `features.md`  | Value propositions, capabilities, use cases | Users, marketing      |
+| `technical.md` | Architecture, APIs, patterns, gotchas       | Developers, AI agents |
 
 After service documentation, project-level docs are updated with an integrated narrative.
 
@@ -93,21 +93,27 @@ Present questions one at a time. Wait for answer before next question.
 ### Question Set
 
 1. **Why does this service exist?**
+
    > "What problem does <service-name> solve? What was the pain point before it existed?"
 
 2. **Who is this for?**
+
    > "Describe the target user. What's their context when they use this?"
 
 3. **What's the killer feature?**
+
    > "If you had to highlight ONE capability, what would it be?"
 
 4. **Real-world use case?**
+
    > "Give me a concrete example: 'User does X, service does Y, user gets Z.'"
 
 5. **What makes it different?**
+
    > "How does this approach differ from alternatives? Why this design?"
 
 6. **Known limitations?**
+
    > "What can't it do? What's on the roadmap?"
 
 7. **Gotchas?**
@@ -177,7 +183,7 @@ Write to `docs/services/<service-name>/features.md`:
 
 ---
 
-*Part of [IntexuraOS](../overview.md) — <tagline>*
+_Part of [IntexuraOS](../overview.md) — <tagline>_
 ```
 
 ### Writing Guidelines
@@ -202,8 +208,8 @@ Write to `docs/services/<service-name>/technical.md`:
 <2-3 sentences: what it does, where it runs, key dependencies>
 
 ## Architecture
-
 ```
+
 <ASCII diagram of key components>
 ```
 
@@ -211,66 +217,66 @@ Write to `docs/services/<service-name>/technical.md`:
 
 ### Public Endpoints
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/resource` | List resources |
-| POST | `/resource` | Create resource |
+| Method | Path        | Purpose         |
+| ------ | ----------- | --------------- |
+| GET    | `/resource` | List resources  |
+| POST   | `/resource` | Create resource |
 
 ### Internal Endpoints
 
-| Method | Path | Purpose | Caller |
-|--------|------|---------|--------|
-| POST | `/internal/resource` | Internal operation | other-service |
+| Method | Path                 | Purpose            | Caller        |
+| ------ | -------------------- | ------------------ | ------------- |
+| POST   | `/internal/resource` | Internal operation | other-service |
 
 ## Domain Model
 
 ### <Entity Name>
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Unique identifier |
-| `status` | `Status` | Current state |
+| Field    | Type     | Description       |
+| -------- | -------- | ----------------- |
+| `id`     | `string` | Unique identifier |
+| `status` | `Status` | Current state     |
 
 **Status Values:**
 
-| Status | Meaning |
-|--------|---------|
-| `pending` | Awaiting processing |
+| Status      | Meaning                |
+| ----------- | ---------------------- |
+| `pending`   | Awaiting processing    |
 | `completed` | Successfully processed |
 
 ## Pub/Sub
 
 ### Published Events
 
-| Topic | Event Type | Payload | Trigger |
-|-------|------------|---------|---------|
+| Topic        | Event Type   | Payload           | Trigger        |
+| ------------ | ------------ | ----------------- | -------------- |
 | `TOPIC_NAME` | `event.type` | `{ field: type }` | When X happens |
 
 ### Subscribed Events
 
-| Topic | Handler | Action |
-|-------|---------|--------|
+| Topic        | Handler                    | Action |
+| ------------ | -------------------------- | ------ |
 | `TOPIC_NAME` | `/internal/pubsub/handler` | Does X |
 
 ## Dependencies
 
 ### External Services
 
-| Service | Purpose | Failure Mode |
-|---------|---------|--------------|
+| Service      | Purpose       | Failure Mode    |
+| ------------ | ------------- | --------------- |
 | WhatsApp API | Send messages | Queue for retry |
 
 ### Internal Services
 
-| Service | Endpoint | Purpose |
-|---------|----------|---------|
+| Service      | Endpoint             | Purpose       |
+| ------------ | -------------------- | ------------- |
 | user-service | `/internal/user/...` | Get user data |
 
 ## Configuration
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `INTEXURAOS_X` | Description | Yes |
+| Variable       | Purpose     | Required |
+| -------------- | ----------- | -------- |
+| `INTEXURAOS_X` | Description | Yes      |
 
 ## Gotchas
 
@@ -288,7 +294,8 @@ apps/<service-name>/src/
 ├── routes/
 └── services.ts
 ```
-```
+
+````
 
 ---
 
@@ -326,7 +333,7 @@ Update `docs/overview.md` with integrated narrative:
 ## Architecture
 
 <High-level diagram or description>
-```
+````
 
 **Note:** Update the narrative section if the new service adds capabilities. Maintain the problem-focused structure.
 
@@ -341,16 +348,19 @@ Append to `docs/documentation-runs.md`:
 
 **Action:** [Created | Updated]
 **Files:**
+
 - `docs/services/<service-name>/features.md`
 - `docs/services/<service-name>/technical.md`
 - `docs/overview.md` (updated)
 
 **Insights Captured:**
+
 - Why: <summary>
 - Killer feature: <summary>
 - Limitations: <summary>
 
 **Changes from previous:**
+
 - <What changed, if update>
 
 ---
