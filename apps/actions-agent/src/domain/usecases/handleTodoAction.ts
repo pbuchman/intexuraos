@@ -3,12 +3,15 @@ import type { ActionServiceClient } from '../ports/actionServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
+import type { ExecuteTodoActionUseCase } from './executeTodoAction.js';
+import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleTodoActionDeps {
   actionServiceClient: ActionServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
+  executeTodoAction?: ExecuteTodoActionUseCase;
 }
 
 export interface HandleTodoActionUseCase {
@@ -16,7 +19,7 @@ export interface HandleTodoActionUseCase {
 }
 
 export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): HandleTodoActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeTodoAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -28,8 +31,27 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
           title: event.title,
           actionType: event.actionType,
         },
-        'Setting todo action to awaiting_approval'
+        'Processing todo action'
       );
+
+      if (shouldAutoExecute(event) && executeTodoAction !== undefined) {
+        logger.info({ actionId: event.actionId }, 'Auto-executing todo action');
+
+        const executeResult = await executeTodoAction(event.actionId);
+
+        if (!executeResult.ok) {
+          logger.error(
+            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
+            'Failed to auto-execute todo action'
+          );
+          return err(executeResult.error);
+        }
+
+        logger.info({ actionId: event.actionId }, 'Todo action auto-executed successfully');
+        return ok({ actionId: event.actionId });
+      }
+
+      logger.info({ actionId: event.actionId }, 'Setting todo action to awaiting_approval');
 
       const result = await actionServiceClient.updateActionStatus(
         event.actionId,

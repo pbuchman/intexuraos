@@ -148,34 +148,6 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
 
-  const handleResearchActionUseCase = createHandleResearchActionUseCase({
-    actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleResearchAction' }),
-  });
-
-  const handleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleTodoAction' }),
-  });
-
-  const handleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleNoteAction' }),
-  });
-
-  const handleLinkActionUseCase = createHandleLinkActionUseCase({
-    actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleLinkAction' }),
-  });
-
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
     actionRepository,
     researchServiceClient,
@@ -206,6 +178,38 @@ export function initServices(config: ServiceConfig): void {
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'executeLinkAction' }),
+  });
+
+  const handleResearchActionUseCase = createHandleResearchActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleResearchAction' }),
+    executeResearchAction: executeResearchActionUseCase,
+  });
+
+  const handleTodoActionUseCase = createHandleTodoActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleTodoAction' }),
+    executeTodoAction: executeTodoActionUseCase,
+  });
+
+  const handleNoteActionUseCase = createHandleNoteActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleNoteAction' }),
+    executeNoteAction: executeNoteActionUseCase,
+  });
+
+  const handleLinkActionUseCase = createHandleLinkActionUseCase({
+    actionServiceClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleLinkAction' }),
+    executeLinkAction: executeLinkActionUseCase,
   });
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
