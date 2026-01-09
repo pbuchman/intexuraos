@@ -85,6 +85,34 @@ resource "google_service_account" "notes_agent" {
   description  = "Service account for notes-agent Cloud Run deployment"
 }
 
+# Service account for app-settings-service
+resource "google_service_account" "app_settings_service" {
+  account_id   = "intexuraos-settings-${var.environment}"
+  display_name = "IntexuraOS App Settings Service (${var.environment})"
+  description  = "Service account for app-settings-service Cloud Run deployment"
+}
+
+# Service account for todos-agent
+resource "google_service_account" "todos_agent" {
+  account_id   = "intexuraos-todos-${var.environment}"
+  display_name = "IntexuraOS Todos Agent (${var.environment})"
+  description  = "Service account for todos-agent Cloud Run deployment"
+}
+
+# Service account for bookmarks-agent
+resource "google_service_account" "bookmarks_agent" {
+  account_id   = "intexuraos-bookmarks-${var.environment}"
+  display_name = "IntexuraOS Bookmarks Agent (${var.environment})"
+  description  = "Service account for bookmarks-agent Cloud Run deployment"
+}
+
+# Service account for calendar-agent
+resource "google_service_account" "calendar_agent" {
+  account_id   = "intexuraos-calendar-${var.environment}"
+  display_name = "IntexuraOS Calendar Agent (${var.environment})"
+  description  = "Service account for calendar-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -185,6 +213,42 @@ resource "google_secret_manager_secret_iam_member" "notes_agent_secrets" {
   member    = "serviceAccount:${google_service_account.notes_agent.email}"
 }
 
+# App Settings Service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "app_settings_service_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.app_settings_service.email}"
+}
+
+# Todos Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "todos_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.todos_agent.email}"
+}
+
+# Bookmarks Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "bookmarks_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}
+
+# Calendar Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "calendar_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.calendar_agent.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
@@ -277,6 +341,27 @@ resource "google_project_iam_member" "notes_agent_firestore" {
   member  = "serviceAccount:${google_service_account.notes_agent.email}"
 }
 
+# App Settings Service: Firestore access (for pricing configuration)
+resource "google_project_iam_member" "app_settings_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.app_settings_service.email}"
+}
+
+# Todos Agent: Firestore access
+resource "google_project_iam_member" "todos_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.todos_agent.email}"
+}
+
+# Bookmarks Agent: Firestore access
+resource "google_project_iam_member" "bookmarks_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -361,3 +446,30 @@ resource "google_project_iam_member" "image_service_logging" {
   member  = "serviceAccount:${google_service_account.image_service.email}"
 }
 
+# Notes Agent: Cloud Logging
+resource "google_project_iam_member" "notes_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.notes_agent.email}"
+}
+
+# App Settings Service: Cloud Logging
+resource "google_project_iam_member" "app_settings_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.app_settings_service.email}"
+}
+
+# Todos Agent: Cloud Logging
+resource "google_project_iam_member" "todos_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.todos_agent.email}"
+}
+
+# Bookmarks Agent: Cloud Logging
+resource "google_project_iam_member" "bookmarks_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}

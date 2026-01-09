@@ -4,7 +4,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ok, err, type SynthesisContext } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
+import type { SynthesisContext } from '@intexuraos/llm-common';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   runSynthesis,
   type RunSynthesisDeps,
@@ -38,8 +40,12 @@ function createMockDeps(): RunSynthesisDeps & {
   };
 
   const mockSynthesizer = {
-    synthesize: vi.fn().mockResolvedValue(ok({ content: 'Synthesized result' })),
-    generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    synthesize: vi.fn().mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 } })
+    ),
+    generateTitle: vi.fn().mockResolvedValue(
+      ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    ),
   };
 
   const mockNotificationSender = {
@@ -73,18 +79,18 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         status: 'completed',
         result: 'Google Result',
       },
       {
-        provider: 'openai',
-        model: 'o4-mini-deep-research',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
         status: 'completed',
         result: 'OpenAI Result',
       },
@@ -138,8 +144,18 @@ describe('runSynthesis', () => {
   it('returns error when no successful LLM results', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Error' },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'failed',
+          error: 'Error',
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -158,18 +174,23 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.0-flash',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
           status: 'completed',
           result: 'Google Result',
         },
         {
-          provider: 'anthropic',
+          provider: LlmProviders.Anthropic,
           model: 'claude-3',
           status: 'completed',
           result: 'Claude Result',
         },
-        { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Error' },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'failed',
+          error: 'Error',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -179,7 +200,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: 'gemini-2.0-flash', content: 'Google Result' },
+        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
         { model: 'claude-3', content: 'Claude Result' },
       ],
       undefined,
@@ -235,14 +256,15 @@ describe('runSynthesis', () => {
     const result = await runSynthesis('research-1', deps);
 
     expect(result).toEqual({ ok: true });
-    expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
+    expect(deps.mockRepo.update).toHaveBeenNthCalledWith(2, 'research-1', {
       status: 'completed',
-      synthesizedResult: 'Synthesized result',
+      synthesizedResult: expect.stringContaining('Synthesized result'),
       completedAt: '2024-01-01T12:00:00.000Z',
       totalDurationMs: 7200000,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalCostUsd: 0,
+      totalInputTokens: 500,
+      totalOutputTokens: 200,
+      totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+      attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
     });
   });
 
@@ -292,8 +314,13 @@ describe('runSynthesis', () => {
   it('handles empty result string from LLM', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: 'google', model: 'gemini-2.0-flash', status: 'completed' },
-        { provider: 'openai', model: 'gpt-4', status: 'completed', result: 'OpenAI Result' },
+        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed' },
+        {
+          provider: LlmProviders.OpenAI,
+          model: 'gpt-4',
+          status: 'completed',
+          result: 'OpenAI Result',
+        },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -303,7 +330,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: 'gemini-2.0-flash', content: '' },
+        { model: LlmModels.Gemini20Flash, content: '' },
         { model: 'gpt-4', content: 'OpenAI Result' },
       ],
       undefined,
@@ -314,11 +341,11 @@ describe('runSynthesis', () => {
   describe('skip synthesis logic', () => {
     it('skips synthesis when only 1 successful LLM and no input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -341,13 +368,23 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Only success',
           },
-          { provider: 'openai', model: 'o4-mini-deep-research', status: 'failed', error: 'Failed' },
-          { provider: 'anthropic', model: 'claude-opus', status: 'failed', error: 'Failed' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'failed',
+            error: 'Failed',
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-opus',
+            status: 'failed',
+            error: 'Failed',
+          },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -360,11 +397,11 @@ describe('runSynthesis', () => {
 
     it('runs synthesis when 1 LLM succeeds with input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
@@ -386,14 +423,14 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: 'openai',
-            model: 'o4-mini-deep-research',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
             status: 'completed',
             result: 'OpenAI result',
           },
@@ -410,7 +447,12 @@ describe('runSynthesis', () => {
     it('runs synthesis when no LLMs succeed but has input contexts', async () => {
       const research = createTestResearch({
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'failed', error: 'Failed' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'failed',
+            error: 'Failed',
+          },
         ],
         inputContexts: [
           { id: 'ctx-1', content: 'Context 1', addedAt: '2024-01-01T10:00:00Z' },
@@ -427,11 +469,11 @@ describe('runSynthesis', () => {
 
     it('sends notification with app URL when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -451,11 +493,11 @@ describe('runSynthesis', () => {
 
     it('does not report LLM success when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro'],
+        selectedModels: [LlmModels.Gemini25Pro],
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Single result',
           },
@@ -507,7 +549,9 @@ describe('runSynthesis', () => {
 
       const mockContextInferrer = {
         inferResearchContext: vi.fn(),
-        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({ context: mockSynthesisContext, usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.003 } })
+        ),
       };
 
       await runSynthesis('research-1', {
@@ -519,13 +563,13 @@ describe('runSynthesis', () => {
       expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
         originalPrompt: 'Test research prompt',
         reports: [
-          { model: 'gemini-2.0-flash', content: 'Google Result' },
-          { model: 'o4-mini-deep-research', content: 'OpenAI Result' },
+          { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+          { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
         ],
         additionalSources: undefined,
       });
       expect(mockLogger.info).toHaveBeenCalledWith(
-        '[4.2.2] Synthesis context inferred successfully'
+        '[4.2.2] Synthesis context inferred successfully (costUsd: 0.003)'
       );
     });
 
@@ -535,7 +579,9 @@ describe('runSynthesis', () => {
 
       const mockContextInferrer = {
         inferResearchContext: vi.fn(),
-        inferSynthesisContext: vi.fn().mockResolvedValue(ok(mockSynthesisContext)),
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({ context: mockSynthesisContext, usage: { inputTokens: 200, outputTokens: 100, costUsd: 0.003 } })
+        ),
       };
 
       await runSynthesis('research-1', {
@@ -652,12 +698,13 @@ describe('runSynthesis', () => {
 
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.objectContaining({
           shareToken: expect.any(String),
           slug: 'test-research',
@@ -713,12 +760,13 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
       });
     });
 
@@ -755,24 +803,25 @@ describe('runSynthesis', () => {
 
       expect(result).toEqual({ ok: true });
       expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
-        'Synthesized result',
-        'gemini-2.5-pro',
+        expect.stringContaining('Synthesized result'),
+        LlmModels.Gemini25Pro,
         'user-1'
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        'gemini-2.5-flash-image',
+        LlmModels.Gemini25FlashImage,
         'user-1',
         { title: 'Test Cover Title' }
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
         }),
@@ -813,7 +862,7 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        'gpt-image-1',
+        LlmModels.GPTImage1,
         'user-1',
         { title: 'OpenAI Cover Title' }
       );
@@ -875,12 +924,13 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -915,12 +965,13 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -953,12 +1004,13 @@ describe('runSynthesis', () => {
       expect(result).toEqual({ ok: true });
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
-        synthesizedResult: 'Synthesized result',
+        synthesizedResult: expect.stringContaining('Synthesized result'),
+        attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: 0,
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),

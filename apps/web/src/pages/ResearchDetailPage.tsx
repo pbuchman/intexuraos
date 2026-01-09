@@ -21,6 +21,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
   Card,
@@ -205,7 +206,7 @@ function renderPromptWithLinks(text: string): React.JSX.Element {
   );
 }
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = ['gemini-2.5-pro', 'gpt-5.2'];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
 
 function getModelDisplayName(modelId: SupportedModel): string {
   for (const provider of PROVIDER_MODELS) {
@@ -1594,7 +1595,7 @@ function CollapsibleInputContext({
           {showFull ? (
             <MarkdownContent content={ctx.content} />
           ) : (
-            <p className="text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
+            <p className="break-all text-sm text-slate-600 whitespace-pre-wrap">{ctx.content}</p>
           )}
         </div>
       ) : null}

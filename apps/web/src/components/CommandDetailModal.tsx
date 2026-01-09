@@ -125,7 +125,9 @@ export function CommandDetailModal({
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               Command Text
             </h3>
-            <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{command.text}</div>
+            <div className="break-all rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              {command.text}
+            </div>
           </div>
 
           {/* Classification confidence */}
@@ -146,7 +148,7 @@ export function CommandDetailModal({
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                 Classification Reasoning
               </h3>
-              <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+              <div className="break-all rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
                 {command.classification.reasoning}
               </div>
             </div>

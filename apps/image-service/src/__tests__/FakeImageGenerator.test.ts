@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createFakeImageGenerator } from '../infra/image/index.js';
 
 describe('FakeImageGenerator', () => {
   it('generates an image with correct structure', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       generateId: () => 'test-id-123',
     });
 
@@ -15,7 +16,7 @@ describe('FakeImageGenerator', () => {
     if (result.ok) {
       expect(result.value.id).toBe('test-id-123');
       expect(result.value.prompt).toBe('A sunset over the ocean');
-      expect(result.value.model).toBe('gpt-image-1');
+      expect(result.value.model).toBe(LlmModels.GPTImage1);
       expect(result.value.thumbnailUrl).toBe(
         'https://storage.googleapis.com/test-bucket/images/test-id-123/thumbnail.jpg'
       );
@@ -29,7 +30,7 @@ describe('FakeImageGenerator', () => {
   it('uses crypto.randomUUID by default for id generation', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: 'gemini-2.5-flash-image',
+      model: LlmModels.Gemini25FlashImage,
     });
 
     const result = await generator.generate('A sunset');
@@ -45,7 +46,7 @@ describe('FakeImageGenerator', () => {
   it('preserves prompt and model in generated image', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'my-bucket',
-      model: 'gemini-2.5-flash-image',
+      model: LlmModels.Gemini25FlashImage,
     });
 
     const result = await generator.generate('Mountain landscape with snow');
@@ -53,14 +54,14 @@ describe('FakeImageGenerator', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.prompt).toBe('Mountain landscape with snow');
-      expect(result.value.model).toBe('gemini-2.5-flash-image');
+      expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
     }
   });
 
   it('uses slug-based URLs when slug option is provided', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       generateId: () => 'test-id-123',
     });
 
@@ -81,7 +82,7 @@ describe('FakeImageGenerator', () => {
   it('does not include slug in result when not provided', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: 'gpt-image-1',
+      model: LlmModels.GPTImage1,
       generateId: () => 'test-id-123',
     });
 

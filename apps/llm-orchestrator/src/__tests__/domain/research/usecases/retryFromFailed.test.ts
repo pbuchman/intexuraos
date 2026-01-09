@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   retryFromFailed,
   type RetryFromFailedDeps,
@@ -42,8 +43,12 @@ function createMockDeps(): RetryFromFailedDeps & {
   };
 
   const mockSynthesizer = {
-    synthesize: vi.fn().mockResolvedValue(ok('Synthesized result')),
-    generateTitle: vi.fn().mockResolvedValue(ok('Generated Title')),
+    synthesize: vi.fn().mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 } })
+    ),
+    generateTitle: vi.fn().mockResolvedValue(
+      ok({ title: 'Generated Title', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 } })
+    ),
   };
 
   const mockNotificationSender = {
@@ -77,18 +82,18 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'failed',
-    selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research'],
-    synthesisModel: 'gemini-2.5-pro',
+    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google',
-        model: 'gemini-2.0-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini20Flash,
         status: 'completed',
         result: 'Google Result',
       },
       {
-        provider: 'openai',
-        model: 'o4-mini-deep-research',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.O4MiniDeepResearch,
         status: 'failed',
         error: 'Rate limit',
       },
@@ -166,8 +171,18 @@ describe('retryFromFailed', () => {
       const research = createTestResearch({
         status: 'failed',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result',
+          },
         ],
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -192,7 +207,7 @@ describe('retryFromFailed', () => {
 
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledWith(
         'research-1',
-        'o4-mini-deep-research',
+        LlmModels.O4MiniDeepResearch,
         {
           status: 'pending',
         }
@@ -221,7 +236,7 @@ describe('retryFromFailed', () => {
         type: 'llm.call',
         researchId: 'research-1',
         userId: 'user-1',
-        model: 'o4-mini-deep-research',
+        model: LlmModels.O4MiniDeepResearch,
         prompt: 'Test research prompt',
       });
     });
@@ -235,24 +250,33 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedModels: ['o4-mini-deep-research'],
+        retriedModels: [LlmModels.O4MiniDeepResearch],
       });
     });
 
     it('handles multiple failed providers', async () => {
       const research = createTestResearch({
-        selectedModels: ['gemini-2.5-pro', 'o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+        selectedModels: [
+          LlmModels.Gemini25Pro,
+          LlmModels.O4MiniDeepResearch,
+          LlmModels.ClaudeOpus45,
+        ],
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
           {
-            provider: 'openai',
-            model: 'o4-mini-deep-research',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
             status: 'failed',
             error: 'Error 1',
           },
           {
-            provider: 'anthropic',
-            model: 'claude-opus-4-5-20251101',
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
             status: 'failed',
             error: 'Error 2',
           },
@@ -265,7 +289,7 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedModels: ['o4-mini-deep-research', 'claude-opus-4-5-20251101'],
+        retriedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
       });
       expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledTimes(2);
@@ -278,12 +302,17 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Synthesis failed: rate limit',
       });
@@ -300,12 +329,17 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Previous error',
       });
@@ -321,12 +355,17 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: 'google',
-            model: 'gemini-2.0-flash',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
             status: 'completed',
             result: 'Result 1',
           },
-          { provider: 'openai', model: 'o4-mini', status: 'completed', result: 'Result 2' },
+          {
+            provider: LlmProviders.OpenAI,
+            model: 'o4-mini',
+            status: 'completed',
+            result: 'Result 2',
+          },
         ],
         synthesisError: 'Previous error',
       });
@@ -343,8 +382,13 @@ describe('retryFromFailed', () => {
       const research = createTestResearch({
         status: 'failed',
         llmResults: [
-          { provider: 'google', model: 'gemini-2.0-flash', status: 'completed', result: 'Result' },
-          { provider: 'openai', model: 'o4-mini', status: 'failed', error: 'LLM Error' },
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+          },
+          { provider: LlmProviders.OpenAI, model: 'o4-mini', status: 'failed', error: 'LLM Error' },
         ],
         synthesisError: 'Synthesis also failed',
       });

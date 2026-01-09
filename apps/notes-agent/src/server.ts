@@ -19,12 +19,18 @@ import { noteRoutes } from './routes/noteRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 
 const SERVICE_NAME = 'notes-agent';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 const REQUIRED_SECRETS: string[] = [];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
-  const servers = [{ url: 'http://localhost:8121', description: 'Local' }];
+  const servers = [
+    {
+      url: 'https://intexuraos-notes-agent-cj44trunra-lm.a.run.app',
+      description: 'Cloud (Development)',
+    },
+    { url: 'http://localhost:8121', description: 'Local' },
+  ];
 
   return {
     openapi: {

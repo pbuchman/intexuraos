@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels } from '@intexuraos/llm-contract';
 import {
   getServices,
   setServices,
@@ -13,6 +15,8 @@ import {
   FakePromptGenerator,
   FakeUserServiceClient,
 } from './fakes.js';
+
+const fakePricingContext = new FakePricingContext();
 
 describe('services', () => {
   beforeEach(() => {
@@ -43,6 +47,7 @@ describe('services', () => {
         generatedImageRepository: fakeRepo,
         imageStorage: fakeImageStorage,
         userServiceClient: fakeUserServiceClient,
+        pricingContext: fakePricingContext,
         createPromptGenerator: () => fakePromptGenerator,
         createImageGenerator: () => fakeImageGenerator,
         generateId: () => 'test-id',
@@ -56,7 +61,7 @@ describe('services', () => {
 
   describe('initializeServices', () => {
     it('initializes services from environment', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
       expect(services.generatedImageRepository).toBeDefined();
@@ -67,7 +72,7 @@ describe('services', () => {
     });
 
     it('createPromptGenerator returns google adapter for google provider', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
       const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id');
@@ -77,7 +82,7 @@ describe('services', () => {
     });
 
     it('createPromptGenerator returns openai adapter for openai provider', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
       const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id');
@@ -87,21 +92,25 @@ describe('services', () => {
     });
 
     it('createImageGenerator returns OpenAI generator for gpt-image-1', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createImageGenerator('gpt-image-1', 'test-key', 'test-user-id');
+      const generator = services.createImageGenerator(
+        LlmModels.GPTImage1,
+        'test-key',
+        'test-user-id'
+      );
 
       expect(generator).toBeDefined();
       expect(generator.generate).toBeDefined();
     });
 
     it('createImageGenerator returns Google generator for gemini-2.5-flash-image', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
       const generator = services.createImageGenerator(
-        'gemini-2.5-flash-image',
+        LlmModels.Gemini25FlashImage,
         'test-key',
         'test-user-id'
       );
@@ -111,7 +120,7 @@ describe('services', () => {
     });
 
     it('generateId returns a UUID', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
 
       const services = getServices();
       const id = services.generateId();
@@ -122,7 +131,7 @@ describe('services', () => {
 
   describe('resetServices', () => {
     it('clears the container', () => {
-      initializeServices();
+      initializeServices(fakePricingContext);
       expect(() => getServices()).not.toThrow();
 
       resetServices();

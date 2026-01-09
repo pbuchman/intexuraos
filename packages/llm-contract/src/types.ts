@@ -5,10 +5,11 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
+import type { LLMModel } from './supportedModels.js';
 
 export interface LLMConfig {
   apiKey: string;
-  model: string;
+  model: LLMModel;
   userId: string;
 }
 

@@ -7,6 +7,9 @@ import {
   FakeResearchServiceClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
+import pino from 'pino';
+
+const silentLogger = pino({ level: 'silent' });
 
 describe('executeResearchAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -39,6 +42,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('non-existent-action');
@@ -61,6 +65,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -81,6 +86,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -101,6 +107,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -126,6 +133,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -150,6 +158,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -170,6 +179,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     await usecase('action-123');
@@ -194,6 +204,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     const result = await usecase('action-123');
@@ -217,6 +228,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     await usecase('action-123');
@@ -238,6 +250,7 @@ describe('executeResearchAction usecase', () => {
       researchServiceClient: fakeResearchClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
     });
 
     await usecase('action-123');

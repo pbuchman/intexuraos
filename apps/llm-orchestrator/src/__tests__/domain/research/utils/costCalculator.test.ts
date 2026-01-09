@@ -1,54 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import {
-  calculateCost,
-  calculateAccurateCost,
-} from '../../../../domain/research/utils/costCalculator.js';
+import { calculateAccurateCost } from '../../../../domain/research/utils/costCalculator.js';
 import type { LlmPricing } from '../../../../domain/research/ports/pricingRepository.js';
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
-describe('calculateCost', () => {
-  const basePricing: LlmPricing = {
-    provider: 'anthropic',
-    model: 'claude-3-opus',
-    inputPricePerMillion: 15,
-    outputPricePerMillion: 75,
-    updatedAt: '2024-01-01T00:00:00Z',
-  };
-
-  it('calculates cost correctly for typical usage', () => {
-    const cost = calculateCost(1000, 500, basePricing);
-    // Input: 1000 tokens * $15/M = $0.015
-    // Output: 500 tokens * $75/M = $0.0375
-    // Total: $0.0525
-    expect(cost).toBe(0.0525);
-  });
-
-  it('returns zero for zero tokens', () => {
-    const cost = calculateCost(0, 0, basePricing);
-    expect(cost).toBe(0);
-  });
-
-  it('handles large token counts', () => {
-    const cost = calculateCost(1_000_000, 1_000_000, basePricing);
-    // Input: 1M tokens * $15/M = $15
-    // Output: 1M tokens * $75/M = $75
-    // Total: $90
-    expect(cost).toBe(90);
-  });
-
-  it('rounds to 6 decimal places', () => {
-    const pricing: LlmPricing = {
-      ...basePricing,
-      inputPricePerMillion: 0.15,
-      outputPricePerMillion: 0.6,
-    };
-    const cost = calculateCost(333, 777, pricing);
-    // Input: 333 * 0.15 / 1M = 0.00004995
-    // Output: 777 * 0.60 / 1M = 0.0004662
-    // Total: 0.00051615 -> rounded to 0.000516
-    expect(cost).toBe(0.000516);
-  });
-});
 
 describe('calculateAccurateCost', () => {
   describe('with providerCost', () => {
@@ -59,8 +13,8 @@ describe('calculateAccurateCost', () => {
         providerCost: 0.05178,
       };
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         inputPricePerMillion: 3,
         outputPricePerMillion: 15,
         updatedAt: '2024-01-01T00:00:00Z',
@@ -77,8 +31,8 @@ describe('calculateAccurateCost', () => {
         costUsd: 0.04567,
       };
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         inputPricePerMillion: 3,
         outputPricePerMillion: 15,
         updatedAt: '2024-01-01T00:00:00Z',
@@ -96,8 +50,8 @@ describe('calculateAccurateCost', () => {
         costUsd: 0.222,
       };
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         inputPricePerMillion: 3,
         outputPricePerMillion: 15,
         updatedAt: '2024-01-01T00:00:00Z',
@@ -110,7 +64,7 @@ describe('calculateAccurateCost', () => {
 
   describe('Anthropic cost calculation', () => {
     const anthropicPricing: LlmPricing = {
-      provider: 'anthropic',
+      provider: LlmProviders.Anthropic,
       model: 'claude-3-opus',
       inputPricePerMillion: 15,
       outputPricePerMillion: 75,
@@ -177,7 +131,7 @@ describe('calculateAccurateCost', () => {
 
   describe('OpenAI cost calculation', () => {
     const openaiPricing: LlmPricing = {
-      provider: 'openai',
+      provider: LlmProviders.OpenAI,
       model: 'gpt-4',
       inputPricePerMillion: 10,
       outputPricePerMillion: 30,
@@ -229,7 +183,7 @@ describe('calculateAccurateCost', () => {
 
   describe('Google cost calculation', () => {
     const googlePricing: LlmPricing = {
-      provider: 'google',
+      provider: LlmProviders.Google,
       model: 'gemini-pro',
       inputPricePerMillion: 1.25,
       outputPricePerMillion: 5,
@@ -271,8 +225,8 @@ describe('calculateAccurateCost', () => {
         outputTokens: 500,
       };
       const pricing: LlmPricing = {
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         inputPricePerMillion: 3,
         outputPricePerMillion: 15,
         updatedAt: '2024-01-01T00:00:00Z',
@@ -295,7 +249,7 @@ describe('calculateAccurateCost', () => {
         webSearchCalls: 1,
       };
       const pricing: LlmPricing = {
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3-opus',
         inputPricePerMillion: 15,
         outputPricePerMillion: 75,
@@ -319,7 +273,7 @@ describe('calculateAccurateCost', () => {
         webSearchCalls: 1,
       };
       const pricing: LlmPricing = {
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         inputPricePerMillion: 10,
         outputPricePerMillion: 30,
@@ -341,7 +295,7 @@ describe('calculateAccurateCost', () => {
         groundingEnabled: true,
       };
       const pricing: LlmPricing = {
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini-pro',
         inputPricePerMillion: 1.25,
         outputPricePerMillion: 5,

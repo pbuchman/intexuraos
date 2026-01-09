@@ -1,11 +1,10 @@
 # IntexuraOS Cloud Build Configuration
-# Builds and deploys affected services on push to development branch.
+# Builds and deploys ALL services on every trigger.
 # CI checks (lint, typecheck, test) run in GitHub Actions before this.
 #
 # Optimizations applied:
 # - Docker BuildKit with layer caching (--cache-from)
-# - Parallel builds for all services (waitFor: ['check-all-affected'])
-# - Per-service affected detection from package.json deps
+# - Parallel builds for all services (waitFor: ['-'])
 # - CLOUD_LOGGING_ONLY for cost savings
 #
 # Substitutions are provided by the Cloud Build trigger (Terraform):
@@ -20,59 +19,28 @@ steps:
     entrypoint: 'npm'
     args: ['ci']
 
-  # Step 2: Check which services are affected and create marker files
-  # Single call checks all services - much more efficient than 13 separate calls
-  - name: 'node:22-slim'
-    id: 'check-all-affected'
-    waitFor: ['npm-ci']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ "${_FORCE_DEPLOY}" == "true" ]]; then
-          echo "Force deploy - marking all services as affected"
-          mkdir -p /workspace/.affected
-          for svc in user-service promptvault-service notion-service whatsapp-service api-docs-hub mobile-notifications-service llm-orchestrator commands-router actions-agent data-insights-service image-service notes-agent web firestore; do
-            touch "/workspace/.affected/$svc"
-          done
-        else
-          node cloudbuild/scripts/check-affected.mjs --all
-        fi
-        echo "=== Marker files ==="
-        ls -la /workspace/.affected/ 2>/dev/null || echo "(none)"
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'PROJECT_ID=$PROJECT_ID'
-      - 'REGION=${_REGION}'
-
   # ===== PARALLEL SERVICE PIPELINES =====
-  # Each service independently checks if affected via check-affected.mjs
-  # Dependencies derived from package.json workspace deps
+  # All services build unconditionally when this pipeline runs
   # Build+Push use gcr.io/cloud-builders/docker, Deploy uses cloud-sdk
 
   # ===== user-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/user-service ]]; then
-          echo "=== Building user-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/user-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/user-service:latest \
-            -f apps/user-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/user-service:latest
-        else
-          echo "user-service not affected, skipping."
-        fi
+        echo "=== Building user-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/user-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/user-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/user-service:latest \
+          -f apps/user-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/user-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -80,14 +48,7 @@ steps:
     id: 'deploy-user-service'
     waitFor: ['build-push-user-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/user-service ]]; then
-          bash cloudbuild/scripts/deploy-user-service.sh
-        else
-          echo "user-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-user-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -97,25 +58,21 @@ steps:
   # ===== promptvault-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-promptvault-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/promptvault-service ]]; then
-          echo "=== Building promptvault-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
-            -f apps/promptvault-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
-        else
-          echo "promptvault-service not affected, skipping."
-        fi
+        echo "=== Building promptvault-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest \
+          -f apps/promptvault-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/promptvault-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -123,14 +80,7 @@ steps:
     id: 'deploy-promptvault-service'
     waitFor: ['build-push-promptvault-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/promptvault-service ]]; then
-          bash cloudbuild/scripts/deploy-promptvault-service.sh
-        else
-          echo "promptvault-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-promptvault-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -140,25 +90,21 @@ steps:
   # ===== notion-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notion-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/notion-service ]]; then
-          echo "=== Building notion-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
-            -f apps/notion-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
-        else
-          echo "notion-service not affected, skipping."
-        fi
+        echo "=== Building notion-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/notion-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/notion-service:latest \
+          -f apps/notion-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/notion-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -166,14 +112,7 @@ steps:
     id: 'deploy-notion-service'
     waitFor: ['build-push-notion-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/notion-service ]]; then
-          bash cloudbuild/scripts/deploy-notion-service.sh
-        else
-          echo "notion-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-notion-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -183,25 +122,21 @@ steps:
   # ===== whatsapp-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/whatsapp-service ]]; then
-          echo "=== Building whatsapp-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
-            -f apps/whatsapp-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
-        else
-          echo "whatsapp-service not affected, skipping."
-        fi
+        echo "=== Building whatsapp-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest \
+          -f apps/whatsapp-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/whatsapp-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -209,14 +144,7 @@ steps:
     id: 'deploy-whatsapp-service'
     waitFor: ['build-push-whatsapp-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/whatsapp-service ]]; then
-          bash cloudbuild/scripts/deploy-whatsapp-service.sh
-        else
-          echo "whatsapp-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-whatsapp-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -226,25 +154,21 @@ steps:
   # ===== api-docs-hub =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-api-docs-hub'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/api-docs-hub ]]; then
-          echo "=== Building api-docs-hub ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
-            -f apps/api-docs-hub/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
-        else
-          echo "api-docs-hub not affected, skipping."
-        fi
+        echo "=== Building api-docs-hub ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest \
+          -f apps/api-docs-hub/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/api-docs-hub:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -252,14 +176,7 @@ steps:
     id: 'deploy-api-docs-hub'
     waitFor: ['build-push-api-docs-hub']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/api-docs-hub ]]; then
-          bash cloudbuild/scripts/deploy-api-docs-hub.sh
-        else
-          echo "api-docs-hub not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-api-docs-hub.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -269,25 +186,21 @@ steps:
   # ===== mobile-notifications-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-mobile-notifications-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/mobile-notifications-service ]]; then
-          echo "=== Building mobile-notifications-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
-            -f apps/mobile-notifications-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
-        else
-          echo "mobile-notifications-service not affected, skipping."
-        fi
+        echo "=== Building mobile-notifications-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
+          -f apps/mobile-notifications-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -295,14 +208,7 @@ steps:
     id: 'deploy-mobile-notifications-service'
     waitFor: ['build-push-mobile-notifications-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/mobile-notifications-service ]]; then
-          bash cloudbuild/scripts/deploy-mobile-notifications-service.sh
-        else
-          echo "mobile-notifications-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-mobile-notifications-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -312,25 +218,21 @@ steps:
   # ===== llm-orchestrator =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-llm-orchestrator'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/llm-orchestrator ]]; then
-          echo "=== Building llm-orchestrator ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
-            -f apps/llm-orchestrator/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
-        else
-          echo "llm-orchestrator not affected, skipping."
-        fi
+        echo "=== Building llm-orchestrator ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+          -f apps/llm-orchestrator/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -338,14 +240,7 @@ steps:
     id: 'deploy-llm-orchestrator'
     waitFor: ['build-push-llm-orchestrator']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/llm-orchestrator ]]; then
-          bash cloudbuild/scripts/deploy-llm-orchestrator.sh
-        else
-          echo "llm-orchestrator not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-llm-orchestrator.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -355,25 +250,21 @@ steps:
   # ===== commands-router =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-commands-router'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/commands-router ]]; then
-          echo "=== Building commands-router ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
-            -f apps/commands-router/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
-        else
-          echo "commands-router not affected, skipping."
-        fi
+        echo "=== Building commands-router ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+          -f apps/commands-router/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -381,14 +272,7 @@ steps:
     id: 'deploy-commands-router'
     waitFor: ['build-push-commands-router']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/commands-router ]]; then
-          bash cloudbuild/scripts/deploy-commands-router.sh
-        else
-          echo "commands-router not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-commands-router.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -398,25 +282,21 @@ steps:
   # ===== actions-agent =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-actions-agent'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/actions-agent ]]; then
-          echo "=== Building actions-agent ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
-            -f apps/actions-agent/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest
-        else
-          echo "actions-agent not affected, skipping."
-        fi
+        echo "=== Building actions-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest \
+          -f apps/actions-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/actions-agent:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -424,14 +304,7 @@ steps:
     id: 'deploy-actions-agent'
     waitFor: ['build-push-actions-agent']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/actions-agent ]]; then
-          bash cloudbuild/scripts/deploy-actions-agent.sh
-        else
-          echo "actions-agent not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-actions-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -441,25 +314,21 @@ steps:
   # ===== data-insights-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-data-insights-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/data-insights-service ]]; then
-          echo "=== Building data-insights-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
-            -f apps/data-insights-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
-        else
-          echo "data-insights-service not affected, skipping."
-        fi
+        echo "=== Building data-insights-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          -f apps/data-insights-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -467,14 +336,7 @@ steps:
     id: 'deploy-data-insights-service'
     waitFor: ['build-push-data-insights-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/data-insights-service ]]; then
-          bash cloudbuild/scripts/deploy-data-insights-service.sh
-        else
-          echo "data-insights-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -484,25 +346,21 @@ steps:
   # ===== image-service =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-image-service'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/image-service ]]; then
-          echo "=== Building image-service ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/image-service:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/image-service:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/image-service:latest \
-            -f apps/image-service/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/image-service:latest
-        else
-          echo "image-service not affected, skipping."
-        fi
+        echo "=== Building image-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/image-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/image-service:latest \
+          -f apps/image-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/image-service:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -510,14 +368,7 @@ steps:
     id: 'deploy-image-service'
     waitFor: ['build-push-image-service']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/image-service ]]; then
-          bash cloudbuild/scripts/deploy-image-service.sh
-        else
-          echo "image-service not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-image-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -527,25 +378,21 @@ steps:
   # ===== notes-agent =====
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/notes-agent ]]; then
-          echo "=== Building notes-agent ==="
-          docker pull ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest || true
-          docker build \
-            --cache-from=${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA \
-            -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
-            -f apps/notes-agent/Dockerfile .
-          docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA
-          docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest
-        else
-          echo "notes-agent not affected, skipping."
-        fi
+        echo "=== Building notes-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest \
+          -f apps/notes-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/notes-agent:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -553,14 +400,135 @@ steps:
     id: 'deploy-notes-agent'
     waitFor: ['build-push-notes-agent']
     entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-notes-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== todos-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-todos-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/notes-agent ]]; then
-          bash cloudbuild/scripts/deploy-notes-agent.sh
-        else
-          echo "notes-agent not affected, skipping deploy."
-        fi
+        echo "=== Building todos-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest \
+          -f apps/todos-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/todos-agent:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-todos-agent'
+    waitFor: ['build-push-todos-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-todos-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== bookmarks-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-bookmarks-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Building bookmarks-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest \
+          -f apps/bookmarks-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/bookmarks-agent:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-bookmarks-agent'
+    waitFor: ['build-push-bookmarks-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== app-settings-service =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-app-settings-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Building app-settings-service ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest \
+          -f apps/app-settings-service/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/app-settings-service:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-app-settings-service'
+    waitFor: ['build-push-app-settings-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-app-settings-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===== calendar-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-calendar-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Building calendar-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest \
+          -f apps/calendar-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/calendar-agent:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-calendar-agent'
+    waitFor: ['build-push-calendar-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-calendar-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -570,14 +538,13 @@ steps:
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'
-    waitFor: ['check-all-affected']
+    waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/web ]]; then
-          echo "=== Fetching secrets for web ==="
-          cat > /workspace/apps/web/.env << EOF
+        echo "=== Fetching secrets for web ==="
+        cat > /workspace/apps/web/.env << EOF
         INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
         INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
         INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
@@ -590,14 +557,15 @@ steps:
         INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
         INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_ACTIONS_AGENT_SERVICE_URL)
         INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_DATA_INSIGHTS_SERVICE_URL)
+        INTEXURAOS_NOTES_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTES_AGENT_URL)
+        INTEXURAOS_TODOS_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_TODOS_AGENT_URL)
+        INTEXURAOS_BOOKMARKS_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_BOOKMARKS_AGENT_URL)
+        INTEXURAOS_APP_SETTINGS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_APP_SETTINGS_SERVICE_URL)
         INTEXURAOS_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
         INTEXURAOS_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
         INTEXURAOS_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
         EOF
-          echo "Secrets written to /workspace/apps/web/.env"
-        else
-          echo "web not affected, skipping secret fetch."
-        fi
+        echo "Secrets written to /workspace/apps/web/.env"
 
   - name: 'node:22-slim'
     id: 'build-web'
@@ -606,12 +574,8 @@ steps:
     args:
       - '-c'
       - |
-        if [[ -f /workspace/.affected/web ]]; then
-          echo "=== Building web ==="
-          npm run --workspace=@intexuraos/web build
-        else
-          echo "web not affected, skipping build."
-        fi
+        echo "=== Building web ==="
+        npm run --workspace=@intexuraos/web build
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
 
@@ -619,15 +583,7 @@ steps:
     id: 'deploy-web'
     waitFor: ['build-web']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/web ]]; then
-          echo "=== Deploying web ==="
-          bash cloudbuild/scripts/deploy-web.sh
-        else
-          echo "web not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-web.sh']
     env:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
       - 'COMMIT_SHA=$COMMIT_SHA'
@@ -637,17 +593,9 @@ steps:
   # ===== firestore (indexes and rules) =====
   - name: 'node:22-slim'
     id: 'deploy-firestore'
-    waitFor: ['check-all-affected']
+    waitFor: ['npm-ci']
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        if [[ -f /workspace/.affected/firestore ]]; then
-          echo "=== Deploying Firestore indexes and rules ==="
-          bash cloudbuild/scripts/deploy-firestore.sh
-        else
-          echo "firestore not affected, skipping deploy."
-        fi
+    args: ['-c', 'bash cloudbuild/scripts/deploy-firestore.sh']
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 

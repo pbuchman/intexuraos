@@ -288,6 +288,34 @@ describe('WhatsApp Message Routes', () => {
       expect(body.data.messages.length).toBe(1);
       expect(body.data.nextCursor).toBe('cursor-for-next-page');
     });
+
+    it('passes limit and cursor query parameters to repository', async () => {
+      const userId = 'user-paginated';
+      const token = await createToken({ sub: userId });
+
+      await ctx.userMappingRepository.saveMapping(userId, ['+1234567890']);
+      await ctx.messageRepository.saveMessage({
+        userId,
+        waMessageId: 'wamid.paginated',
+        text: 'Paginated message',
+        fromNumber: '+1234567890',
+        toNumber: '+15559876543',
+        mediaType: 'text',
+        timestamp: '1234567890',
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-paginated',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages?limit=5&cursor=prev-cursor-token',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/media', () => {

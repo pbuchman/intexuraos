@@ -54,7 +54,7 @@ const validStatuses: ActionStatus[] = [
 
 export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/router/actions',
+    '/actions',
     {
       schema: {
         operationId: 'listActions',
@@ -129,7 +129,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch(
-    '/router/actions/:actionId',
+    '/actions/:actionId',
     {
       schema: {
         operationId: 'updateAction',
@@ -251,7 +251,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete(
-    '/router/actions/:actionId',
+    '/actions/:actionId',
     {
       schema: {
         operationId: 'deleteAction',
@@ -322,7 +322,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // 💰 CostGuard: Batch endpoint prevents N+1 API calls
   // Fetches up to 50 actions in single request instead of 50 individual requests
   fastify.post(
-    '/router/actions/batch',
+    '/actions/batch',
     {
       schema: {
         operationId: 'batchGetActions',
@@ -414,7 +414,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post(
-    '/router/actions/:actionId/execute',
+    '/actions/:actionId/execute',
     {
       schema: {
         operationId: 'executeAction',
@@ -490,18 +490,31 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { actionId } = request.params;
 
-      const { actionRepository, executeResearchActionUseCase } = getServices();
-      const action = await actionRepository.getById(actionId);
+      const services = getServices();
+      const action = await services.actionRepository.getById(actionId);
 
       if (action?.userId !== user.userId) {
         return await reply.fail('NOT_FOUND', 'Action not found');
       }
 
-      if (action.type !== 'research') {
+      const executorMap: Partial<
+        Record<
+          ActionType,
+          (actionId: string) => ReturnType<typeof services.executeResearchActionUseCase>
+        >
+      > = {
+        research: services.executeResearchActionUseCase,
+        todo: services.executeTodoActionUseCase,
+        note: services.executeNoteActionUseCase,
+        link: services.executeLinkActionUseCase,
+      };
+
+      const executor = executorMap[action.type];
+      if (executor === undefined) {
         return await reply.fail('INVALID_REQUEST', `Action type ${action.type} not supported`);
       }
 
-      const result = await executeResearchActionUseCase(actionId);
+      const result = await executor(actionId);
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);

@@ -41,7 +41,7 @@ export async function getActions(
     params.set('status', options.status.join(','));
   }
   const queryString = params.toString();
-  const path = queryString !== '' ? `/router/actions?${queryString}` : '/router/actions';
+  const path = queryString !== '' ? `/actions?${queryString}` : '/actions';
 
   return await apiRequest<ActionsResponse>(config.actionsAgentUrl, path, accessToken);
 }
@@ -56,7 +56,7 @@ export async function updateAction(
 ): Promise<Action> {
   const response = await apiRequest<{ action: Action }>(
     config.actionsAgentUrl,
-    `/router/actions/${actionId}`,
+    `/actions/${actionId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -69,7 +69,7 @@ export async function updateAction(
 export async function deleteAction(accessToken: string, actionId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.actionsAgentUrl,
-    `/router/actions/${actionId}`,
+    `/actions/${actionId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -106,7 +106,7 @@ export async function batchGetActions(accessToken: string, actionIds: string[]):
 
   const response = await apiRequest<{ actions: Action[] }>(
     config.actionsAgentUrl,
-    '/router/actions/batch',
+    '/actions/batch',
     accessToken,
     {
       method: 'POST',

@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-gemini",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "*",
+    "@intexuraos/llm-common": "*",
     "@intexuraos/llm-audit": "*",
     "@intexuraos/llm-contract": "*",
     "@intexuraos/llm-pricing": "*",

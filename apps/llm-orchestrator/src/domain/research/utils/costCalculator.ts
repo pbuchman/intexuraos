@@ -1,4 +1,4 @@
-import type { TokenUsage } from '@intexuraos/llm-contract';
+import { type TokenUsage, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmPricing } from '../ports/pricingRepository.js';
 
 const DEFAULT_WEB_SEARCH_COST = 0.01;
@@ -7,15 +7,6 @@ const DEFAULT_CACHE_WRITE_MULTIPLIER = 1.25;
 const DEFAULT_CACHE_READ_MULTIPLIER = 0.1;
 const DEFAULT_OPENAI_CACHE_MULTIPLIER = 0.25;
 
-export function calculateCost(
-  inputTokens: number,
-  outputTokens: number,
-  pricing: LlmPricing
-): number {
-  const inputCost = (inputTokens / 1_000_000) * pricing.inputPricePerMillion;
-  const outputCost = (outputTokens / 1_000_000) * pricing.outputPricePerMillion;
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-}
 
 export function calculateAccurateCost(
   usage: TokenUsage & { costUsd?: number },
@@ -34,11 +25,11 @@ export function calculateAccurateCost(
 
   let cost = 0;
 
-  if (pricing.provider === 'anthropic') {
+  if (pricing.provider === LlmProviders.Anthropic) {
     cost = calculateAnthropicCost(usage, inputPrice, outputPrice, pricing);
-  } else if (pricing.provider === 'openai') {
+  } else if (pricing.provider === LlmProviders.OpenAI) {
     cost = calculateOpenAICost(usage, inputPrice, outputPrice, pricing);
-  } else if (pricing.provider === 'google') {
+  } else if (pricing.provider === LlmProviders.Google) {
     cost = calculateGeminiCost(usage, inputPrice, outputPrice, pricing);
   } else {
     cost = usage.inputTokens * inputPrice + usage.outputTokens * outputPrice;

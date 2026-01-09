@@ -2,6 +2,7 @@
  * Tests for FirestorePricingRepository.
  */
 
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDocGet = vi.fn();
@@ -37,7 +38,10 @@ describe('FirestorePricingRepository', () => {
     it('returns null when document does not exist', async () => {
       mockDocGet.mockResolvedValueOnce({ exists: false });
 
-      const result = await repository.findByProviderAndModel('google', 'gemini-2.0-flash');
+      const result = await repository.findByProviderAndModel(
+        LlmProviders.Google,
+        LlmModels.Gemini20Flash
+      );
 
       expect(result).toBeNull();
       expect(mockCollection).toHaveBeenCalledWith('app_settings');
@@ -50,7 +54,7 @@ describe('FirestorePricingRepository', () => {
         data: () => ({
           models: {
             openai_gpt4: {
-              provider: 'openai',
+              provider: LlmProviders.OpenAI,
               model: 'gpt4',
               inputPricePerMillion: 30,
               outputPricePerMillion: 60,
@@ -60,7 +64,10 @@ describe('FirestorePricingRepository', () => {
         }),
       });
 
-      const result = await repository.findByProviderAndModel('google', 'gemini-2.0-flash');
+      const result = await repository.findByProviderAndModel(
+        LlmProviders.Google,
+        LlmModels.Gemini20Flash
+      );
 
       expect(result).toBeNull();
     });
@@ -71,7 +78,7 @@ describe('FirestorePricingRepository', () => {
         data: () => ({
           models: {
             google_gemini: {
-              provider: 'google',
+              provider: LlmProviders.Google,
               model: 'gemini',
               inputPricePerMillion: 0.075,
               outputPricePerMillion: 0.3,
@@ -81,10 +88,10 @@ describe('FirestorePricingRepository', () => {
         }),
       });
 
-      const result = await repository.findByProviderAndModel('google', 'gemini');
+      const result = await repository.findByProviderAndModel(LlmProviders.Google, 'gemini');
 
       expect(result).toEqual({
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini',
         inputPricePerMillion: 0.075,
         outputPricePerMillion: 0.3,

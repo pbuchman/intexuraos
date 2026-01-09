@@ -1,3 +1,4 @@
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 const mockBatch = {
@@ -69,8 +70,8 @@ describe('usageLogger', () => {
 
   const baseParams = {
     userId: 'user-123',
-    provider: 'google' as const,
-    model: 'gemini-2.5-flash',
+    provider: LlmProviders.Google,
+    model: LlmModels.Gemini25Flash,
     callType: 'research' as const,
     usage: {
       inputTokens: 100,
@@ -140,7 +141,7 @@ describe('usageLogger', () => {
       await logUsage(baseParams);
 
       expect(mockFirestore.collection).toHaveBeenCalledWith('llm_usage_stats');
-      expect(mockCollection.doc).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockCollection.doc).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
     });
 
     it('creates batch with model metadata', async () => {
@@ -152,12 +153,13 @@ describe('usageLogger', () => {
 
       const setCalls = mockBatch.set.mock.calls;
       const modelSetCall = setCalls.find(
-        (call) => call[1]?.model === 'gemini-2.5-flash' && call[1]?.provider === 'google'
+        (call) =>
+          call[1]?.model === LlmModels.Gemini25Flash && call[1]?.provider === LlmProviders.Google
       );
       expect(modelSetCall).toBeDefined();
       expect(modelSetCall?.[1]).toMatchObject({
-        model: 'gemini-2.5-flash',
-        provider: 'google',
+        model: LlmModels.Gemini25Flash,
+        provider: LlmProviders.Google,
       });
       expect(modelSetCall?.[2]).toEqual({ merge: true });
 
@@ -227,6 +229,18 @@ describe('usageLogger', () => {
       const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
       expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 0 });
       expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
+    });
+
+    it('includes errorMessage in log when provided', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error' });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"errorMessage":"API timeout error"')
+      );
+      consoleSpy.mockRestore();
     });
 
     it('commits the batch', async () => {

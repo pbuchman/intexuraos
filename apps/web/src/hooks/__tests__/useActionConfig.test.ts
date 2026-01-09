@@ -15,7 +15,7 @@ vi.mock('../../services/actionConfigLoader', () => ({
   getFallbackConfig: vi.fn(() => ({
     actions: {
       delete: {
-        endpoint: { path: '/router/actions/{actionId}', method: 'DELETE' },
+        endpoint: { path: '/actions/{actionId}', method: 'DELETE' },
         ui: { label: 'Delete', variant: 'danger', icon: 'Trash2' },
       },
     },
@@ -85,16 +85,16 @@ describe('useActionConfig', () => {
   const mockConfig: ActionConfig = {
     actions: {
       delete: {
-        endpoint: { path: '/router/actions/{actionId}', method: 'DELETE' },
+        endpoint: { path: '/actions/{actionId}', method: 'DELETE' },
         ui: { label: 'Delete', variant: 'danger', icon: 'Trash2' },
       },
       discard: {
-        endpoint: { path: '/router/actions/{actionId}', method: 'DELETE' },
+        endpoint: { path: '/actions/{actionId}', method: 'DELETE' },
         ui: { label: 'Discard', variant: 'secondary', icon: 'XCircle' },
       },
       'approve-research': {
         endpoint: {
-          path: '/router/actions/{actionId}',
+          path: '/actions/{actionId}',
           method: 'PATCH',
           body: { status: 'processing' },
         },
@@ -156,7 +156,7 @@ describe('useActionConfig', () => {
     const fallback = vi.mocked(getFallbackConfig).mockReturnValue({
       actions: {
         delete: {
-          endpoint: { path: '/router/actions/{actionId}', method: 'DELETE' },
+          endpoint: { path: '/actions/{actionId}', method: 'DELETE' },
           ui: { label: 'Delete', variant: 'danger', icon: 'Trash2' },
         },
       },

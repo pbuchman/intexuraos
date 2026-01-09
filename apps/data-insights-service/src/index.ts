@@ -1,5 +1,7 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
@@ -19,8 +21,23 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
+/** Models used by this service */
+const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
+
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Fetch pricing from app-settings-service
+  process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
+  const pricingResult = await fetchAllPricing(
+    config.appSettingsServiceUrl,
+    config.internalAuthToken
+  );
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+  const pricingContext = createPricingContext(pricingResult.value, [...REQUIRED_MODELS]);
+  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
@@ -29,9 +46,9 @@ async function main(): Promise<void> {
 
   initServices({
     dataSourceRepository: new FirestoreDataSourceRepository(),
-    titleGenerationService: createTitleGenerationService(userServiceClient),
+    titleGenerationService: createTitleGenerationService(userServiceClient, pricingContext),
     compositeFeedRepository: new FirestoreCompositeFeedRepository(),
-    feedNameGenerationService: createFeedNameGenerationService(userServiceClient),
+    feedNameGenerationService: createFeedNameGenerationService(userServiceClient, pricingContext),
     mobileNotificationsClient: createMobileNotificationsClient({
       baseUrl: config.mobileNotificationsServiceUrl,
       internalAuthToken: config.internalAuthToken,

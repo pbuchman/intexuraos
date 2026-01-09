@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/user-service",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -27,6 +27,7 @@
     "@intexuraos/http-contracts": "*",
     "@intexuraos/http-server": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
     "firebase-admin": "^13.0.2",
     "zod": "^3.24.1"

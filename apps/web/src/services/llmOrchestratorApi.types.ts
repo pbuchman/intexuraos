@@ -2,29 +2,23 @@
  * LLM Orchestrator types for research management.
  */
 
-export type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
+import type { LlmProvider as ContractLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
-export type SupportedModel =
-  | 'gemini-2.5-pro'
-  | 'gemini-2.5-flash'
-  | 'claude-opus-4-5-20251101'
-  | 'claude-sonnet-4-5-20250929'
-  | 'o4-mini-deep-research'
-  | 'gpt-5.2'
-  | 'sonar'
-  | 'sonar-pro'
-  | 'sonar-deep-research';
+export type LlmProvider = ContractLlmProvider;
+
+export type SupportedModel = ResearchModel;
 
 const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
-  'gemini-2.5-pro': 'google',
-  'gemini-2.5-flash': 'google',
-  'claude-opus-4-5-20251101': 'anthropic',
-  'claude-sonnet-4-5-20250929': 'anthropic',
-  'o4-mini-deep-research': 'openai',
-  'gpt-5.2': 'openai',
-  sonar: 'perplexity',
-  'sonar-pro': 'perplexity',
-  'sonar-deep-research': 'perplexity',
+  [LlmModels.Gemini25Pro]: LlmProviders.Google,
+  [LlmModels.Gemini25Flash]: LlmProviders.Google,
+  [LlmModels.ClaudeOpus45]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet45]: LlmProviders.Anthropic,
+  [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
+  [LlmModels.GPT52]: LlmProviders.OpenAI,
+  [LlmModels.Sonar]: LlmProviders.Perplexity,
+  [LlmModels.SonarPro]: LlmProviders.Perplexity,
+  [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
 };
 
 export function getProviderForModel(model: SupportedModel): LlmProvider {

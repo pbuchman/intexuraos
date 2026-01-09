@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   IMAGE_PROMPT_MODELS,
   isValidImagePromptModel,
@@ -10,15 +11,15 @@ describe('ImagePromptModel', () => {
   describe('IMAGE_PROMPT_MODELS', () => {
     it('has gpt-4.1 with openai provider', () => {
       expect(IMAGE_PROMPT_MODELS['gpt-4.1']).toEqual({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         modelId: 'gpt-4.1',
       });
     });
 
     it('has gemini-2.5-pro with google provider', () => {
-      expect(IMAGE_PROMPT_MODELS['gemini-2.5-pro']).toEqual({
-        provider: 'google',
-        modelId: 'gemini-2.5-pro',
+      expect(IMAGE_PROMPT_MODELS[LlmModels.Gemini25Pro]).toEqual({
+        provider: LlmProviders.Google,
+        modelId: LlmModels.Gemini25Pro,
       });
     });
   });
@@ -29,7 +30,7 @@ describe('ImagePromptModel', () => {
     });
 
     it('returns true for gemini-2.5-pro', () => {
-      expect(isValidImagePromptModel('gemini-2.5-pro')).toBe(true);
+      expect(isValidImagePromptModel(LlmModels.Gemini25Pro)).toBe(true);
     });
 
     it('returns false for invalid model', () => {
@@ -45,27 +46,27 @@ describe('ImagePromptModel', () => {
 describe('ImageGenerationModel', () => {
   describe('IMAGE_GENERATION_MODELS', () => {
     it('has gpt-image-1 with openai provider', () => {
-      expect(IMAGE_GENERATION_MODELS['gpt-image-1']).toEqual({
-        provider: 'openai',
-        modelId: 'gpt-image-1',
+      expect(IMAGE_GENERATION_MODELS[LlmModels.GPTImage1]).toEqual({
+        provider: LlmProviders.OpenAI,
+        modelId: LlmModels.GPTImage1,
       });
     });
 
     it('has gemini-2.5-flash-image with google provider', () => {
-      expect(IMAGE_GENERATION_MODELS['gemini-2.5-flash-image']).toEqual({
-        provider: 'google',
-        modelId: 'gemini-2.5-flash-image',
+      expect(IMAGE_GENERATION_MODELS[LlmModels.Gemini25FlashImage]).toEqual({
+        provider: LlmProviders.Google,
+        modelId: LlmModels.Gemini25FlashImage,
       });
     });
   });
 
   describe('isValidImageGenerationModel', () => {
     it('returns true for gpt-image-1', () => {
-      expect(isValidImageGenerationModel('gpt-image-1')).toBe(true);
+      expect(isValidImageGenerationModel(LlmModels.GPTImage1)).toBe(true);
     });
 
     it('returns true for gemini-2.5-flash-image', () => {
-      expect(isValidImageGenerationModel('gemini-2.5-flash-image')).toBe(true);
+      expect(isValidImageGenerationModel(LlmModels.Gemini25FlashImage)).toBe(true);
     });
 
     it('returns false for invalid model', () => {

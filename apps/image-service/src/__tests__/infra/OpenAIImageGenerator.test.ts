@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import {
   OpenAIImageGenerator,
   createOpenAIImageGenerator,
@@ -23,6 +24,17 @@ vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
 }));
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 1.75,
+  outputPricePerMillion: 14.0,
+};
+
+const testImagePricing: ModelPricing = {
+  inputPricePerMillion: 0,
+  outputPricePerMillion: 0,
+  imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
+};
+
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
@@ -42,7 +54,7 @@ function createMockStorage(): ImageStorage & {
 
 describe('OpenAIImageGenerator', () => {
   const testApiKey = 'test-api-key';
-  const testModel = 'gpt-image-1' as const;
+  const testModel = LlmModels.GPTImage1;
   const testImageId = 'test-image-123';
   const testPrompt = 'A beautiful sunset over mountains';
 
@@ -60,7 +72,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -78,6 +90,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -100,7 +114,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -113,6 +127,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       await generator.generate(testPrompt);
@@ -128,7 +144,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -141,6 +157,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -165,6 +183,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -183,7 +203,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -198,6 +218,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -219,6 +241,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -241,6 +265,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -261,6 +287,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -283,6 +311,8 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -300,7 +330,7 @@ describe('OpenAIImageGenerator', () => {
       mockGenerateImage.mockResolvedValue(
         ok({
           imageData: fakeImageData,
-          model: 'dall-e-3',
+          model: LlmModels.GPTImage1,
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
         })
       );
@@ -312,6 +342,8 @@ describe('OpenAIImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -333,6 +365,8 @@ describe('OpenAIImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
       });
 
       expect(generator).toBeInstanceOf(OpenAIImageGenerator);

@@ -52,6 +52,22 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL',
     displayName: 'Notes Agent API',
   },
+  {
+    key: 'INTEXURAOS_TODOS_AGENT_OPENAPI_URL',
+    displayName: 'Todos Agent API',
+  },
+  {
+    key: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL',
+    displayName: 'Application Settings API',
+  },
+  {
+    key: 'INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL',
+    displayName: 'Bookmarks Agent API',
+  },
+  {
+    key: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
+    displayName: 'Calendar Agent API',
+  },
 ];
 
 /**

@@ -1,3 +1,4 @@
+import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import {
@@ -58,13 +59,13 @@ describe('createImageServiceClient', () => {
       nock(baseUrl)
         .post('/internal/images/prompts/generate', {
           text: 'gemini text',
-          model: 'gemini-2.5-pro',
+          model: LlmModels.Gemini25Pro,
           userId: 'user-2',
         })
         .reply(200, { success: true, data: mockPrompt });
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generatePrompt('gemini text', 'gemini-2.5-pro', 'user-2');
+      const result = await client.generatePrompt('gemini text', LlmModels.Gemini25Pro, 'user-2');
 
       expect(result.ok).toBe(true);
     });
@@ -107,7 +108,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl)
         .post('/internal/images/generate', {
           prompt: 'A beautiful sunset',
-          model: 'gpt-image-1',
+          model: LlmModels.GPTImage1,
           userId: 'user-1',
           title: undefined,
         })
@@ -116,7 +117,11 @@ describe('createImageServiceClient', () => {
         .reply(200, { success: true, data: mockImageData });
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generateImage('A beautiful sunset', 'gpt-image-1', 'user-1');
+      const result = await client.generateImage(
+        'A beautiful sunset',
+        LlmModels.GPTImage1,
+        'user-1'
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -128,7 +133,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl)
         .post('/internal/images/generate', {
           prompt: 'Mountain landscape',
-          model: 'gemini-2.5-flash-image',
+          model: LlmModels.Gemini25FlashImage,
           userId: 'user-1',
           title: 'My Mountain Photo',
         })
@@ -137,7 +142,7 @@ describe('createImageServiceClient', () => {
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
       const result = await client.generateImage(
         'Mountain landscape',
-        'gemini-2.5-flash-image',
+        LlmModels.Gemini25FlashImage,
         'user-1',
         {
           title: 'My Mountain Photo',
@@ -151,7 +156,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl).post('/internal/images/generate').reply(400, 'Bad Request');
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generateImage('prompt', 'gpt-image-1', 'user-1');
+      const result = await client.generateImage('prompt', LlmModels.GPTImage1, 'user-1');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -164,7 +169,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl).post('/internal/images/generate').replyWithError('ECONNRESET');
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generateImage('prompt', 'gpt-image-1', 'user-1');
+      const result = await client.generateImage('prompt', LlmModels.GPTImage1, 'user-1');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

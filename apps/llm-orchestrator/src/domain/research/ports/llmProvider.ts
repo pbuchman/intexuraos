@@ -3,7 +3,8 @@
  * Implemented by Gemini, Claude, and GPT adapters.
  */
 
-import type { Result, SynthesisContext } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
+import type { SynthesisContext } from '@intexuraos/llm-common';
 
 export interface LlmError {
   code: 'API_ERROR' | 'TIMEOUT' | 'INVALID_KEY' | 'RATE_LIMITED';
@@ -14,6 +15,16 @@ export interface LlmUsage {
   inputTokens: number;
   outputTokens: number;
   costUsd?: number;
+}
+
+export interface TitleGenerateResult {
+  title: string;
+  usage: LlmUsage;
+}
+
+export interface LabelGenerateResult {
+  label: string;
+  usage: LlmUsage;
 }
 
 export interface LlmResearchResult {
@@ -39,10 +50,10 @@ export interface LlmSynthesisProvider {
     synthesisContext?: SynthesisContext
   ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
+  generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;
 }
 
 export interface TitleGenerator {
-  generateTitle(prompt: string): Promise<Result<string, LlmError>>;
-  generateContextLabel(content: string): Promise<Result<string, LlmError>>;
+  generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;
+  generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>>;
 }

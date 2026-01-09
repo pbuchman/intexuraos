@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
+import { LlmModels } from '@intexuraos/llm-contract';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { ImageGenerationModel } from '../../domain/index.js';
 import type {
   GeneratedImageData,
@@ -15,6 +17,8 @@ export interface GoogleImageGeneratorConfig {
   model: ImageGenerationModel;
   storage: ImageStorage;
   userId: string;
+  pricing: ModelPricing;
+  imagePricing: ModelPricing;
   generateId?: () => string;
 }
 
@@ -23,6 +27,8 @@ export class GoogleImageGenerator implements ImageGenerator {
   private readonly model: ImageGenerationModel;
   private readonly storage: ImageStorage;
   private readonly userId: string;
+  private readonly pricing: ModelPricing;
+  private readonly imagePricing: ModelPricing;
   private readonly generateId: () => string;
 
   constructor(config: GoogleImageGeneratorConfig) {
@@ -30,6 +36,8 @@ export class GoogleImageGenerator implements ImageGenerator {
     this.model = config.model;
     this.storage = config.storage;
     this.userId = config.userId;
+    this.pricing = config.pricing;
+    this.imagePricing = config.imagePricing;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -41,8 +49,10 @@ export class GoogleImageGenerator implements ImageGenerator {
 
     const client = createGeminiClient({
       apiKey: this.apiKey,
-      model: 'gemini-2.5-flash-image',
+      model: LlmModels.Gemini25FlashImage,
       userId: this.userId,
+      pricing: this.pricing,
+      imagePricing: this.imagePricing,
     });
 
     if (client.generateImage === undefined) {

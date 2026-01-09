@@ -4,6 +4,8 @@ import type { ActionEventPublisher } from '../../infra/pubsub/actionEventPublish
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import { getHandlerForType, type ActionHandlerRegistry } from './actionHandlerRegistry.js';
 
+const DEFAULT_RETRY_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
 export interface RetryResult {
   processed: number;
   skipped: number;
@@ -21,8 +23,10 @@ export function createRetryPendingActionsUseCase(deps: {
   actionEventPublisher: ActionEventPublisher;
   actionHandlerRegistry: ActionHandlerRegistry;
   logger: Logger;
+  retryThresholdMs?: number;
 }): RetryPendingActionsUseCase {
   const { actionRepository, actionEventPublisher, actionHandlerRegistry, logger } = deps;
+  const retryThresholdMs = deps.retryThresholdMs ?? DEFAULT_RETRY_THRESHOLD_MS;
 
   return {
     async execute(): Promise<RetryResult> {
@@ -38,6 +42,18 @@ export function createRetryPendingActionsUseCase(deps: {
       const skipReasons: Record<string, number> = {};
 
       for (const action of pendingActions) {
+        const actionAge = Date.now() - new Date(action.createdAt).getTime();
+
+        if (actionAge < retryThresholdMs) {
+          logger.debug(
+            { actionId: action.id, ageMs: actionAge },
+            'Action too recent, skipping retry'
+          );
+          skipped++;
+          skipReasons['too_recent'] = (skipReasons['too_recent'] ?? 0) + 1;
+          continue;
+        }
+
         logger.info(
           { actionId: action.id, userId: action.userId, actionType: action.type },
           'Processing pending action'

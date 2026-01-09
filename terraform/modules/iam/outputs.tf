@@ -13,6 +13,10 @@ output "service_accounts" {
     data_insights_service        = google_service_account.data_insights_service.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
+    app_settings_service         = google_service_account.app_settings_service.email
+    todos_agent                  = google_service_account.todos_agent.email
+    bookmarks_agent              = google_service_account.bookmarks_agent.email
+    calendar_agent               = google_service_account.calendar_agent.email
   }
 }
 
@@ -74,4 +78,24 @@ output "image_service_sa" {
 output "notes_agent_sa" {
   description = "Notes Agent service account email"
   value       = google_service_account.notes_agent.email
+}
+
+output "app_settings_service_sa" {
+  description = "App Settings Service service account email"
+  value       = google_service_account.app_settings_service.email
+}
+
+output "todos_agent_sa" {
+  description = "Todos Agent service account email"
+  value       = google_service_account.todos_agent.email
+}
+
+output "bookmarks_agent_sa" {
+  description = "Bookmarks Agent service account email"
+  value       = google_service_account.bookmarks_agent.email
+}
+
+output "calendar_agent_sa" {
+  description = "Calendar Agent service account email"
+  value       = google_service_account.calendar_agent.email
 }

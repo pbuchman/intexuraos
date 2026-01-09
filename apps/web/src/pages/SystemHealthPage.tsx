@@ -1,3 +1,4 @@
+import { LlmProviders, type Google, type OpenAI, type Anthropic } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
 import { Layout, StatusWidget } from '@/components';
 import { useAuth } from '@/context';
@@ -182,7 +183,7 @@ export function SystemHealthPage(): React.JSX.Element {
     );
   };
 
-  const getLlmStatus = (provider: 'google' | 'openai' | 'anthropic'): StatusState => {
+  const getLlmStatus = (provider: Google | OpenAI | Anthropic): StatusState => {
     if (llmLoading) {
       return { status: 'loading', description: 'Loading...' };
     }
@@ -210,7 +211,7 @@ export function SystemHealthPage(): React.JSX.Element {
 
   const renderLlmWidget = (
     title: string,
-    provider: 'google' | 'openai' | 'anthropic'
+    provider: Google | OpenAI | Anthropic
   ): React.JSX.Element => {
     const state = getLlmStatus(provider);
     const details = state.details;
@@ -246,9 +247,9 @@ export function SystemHealthPage(): React.JSX.Element {
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">LLM Providers</h3>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {renderLlmWidget('Claude (Anthropic)', 'anthropic')}
-          {renderLlmWidget('Gemini (Google)', 'google')}
-          {renderLlmWidget('GPT (OpenAI)', 'openai')}
+          {renderLlmWidget('Claude (Anthropic)', LlmProviders.Anthropic)}
+          {renderLlmWidget('Gemini (Google)', LlmProviders.Google)}
+          {renderLlmWidget('GPT (OpenAI)', LlmProviders.OpenAI)}
         </div>
       </div>
     </Layout>

@@ -1,12 +1,12 @@
 import type { CommandType } from '../models/command.js';
-import type { SupportedModel } from '@intexuraos/llm-contract';
+import type { ResearchModel } from '@intexuraos/llm-contract';
 
 export interface ClassificationResult {
   type: CommandType;
   confidence: number;
   title: string;
   reasoning: string;
-  selectedModels?: SupportedModel[];
+  selectedModels?: ResearchModel[];
 }
 
 export interface Classifier {

@@ -1,34 +1,27 @@
+/**
+ * Claude Client - with parameterized pricing.
+ *
+ * All costs calculated from passed ModelPricing config.
+ */
+
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
-import {
-  buildResearchPrompt,
-  err,
-  getErrorMessage,
-  ok,
-  type Result,
-} from '@intexuraos/common-core';
+import { buildResearchPrompt } from '@intexuraos/llm-common';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
-import type { LLMClient, NormalizedUsage, GenerateResult } from '@intexuraos/llm-contract';
+import {
+  LlmProviders,
+  type LLMClient,
+  type NormalizedUsage,
+  type GenerateResult,
+} from '@intexuraos/llm-contract';
 import { logUsage, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
+import { normalizeUsage } from './costCalculator.js';
 
 export type ClaudeClient = LLMClient;
 
 const MAX_TOKENS = 8192;
-const WEB_SEARCH_COST_PER_CALL = 0.03;
-
-const CLAUDE_PRICING: Record<string, { input: number; output: number }> = {
-  'claude-opus-4-5-20251101': { input: 5.0, output: 25.0 },
-  'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
-  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-  'claude-opus-4-20250514': { input: 15.0, output: 75.0 },
-  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4.0 },
-  'claude-3-opus-20240229': { input: 15.0, output: 75.0 },
-  'claude-3-sonnet-20240229': { input: 3.0, output: 15.0 },
-  'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
-};
 
 function createRequestContext(
   method: string,
@@ -38,7 +31,7 @@ function createRequestContext(
   const requestId = randomUUID();
   const startTime = new Date();
   const auditContext = createAuditContext({
-    provider: 'anthropic',
+    provider: LlmProviders.Anthropic,
     model,
     method,
     prompt,
@@ -47,63 +40,9 @@ function createRequestContext(
   return { requestId, startTime, auditContext };
 }
 
-function calculateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  cacheReadTokens: number,
-  cacheCreationTokens: number,
-  webSearchCalls: number
-): number {
-  const pricing = CLAUDE_PRICING[model] ?? { input: 3.0, output: 15.0 };
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.input * 0.1;
-  const cacheCreationCost = (cacheCreationTokens / 1_000_000) * pricing.input * 1.25;
-  const regularInputCost =
-    ((inputTokens - cacheReadTokens - cacheCreationTokens) / 1_000_000) * pricing.input;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  const webSearchCost = webSearchCalls * WEB_SEARCH_COST_PER_CALL;
-  return (
-    Math.round(
-      (regularInputCost + cacheReadCost + cacheCreationCost + outputCost + webSearchCost) *
-        1_000_000
-    ) / 1_000_000
-  );
-}
-
-function normalizeUsage(
-  model: string,
-  usage: Anthropic.Usage,
-  webSearchCalls: number
-): NormalizedUsage {
-  const inputTokens = usage.input_tokens;
-  const outputTokens = usage.output_tokens;
-  const cacheReadTokens =
-    (usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0;
-  const cacheCreationTokens =
-    (usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0;
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
-    costUsd: calculateCost(
-      model,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      webSearchCalls
-    ),
-    ...(cacheReadTokens + cacheCreationTokens > 0 && {
-      cacheTokens: cacheReadTokens + cacheCreationTokens,
-    }),
-    ...(webSearchCalls > 0 && { webSearchCalls }),
-  };
-}
-
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId } = config;
+  const { model, userId, pricing } = config;
 
   function trackUsage(
     callType: CallType,
@@ -113,13 +52,29 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   ): void {
     void logUsage({
       userId,
-      provider: 'anthropic',
+      provider: LlmProviders.Anthropic,
       model,
       callType,
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
     });
+  }
+
+  function extractUsageDetails(usage: Anthropic.Usage): {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  } {
+    const inputTokens = usage.input_tokens;
+    const outputTokens = usage.output_tokens;
+    const cacheReadTokens =
+      (usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0;
+    const cacheCreationTokens =
+      (usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0;
+
+    return { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens };
   }
 
   return {
@@ -141,7 +96,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         const content = textBlocks.map((b) => b.text).join('\n\n');
         const sources = extractSourcesFromClaudeResponse(response);
         const webSearchCalls = countWebSearchCalls(response);
-        const usage = normalizeUsage(model, response.usage, webSearchCalls);
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cacheReadTokens,
+          usageDetails.cacheCreationTokens,
+          webSearchCalls,
+          pricing
+        );
 
         const successParams: Parameters<typeof auditContext.success>[0] = {
           response: content,
@@ -183,7 +146,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           (block): block is Anthropic.TextBlock => block.type === 'text'
         );
         const text = textBlocks.map((b) => b.text).join('\n\n');
-        const usage = normalizeUsage(model, response.usage, 0);
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cacheReadTokens,
+          usageDetails.cacheCreationTokens,
+          0,
+          pricing
+        );
 
         await auditContext.success({
           response: text,

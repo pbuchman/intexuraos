@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
@@ -12,6 +13,11 @@ vi.mock('@intexuraos/llm-audit', (): object => ({
 vi.mock('@intexuraos/llm-pricing', (): object => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
 }));
+
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 1.25,
+  outputPricePerMillion: 10.0,
+};
 
 describe('GeminiPromptAdapter', () => {
   beforeAll(() => {
@@ -60,7 +66,11 @@ describe('GeminiPromptAdapter', () => {
           },
         });
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Machine learning article');
 
       expect(result.ok).toBe(true);
@@ -83,7 +93,11 @@ describe('GeminiPromptAdapter', () => {
           ],
         });
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -97,7 +111,11 @@ describe('GeminiPromptAdapter', () => {
         .post(/.*/)
         .replyWithError('API_KEY invalid');
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'bad-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'bad-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -111,7 +129,11 @@ describe('GeminiPromptAdapter', () => {
         .post(/.*/)
         .replyWithError('429 Too Many Requests');
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -123,7 +145,11 @@ describe('GeminiPromptAdapter', () => {
     it('returns TIMEOUT error for timeout', async () => {
       nock('https://generativelanguage.googleapis.com').post(/.*/).replyWithError('timeout');
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -135,7 +161,11 @@ describe('GeminiPromptAdapter', () => {
     it('returns API_ERROR for other errors', async () => {
       nock('https://generativelanguage.googleapis.com').post(/.*/).replyWithError('Unknown error');
 
-      const adapter = new GeminiPromptAdapter({ apiKey: 'test-key', userId: 'test-user' });
+      const adapter = new GeminiPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
       expect(result.ok).toBe(false);
@@ -168,8 +198,9 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
-        model: 'gemini-2.0-flash',
+        model: LlmModels.Gemini20Flash,
         userId: 'test-user',
+        pricing: testPricing,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

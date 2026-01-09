@@ -3,6 +3,7 @@
  * Mocks @intexuraos/infra-firestore.
  */
 
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDocSet = vi.fn().mockResolvedValue(undefined);
@@ -93,7 +94,7 @@ describe('createAuditContext', () => {
     it('saves audit log to Firestore on success', async () => {
       const startedAt = new Date('2024-01-01T00:00:00Z');
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test prompt',
@@ -105,7 +106,7 @@ describe('createAuditContext', () => {
       expect(mockCollection).toHaveBeenCalledWith('llm_api_logs');
       expect(mockDocSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: 'openai',
+          provider: LlmProviders.OpenAI,
           model: 'gpt-4',
           method: 'research',
           prompt: 'Test prompt',
@@ -120,7 +121,7 @@ describe('createAuditContext', () => {
 
     it('includes userId when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'generate',
         prompt: 'Test',
@@ -139,7 +140,7 @@ describe('createAuditContext', () => {
 
     it('includes researchId when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini',
         method: 'synthesize',
         prompt: 'Test',
@@ -160,7 +161,7 @@ describe('createAuditContext', () => {
       process.env['INTEXURAOS_AUDIT_LLMS'] = 'false';
 
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -174,7 +175,7 @@ describe('createAuditContext', () => {
 
     it('is idempotent - only logs once', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -194,7 +195,7 @@ describe('createAuditContext', () => {
       vi.setSystemTime(new Date('2024-01-01T00:00:01.500Z'));
 
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -214,7 +215,7 @@ describe('createAuditContext', () => {
 
     it('includes inputTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -232,7 +233,7 @@ describe('createAuditContext', () => {
 
     it('includes outputTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -250,7 +251,7 @@ describe('createAuditContext', () => {
 
     it('includes costUsd when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -268,7 +269,7 @@ describe('createAuditContext', () => {
 
     it('includes all token/cost fields when provided together', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'research',
         prompt: 'Test',
@@ -293,7 +294,7 @@ describe('createAuditContext', () => {
 
     it('includes cacheCreationTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'research',
         prompt: 'Test',
@@ -311,7 +312,7 @@ describe('createAuditContext', () => {
 
     it('includes cacheReadTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'research',
         prompt: 'Test',
@@ -329,7 +330,7 @@ describe('createAuditContext', () => {
 
     it('includes cachedTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -347,7 +348,7 @@ describe('createAuditContext', () => {
 
     it('includes reasoningTokens when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -365,7 +366,7 @@ describe('createAuditContext', () => {
 
     it('includes webSearchCalls when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'research',
         prompt: 'Test',
@@ -383,7 +384,7 @@ describe('createAuditContext', () => {
 
     it('includes groundingEnabled when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'google',
+        provider: LlmProviders.Google,
         model: 'gemini',
         method: 'research',
         prompt: 'Test',
@@ -401,8 +402,8 @@ describe('createAuditContext', () => {
 
     it('includes providerCost when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'perplexity',
-        model: 'sonar-pro',
+        provider: LlmProviders.Perplexity,
+        model: LlmModels.SonarPro,
         method: 'research',
         prompt: 'Test',
         startedAt: new Date(),
@@ -419,8 +420,8 @@ describe('createAuditContext', () => {
 
     it('includes imageCount when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
-        model: 'gpt-image-1',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPTImage1,
         method: 'image-generation',
         prompt: 'A cat',
         startedAt: new Date(),
@@ -437,26 +438,26 @@ describe('createAuditContext', () => {
 
     it('includes imageModel when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
-        model: 'gpt-image-1',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPTImage1,
         method: 'image-generation',
         prompt: 'A dog',
         startedAt: new Date(),
       });
 
-      await ctx.success({ response: '[image]', imageModel: 'gpt-image-1' });
+      await ctx.success({ response: '[image]', imageModel: LlmModels.GPTImage1 });
 
       expect(mockDocSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          imageModel: 'gpt-image-1',
+          imageModel: LlmModels.GPTImage1,
         })
       );
     });
 
     it('includes imageSize when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'google',
-        model: 'gemini-2.5-flash-image',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini25FlashImage,
         method: 'image-generation',
         prompt: 'A bird',
         startedAt: new Date(),
@@ -473,8 +474,8 @@ describe('createAuditContext', () => {
 
     it('includes imageCostUsd when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
-        model: 'gpt-image-1',
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPTImage1,
         method: 'image-generation',
         prompt: 'A fish',
         startedAt: new Date(),
@@ -491,8 +492,8 @@ describe('createAuditContext', () => {
 
     it('includes all image fields when provided together', async () => {
       const ctx = createAuditContext({
-        provider: 'google',
-        model: 'gemini-2.5-flash-image',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini25FlashImage,
         method: 'image-generation',
         prompt: 'A landscape',
         startedAt: new Date(),
@@ -501,7 +502,7 @@ describe('createAuditContext', () => {
       await ctx.success({
         response: '[image-generated]',
         imageCount: 1,
-        imageModel: 'gemini-2.5-flash-image',
+        imageModel: LlmModels.Gemini25FlashImage,
         imageSize: '1024x1024',
         imageCostUsd: 0.03,
       });
@@ -509,7 +510,7 @@ describe('createAuditContext', () => {
       expect(mockDocSet).toHaveBeenCalledWith(
         expect.objectContaining({
           imageCount: 1,
-          imageModel: 'gemini-2.5-flash-image',
+          imageModel: LlmModels.Gemini25FlashImage,
           imageSize: '1024x1024',
           imageCostUsd: 0.03,
         })
@@ -521,7 +522,7 @@ describe('createAuditContext', () => {
     it('saves error log to Firestore', async () => {
       const startedAt = new Date('2024-01-01T00:00:00Z');
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test prompt',
@@ -532,7 +533,7 @@ describe('createAuditContext', () => {
 
       expect(mockDocSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: 'openai',
+          provider: LlmProviders.OpenAI,
           model: 'gpt-4',
           method: 'research',
           prompt: 'Test prompt',
@@ -546,7 +547,7 @@ describe('createAuditContext', () => {
 
     it('includes optional fields when provided', async () => {
       const ctx = createAuditContext({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-3',
         method: 'generate',
         prompt: 'Test',
@@ -569,7 +570,7 @@ describe('createAuditContext', () => {
       process.env['INTEXURAOS_AUDIT_LLMS'] = 'false';
 
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -583,7 +584,7 @@ describe('createAuditContext', () => {
 
     it('is idempotent - only logs once', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -598,7 +599,7 @@ describe('createAuditContext', () => {
 
     it('does not log if success was called first', async () => {
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',
@@ -619,7 +620,7 @@ describe('createAuditContext', () => {
       mockDocSet.mockRejectedValueOnce(new Error('Firestore connection failed'));
 
       const ctx = createAuditContext({
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4',
         method: 'research',
         prompt: 'Test',

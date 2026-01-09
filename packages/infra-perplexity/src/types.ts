@@ -2,12 +2,19 @@ export type {
   LLMError as PerplexityError,
   ResearchResult,
   GenerateResult,
+  ModelPricing,
 } from '@intexuraos/llm-contract';
 
+/**
+ * Perplexity client configuration with explicit pricing.
+ */
 export interface PerplexityConfig {
   apiKey: string;
   model: string;
   userId: string;
+  pricing: import('@intexuraos/llm-contract').ModelPricing;
+  /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
+  timeoutMs?: number;
 }
 
 export type SearchContextSize = 'low' | 'medium' | 'high';
@@ -20,6 +27,7 @@ export interface PerplexityRequestBody {
   }[];
   temperature?: number;
   max_tokens?: number;
+  stream?: boolean;
 }
 
 export interface PerplexitySearchResult {

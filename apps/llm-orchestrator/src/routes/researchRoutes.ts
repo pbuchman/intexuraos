@@ -22,17 +22,19 @@ import {
   enhanceResearch,
   type InputContext,
   getResearch,
+  type LabelGenerateResult,
   listResearches,
+  type LlmError,
   type PartialFailureDecision,
   type Research,
-  type SupportedModel,
+  type ResearchModel,
   retryFailedLlms,
   retryFromFailed,
   runSynthesis,
   submitResearch,
   unshareResearch,
 } from '../domain/research/index.js';
-import { getProviderForModel } from '@intexuraos/llm-contract';
+import { getProviderForModel, LlmModels, type Gemini25Flash } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   approveResearchResponseSchema,
@@ -55,16 +57,16 @@ import {
 
 interface CreateResearchBody {
   prompt: string;
-  selectedModels: SupportedModel[];
-  synthesisModel?: SupportedModel;
+  selectedModels: ResearchModel[];
+  synthesisModel?: ResearchModel;
   inputContexts?: { content: string; label?: string }[];
   skipSynthesis?: boolean;
 }
 
 interface SaveDraftBody {
   prompt: string;
-  selectedModels?: SupportedModel[];
-  synthesisModel?: SupportedModel;
+  selectedModels?: ResearchModel[];
+  synthesisModel?: ResearchModel;
   inputContexts?: { content: string; label?: string }[];
 }
 
@@ -82,9 +84,9 @@ interface ConfirmPartialFailureBody {
 }
 
 interface EnhanceResearchBody {
-  additionalModels?: SupportedModel[];
+  additionalModels?: ResearchModel[];
   additionalContexts?: { content: string; label?: string }[];
-  synthesisModel?: SupportedModel;
+  synthesisModel?: ResearchModel;
   removeContextIds?: string[];
 }
 
@@ -98,16 +100,22 @@ async function generateContextLabels(
   googleApiKey: string | undefined,
   userId: string,
   createTitleGenerator: (
-    model: string,
+    model: Gemini25Flash,
     apiKey: string,
-    userId: string
-  ) => { generateContextLabel: (content: string) => Promise<{ ok: boolean; value?: string }> }
+    userId: string,
+    pricing: import('@intexuraos/llm-contract').ModelPricing
+  ) => {
+    generateContextLabel: (
+      content: string
+    ) => Promise<import('@intexuraos/common-core').Result<LabelGenerateResult, LlmError>>;
+  },
+  pricing: import('@intexuraos/llm-contract').ModelPricing
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;
   }
 
-  const generator = createTitleGenerator('gemini-2.5-flash', googleApiKey, userId);
+  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, pricing);
 
   return await Promise.all(
     contexts.map(async (ctx) => {
@@ -117,7 +125,7 @@ async function generateContextLabels(
       const labelResult = await generator.generateContextLabel(ctx.content);
       return {
         content: ctx.content,
-        label: labelResult.ok && labelResult.value !== undefined ? labelResult.value : undefined,
+        label: labelResult.ok ? labelResult.value.label : undefined,
       };
     })
   );
@@ -152,6 +160,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         researchEventPublisher,
         userServiceClient,
         createTitleGenerator,
+        pricingContext,
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -161,14 +170,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: user.userId,
         prompt: body.prompt,
         selectedModels: body.selectedModels,
-        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? 'gemini-2.5-pro',
+        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          createTitleGenerator
+          createTitleGenerator,
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         submitParams.inputContexts = contextsWithLabels;
       }
@@ -215,7 +225,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+        getServices();
 
       // Get user's API keys to generate title
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -225,38 +236,35 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       let title: string;
       if (apiKeys.google !== undefined) {
         const titleGenerator = createTitleGenerator(
-          'gemini-2.5-flash',
+          LlmModels.Gemini25Flash,
           apiKeys.google,
-          user.userId
+          user.userId,
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
-        title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+        title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
       } else {
         // Fallback: use first 60 chars of prompt
         title = body.prompt.slice(0, 60);
       }
 
-      // Create draft research
-      const defaultModels: SupportedModel[] = [
-        'gemini-2.5-pro',
-        'claude-opus-4-5-20251101',
-        'o4-mini-deep-research',
-      ];
-      const resolvedSelectedModels = body.selectedModels ?? defaultModels;
+      // Create draft research (no default models - user must select before approving)
+      const selectedModels = body.selectedModels ?? [];
       const draftParams: Parameters<typeof createDraftResearch>[0] = {
         id: generateId(),
         userId: user.userId,
         title,
         prompt: body.prompt,
-        selectedModels: resolvedSelectedModels,
-        synthesisModel: body.synthesisModel ?? resolvedSelectedModels[0] ?? 'gemini-2.5-pro',
+        selectedModels,
+        synthesisModel: body.synthesisModel ?? selectedModels[0] ?? LlmModels.Gemini25Pro,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          createTitleGenerator
+          createTitleGenerator,
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const now = new Date().toISOString();
         draftParams.inputContexts = contextsWithLabels.map((ctx) => {
@@ -307,7 +315,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as { id: string };
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator } = getServices();
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+        getServices();
 
       // Get existing research
       const existingResult = await researchRepo.findById(id);
@@ -339,12 +348,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.prompt !== existing.prompt) {
         if (apiKeys.google !== undefined) {
           const titleGenerator = createTitleGenerator(
-            'gemini-2.5-flash',
+            LlmModels.Gemini25Flash,
             apiKeys.google,
-            user.userId
+            user.userId,
+            pricingContext.getPricing(LlmModels.Gemini25Flash)
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
-          title = titleResult.ok ? titleResult.value : body.prompt.slice(0, 60);
+          title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
         } else {
           title = body.prompt.slice(0, 60);
         }
@@ -365,7 +375,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          createTitleGenerator
+          createTitleGenerator,
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         const now = new Date().toISOString();
         updates.inputContexts = contextsWithLabels.map((ctx) => {
@@ -525,6 +536,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('CONFLICT', 'Research is not in draft status');
       }
 
+      // Require at least one source: either models or input contexts
+      const hasModels = existing.value.selectedModels.length > 0;
+      const hasContexts =
+        existing.value.inputContexts !== undefined && existing.value.inputContexts.length > 0;
+      if (!hasModels && !hasContexts) {
+        return await reply.fail(
+          'INVALID_REQUEST',
+          'Select at least one model or provide input context before starting research'
+        );
+      }
+
       const updateResult = await researchRepo.update(params.id, { status: 'pending' });
 
       if (!updateResult.ok) {
@@ -578,6 +600,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         createContextInferrer,
         shareStorage,
         shareConfig,
+        pricingContext,
       } = getServices();
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
@@ -631,13 +654,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
-          const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
+          const synthesizer = createSynthesizer(
+            synthesisModel,
+            synthesisKey,
+            user.userId,
+            pricingContext.getPricing(synthesisModel)
+          );
           const contextInferrer =
             apiKeysResult.value.google !== undefined
               ? createContextInferrer(
-                  'gemini-2.5-flash',
+                  LlmModels.Gemini25Flash,
                   apiKeysResult.value.google,
                   user.userId,
+                  pricingContext.getPricing(LlmModels.Gemini25Flash),
                   request.log
                 )
               : undefined;
@@ -741,6 +770,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         createSynthesizer,
         shareStorage,
         shareConfig,
+        pricingContext,
       } = getServices();
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
 
@@ -775,7 +805,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const synthesizer = createSynthesizer(synthesisModel, synthesisKey, user.userId);
+      const synthesizer = createSynthesizer(
+        synthesisModel,
+        synthesisKey,
+        user.userId,
+        pricingContext.getPricing(synthesisModel)
+      );
 
       const retryResult = await retryFromFailed(id, {
         researchRepo,
@@ -849,6 +884,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         researchEventPublisher,
         userServiceClient,
         createTitleGenerator,
+        pricingContext,
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -866,7 +902,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
-          createTitleGenerator
+          createTitleGenerator,
+          pricingContext.getPricing(LlmModels.Gemini25Flash)
         );
         enhanceInput.additionalContexts = contextsWithLabels;
       }

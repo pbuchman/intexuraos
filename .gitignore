@@ -5,6 +5,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
+.eslintcache
 scripts/test-results/
 
 # IDE - exclude user-specific files but keep project configuration
@@ -45,6 +46,8 @@ tfplan
 
 # Affected services output (Cloud Build)
 affected.json
+.affected/
+cloudbuild.dynamic.json
 
 speechmatics-js-sdk/
 
@@ -57,3 +60,11 @@ firestore.rules
 
 # Local Next.js build output
 apps/web/dev-dist/
+# Local Next.js build output
+apps/web/dev-dist/
+apps/\*
+
+# Ignore auto-generated folder context files
+CLAUDE.md
+# But keep the root CLAUDE.md if you want
+!.claude/CLAUDE.md

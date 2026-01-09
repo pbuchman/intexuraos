@@ -2,6 +2,7 @@
  * Tests for userServiceClient.
  */
 
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient } from '../../../infra/user/userServiceClient.js';
@@ -92,7 +93,7 @@ describe('createUserServiceClient', () => {
         .reply(200);
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
-      await client.reportLlmSuccess('user-1', 'google');
+      await client.reportLlmSuccess('user-1', LlmProviders.Google);
 
       expect(scope.isDone()).toBe(true);
     });
@@ -104,7 +105,7 @@ describe('createUserServiceClient', () => {
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
 
-      await expect(client.reportLlmSuccess('user-1', 'openai')).resolves.toBeUndefined();
+      await expect(client.reportLlmSuccess('user-1', LlmProviders.OpenAI)).resolves.toBeUndefined();
     });
 
     it('does not throw on error response (best effort)', async () => {
@@ -112,7 +113,9 @@ describe('createUserServiceClient', () => {
 
       const client = createUserServiceClient({ baseUrl, internalAuthToken });
 
-      await expect(client.reportLlmSuccess('user-1', 'anthropic')).resolves.toBeUndefined();
+      await expect(
+        client.reportLlmSuccess('user-1', LlmProviders.Anthropic)
+      ).resolves.toBeUndefined();
     });
   });
 });

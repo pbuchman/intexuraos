@@ -167,7 +167,7 @@ function CommandItem({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 text-sm text-slate-800">{command.text}</p>
+          <p className="line-clamp-3 break-all text-sm text-slate-800">{command.text}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {command.classification !== undefined && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
@@ -272,7 +272,7 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium text-slate-800">{action.title}</h3>
+          <h3 className="break-all font-medium text-slate-800">{action.title}</h3>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
               {getTypeLabel(action.type)}
@@ -337,6 +337,8 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 
 // 💰 CostGuard: Debounce delay for batch fetching changed actions
 const DEBOUNCE_DELAY_MS = 500;
+// 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
+const BATCH_SIZE_LIMIT = 50;
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -388,18 +390,26 @@ export function InboxPage(): React.JSX.Element {
 
   // 💰 CostGuard: Debounced batch fetch for changed actions
   // Waits 500ms for additional changes before making API call
+  // Chunks IDs into batches of BATCH_SIZE_LIMIT to respect backend limits
   const fetchChangedActions = useCallback(
     async (ids: string[]): Promise<void> => {
       if (ids.length === 0) return;
 
       try {
         const token = await getAccessToken();
-        const fetchedActions = await batchGetActions(token, ids);
+
+        // Chunk IDs into batches of BATCH_SIZE_LIMIT
+        const allFetchedActions: Action[] = [];
+        for (let i = 0; i < ids.length; i += BATCH_SIZE_LIMIT) {
+          const chunk = ids.slice(i, i + BATCH_SIZE_LIMIT);
+          const fetchedActions = await batchGetActions(token, chunk);
+          allFetchedActions.push(...fetchedActions);
+        }
 
         setActions((prev) => {
           const updated = [...prev];
 
-          for (const changedAction of fetchedActions) {
+          for (const changedAction of allFetchedActions) {
             const index = updated.findIndex((a) => a.id === changedAction.id);
             if (index >= 0) {
               updated[index] = changedAction;

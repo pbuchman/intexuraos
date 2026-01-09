@@ -39,7 +39,7 @@ Introduce user approval workflow for all actions - no automatic execution, expli
 - ✅ Tier 1-2: Wrote 4 comprehensive tests for UserPhoneLookup adapter
 - ✅ Tier 2-0: Created executeResearchAction use case (domain/usecases/executeResearchAction.ts)
 - ✅ Tier 2-0: Added executeResearchActionUseCase to services.ts
-- ✅ Tier 2-0: Created POST /router/actions/:actionId/execute endpoint in publicRoutes.ts
+- ✅ Tier 2-0: Created POST /actions/:actionId/execute endpoint in publicRoutes.ts
 - ✅ Tier 2-0: Updated handleResearchAction to only set awaiting_approval + send WhatsApp notification
 - ✅ Tier 2-0: Updated services.ts with new handleResearchAction dependencies
 - ✅ Tier 2-1: Created ActionsAgentClient interface and HTTP implementation
@@ -170,7 +170,7 @@ All tiers completed. Remaining work:
   - Wrote 4 comprehensive tests for UserPhoneLookup adapter (success, 404, 500, network error)
 - ✅ Completed Tier 2-0: Execute Endpoint & Updated Handler
   - Created executeResearchAction use case (creates draft, updates action, sends WhatsApp)
-  - Added POST /router/actions/:actionId/execute endpoint to publicRoutes.ts
+  - Added POST /actions/:actionId/execute endpoint to publicRoutes.ts
   - Simplified handleResearchAction to only set awaiting_approval + send approval notification
   - Updated services.ts with new dependencies for both use cases
   - Idempotency: execute can be called multiple times, returns existing resource_url if completed
@@ -193,7 +193,7 @@ All tiers completed. Remaining work:
   - Updated firestore-collections.json ownership transfer
   - Added INTEXURAOS_PUBSUB_ACTIONS_RESEARCH_TOPIC env var validation
 - ✅ Completed Tier 1-1: Public Action Endpoints Migration
-  - Created publicRoutes.ts with GET, PATCH, DELETE for /router/actions
+  - Created publicRoutes.ts with GET, PATCH, DELETE for /actions
   - Added action schema including awaiting_approval status
   - Registered public routes in routes/index.ts
   - Wrote 11 comprehensive tests covering all endpoints and edge cases

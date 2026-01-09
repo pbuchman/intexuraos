@@ -52,7 +52,7 @@ mkdir -p packages/infra-whatsapp/src
 ```json
 {
   "name": "@intexuraos/infra-whatsapp",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

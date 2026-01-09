@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/image-service",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "@intexuraos/infra-gpt": "*",
     "@intexuraos/llm-audit": "*",
     "@intexuraos/llm-contract": "*",
+    "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "sharp": "^0.33.5",

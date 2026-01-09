@@ -5,15 +5,15 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import { createEnhancedResearch, type Research, type SupportedModel } from '../models/index.js';
+import { createEnhancedResearch, type Research, type ResearchModel } from '../models/index.js';
 import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 
 export interface EnhanceResearchInput {
   sourceResearchId: string;
   userId: string;
-  additionalModels?: SupportedModel[];
+  additionalModels?: ResearchModel[];
   additionalContexts?: { content: string; model?: string }[];
-  synthesisModel?: SupportedModel;
+  synthesisModel?: ResearchModel;
   removeContextIds?: string[];
 }
 

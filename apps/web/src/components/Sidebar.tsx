@@ -3,11 +3,15 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   BellRing,
+  Bookmark,
+  Calendar,
+  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Database,
+  DollarSign,
   FileText,
   Filter,
   Inbox,
@@ -20,6 +24,8 @@ import {
   Plus,
   Settings,
   Sparkles,
+  StickyNote,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context';
@@ -36,7 +42,10 @@ const settingsItems: NavItem[] = [
   { to: '/settings/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
   { to: '/settings/notion', label: 'Notion', icon: FileText },
+  { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
+  { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
+  { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
 const orchestratorItems: NavItem[] = [
@@ -352,6 +361,54 @@ export function Sidebar(): React.JSX.Element {
               </div>
             ) : null}
           </div>
+
+          {/* My Notes */}
+          <NavLink
+            to="/my-notes"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <StickyNote className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>My Notes</span> : null}
+          </NavLink>
+
+          {/* My Todos */}
+          <NavLink
+            to="/my-todos"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <CheckSquare className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>My Todos</span> : null}
+          </NavLink>
+
+          {/* My Bookmarks */}
+          <NavLink
+            to="/my-bookmarks"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <Bookmark className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>My Bookmarks</span> : null}
+          </NavLink>
 
           {/* WhatsApp */}
           <NavLink

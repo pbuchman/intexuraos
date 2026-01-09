@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -20,28 +21,39 @@ const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 1.25,
+  outputPricePerMillion: 10.0,
+};
+
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
+    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
+      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'gemini-2.5-pro',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
+        pricing: testPricing,
       });
     });
 
     it('creates adapter successfully', () => {
-      const testAdapter = new GeminiAdapter('test-key', 'gemini-2.5-pro', 'test-user-id');
+      const testAdapter = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        testPricing
+      );
       expect(testAdapter).toBeDefined();
     });
   });
@@ -175,7 +187,8 @@ describe('GeminiAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated Title');
+        expect(result.value.title).toBe('Generated Title');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a short, concise title')
@@ -210,7 +223,8 @@ describe('GeminiAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Context label');
+        expect(result.value.label).toBe('Context label');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a very short label')

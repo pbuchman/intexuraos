@@ -4,20 +4,23 @@
  */
 
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
-import { buildSynthesisPrompt, type Result, type SynthesisContext } from '@intexuraos/common-core';
+import type { ModelPricing } from '@intexuraos/llm-contract';
+import { buildSynthesisPrompt, titlePrompt, type SynthesisContext } from '@intexuraos/llm-common';
+import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  TitleGenerateResult,
 } from '../../domain/research/index.js';
 
 export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
 
-  constructor(apiKey: string, model: string, userId: string) {
-    this.client = createGptClient({ apiKey, model, userId });
+  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+    this.client = createGptClient({ apiKey, model, userId, pricing });
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
@@ -57,24 +60,28 @@ export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     };
   }
 
-  async generateTitle(prompt: string): Promise<Result<string, LlmError>> {
-    const titlePrompt = `Generate a short, concise title for this research prompt.
-
-CRITICAL REQUIREMENTS:
-- Title must be 5-8 words maximum
-- Title must be in the SAME LANGUAGE as the prompt (Polish prompt → Polish title, English prompt → English title)
-- Return ONLY the title - no explanations, no options, no word counts
-
-Research prompt:
-${prompt}
-
-Generate title:`;
-    const result = await this.client.generate(titlePrompt);
+  async generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
+    const builtPrompt = titlePrompt.build(
+      { content: prompt },
+      { wordRange: { min: 5, max: 8 } }
+    );
+    const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
     }
-    return { ok: true, value: result.value.content.trim() };
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        title: result.value.content.trim(),
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
   }
 }
 

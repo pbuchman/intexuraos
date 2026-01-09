@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import pino from 'pino';
-import { FakeNoteRepository } from '../infra/firestore/fakeNoteRepository.js';
+import { FakeNoteRepository } from './fakeNoteRepository.js';
 import { createNote } from '../domain/usecases/createNote.js';
 import { getNote } from '../domain/usecases/getNote.js';
 import { listNotes } from '../domain/usecases/listNotes.js';

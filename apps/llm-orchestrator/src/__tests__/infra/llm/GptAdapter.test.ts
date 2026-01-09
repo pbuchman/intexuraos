@@ -3,6 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -18,23 +19,29 @@ vi.mock('@intexuraos/infra-gpt', () => ({
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 2.0,
+  outputPricePerMillion: 8.0,
+};
+
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id');
+    adapter = new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', 'o4-mini-deep-research', 'test-user-id');
+      new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing);
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'o4-mini-deep-research',
+        model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
+        pricing: testPricing,
       });
     });
   });
@@ -176,7 +183,8 @@ describe('GptAdapter', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBe('Generated Title');
+        expect(result.value.title).toBe('Generated Title');
+        expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
         expect.stringContaining('Generate a short, concise title')

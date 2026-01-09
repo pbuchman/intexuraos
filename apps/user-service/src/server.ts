@@ -19,7 +19,7 @@ import {
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';
-const SERVICE_VERSION = '0.0.1';
+const SERVICE_VERSION = '0.0.4';
 
 // Required secrets for this service
 const REQUIRED_SECRETS = [

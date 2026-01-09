@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockResearch = vi.fn();
 
@@ -12,23 +13,30 @@ vi.mock('@intexuraos/infra-perplexity', () => ({
 
 const { PerplexityAdapter } = await import('../../../infra/llm/PerplexityAdapter.js');
 
+const testPricing: ModelPricing = {
+  inputPricePerMillion: 3.0,
+  outputPricePerMillion: 15.0,
+  useProviderCost: true,
+};
+
 describe('PerplexityAdapter', () => {
   let adapter: InstanceType<typeof PerplexityAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new PerplexityAdapter('test-key', 'sonar-pro', 'test-user-id');
+    adapter = new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreatePerplexityClient.mockClear();
-      new PerplexityAdapter('test-key', 'sonar-pro', 'test-user-id');
+      new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing);
 
       expect(mockCreatePerplexityClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'sonar-pro',
+        model: LlmModels.SonarPro,
         userId: 'test-user-id',
+        pricing: testPricing,
       });
     });
   });

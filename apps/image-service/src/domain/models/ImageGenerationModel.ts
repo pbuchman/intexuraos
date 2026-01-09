@@ -1,13 +1,19 @@
-export type ImageGenerationModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
+import type { GPTImage1, Gemini25FlashImage, Google, OpenAI } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+
+export type ImageGenerationModel = GPTImage1 | Gemini25FlashImage;
 
 export interface ImageGenerationModelConfig {
-  provider: 'openai' | 'google';
+  provider: Google | OpenAI;
   modelId: string;
 }
 
 export const IMAGE_GENERATION_MODELS: Record<ImageGenerationModel, ImageGenerationModelConfig> = {
-  'gpt-image-1': { provider: 'openai', modelId: 'gpt-image-1' },
-  'gemini-2.5-flash-image': { provider: 'google', modelId: 'gemini-2.5-flash-image' },
+  [LlmModels.GPTImage1]: { provider: LlmProviders.OpenAI, modelId: LlmModels.GPTImage1 },
+  [LlmModels.Gemini25FlashImage]: {
+    provider: LlmProviders.Google,
+    modelId: LlmModels.Gemini25FlashImage,
+  },
 };
 
 export function isValidImageGenerationModel(model: string): model is ImageGenerationModel {

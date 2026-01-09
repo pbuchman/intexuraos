@@ -319,6 +319,39 @@ describe('Research Agent Routes', () => {
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toContain('Failed to update action status');
     });
+
+    it('returns 400 for unsupported action type', async () => {
+      const event = {
+        type: 'action.created',
+        actionId: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        actionType: 'unknown_type',
+        title: 'Test Action',
+        payload: { prompt: 'test', confidence: 0.9 },
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/unknown_type',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'pubsub-msg-unsupported',
+            publishTime: '2025-01-01T12:00:00.000Z',
+          },
+          subscription: 'projects/test/subscriptions/actions-unknown',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unsupported action type: unknown_type');
+    });
   });
 
   describe('POST /internal/actions (action creation endpoint)', () => {
@@ -501,7 +534,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('GET /router/actions (list user actions)', () => {
+  describe('GET /actions (list user actions)', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
@@ -511,7 +544,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/router/actions',
+        url: '/actions',
       });
 
       expect(response.statusCode).toBe(401);
@@ -536,7 +569,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/actions',
+        url: '/actions',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -582,7 +615,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/actions?status=pending',
+        url: '/actions?status=pending',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -641,7 +674,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/actions?status=pending,completed',
+        url: '/actions?status=pending,completed',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -679,7 +712,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/actions?status=invalid_status,pending',
+        url: '/actions?status=invalid_status,pending',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -696,7 +729,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('PATCH /router/actions/:actionId (update action status)', () => {
+  describe('PATCH /actions/:actionId (update action status)', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
@@ -706,7 +739,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         payload: { status: 'rejected' },
       });
 
@@ -719,7 +752,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/nonexistent',
+        url: '/actions/nonexistent',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -748,7 +781,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -777,7 +810,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -794,7 +827,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('PATCH /router/actions/:actionId with type change', () => {
+  describe('PATCH /actions/:actionId with type change', () => {
     const mockToken =
       'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
 
@@ -821,7 +854,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -854,7 +887,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -887,7 +920,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -914,7 +947,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -948,7 +981,7 @@ describe('Research Agent Routes', () => {
 
       await app.inject({
         method: 'PATCH',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -968,7 +1001,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('DELETE /router/actions/:actionId (delete action)', () => {
+  describe('DELETE /actions/:actionId (delete action)', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
@@ -978,7 +1011,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -990,7 +1023,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/actions/nonexistent',
+        url: '/actions/nonexistent',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1018,7 +1051,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1046,7 +1079,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/actions/action-1',
+        url: '/actions/action-1',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1059,7 +1092,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('POST /router/actions/batch (batch fetch actions)', () => {
+  describe('POST /actions/batch (batch fetch actions)', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
@@ -1069,7 +1102,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         payload: { actionIds: ['action-1'] },
       });
 
@@ -1082,7 +1115,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1141,7 +1174,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1183,7 +1216,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1205,7 +1238,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1221,7 +1254,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/batch',
+        url: '/actions/batch',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1232,7 +1265,7 @@ describe('Research Agent Routes', () => {
     });
   });
 
-  describe('POST /router/actions/:actionId/execute (execute action)', () => {
+  describe('POST /actions/:actionId/execute (execute action)', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
@@ -1242,7 +1275,7 @@ describe('Research Agent Routes', () => {
     it('returns 401 when no auth token', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/action-1/execute',
+        url: '/actions/action-1/execute',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1254,7 +1287,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/nonexistent/execute',
+        url: '/actions/nonexistent/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1282,7 +1315,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/action-1/execute',
+        url: '/actions/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1291,14 +1324,14 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('returns 400 when action type is not research', async () => {
+    it('returns 400 when action type is not supported', async () => {
       await fakeActionRepository.save({
         id: 'action-1',
         userId: 'user-123',
         commandId: 'cmd-1',
-        type: 'todo',
+        type: 'calendar',
         confidence: 0.95,
-        title: 'Test Todo',
+        title: 'Test Calendar',
         status: 'awaiting_approval',
         payload: {},
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1310,7 +1343,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/action-1/execute',
+        url: '/actions/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1318,7 +1351,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('Action type todo not supported');
+      expect(body.error.message).toContain('Action type calendar not supported');
     });
 
     it('executes research action successfully', async () => {
@@ -1340,7 +1373,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/action-1/execute',
+        url: '/actions/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1389,7 +1422,7 @@ describe('Research Agent Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/actions/action-1/execute',
+        url: '/actions/action-1/execute',
         headers: {
           authorization: `Bearer ${mockToken}`,
         },
@@ -1509,7 +1542,7 @@ describe('Research Agent Routes', () => {
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
-        payload: createValidPayload({ actionType: 'todo' }),
+        payload: createValidPayload({ actionType: 'calendar' }),
       });
 
       expect(response.statusCode).toBe(200);

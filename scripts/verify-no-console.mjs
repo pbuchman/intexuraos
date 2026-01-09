@@ -15,6 +15,7 @@ const ALLOWED_PATHS = [
   'packages/infra-gemini/',
   'packages/infra-claude/',
   'packages/infra-gpt/',
+  'packages/infra-perplexity/',
   // Leaf packages that log directly to Firestore + Cloud Logging (no DI)
   'packages/llm-audit/',
   'packages/llm-pricing/',
