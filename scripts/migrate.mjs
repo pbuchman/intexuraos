@@ -31,19 +31,28 @@ const MIGRATIONS_COLLECTION = '_migrations';
 
 function aggregateIndexes(migrations) {
   const allIndexes = [];
-  const seen = new Set();
+  const allFieldOverrides = [];
+  const seenIndexes = new Set();
+  const seenOverrides = new Set();
 
   for (const migration of migrations) {
     for (const index of migration.indexes ?? []) {
       const key = JSON.stringify(index);
-      if (!seen.has(key)) {
-        seen.add(key);
+      if (!seenIndexes.has(key)) {
+        seenIndexes.add(key);
         allIndexes.push(index);
+      }
+    }
+    for (const override of migration.fieldOverrides ?? []) {
+      const key = JSON.stringify(override);
+      if (!seenOverrides.has(key)) {
+        seenOverrides.add(key);
+        allFieldOverrides.push(override);
       }
     }
   }
 
-  return { indexes: allIndexes, fieldOverrides: [] };
+  return { indexes: allIndexes, fieldOverrides: allFieldOverrides };
 }
 
 function aggregateRules(migrations) {
@@ -211,6 +220,7 @@ async function discoverMigrations() {
       metadata: module.metadata,
       up: module.up,
       indexes: module.indexes ?? [],
+      fieldOverrides: module.fieldOverrides ?? [],
       rules: module.rules ?? {},
     });
   }
