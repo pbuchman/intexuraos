@@ -146,6 +146,42 @@ export async function unshareResearch(accessToken: string, id: string): Promise<
   });
 }
 
+/**
+ * Validate research input quality.
+ */
+export async function validateInput(
+  accessToken: string,
+  request: { prompt: string; includeImprovement?: boolean }
+): Promise<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }> {
+  return await apiRequest<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }>(
+    config.llmOrchestratorUrl,
+    '/research/validate-input',
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
+}
+
+/**
+ * Improve research input prompt.
+ */
+export async function improveInput(
+  accessToken: string,
+  request: { prompt: string }
+): Promise<{ improvedPrompt: string }> {
+  return await apiRequest<{ improvedPrompt: string }>(
+    config.llmOrchestratorUrl,
+    '/research/improve-input',
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
+}
+
 export interface EnhanceResearchRequest {
   additionalModels?: SupportedModel[];
   additionalContexts?: { content: string; label?: string }[];
@@ -174,14 +210,18 @@ export async function enhanceResearch(
 
 export type {
   ConfirmPartialFailureResponse,
+  CreateResearchRequest,
+  ImproveInputRequest,
+  ImproveInputResponse,
+  ListResearchesResponse,
   LlmProvider,
   LlmResult,
   PartialFailure,
   PartialFailureDecision,
   Research,
   ResearchStatus,
-  SupportedModel,
-  CreateResearchRequest,
   SaveDraftRequest,
-  ListResearchesResponse,
+  SupportedModel,
+  ValidateInputRequest,
+  ValidateInputResponse,
 } from './llmOrchestratorApi.types.js';

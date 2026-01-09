@@ -189,3 +189,60 @@ export const compositeFeedDataResponseSchema = {
     },
   },
 } as const;
+
+/**
+ * Schema for snapshot response (includes expiresAt).
+ */
+export const snapshotResponseSchema = {
+  type: 'object',
+  properties: {
+    feedId: { type: 'string' },
+    feedName: { type: 'string' },
+    purpose: { type: 'string' },
+    generatedAt: { type: 'string', format: 'date-time' },
+    expiresAt: { type: 'string', format: 'date-time' },
+    staticSources: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          content: { type: 'string' },
+        },
+      },
+    },
+    notifications: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          filterId: { type: 'string' },
+          filterName: { type: 'string' },
+          criteria: {
+            type: 'object',
+            properties: {
+              app: { type: 'array', items: { type: 'string' } },
+              source: { type: 'array', items: { type: 'string' } },
+              title: { type: 'string' },
+            },
+          },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                app: { type: 'string' },
+                title: { type: 'string' },
+                body: { type: 'string' },
+                timestamp: { type: 'string' },
+                source: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;

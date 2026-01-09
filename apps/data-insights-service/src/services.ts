@@ -9,6 +9,7 @@ import type {
   FeedNameGenerationService,
   MobileNotificationsClient,
 } from './domain/compositeFeed/index.js';
+import type { SnapshotRepository } from './domain/snapshot/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -19,6 +20,7 @@ export interface ServiceContainer {
   compositeFeedRepository: CompositeFeedRepository;
   feedNameGenerationService: FeedNameGenerationService;
   mobileNotificationsClient: MobileNotificationsClient;
+  snapshotRepository: SnapshotRepository;
 }
 
 let container: ServiceContainer | null = null;

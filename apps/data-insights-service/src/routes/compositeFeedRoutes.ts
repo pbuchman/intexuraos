@@ -17,12 +17,14 @@ import {
   getCompositeFeedData,
   getCompositeFeedJsonSchema,
 } from '../domain/compositeFeed/index.js';
+import { getDataInsightSnapshot } from '../domain/snapshot/index.js';
 import {
   createCompositeFeedBodySchema,
   updateCompositeFeedBodySchema,
   compositeFeedParamsSchema,
   compositeFeedResponseSchema,
   compositeFeedDataResponseSchema,
+  snapshotResponseSchema,
 } from './compositeFeedSchemas.js';
 
 interface NotificationFilterInput {
@@ -316,14 +318,33 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         return;
       }
 
-      const { compositeFeedRepository } = getServices();
-      const result = await compositeFeedRepository.delete(request.params.id, user.userId);
+      const services = getServices();
+      const result = await services.compositeFeedRepository.delete(
+        request.params.id,
+        user.userId
+      );
 
       if (!result.ok) {
         if (result.error === 'Composite feed not found') {
           return await reply.fail('NOT_FOUND', result.error);
         }
         return await reply.fail('INTERNAL_ERROR', result.error);
+      }
+
+      const snapshotDeleteResult = await services.snapshotRepository.delete(
+        request.params.id,
+        user.userId
+      );
+
+      if (!snapshotDeleteResult.ok) {
+        request.log.warn(
+          {
+            feedId: request.params.id,
+            userId: user.userId,
+            error: snapshotDeleteResult.error,
+          },
+          'Failed to delete snapshot after feed deletion (non-fatal)'
+        );
       }
 
       return await reply.ok({});
@@ -414,6 +435,75 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
       }
 
       return await reply.ok(result.value);
+    }
+  );
+
+  fastify.get<{ Params: CompositeFeedParams }>(
+    '/composite-feeds/:id/snapshot',
+    {
+      schema: {
+        operationId: 'getCompositeFeedSnapshot',
+        summary: 'Get composite feed snapshot',
+        description:
+          'Get pre-computed snapshot data for a composite feed. Returns cached data computed by scheduler.',
+        tags: ['composite-feeds'],
+        security: [{ bearerAuth: [] }],
+        params: compositeFeedParamsSchema,
+        response: {
+          200: {
+            description: 'Pre-computed snapshot data',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: snapshotResponseSchema,
+            },
+          },
+          404: {
+            description: 'Snapshot not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: CompositeFeedParams }>, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const services = getServices();
+      const result = await getDataInsightSnapshot(request.params.id, user.userId, {
+        snapshotRepository: services.snapshotRepository,
+      });
+
+      if (!result.ok) {
+        const error = result.error;
+        if (error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', 'Snapshot not yet generated for this feed');
+        }
+        return await reply.fail('INTERNAL_ERROR', error.message);
+      }
+
+      const snapshot = result.value;
+      return await reply.ok({
+        feedId: snapshot.feedId,
+        feedName: snapshot.feedName,
+        purpose: snapshot.data.purpose,
+        generatedAt: snapshot.generatedAt.toISOString(),
+        expiresAt: snapshot.expiresAt.toISOString(),
+        staticSources: snapshot.data.staticSources,
+        notifications: snapshot.data.notifications,
+      });
     }
   );
 

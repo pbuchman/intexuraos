@@ -495,6 +495,13 @@ export interface CompositeFeedData {
 }
 
 /**
+ * Pre-computed composite feed snapshot
+ */
+export interface CompositeFeedSnapshot extends CompositeFeedData {
+  expiresAt: string;
+}
+
+/**
  * Note from notes-agent
  */
 export interface Note {
