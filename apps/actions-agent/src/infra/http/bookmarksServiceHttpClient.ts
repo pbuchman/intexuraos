@@ -36,7 +36,7 @@ export function createBookmarksServiceHttpClient(
 
   return {
     async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {
-      const url = `${config.baseUrl}/internal/bookmarks/bookmarks`;
+      const url = `${config.baseUrl}/internal/bookmarks`;
 
       logger.info({ url, userId: request.userId }, 'Creating bookmark via bookmarks-agent');
 

@@ -18,7 +18,7 @@ describe('createBookmarksServiceHttpClient', () => {
   describe('createBookmark', () => {
     it('returns bookmark on successful creation', async () => {
       nock(baseUrl)
-        .post('/internal/bookmarks/bookmarks')
+        .post('/internal/bookmarks')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
@@ -52,7 +52,7 @@ describe('createBookmarksServiceHttpClient', () => {
 
     it('returns bookmark with null title', async () => {
       nock(baseUrl)
-        .post('/internal/bookmarks/bookmarks')
+        .post('/internal/bookmarks')
         .reply(200, {
           success: true,
           data: {
@@ -80,7 +80,7 @@ describe('createBookmarksServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 500', async () => {
-      nock(baseUrl).post('/internal/bookmarks/bookmarks').reply(500, 'Internal Server Error');
+      nock(baseUrl).post('/internal/bookmarks').reply(500, 'Internal Server Error');
 
       const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createBookmark({
@@ -99,7 +99,7 @@ describe('createBookmarksServiceHttpClient', () => {
     });
 
     it('returns error on HTTP 401', async () => {
-      nock(baseUrl).post('/internal/bookmarks/bookmarks').reply(401, { error: 'Unauthorized' });
+      nock(baseUrl).post('/internal/bookmarks').reply(401, { error: 'Unauthorized' });
 
       const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createBookmark({
@@ -119,7 +119,7 @@ describe('createBookmarksServiceHttpClient', () => {
 
     it('returns error when response success is false', async () => {
       nock(baseUrl)
-        .post('/internal/bookmarks/bookmarks')
+        .post('/internal/bookmarks')
         .reply(200, {
           success: false,
           error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' },
@@ -142,7 +142,7 @@ describe('createBookmarksServiceHttpClient', () => {
     });
 
     it('returns error when response data is undefined', async () => {
-      nock(baseUrl).post('/internal/bookmarks/bookmarks').reply(200, { success: true });
+      nock(baseUrl).post('/internal/bookmarks').reply(200, { success: true });
 
       const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createBookmark({
@@ -161,7 +161,7 @@ describe('createBookmarksServiceHttpClient', () => {
     });
 
     it('returns error on network failure', async () => {
-      nock(baseUrl).post('/internal/bookmarks/bookmarks').replyWithError('Connection refused');
+      nock(baseUrl).post('/internal/bookmarks').replyWithError('Connection refused');
 
       const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
       const result = await client.createBookmark({
@@ -181,7 +181,7 @@ describe('createBookmarksServiceHttpClient', () => {
 
     it('sends correct request body', async () => {
       const scope = nock(baseUrl)
-        .post('/internal/bookmarks/bookmarks', {
+        .post('/internal/bookmarks', {
           userId: 'user-456',
           url: 'https://example.com/typescript',
           title: 'TypeScript article',
