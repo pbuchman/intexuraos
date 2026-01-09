@@ -145,3 +145,34 @@ export interface ConfirmPartialFailureResponse {
   action: PartialFailureDecision;
   message: string;
 }
+
+/**
+ * Request body for validating input quality.
+ */
+export interface ValidateInputRequest {
+  prompt: string;
+  includeImprovement?: boolean;
+}
+
+/**
+ * Response from input validation endpoint.
+ */
+export interface ValidateInputResponse {
+  quality: 0 | 1 | 2;
+  reason: string;
+  improvedPrompt: string | null;
+}
+
+/**
+ * Request body for improving input.
+ */
+export interface ImproveInputRequest {
+  prompt: string;
+}
+
+/**
+ * Response from input improvement endpoint.
+ */
+export interface ImproveInputResponse {
+  improvedPrompt: string;
+}
