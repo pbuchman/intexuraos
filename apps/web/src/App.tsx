@@ -23,6 +23,7 @@ import {
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
+  LlmCostsPage,
   LlmOrchestratorPage,
   LlmPricingPage,
   LoginPage,
@@ -159,6 +160,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <LlmPricingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/usage-costs"
+        element={
+          <ProtectedRoute>
+            <LlmCostsPage />
           </ProtectedRoute>
         }
       />

@@ -58,10 +58,15 @@ describe('internalRoutes', () => {
     getByProvider: vi.fn(),
   };
 
+  const fakeUsageStatsRepository = {
+    getUserCosts: vi.fn(),
+  };
+
   beforeEach(() => {
     vi.stubEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN', 'test-token');
     setServices({
       pricingRepository: fakePricingRepository,
+      usageStatsRepository: fakeUsageStatsRepository,
     } as ServiceContainer);
   });
 
