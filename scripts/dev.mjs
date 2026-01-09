@@ -5,9 +5,10 @@
  * Features:
  * - Starts emulators (Firestore, Pub/Sub, GCS) via docker compose
  * - Waits for emulators to be healthy
- * - Starts all 7 backend services with hot-reload (tsx watch)
+ * - Starts all backend services with hot-reload (tsx watch)
  * - Starts web app with Vite dev server (hot module replacement)
- * - Aggregates logs with color-coding per service
+ * - Split-pane TUI with service health status (top) and logs (bottom)
+ * - Health polling every 3 seconds to update service status
  * - Graceful shutdown on SIGINT/SIGTERM
  *
  * Prerequisites:
@@ -15,9 +16,18 @@
  *   - .envrc.local configured (cp .envrc.local.example .envrc.local)
  *
  * Usage:
- *   npm run dev           # Start all services + web app
- *   npm run dev:emulators # Start only emulators
- *   npm run dev:services  # Start only services + web app (assumes emulators are running)
+ *   npm run dev             # Start all with TUI
+ *   npm run dev -- --no-tui # Start all with plain log output
+ *   npm run dev:emulators   # Start only emulators (no TUI)
+ *   npm run dev:services    # Start only services (assumes emulators running)
+ *
+ * TUI Controls:
+ *   q, Escape, Ctrl+C - Quit
+ *   Up/k, Down/j      - Scroll logs
+ *   PageUp/PageDown   - Scroll logs by page
+ *   / or f            - Open filter input
+ *   Enter             - Apply filter
+ *   c                 - Clear filter
  */
 
 import { spawn, execSync } from 'node:child_process';
@@ -26,27 +36,36 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
+import {
+  initUI,
+  appendLog,
+  updateServiceStatus,
+  pollHealth,
+  destroy as destroyUI,
+  isActive as isUIActive,
+} from './dev-ui.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
 
 const SERVICES = [
-  { name: 'user-service', port: 8110, color: '\x1b[36m' },
+  { name: 'app-settings-service', port: 8122, color: '\x1b[95m' },
   { name: 'promptvault-service', port: 8111, color: '\x1b[33m' },
   { name: 'notion-service', port: 8112, color: '\x1b[35m' },
   { name: 'whatsapp-service', port: 8113, color: '\x1b[32m' },
   { name: 'mobile-notifications-service', port: 8114, color: '\x1b[34m' },
-  { name: 'api-docs-hub', port: 8115, color: '\x1b[31m' },
-  { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
   { name: 'commands-router', port: 8117, color: '\x1b[93m' },
   { name: 'actions-agent', port: 8118, color: '\x1b[94m' },
-  { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
-  { name: 'image-service', port: 8120, color: '\x1b[91m' },
   { name: 'notes-agent', port: 8121, color: '\x1b[37m' },
-  { name: 'app-settings-service', port: 8122, color: '\x1b[95m' },
   { name: 'todos-agent', port: 8123, color: '\x1b[38;5;208m' },
   { name: 'bookmarks-agent', port: 8124, color: '\x1b[38;5;141m' },
   { name: 'calendar-agent', port: 8125, color: '\x1b[38;5;220m' },
+
+  // these services depend on app-settings-service, so start them after
+  { name: 'user-service', port: 8110, color: '\x1b[36m' },
+  { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
+  { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
+  { name: 'image-service', port: 8120, color: '\x1b[91m' },
 ];
 
 const WEB_APP = { name: 'web', port: 3000, color: '\x1b[97m' };
@@ -61,10 +80,17 @@ const BOLD = '\x1b[1m';
 const processes = new Map();
 let shuttingDown = false;
 let emulatorsStartedByUs = false;
+let useTUI = false;
+let healthPollInterval = null;
 
 function log(prefix, message, color = '') {
   const timestamp = new Date().toISOString().slice(11, 19);
-  console.log(`\x1b[97m[${timestamp}]\x1b[0m ${color}${prefix}\x1b[0m ${message}`);
+  const line = `{white-fg}[${timestamp}]{/white-fg} ${color}${prefix}${RESET} ${message}`;
+  if (useTUI && isUIActive()) {
+    appendLog(line);
+  } else {
+    console.log(`\x1b[97m[${timestamp}]\x1b[0m ${color}${prefix}\x1b[0m ${message}`);
+  }
 }
 
 /**
@@ -376,6 +402,9 @@ function startService(service) {
   child.on('exit', (code, signal) => {
     if (!shuttingDown) {
       log(prefix, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
+      if (useTUI) {
+        updateServiceStatus(service.name, 'stopped');
+      }
     }
     processes.delete(service.name);
   });
@@ -403,6 +432,7 @@ function startWebApp() {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: true,
+    detached: true,
   });
 
   const prefix = `[${WEB_APP.name}]`;
@@ -424,6 +454,9 @@ function startWebApp() {
   child.on('exit', (code, signal) => {
     if (!shuttingDown) {
       log(prefix, `Exited with code ${code} (signal: ${signal})`, '\x1b[33m');
+      if (useTUI) {
+        updateServiceStatus(WEB_APP.name, 'stopped');
+      }
     }
     processes.delete(WEB_APP.name);
   });
@@ -469,6 +502,10 @@ function followDockerLogs(service) {
 }
 
 async function startAllServices() {
+  if (useTUI) {
+    initUI(SERVICES, WEB_APP);
+  }
+
   logOrchestrator('Following docker container logs...');
   for (const dockerService of DOCKER_LOG_SERVICES) {
     followDockerLogs(dockerService);
@@ -486,13 +523,21 @@ async function startAllServices() {
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   logOrchestrator(`All ${String(SERVICES.length)} services + web app started!`);
-  logOrchestrator('');
-  console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
-  console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
-  console.log(`  Firebase UI:      http://localhost:8100`);
-  console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
-  logOrchestrator('');
-  logOrchestrator('Press Ctrl+C to stop all services');
+
+  if (useTUI) {
+    healthPollInterval = setInterval(() => {
+      void pollHealth(SERVICES, WEB_APP);
+    }, 3000);
+    void pollHealth(SERVICES, WEB_APP);
+  } else {
+    logOrchestrator('');
+    console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
+    console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
+    console.log(`  Firebase UI:      http://localhost:8100`);
+    console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
+    logOrchestrator('');
+    logOrchestrator('Press Ctrl+C to stop all services');
+  }
 }
 
 async function stopEmulators() {
@@ -512,28 +557,52 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
 
-  logOrchestrator('Shutting down...');
+  if (healthPollInterval) {
+    clearInterval(healthPollInterval);
+    healthPollInterval = null;
+  }
+
+  if (useTUI && isUIActive()) {
+    destroyUI();
+  }
+
+  console.log('\n\x1b[1m\x1b[97m[dev]\x1b[0m Shutting down...');
 
   for (const [name, child] of processes) {
-    log(`[${name}]`, 'Stopping...', '\x1b[33m');
-    child.kill('SIGTERM');
+    console.log(`\x1b[33m[${name}]\x1b[0m Stopping...`);
+    try {
+      if (name === WEB_APP.name && child.pid) {
+        process.kill(-child.pid, 'SIGTERM');
+      } else {
+        child.kill('SIGTERM');
+      }
+    } catch {
+      // Process may already be dead
+    }
   }
 
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   for (const [name, child] of processes) {
     if (!child.killed) {
-      log(`[${name}]`, 'Force killing...', '\x1b[31m');
-      child.kill('SIGKILL');
+      console.log(`\x1b[31m[${name}]\x1b[0m Force killing...`);
+      try {
+        if (name === WEB_APP.name && child.pid) {
+          process.kill(-child.pid, 'SIGKILL');
+        } else {
+          child.kill('SIGKILL');
+        }
+      } catch {
+        // Process may already be dead
+      }
     }
   }
 
-  // Only stop emulators if we started them
   if (emulatorsStartedByUs) {
     await stopEmulators();
   }
 
-  logOrchestrator('Goodbye!');
+  console.log('\x1b[1m\x1b[97m[dev]\x1b[0m Goodbye!');
   process.exit(0);
 }
 
@@ -544,9 +613,14 @@ async function main() {
   const args = process.argv.slice(2);
   const emulatorsOnly = args.includes('--emulators-only');
   const servicesOnly = args.includes('--services-only');
+  const noTUI = args.includes('--no-tui');
 
-  logOrchestrator('IntexuraOS Local Development Environment');
-  logOrchestrator('');
+  useTUI = !noTUI && !emulatorsOnly && process.stdout.isTTY;
+
+  if (!useTUI) {
+    logOrchestrator('IntexuraOS Local Development Environment');
+    logOrchestrator('');
+  }
 
   if (!(await checkDockerRunning())) {
     console.error('Error: Docker is not running. Please start Docker and try again.');

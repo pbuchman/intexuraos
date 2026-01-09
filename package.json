@@ -48,16 +48,19 @@
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
     "install-hooks": "node scripts/install-hooks.mjs",
-    "ci": "node scripts/ci.mjs"
+    "ci": "node scripts/ci.mjs",
+    "ci:tracked": "node scripts/ci-tracked.mjs",
+    "ci:report": "node scripts/ci-failure-report.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
-    "firebase-tools": "15.1.0",
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^4.0.16",
+    "blessed": "^0.1.81",
     "esbuild": "^0.25.0",
     "eslint": "^9.17.0",
     "eslint-plugin-boundaries": "^5.3.1",
+    "firebase-tools": "15.1.0",
     "globals": "^15.14.0",
     "prettier": "^3.4.2",
     "tsx": "^4.21.0",
