@@ -17,11 +17,11 @@ export const metadata = {
   createdAt: '2026-01-09',
 };
 
-export const indexes = [
+export const fieldOverrides = [
   {
     collectionGroup: 'by_user',
-    queryScope: 'COLLECTION_GROUP',
-    fields: [{ fieldPath: 'userId', order: 'ASCENDING' }],
+    fieldPath: 'userId',
+    indexes: [{ order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' }],
   },
 ];
 
