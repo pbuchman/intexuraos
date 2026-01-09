@@ -352,10 +352,10 @@ function BookmarkModal({
                 href={bookmark.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
               >
-                {bookmark.url}
-                <ExternalLink className="h-3 w-3" />
+                <span className="min-w-0 truncate">{bookmark.url}</span>
+                <ExternalLink className="h-3 w-3 shrink-0" />
               </a>
 
               {bookmark.aiSummary !== null && bookmark.aiSummary !== '' ? (
