@@ -227,6 +227,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    web_agent = {
+      name      = "intexuraos-web-agent"
+      app_path  = "apps/web-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -1324,6 +1331,35 @@ module "calendar_agent" {
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
   }
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Web Agent - Link preview and Open Graph metadata extraction
+module "web_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.web_agent.name
+  service_account = module.iam.service_accounts["web_agent"]
+  port            = local.services.web_agent.port
+  min_scale       = local.services.web_agent.min_scale
+  max_scale       = local.services.web_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
+  env_vars = {}
 
   depends_on = [
     module.artifact_registry,

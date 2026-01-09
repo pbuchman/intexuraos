@@ -1,0 +1,31 @@
+{
+  "name": "@intexuraos/web-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ../../scripts/build-service.mjs web-agent",
+    "dev": "npx tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "npm run test --workspace=@intexuraos/root -- apps/web-agent",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "*",
+    "@intexuraos/common-http": "*",
+    "@intexuraos/http-contracts": "*",
+    "@intexuraos/http-server": "*",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.1",
+    "cheerio": "^1.0.0",
+    "fastify": "^5.1.0",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "nock": "^14.0.1",
+    "typescript": "^5.7.2"
+  }
+}
