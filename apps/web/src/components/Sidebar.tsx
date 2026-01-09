@@ -25,6 +25,7 @@ import {
   Settings,
   Sparkles,
   StickyNote,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context';
@@ -44,6 +45,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
+  { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
 const orchestratorItems: NavItem[] = [

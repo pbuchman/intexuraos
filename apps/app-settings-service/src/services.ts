@@ -2,14 +2,15 @@
  * Service wiring for app-settings-service.
  * Provides dependency injection for domain adapters.
  */
-import type { PricingRepository } from './domain/ports/index.js';
-import { FirestorePricingRepository } from './infra/firestore/index.js';
+import type { PricingRepository, UsageStatsRepository } from './domain/ports/index.js';
+import { FirestorePricingRepository, FirestoreUsageStatsRepository } from './infra/firestore/index.js';
 
 /**
  * Service container holding all adapter instances.
  */
 export interface ServiceContainer {
   pricingRepository: PricingRepository;
+  usageStatsRepository: UsageStatsRepository;
 }
 
 let container: ServiceContainer | null = null;
@@ -20,6 +21,7 @@ let container: ServiceContainer | null = null;
 export function getServices(): ServiceContainer {
   container ??= {
     pricingRepository: new FirestorePricingRepository(),
+    usageStatsRepository: new FirestoreUsageStatsRepository(),
   };
   return container;
 }

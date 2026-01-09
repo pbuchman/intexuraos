@@ -1,6 +1,5 @@
 /**
- * Firestore implementation of PricingRepository.
- * Reads from settings/llm_pricing/providers/{provider} collection.
+ * Firestore implementations for app-settings-service repositories.
  */
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
@@ -9,6 +8,8 @@ import type {
   ProviderPricing,
   PricingRepository,
 } from '../../domain/ports/index.js';
+
+export { FirestoreUsageStatsRepository } from './usageStatsRepository.js';
 
 interface ProviderPricingDoc {
   provider: LlmProvider;

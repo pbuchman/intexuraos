@@ -744,3 +744,48 @@ export interface GoogleCalendarStatus {
 export interface GoogleCalendarInitiateResponse {
   authorizationUrl: string;
 }
+
+/**
+ * Monthly cost breakdown for LLM usage
+ */
+export interface MonthlyCost {
+  month: string;
+  costUsd: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  percentage: number;
+}
+
+/**
+ * Cost breakdown by LLM model
+ */
+export interface ModelCost {
+  model: string;
+  costUsd: number;
+  calls: number;
+  percentage: number;
+}
+
+/**
+ * Cost breakdown by call type
+ */
+export interface CallTypeCost {
+  callType: string;
+  costUsd: number;
+  calls: number;
+  percentage: number;
+}
+
+/**
+ * Aggregated LLM usage costs for a user
+ */
+export interface AggregatedCosts {
+  totalCostUsd: number;
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  monthlyBreakdown: MonthlyCost[];
+  byModel: ModelCost[];
+  byCallType: CallTypeCost[];
+}
