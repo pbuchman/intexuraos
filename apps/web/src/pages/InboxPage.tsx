@@ -337,6 +337,8 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 
 // 💰 CostGuard: Debounce delay for batch fetching changed actions
 const DEBOUNCE_DELAY_MS = 500;
+// 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
+const BATCH_SIZE_LIMIT = 50;
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -388,18 +390,26 @@ export function InboxPage(): React.JSX.Element {
 
   // 💰 CostGuard: Debounced batch fetch for changed actions
   // Waits 500ms for additional changes before making API call
+  // Chunks IDs into batches of BATCH_SIZE_LIMIT to respect backend limits
   const fetchChangedActions = useCallback(
     async (ids: string[]): Promise<void> => {
       if (ids.length === 0) return;
 
       try {
         const token = await getAccessToken();
-        const fetchedActions = await batchGetActions(token, ids);
+
+        // Chunk IDs into batches of BATCH_SIZE_LIMIT
+        const allFetchedActions: Action[] = [];
+        for (let i = 0; i < ids.length; i += BATCH_SIZE_LIMIT) {
+          const chunk = ids.slice(i, i + BATCH_SIZE_LIMIT);
+          const fetchedActions = await batchGetActions(token, chunk);
+          allFetchedActions.push(...fetchedActions);
+        }
 
         setActions((prev) => {
           const updated = [...prev];
 
-          for (const changedAction of fetchedActions) {
+          for (const changedAction of allFetchedActions) {
             const index = updated.findIndex((a) => a.id === changedAction.id);
             if (index >= 0) {
               updated[index] = changedAction;
