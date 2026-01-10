@@ -45,7 +45,7 @@ resource "google_service_account" "mobile_notifications_service" {
 
 # Service account for research-agent
 resource "google_service_account" "research_agent" {
-  account_id   = "intexuraos-llm-orch-${var.environment}"
+  account_id   = "intexuraos-research-agent-${var.environment}"
   display_name = "IntexuraOS Research Agent (${var.environment})"
   description  = "Service account for research-agent Cloud Run deployment"
 }

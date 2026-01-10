@@ -49,7 +49,7 @@ import {
 } from './domain/usecases/changeActionType.js';
 import pino from 'pino';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
-import { createResearchAgentClient } from './infra/research/ResearchAgentClient.js';
+import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';

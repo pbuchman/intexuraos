@@ -7,7 +7,7 @@ output "service_accounts" {
     whatsapp_service             = google_service_account.whatsapp_service.email
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
-    research_agent             = google_service_account.research_agent.email
+    research_agent               = google_service_account.research_agent.email
     commands_router              = google_service_account.commands_router.email
     actions_agent                = google_service_account.actions_agent.email
     data_insights_service        = google_service_account.data_insights_service.email
