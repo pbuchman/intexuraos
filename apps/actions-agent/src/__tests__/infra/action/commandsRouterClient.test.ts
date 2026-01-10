@@ -14,6 +14,67 @@ describe('createCommandsRouterClient', () => {
     nock.cleanAll();
   });
 
+  describe('getAction', () => {
+    it('returns action on successful fetch', async () => {
+      const mockAction = {
+        id: 'action-123',
+        userId: 'user-456',
+        type: 'research',
+        status: 'pending',
+      };
+
+      nock(baseUrl)
+        .get('/internal/actions/action-123')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('Content-Type', 'application/json')
+        .reply(200, mockAction);
+
+      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const result = await client.getAction('action-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(mockAction);
+      }
+    });
+
+    it('returns null for 404 response', async () => {
+      nock(baseUrl).get('/internal/actions/not-found').reply(404);
+
+      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const result = await client.getAction('not-found');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns error on non-404 error response', async () => {
+      nock(baseUrl).get('/internal/actions/action-123').reply(500);
+
+      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const result = await client.getAction('action-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('500');
+      }
+    });
+
+    it('returns error on network failure', async () => {
+      nock(baseUrl).get('/internal/actions/action-123').replyWithError('Connection refused');
+
+      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const result = await client.getAction('action-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Network error');
+      }
+    });
+  });
+
   describe('updateActionStatus', () => {
     it('returns ok on successful status update', async () => {
       nock(baseUrl)

@@ -31,7 +31,11 @@ export async function createBookmark(
     deps.logger.info({ userId: input.userId, url: input.url }, 'Duplicate bookmark URL');
     return {
       ok: false,
-      error: { code: 'DUPLICATE_URL', message: 'Bookmark with this URL already exists' },
+      error: {
+        code: 'DUPLICATE_URL',
+        message: 'Bookmark with this URL already exists',
+        existingBookmarkId: existingResult.value.id,
+      },
     };
   }
 

@@ -276,8 +276,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     properties: {
                       id: { type: 'string' },
                       text: { type: 'string' },
+                      sourceType: { type: 'string' },
                     },
-                    required: ['id', 'text'],
+                    required: ['id', 'text', 'sourceType'],
                   },
                 },
                 required: ['command'],
@@ -330,6 +331,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         command: {
           id: command.id,
           text: command.text,
+          sourceType: command.sourceType,
         },
       });
     }

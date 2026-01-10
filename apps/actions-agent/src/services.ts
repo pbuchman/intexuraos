@@ -175,6 +175,7 @@ export function initServices(config: ServiceConfig): void {
   const executeLinkActionUseCase = createExecuteLinkActionUseCase({
     actionRepository,
     bookmarksServiceClient,
+    commandsRouterClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'executeLinkAction' }),

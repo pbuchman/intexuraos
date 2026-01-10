@@ -329,6 +329,17 @@ describe('Todo Routes', () => {
       expect(body.data.items).toHaveLength(1);
       expect(body.data.items[0].title).toBe('New Item');
     });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/any-id/items',
+        headers: { 'content-type': 'application/json' },
+        payload: { title: 'New Item' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
   });
 
   describe('PATCH /todos/:id/items/:itemId', () => {
@@ -362,6 +373,17 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.items[0].status).toBe('completed');
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/todos/any-id/items/any-item-id',
+        headers: { 'content-type': 'application/json' },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns 500 on storage error', async () => {
@@ -906,6 +928,15 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(403);
     });
 
+    it('DELETE /todos/:id/items/:itemId returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/todos/any-id/items/any-item-id',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('POST /todos/:id/items/reorder returns 404 for non-existent todo', async () => {
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -945,6 +976,17 @@ describe('Todo Routes', () => {
       });
 
       expect(response.statusCode).toBe(403);
+    });
+
+    it('POST /todos/:id/items/reorder returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/any-id/items/reorder',
+        headers: { 'content-type': 'application/json' },
+        payload: { itemIds: [] },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
     it('POST /todos/:id/items/reorder returns 400 for invalid item IDs', async () => {
@@ -1009,6 +1051,15 @@ describe('Todo Routes', () => {
       expect(response.statusCode).toBe(403);
     });
 
+    it('POST /todos/:id/archive returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/any-id/archive',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('POST /todos/:id/archive returns 500 on storage error', async () => {
       const createResult = await ctx.todoRepository.create({
         userId: 'user-1',
@@ -1037,6 +1088,15 @@ describe('Todo Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    it('POST /todos/:id/unarchive returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/any-id/unarchive',
+      });
+
+      expect(response.statusCode).toBe(401);
     });
 
     it('POST /todos/:id/unarchive returns 500 on storage error', async () => {

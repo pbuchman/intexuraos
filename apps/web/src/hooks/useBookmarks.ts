@@ -5,6 +5,7 @@ import {
   archiveBookmark as archiveBookmarkApi,
   createBookmark as createBookmarkApi,
   deleteBookmark as deleteBookmarkApi,
+  getBookmark as getBookmarkApi,
   listBookmarks as listBookmarksApi,
   unarchiveBookmark as unarchiveBookmarkApi,
   updateBookmark as updateBookmarkApi,
@@ -19,6 +20,7 @@ interface UseBookmarksResult {
   filters: ListBookmarksFilters;
   setFilters: (filters: ListBookmarksFilters) => void;
   refresh: () => Promise<void>;
+  refreshBookmarkById: (id: string) => Promise<void>;
   createBookmark: (request: CreateBookmarkRequest) => Promise<Bookmark>;
   updateBookmark: (id: string, request: UpdateBookmarkRequest) => Promise<Bookmark>;
   deleteBookmark: (id: string) => Promise<void>;
@@ -51,6 +53,27 @@ export function useBookmarks(): UseBookmarksResult {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshBookmarkById = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const updated = await getBookmarkApi(token, id);
+        setBookmarks((prev) => {
+          const index = prev.findIndex((b) => b.id === id);
+          if (index >= 0) {
+            const newBookmarks = [...prev];
+            newBookmarks[index] = updated;
+            return newBookmarks;
+          }
+          return [updated, ...prev];
+        });
+      } catch {
+        // Silently fail - bookmark may have been deleted or user lost access
+      }
+    },
+    [getAccessToken]
+  );
 
   const createBookmark = useCallback(
     async (request: CreateBookmarkRequest): Promise<Bookmark> => {
@@ -108,6 +131,7 @@ export function useBookmarks(): UseBookmarksResult {
     filters,
     setFilters,
     refresh,
+    refreshBookmarkById,
     createBookmark,
     updateBookmark,
     deleteBookmark,

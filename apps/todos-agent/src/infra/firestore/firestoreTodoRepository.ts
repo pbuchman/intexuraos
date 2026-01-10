@@ -192,7 +192,7 @@ export class FirestoreTodoRepository implements TodoRepository {
         query = query.where('priority', '==', filters.priority);
       }
 
-      query = query.orderBy('createdAt', 'desc');
+      query = query.orderBy('updatedAt', 'desc');
 
       const snapshot = await query.get();
       let todos = snapshot.docs.map((doc) => toTodo(doc.id, doc.data() as TodoDocument));

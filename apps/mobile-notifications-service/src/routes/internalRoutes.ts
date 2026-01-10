@@ -53,7 +53,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             limit: {
               type: 'integer',
               minimum: 1,
-              maximum: 100,
+              maximum: 1000,
               default: 50,
               description: 'Maximum number of notifications to return',
             },

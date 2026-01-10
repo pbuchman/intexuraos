@@ -3,12 +3,14 @@ import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { BookmarksServiceClient } from '../ports/bookmarksServiceClient.js';
+import type { CommandsRouterClient } from '../ports/commandsRouterClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Logger } from 'pino';
 
 export interface ExecuteLinkActionDeps {
   actionRepository: ActionRepository;
   bookmarksServiceClient: BookmarksServiceClient;
+  commandsRouterClient: CommandsRouterClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -39,7 +41,14 @@ function extractUrl(text: string): string | null {
 export function createExecuteLinkActionUseCase(
   deps: ExecuteLinkActionDeps
 ): ExecuteLinkActionUseCase {
-  const { actionRepository, bookmarksServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
+  const {
+    actionRepository,
+    bookmarksServiceClient,
+    commandsRouterClient,
+    whatsappPublisher,
+    webAppUrl,
+    logger,
+  } = deps;
 
   return async (actionId: string): Promise<Result<ExecuteLinkActionResult>> => {
     logger.info({ actionId }, 'Executing link action');
@@ -117,14 +126,20 @@ export function createExecuteLinkActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    logger.info({ actionId, userId: action.userId, url }, 'Creating bookmark via bookmarks-agent');
+    const command = await commandsRouterClient.getCommand(action.commandId);
+    const source = command?.sourceType ?? 'actions-agent';
+
+    logger.info(
+      { actionId, userId: action.userId, url, commandId: action.commandId, source },
+      'Creating bookmark via bookmarks-agent'
+    );
 
     const result = await bookmarksServiceClient.createBookmark({
       userId: action.userId,
       url,
       title: action.title,
       tags: [],
-      source: 'actions-agent',
+      source,
       sourceId: action.id,
     });
 

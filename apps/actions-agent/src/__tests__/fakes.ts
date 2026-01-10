@@ -343,8 +343,8 @@ export class FakeCommandsRouterClient implements CommandsRouterClient {
   private failNext = false;
   private failError: Error | null = null;
 
-  setCommand(id: string, text: string): void {
-    this.commands.set(id, { id, text });
+  setCommand(id: string, text: string, sourceType = 'whatsapp_text'): void {
+    this.commands.set(id, { id, text, sourceType });
   }
 
   setFailNext(fail: boolean, error?: Error): void {
