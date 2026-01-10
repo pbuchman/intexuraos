@@ -78,7 +78,7 @@ describe('mobileNotificationsClient', () => {
         .post('/internal/mobile-notifications/query', (body) => {
           return (
             body.filter?.app?.includes('WhatsApp') === true &&
-            body.filter?.source?.includes('work') === true &&
+            body.filter?.source === 'work' &&
             body.filter?.title === 'urgent'
           );
         })
@@ -88,7 +88,7 @@ describe('mobileNotificationsClient', () => {
         id: 'f1',
         name: 'Test',
         app: ['WhatsApp'],
-        source: ['work'],
+        source: 'work',
         title: 'urgent',
       });
 
@@ -111,7 +111,7 @@ describe('mobileNotificationsClient', () => {
         id: 'f1',
         name: 'Test',
         app: [],
-        source: [],
+        source: '',
         title: '',
       });
 
@@ -198,7 +198,7 @@ describe('mobileNotificationsClient', () => {
         id: 'f1',
         name: 'Test',
         app: ['WhatsApp'],
-        source: [],
+        source: '',
         title: '',
       });
 

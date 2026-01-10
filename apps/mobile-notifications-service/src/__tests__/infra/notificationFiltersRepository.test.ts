@@ -188,12 +188,12 @@ describe('FirestoreNotificationFiltersRepository', () => {
     it('creates saved filter with source', async () => {
       const result = await repository.addSavedFilter('user-123', {
         name: 'Mail Only',
-        source: ['mail'],
+        source: 'mail',
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.source).toEqual(['mail']);
+        expect(result.value.source).toBe('mail');
       }
     });
 
@@ -214,7 +214,7 @@ describe('FirestoreNotificationFiltersRepository', () => {
         name: 'Complex Filter',
         app: ['com.gmail'],
         device: ['Pixel 7'],
-        source: ['mail'],
+        source: 'mail',
         title: 'meeting',
       });
 
@@ -222,7 +222,7 @@ describe('FirestoreNotificationFiltersRepository', () => {
       if (result.ok) {
         expect(result.value.app).toEqual(['com.gmail']);
         expect(result.value.device).toEqual(['Pixel 7']);
-        expect(result.value.source).toEqual(['mail']);
+        expect(result.value.source).toBe('mail');
         expect(result.value.title).toBe('meeting');
       }
     });

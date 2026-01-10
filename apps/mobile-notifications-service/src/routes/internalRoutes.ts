@@ -11,7 +11,7 @@ interface QueryNotificationsBody {
   userId: string;
   filter?: {
     app?: string[];
-    source?: string[];
+    source?: string;
     title?: string;
   };
   limit?: number;
@@ -41,9 +41,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   description: 'Filter by app names (OR logic)',
                 },
                 source: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Filter by sources (OR logic)',
+                  type: 'string',
+                  description: 'Filter by source (single value)',
                 },
                 title: {
                   type: 'string',
@@ -136,7 +135,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         input.app = filter.app;
       }
       if (filter?.source !== undefined && filter.source.length > 0) {
-        input.source = filter.source;
+        input.source = [filter.source];
       }
       if (filter?.title !== undefined && filter.title.length > 0) {
         input.title = filter.title;

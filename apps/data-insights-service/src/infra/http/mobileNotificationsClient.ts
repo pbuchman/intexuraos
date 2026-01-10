@@ -35,7 +35,7 @@ export function createMobileNotificationsClient(
           userId: string;
           filter?: {
             app?: string[];
-            source?: string[];
+            source?: string;
             title?: string;
           };
           limit?: number;

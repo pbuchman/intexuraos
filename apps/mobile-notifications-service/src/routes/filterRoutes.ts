@@ -13,7 +13,7 @@ interface CreateSavedFilterBody {
   name: string;
   app?: string[];
   device?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 
@@ -29,7 +29,7 @@ const savedFilterSchema = {
     name: { type: 'string' },
     app: { type: 'array', items: { type: 'string' } },
     device: { type: 'array', items: { type: 'string' } },
-    source: { type: 'array', items: { type: 'string' } },
+    source: { type: 'string' },
     title: { type: 'string' },
     createdAt: { type: 'string' },
   },
@@ -142,7 +142,7 @@ export const filterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             name: { type: 'string', minLength: 1, maxLength: 100 },
             app: { type: 'array', items: { type: 'string' } },
             device: { type: 'array', items: { type: 'string' } },
-            source: { type: 'array', items: { type: 'string' } },
+            source: { type: 'string' },
             title: { type: 'string' },
           },
         },

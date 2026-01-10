@@ -66,7 +66,7 @@ export async function getCompositeFeedData(
     filterName: string;
     criteria: {
       app?: string[];
-      source?: string[];
+      source?: string;
       title?: string;
     };
     items: {
@@ -82,7 +82,7 @@ export async function getCompositeFeedData(
   for (const filter of feed.notificationFilters) {
     const notificationsResult = await mobileNotificationsClient.queryNotifications(userId, filter);
 
-    const criteria: { app?: string[]; source?: string[]; title?: string } = {};
+    const criteria: { app?: string[]; source?: string; title?: string } = {};
     if (filter.app !== undefined && filter.app.length > 0) {
       criteria.app = filter.app;
     }

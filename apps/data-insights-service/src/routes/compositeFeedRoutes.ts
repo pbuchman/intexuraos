@@ -31,7 +31,7 @@ interface NotificationFilterInput {
   id?: string;
   name: string;
   app?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 
