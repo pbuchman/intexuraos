@@ -370,4 +370,122 @@ describe('FirestoreUsageStatsRepository', () => {
 
     expect(result.totalCostUsd).toBe(0.123457);
   });
+
+  it('skips documents with invalid path structure (< 8 parts)', async () => {
+    const invalidPathDocs = [
+      {
+        ref: { path: 'llm_usage_stats/gemini/by_call_type/research/by_period/2026-01-08' },
+        data: () => ({
+          userId: 'user-123',
+          totalCalls: 10,
+          successfulCalls: 10,
+          inputTokens: 5000,
+          outputTokens: 2500,
+          costUsd: 1.0,
+        }),
+      },
+      {
+        ref: { path: 'short/path' },
+        data: () => ({
+          userId: 'user-123',
+          totalCalls: 100,
+          successfulCalls: 100,
+          inputTokens: 50000,
+          outputTokens: 25000,
+          costUsd: 10.0,
+        }),
+      },
+      createMockDoc('gemini', 'research', '2026-01-08', 'user-123', {
+        totalCalls: 5,
+        successfulCalls: 5,
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.5,
+      }),
+    ];
+    mockGet.mockResolvedValue({ docs: invalidPathDocs });
+
+    const { FirestoreUsageStatsRepository } = await import(
+      '../../infra/firestore/usageStatsRepository.js'
+    );
+    const repo = new FirestoreUsageStatsRepository();
+    const result = await repo.getUserCosts('user-123');
+
+    // Should only include the valid document
+    expect(result.totalCostUsd).toBe(0.5);
+    expect(result.totalCalls).toBe(5);
+  });
+
+  it('skips documents with empty string segments in path', async () => {
+    // Documents with empty strings for model/callType will be processed
+    // (empty string is not undefined, so it passes the undefined check)
+    // Only empty period will be filtered by isValidDatePeriod
+    const docsWithEmptyParts = [
+      {
+        ref: {
+          path: 'llm_usage_stats//by_call_type/research/by_period//by_user/user-123',
+        },
+        data: () => ({
+          userId: 'user-123',
+          totalCalls: 10,
+          successfulCalls: 10,
+          inputTokens: 5000,
+          outputTokens: 2500,
+          costUsd: 1.0,
+        }),
+      },
+      createMockDoc('gemini', 'research', '2026-01-08', 'user-123', {
+        totalCalls: 5,
+        successfulCalls: 5,
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.5,
+      }),
+    ];
+    mockGet.mockResolvedValue({ docs: docsWithEmptyParts });
+
+    const { FirestoreUsageStatsRepository } = await import(
+      '../../infra/firestore/usageStatsRepository.js'
+    );
+    const repo = new FirestoreUsageStatsRepository();
+    const result = await repo.getUserCosts('user-123');
+
+    // Empty period fails isValidDatePeriod check, so first doc is excluded
+    expect(result.totalCostUsd).toBe(0.5);
+    expect(result.totalCalls).toBe(5);
+  });
+
+  it('returns zero percentages when totalCostUsd is zero', async () => {
+    const docs = [
+      createMockDoc('gemini', 'research', '2026-01-08', 'user-123', {
+        totalCalls: 10,
+        successfulCalls: 10,
+        inputTokens: 5000,
+        outputTokens: 2500,
+        costUsd: 0.0,
+      }),
+      createMockDoc('claude', 'generate', '2026-01-08', 'user-123', {
+        totalCalls: 5,
+        successfulCalls: 5,
+        inputTokens: 2500,
+        outputTokens: 1250,
+        costUsd: 0.0,
+      }),
+    ];
+    mockGet.mockResolvedValue({ docs });
+
+    const { FirestoreUsageStatsRepository } = await import(
+      '../../infra/firestore/usageStatsRepository.js'
+    );
+    const repo = new FirestoreUsageStatsRepository();
+    const result = await repo.getUserCosts('user-123');
+
+    expect(result.totalCostUsd).toBe(0);
+    expect(result.totalCalls).toBe(15);
+    expect(result.monthlyBreakdown[0]?.percentage).toBe(0);
+    expect(result.byModel[0]?.percentage).toBe(0);
+    expect(result.byModel[1]?.percentage).toBe(0);
+    expect(result.byCallType[0]?.percentage).toBe(0);
+    expect(result.byCallType[1]?.percentage).toBe(0);
+  });
 });
