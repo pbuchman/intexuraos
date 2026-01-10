@@ -234,6 +234,30 @@ describe('webAgentLinkPreviewClient', () => {
       }
     });
 
+    it('maps PARSE_FAILED error code correctly', async () => {
+      nock(baseUrl).post('/internal/link-previews').reply(200, {
+        success: true,
+        data: {
+          results: [
+            {
+              url: 'https://example.com/',
+              status: 'failed',
+              error: { code: 'PARSE_FAILED', message: 'Could not parse HTML' },
+            },
+          ],
+          metadata: { requestedCount: 1, successCount: 0, failedCount: 1, durationMs: 50 },
+        },
+      });
+
+      const result = await client.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PARSE_FAILED');
+        expect(result.error.message).toBe('Could not parse HTML');
+      }
+    });
+
     it('maps unknown error codes to FETCH_FAILED', async () => {
       nock(baseUrl).post('/internal/link-previews').reply(200, {
         success: true,
@@ -274,6 +298,63 @@ describe('webAgentLinkPreviewClient', () => {
         expect(result.error.code).toBe('FETCH_FAILED');
         expect(result.error.message).toBe('No preview in successful result');
       }
+    });
+
+    it('returns fallback message when success is false without error object', async () => {
+      nock(baseUrl).post('/internal/link-previews').reply(200, { success: false });
+
+      const result = await client.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Invalid response from web-agent');
+      }
+    });
+
+    it('returns fallback values when failed result has no error object', async () => {
+      nock(baseUrl).post('/internal/link-previews').reply(200, {
+        success: true,
+        data: {
+          results: [{ url: 'https://example.com/', status: 'failed' }],
+          metadata: { requestedCount: 1, successCount: 0, failedCount: 1, durationMs: 10 },
+        },
+      });
+
+      const result = await client.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Unknown error');
+      }
+    });
+  });
+
+  describe('default logger', () => {
+    it('uses default logger when none provided', async () => {
+      const clientWithDefaultLogger = createWebAgentLinkPreviewClient({
+        baseUrl,
+        internalAuthToken,
+      });
+
+      nock(baseUrl).post('/internal/link-previews').reply(200, {
+        success: true,
+        data: {
+          results: [
+            {
+              url: 'https://example.com/',
+              status: 'success',
+              preview: { url: 'https://example.com/', title: 'Test' },
+            },
+          ],
+          metadata: { requestedCount: 1, successCount: 1, failedCount: 0, durationMs: 50 },
+        },
+      });
+
+      const result = await clientWithDefaultLogger.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(true);
     });
   });
 });
