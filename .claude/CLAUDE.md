@@ -12,6 +12,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Verification (MANDATORY)
 
+### Step 1: Targeted Verification (per workspace)
+
+When modifying a specific app, first verify that workspace passes all checks:
+
+```bash
+npm run verify:workspace:tracked -- <app-name>   # e.g. llm-orchestrator
+```
+
+This runs (in order):
+1. TypeCheck (source) — workspace-specific
+2. TypeCheck (tests) — workspace-specific
+3. Lint — workspace-specific
+4. Tests + Coverage — 95% threshold per workspace
+
+### Step 2: Full CI
+
 ```bash
 npm run ci:tracked            # MUST pass before task completion (auto-tracks failures)
 tf fmt -check -recursive      # If terraform changed (from /terraform)
