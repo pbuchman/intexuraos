@@ -4,6 +4,8 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeBookmarkRepository } from './fakeBookmarkRepository.js';
+import { FakeLinkPreviewFetcher } from './fakeLinkPreviewFetcher.js';
+import { FakeEnrichPublisher } from './fakeEnrichPublisher.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
@@ -66,12 +68,16 @@ export async function teardownJwksServer(): Promise<void> {
 export interface TestContext {
   app: FastifyInstance;
   bookmarkRepository: FakeBookmarkRepository;
+  linkPreviewFetcher: FakeLinkPreviewFetcher;
+  enrichPublisher: FakeEnrichPublisher;
 }
 
 export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
     bookmarkRepository: null as unknown as FakeBookmarkRepository,
+    linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcher,
+    enrichPublisher: null as unknown as FakeEnrichPublisher,
   };
 
   beforeAll(async () => {
@@ -85,7 +91,13 @@ export function setupTestContext(): TestContext {
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.bookmarkRepository = new FakeBookmarkRepository();
-    setServices({ bookmarkRepository: context.bookmarkRepository });
+    context.linkPreviewFetcher = new FakeLinkPreviewFetcher();
+    context.enrichPublisher = new FakeEnrichPublisher();
+    setServices({
+      bookmarkRepository: context.bookmarkRepository,
+      linkPreviewFetcher: context.linkPreviewFetcher,
+      enrichPublisher: context.enrichPublisher,
+    });
     clearJwksCache();
     context.app = await buildServer();
     await context.app.ready();
