@@ -1120,8 +1120,9 @@ module "data_insights_service" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID   = var.project_id
-    INTEXURAOS_USER_SERVICE_URL = module.user_service.service_url
+    INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
+    INTEXURAOS_USER_SERVICE_URL                 = module.user_service.service_url
+    INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = module.mobile_notifications_service.service_url
   }
 
   depends_on = [
@@ -1129,6 +1130,7 @@ module "data_insights_service" {
     module.iam,
     module.secret_manager,
     module.user_service,
+    module.mobile_notifications_service,
   ]
 }
 
