@@ -375,7 +375,7 @@ describe('FirestoreUsageStatsRepository', () => {
     const invalidPathDocs = [
       {
         ref: { path: 'llm_usage_stats/gemini/by_call_type/research/by_period/2026-01-08' },
-        data: () => ({
+        data: (): Record<string, unknown> => ({
           userId: 'user-123',
           totalCalls: 10,
           successfulCalls: 10,
@@ -386,7 +386,7 @@ describe('FirestoreUsageStatsRepository', () => {
       },
       {
         ref: { path: 'short/path' },
-        data: () => ({
+        data: (): Record<string, unknown> => ({
           userId: 'user-123',
           totalCalls: 100,
           successfulCalls: 100,
@@ -425,7 +425,7 @@ describe('FirestoreUsageStatsRepository', () => {
         ref: {
           path: 'llm_usage_stats//by_call_type/research/by_period//by_user/user-123',
         },
-        data: () => ({
+        data: (): Record<string, unknown> => ({
           userId: 'user-123',
           totalCalls: 10,
           successfulCalls: 10,
