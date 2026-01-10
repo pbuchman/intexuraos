@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createResearchAgentClient } from '../../../infra/research/ResearchAgentClient.js';
+import { createResearchAgentClient } from '../../../infra/research/researchAgentClient.js';
 
 describe('createResearchAgentClient', () => {
   const baseUrl = 'http://research-agent.local';
