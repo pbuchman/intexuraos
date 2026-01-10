@@ -1,6 +1,6 @@
 /**
  * Shared synthesis prompt builder for combining multiple LLM research reports.
- * Used by adapters in llm-orchestrator to synthesize research from multiple providers.
+ * Used by adapters in research-agent to synthesize research from multiple providers.
  */
 
 import type { SynthesisContext } from './context/types.js';

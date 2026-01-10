@@ -1,4 +1,4 @@
-# 1-4: Create ProcessIncomingMessageUseCase (Orchestrator)
+# 1-4: Create ProcessIncomingMessageUseCase (ResearchAgent)
 
 ## Tier
 

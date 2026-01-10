@@ -238,7 +238,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'deleteImageInternal',
         summary: 'Delete image (internal)',
         description:
-          'Internal endpoint for deleting images. Used by llm-orchestrator when research is unshared.',
+          'Internal endpoint for deleting images. Used by research-agent when research is unshared.',
         tags: ['internal'],
         params: deleteImageParamsSchema,
         response: {

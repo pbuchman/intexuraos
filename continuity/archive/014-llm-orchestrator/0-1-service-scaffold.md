@@ -1,13 +1,13 @@
-# Task 0-1: Create llm-orchestrator-service Scaffold
+# Task 0-1: Create research-agent-service Scaffold
 
 ## Objective
 
-Create the basic structure for llm-orchestrator-service app.
+Create the basic structure for research-agent-service app.
 
 ## Structure
 
 ```
-apps/llm-orchestrator-service/
+apps/research-agent-service/
 ├── package.json
 ├── tsconfig.json
 ├── Dockerfile
@@ -29,7 +29,7 @@ apps/llm-orchestrator-service/
 
 ```json
 {
-  "name": "@intexuraos/llm-orchestrator-service",
+  "name": "@intexuraos/research-agent-service",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

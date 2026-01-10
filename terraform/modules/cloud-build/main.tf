@@ -157,7 +157,7 @@ locals {
     "whatsapp-service",
     "api-docs-hub",
     "mobile-notifications-service",
-    "llm-orchestrator",
+    "research-agent",
     "commands-router",
     "actions-agent",
     "data-insights-service",

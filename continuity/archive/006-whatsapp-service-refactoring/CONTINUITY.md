@@ -41,12 +41,12 @@ Deep refactoring of whatsapp-service routes to enforce architecture pattern:
 
 ### 2024-12-26: Skip ProcessIncomingMessageUseCase
 
-**What:** Decided not to create a separate orchestrator usecase
+**What:** Decided not to create a separate researchAgent usecase
 **Why:**
 
 - Payload extraction is transport-layer concern (belongs in routes)
 - Routes should coordinate between usecases, not delegate orchestration
-- Creating an orchestrator would duplicate extraction logic
+- Creating an researchAgent would duplicate extraction logic
   **Chosen:** Routes remain as thin coordinators calling specialized usecases
 
 ### Extraction Plan:

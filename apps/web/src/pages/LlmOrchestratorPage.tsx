@@ -18,20 +18,20 @@ import {
   saveDraft,
   updateDraft,
   validateInput,
-} from '@/services/llmOrchestratorApi';
+} from '@/services/ResearchAgentApi';
 import {
   getProviderForModel,
   type LlmProvider,
   type SupportedModel,
   type SaveDraftRequest,
-} from '@/services/llmOrchestratorApi.types';
+} from '@/services/ResearchAgentApi.types';
 
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
 
 const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
 
-export function LlmOrchestratorPage(): React.JSX.Element {
+export function ResearchAgentPage(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { getAccessToken } = useAuth();
@@ -313,7 +313,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
       if (isEditMode) {
         const { updateDraft: updateDraftFn, approveResearch } =
-          await import('@/services/llmOrchestratorApi');
+          await import('@/services/ResearchAgentApi');
 
         const draftRequest: SaveDraftRequest = { prompt };
         if (selectedModels.length > 0) {
@@ -333,7 +333,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
         if (synthesisModel === null) {
           throw new Error('Synthesis model is required');
         }
-        const { createResearch } = await import('@/services/llmOrchestratorApi');
+        const { createResearch } = await import('@/services/ResearchAgentApi');
         const request: Parameters<typeof createResearch>[1] = {
           prompt,
           selectedModels,
@@ -464,7 +464,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setDiscarding(true);
     try {
       const token = await getAccessToken();
-      const { deleteResearch } = await import('@/services/llmOrchestratorApi');
+      const { deleteResearch } = await import('@/services/ResearchAgentApi');
       await deleteResearch(token, draftId);
       void navigate('/research');
     } catch {

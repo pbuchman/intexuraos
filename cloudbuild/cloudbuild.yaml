@@ -215,32 +215,32 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== llm-orchestrator =====
+  # ===== research-agent =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-llm-orchestrator'
+    id: 'build-push-research-agent'
     waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "=== Building llm-orchestrator ==="
-        docker pull ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest || true
+        echo "=== Building research-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/research-agent:latest || true
         docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest \
-          -f apps/llm-orchestrator/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/llm-orchestrator:latest
+          -t ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/research-agent:latest \
+          -f apps/research-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/research-agent:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-llm-orchestrator'
-    waitFor: ['build-push-llm-orchestrator']
+    id: 'deploy-research-agent'
+    waitFor: ['build-push-research-agent']
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-llm-orchestrator.sh']
+    args: ['-c', 'bash cloudbuild/scripts/deploy-research-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -585,7 +585,7 @@ steps:
         INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
         INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
         INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
-        INTEXURAOS_LLM_ORCHESTRATOR_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_LLM_ORCHESTRATOR_URL)
+        INTEXURAOS_RESEARCH_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_RESEARCH_AGENT_URL)
         INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
         INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_ACTIONS_AGENT_SERVICE_URL)
         INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_DATA_INSIGHTS_SERVICE_URL)

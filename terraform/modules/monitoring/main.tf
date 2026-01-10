@@ -10,7 +10,7 @@ resource "google_logging_metric" "llm_errors" {
   description = "Errors from LLM provider calls"
   filter      = <<-EOT
     resource.type="cloud_run_revision"
-    resource.labels.service_name="llm-orchestrator"
+    resource.labels.service_name="research-agent"
     severity>=ERROR
     (textPayload=~"LLM" OR textPayload=~"OpenAI" OR textPayload=~"Gemini" OR textPayload=~"Claude" OR textPayload=~"Perplexity" OR jsonPayload.message=~"LLM|OpenAI|Gemini|Claude|Perplexity")
   EOT
@@ -129,7 +129,7 @@ resource "google_monitoring_dashboard" "main" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"llm-orchestrator\" metric.type=\"run.googleapis.com/request_latencies\""
+                    filter = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"research-agent\" metric.type=\"run.googleapis.com/request_latencies\""
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_PERCENTILE_95"
@@ -463,7 +463,7 @@ resource "google_monitoring_alert_policy" "llm_errors" {
   }
 
   documentation {
-    content   = "LLM provider errors are elevated. Check llm-orchestrator logs for details."
+    content   = "LLM provider errors are elevated. Check research-agent logs for details."
     mime_type = "text/markdown"
   }
 }

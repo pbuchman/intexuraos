@@ -26,7 +26,7 @@ Create a new `commands-router` service that:
 ## Constraints
 
 - Use Firestore for storage (no Notion sync)
-- Direct Gemini SDK (not infra-gemini or llm-orchestrator)
+- Direct Gemini SDK (not infra-gemini or research-agent)
 - Idempotency key: `sourceType:externalId`
 - Auth: X-Internal-Auth header for PubSub push
 

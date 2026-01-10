@@ -40,7 +40,7 @@ Create public POST /actions/:actionId/execute endpoint for user-initiated action
 1. Fetch action from repository
 2. If status is `completed`: return existing resource_url (idempotency)
 3. Update status to `processing`
-4. Call llm-orchestrator to create draft
+4. Call research-agent to create draft
 5. On success:
    - Update to `completed` with `payload: { researchId, resource_url }`
    - Send WhatsApp notification with draft link
@@ -52,7 +52,7 @@ Create public POST /actions/:actionId/execute endpoint for user-initiated action
 
 - Draft research: `/#/research/{researchId}/edit`
 - Published research: `/#/research/{researchId}`
-- Determined by llm-orchestrator response status
+- Determined by research-agent response status
 
 ## WhatsApp Notification
 
@@ -108,8 +108,8 @@ if (phoneNumber !== null) {
 
 ## Notes
 
-- **Synchronous execution** - wait for llm-orchestrator to complete
-- **5-minute timeout** - llm-orchestrator can be slow
+- **Synchronous execution** - wait for research-agent to complete
+- **5-minute timeout** - research-agent can be slow
 - **Idempotent** - safe to retry failed executions
 - Phone lookup is best-effort - don't fail if user not found
 

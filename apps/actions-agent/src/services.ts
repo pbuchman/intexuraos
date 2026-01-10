@@ -49,7 +49,7 @@ import {
 } from './domain/usecases/changeActionType.js';
 import pino from 'pino';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
-import { createLlmOrchestratorClient } from './infra/research/llmOrchestratorClient.js';
+import { createResearchAgentClient } from './infra/research/ResearchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
@@ -90,7 +90,7 @@ export interface Services {
 }
 
 export interface ServiceConfig {
-  llmOrchestratorUrl: string;
+  ResearchAgentUrl: string;
   userServiceUrl: string;
   commandsRouterUrl: string;
   todosAgentUrl: string;
@@ -114,8 +114,8 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
   });
 
-  const researchServiceClient = createLlmOrchestratorClient({
-    baseUrl: config.llmOrchestratorUrl,
+  const researchServiceClient = createResearchAgentClient({
+    baseUrl: config.ResearchAgentUrl,
     internalAuthToken: config.internalAuthToken,
   });
 

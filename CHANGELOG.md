@@ -91,7 +91,7 @@ This release includes comprehensive development across the platform with 187 fun
 41. `PUT /prompts/:id` - Update prompt template
 42. `DELETE /prompts/:id` - Delete prompt
 
-### API Endpoints - LLM Orchestrator
+### API Endpoints - Research Agent
 
 43. `POST /research` - Create research request
 44. `POST /research/draft` - Create draft research
@@ -146,7 +146,7 @@ This release includes comprehensive development across the platform with 187 fun
 75. MobileNotification model
 76. SignatureConnection model for device pairing
 
-### Domain Models - LLM Orchestrator
+### Domain Models - Research Agent
 
 77. Research model with multi-LLM support
 78. LlmResult model for individual provider results
@@ -194,7 +194,7 @@ This release includes comprehensive development across the platform with 187 fun
 105. ListNotificationsUseCase - Filter and list
 106. DeleteNotificationUseCase - Remove notification
 
-### Use Cases - LLM Orchestrator
+### Use Cases - Research Agent
 
 107. CreateResearchUseCase - Initialize research
 108. ProcessResearchUseCase - Orchestrate multi-LLM execution
@@ -319,14 +319,14 @@ This release includes comprehensive development across the platform with 187 fun
 3. **mobile-notifications-service** - Mobile notification aggregation
 4. **notion-service** - Notion integration service
 5. **promptvault-service** - Prompt template management
-6. **llm-orchestrator** - Multi-LLM research orchestration
+6. **research-agent** - Multi-LLM research orchestration
 7. **actions-agent** - Action management and execution
 8. **commands-router** - Natural language command processing
 9. **data-insights-service** - Data analysis and insights
 10. **api-docs-hub** - Unified API documentation
 11. **web** - React frontend application
 12. **auth-service** - Authentication service (later merged into user-service)
-13. **research-agent** - Research service (later merged into llm-orchestrator)
+13. **research-agent** - Research service (later merged into research-agent)
 14. **srt-service** - Speech-to-text service (planned)
 
 ### Shared Packages Created

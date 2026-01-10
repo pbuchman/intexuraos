@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import type { LlmProvider, SupportedModel } from '@/services/llmOrchestratorApi.types';
+import type { LlmProvider, SupportedModel } from '@/services/ResearchAgentApi.types';
 
 interface ModelOption {
   id: SupportedModel;

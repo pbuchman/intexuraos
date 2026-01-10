@@ -1,12 +1,12 @@
 # Task 3-0: Define Research Domain Models
 
-**Tier:** 3 (LLM Orchestrator domain — depends on Tier 1-2)
+**Tier:** 3 (Research Agent domain — depends on Tier 1-2)
 
 ---
 
 ## Context Snapshot
 
-- llm-orchestrator-service scaffold exists (Tier 0)
+- research-agent-service scaffold exists (Tier 0)
 - Infra packages ready (Tier 1)
 - Following hexagonal architecture: domain has no external dependencies
 - Models define the core Research entity and LlmResult value objects
@@ -48,7 +48,7 @@ Define the core domain models for the research feature:
 ### Step 1: Create directory structure
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/domain/research/models
+mkdir -p apps/research-agent-service/src/domain/research/models
 ```
 
 ### Step 2: Create models/Research.ts
@@ -177,4 +177,4 @@ npm run lint
 
 If verification fails:
 
-1. Remove `apps/llm-orchestrator-service/src/domain/research/` directory
+1. Remove `apps/research-agent-service/src/domain/research/` directory

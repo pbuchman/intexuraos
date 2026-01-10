@@ -50,7 +50,7 @@ Create page listing all user's researches with:
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useResearches } from '../hooks/useResearch.js';
-import type { Research, ResearchStatus } from '../services/llmOrchestratorApi.types.js';
+import type { Research, ResearchStatus } from '../services/ResearchAgentApi.types.js';
 
 const STATUS_STYLES: Record<ResearchStatus, { bg: string; text: string; label: string }> = {
   pending: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Pending' },

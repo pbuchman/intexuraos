@@ -48,7 +48,7 @@ Implement core usecases:
 ### Step 1: Create usecases directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/domain/research/usecases
+mkdir -p apps/research-agent-service/src/domain/research/usecases
 ```
 
 ### Step 2: Create usecases/submitResearch.ts

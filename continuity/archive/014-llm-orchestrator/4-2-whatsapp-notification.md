@@ -46,7 +46,7 @@ Implement NotificationSender port that:
 ### Step 1: Create notification directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/infra/notification
+mkdir -p apps/research-agent-service/src/infra/notification
 ```
 
 ### Step 2: Create infra/notification/WhatsAppNotificationSender.ts

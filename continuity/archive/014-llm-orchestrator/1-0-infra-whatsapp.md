@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator will send WhatsApp notifications when research completes
+- Research Agent will send WhatsApp notifications when research completes
 - WhatsApp sending logic currently exists in `apps/whatsapp-service/src/infra/whatsapp/sender.ts`
 - Need a shared package to avoid code duplication
 - Follows pattern of existing `packages/infra-*` packages
@@ -17,7 +17,7 @@
 
 ## Problem Statement
 
-WhatsApp message sending functionality is tightly coupled to whatsapp-service. LLM Orchestrator needs to send completion notifications via WhatsApp but cannot import from another app (ESLint boundary rule).
+WhatsApp message sending functionality is tightly coupled to whatsapp-service. Research Agent needs to send completion notifications via WhatsApp but cannot import from another app (ESLint boundary rule).
 
 ---
 

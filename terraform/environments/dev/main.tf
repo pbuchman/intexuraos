@@ -157,9 +157,9 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    llm_orchestrator = {
-      name      = "intexuraos-llm-orchestrator"
-      app_path  = "apps/llm-orchestrator"
+    research_agent = {
+      name      = "intexuraos-research-agent"
+      app_path  = "apps/research-agent"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -310,7 +310,7 @@ module "shared_content" {
   environment = var.environment
   labels      = local.common_labels
 
-  llm_orchestrator_service_account = module.iam.service_accounts["llm_orchestrator"]
+  research_agent_service_account = module.iam.service_accounts["research_agent"]
 
   depends_on = [google_project_service.apis, module.iam]
 }
@@ -432,7 +432,7 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_SERVICE_URL"             = "WhatsApp service Cloud Run URL for web frontend"
     "INTEXURAOS_NOTION_SERVICE_URL"               = "Notion service Cloud Run URL for web frontend"
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
-    "INTEXURAOS_LLM_ORCHESTRATOR_URL"             = "LLM Orchestrator Cloud Run URL for web frontend"
+    "INTEXURAOS_RESEARCH_AGENT_URL"             = "Research Agent Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
     "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"        = "Actions Agent Cloud Run URL for commands-router"
     "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
@@ -603,7 +603,7 @@ module "pubsub_actions_queue" {
   ]
 }
 
-# Topic for research processing (llm-orchestrator async research)
+# Topic for research processing (research-agent async research)
 module "pubsub_research_process" {
   source = "../../modules/pubsub-push"
 
@@ -612,23 +612,23 @@ module "pubsub_research_process" {
   topic_name     = "intexuraos-research-process-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-research"
-  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
-  push_audience              = module.llm_orchestrator.service_url
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-research"
+  push_service_account_email = module.iam.service_accounts["research_agent"]
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 600 # Max allowed by GCP (research processing can take several minutes)
 
   publisher_service_accounts = {
-    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+    research_agent = module.iam.service_accounts["research_agent"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.llm_orchestrator,
+    module.research_agent,
   ]
 }
 
-# Topic for LLM analytics reporting (llm-orchestrator -> user-service)
+# Topic for LLM analytics reporting (research-agent -> user-service)
 module "pubsub_llm_analytics" {
   source = "../../modules/pubsub-push"
 
@@ -637,23 +637,23 @@ module "pubsub_llm_analytics" {
   topic_name     = "intexuraos-llm-analytics-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/report-analytics"
-  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
-  push_audience              = module.llm_orchestrator.service_url
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/report-analytics"
+  push_service_account_email = module.iam.service_accounts["research_agent"]
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 300
 
   publisher_service_accounts = {
-    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+    research_agent = module.iam.service_accounts["research_agent"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.llm_orchestrator,
+    module.research_agent,
   ]
 }
 
-# Topic for individual LLM research calls (llm-orchestrator -> llm-orchestrator)
+# Topic for individual LLM research calls (research-agent -> research-agent)
 module "pubsub_llm_call" {
   source = "../../modules/pubsub-push"
 
@@ -662,23 +662,23 @@ module "pubsub_llm_call" {
   topic_name     = "intexuraos-llm-call-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.llm_orchestrator.service_url}/internal/llm/pubsub/process-llm-call"
-  push_service_account_email = module.iam.service_accounts["llm_orchestrator"]
-  push_audience              = module.llm_orchestrator.service_url
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-llm-call"
+  push_service_account_email = module.iam.service_accounts["research_agent"]
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 600
 
   publisher_service_accounts = {
-    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+    research_agent = module.iam.service_accounts["research_agent"]
   }
 
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.llm_orchestrator,
+    module.research_agent,
   ]
 }
 
-# Topic for sending WhatsApp messages (actions-agent, llm-orchestrator -> whatsapp-service)
+# Topic for sending WhatsApp messages (actions-agent, research-agent -> whatsapp-service)
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
@@ -693,7 +693,7 @@ module "pubsub_whatsapp_send" {
 
   publisher_service_accounts = {
     actions_agent    = module.iam.service_accounts["actions_agent"]
-    llm_orchestrator = module.iam.service_accounts["llm_orchestrator"]
+    research_agent = module.iam.service_accounts["research_agent"]
   }
 
   depends_on = [
@@ -928,7 +928,7 @@ module "api_docs_hub" {
     INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
-    INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL             = "${module.llm_orchestrator.service_url}/openapi.json"
+    INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL             = "${module.research_agent.service_url}/openapi.json"
     INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
@@ -948,7 +948,7 @@ module "api_docs_hub" {
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
-    module.llm_orchestrator,
+    module.research_agent,
     module.commands_router,
     module.actions_agent,
     module.data_insights_service,
@@ -960,22 +960,22 @@ module "api_docs_hub" {
   ]
 }
 
-# LLM Orchestrator - Multi-LLM research with synthesis
-module "llm_orchestrator" {
+# Research Agent - Multi-LLM research with synthesis
+module "research_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.llm_orchestrator.name
-  service_account = module.iam.service_accounts["llm_orchestrator"]
-  port            = local.services.llm_orchestrator.port
-  min_scale       = local.services.llm_orchestrator.min_scale
-  max_scale       = local.services.llm_orchestrator.max_scale
+  service_name    = local.services.research_agent.name
+  service_account = module.iam.service_accounts["research_agent"]
+  port            = local.services.research_agent.port
+  min_scale       = local.services.research_agent.min_scale
+  max_scale       = local.services.research_agent.max_scale
   labels          = local.common_labels
   timeout         = "900s"
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-orchestrator:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/research-agent:latest"
 
   secrets = {
     INTEXURAOS_AUTH_JWKS_URL            = module.secret_manager.secret_ids["INTEXURAOS_AUTH_JWKS_URL"]
@@ -1070,7 +1070,7 @@ module "actions_agent" {
 
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID             = var.project_id
-    INTEXURAOS_LLM_ORCHESTRATOR_URL       = module.llm_orchestrator.service_url
+    INTEXURAOS_RESEARCH_AGENT_URL       = module.research_agent.service_url
     INTEXURAOS_USER_SERVICE_URL           = module.user_service.service_url
     INTEXURAOS_COMMANDS_ROUTER_URL        = module.commands_router.service_url
     INTEXURAOS_TODOS_AGENT_URL            = module.todos_agent.service_url
@@ -1086,7 +1086,7 @@ module "actions_agent" {
     module.artifact_registry,
     module.iam,
     module.secret_manager,
-    module.llm_orchestrator,
+    module.research_agent,
     module.user_service,
     module.commands_router,
     module.todos_agent,
@@ -1733,9 +1733,9 @@ output "api_docs_hub_url" {
   value       = module.api_docs_hub.service_url
 }
 
-output "llm_orchestrator_url" {
-  description = "LLM Orchestrator URL"
-  value       = module.llm_orchestrator.service_url
+output "research_agent_url" {
+  description = "Research Agent URL"
+  value       = module.research_agent.service_url
 }
 
 output "commands_router_url" {

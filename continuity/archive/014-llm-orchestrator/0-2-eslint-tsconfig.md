@@ -2,7 +2,7 @@
 
 ## Objective
 
-Add llm-orchestrator-service to root configuration files.
+Add research-agent-service to root configuration files.
 
 ## Files to Modify
 
@@ -11,7 +11,7 @@ Add llm-orchestrator-service to root configuration files.
 Add reference:
 
 ```json
-{ "path": "apps/llm-orchestrator-service" }
+{ "path": "apps/research-agent-service" }
 ```
 
 ### 2. eslint.config.js
@@ -19,16 +19,16 @@ Add reference:
 Add to `boundaries/elements`:
 
 ```javascript
-{ type: 'llm-orchestrator', pattern: ['apps/llm-orchestrator-service/src/**'], mode: 'folder' }
+{ type: 'research-agent', pattern: ['apps/research-agent-service/src/**'], mode: 'folder' }
 ```
 
 Add to `boundaries/element-types` rules:
 
 ```javascript
 {
-  from: 'llm-orchestrator',
+  from: 'research-agent',
   allow: [
-    'llm-orchestrator',
+    'research-agent',
     'common-core',
     'common-http',
     'infra-firestore',
@@ -41,7 +41,7 @@ Add to `no-restricted-imports` patterns:
 
 ```javascript
 {
-  group: ['@intexuraos/llm-orchestrator-service', '@intexuraos/llm-orchestrator-service/**'],
+  group: ['@intexuraos/research-agent-service', '@intexuraos/research-agent-service/**'],
   message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
 }
 ```
@@ -55,7 +55,7 @@ npm run typecheck
 
 ## Acceptance Criteria
 
-- [ ] Root tsconfig.json includes llm-orchestrator-service
+- [ ] Root tsconfig.json includes research-agent-service
 - [ ] ESLint boundaries configured
 - [ ] ESLint no-restricted-imports updated
 - [ ] `npm run lint` passes

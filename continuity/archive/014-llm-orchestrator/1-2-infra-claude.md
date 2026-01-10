@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator runs research prompts on multiple LLMs including Claude
+- Research Agent runs research prompts on multiple LLMs including Claude
 - Claude provides web search capability via tool use
 - Uses `@anthropic-ai/sdk` official SDK
 - Model: `claude-sonnet-4-20250514` (or latest available)
@@ -17,7 +17,7 @@
 
 ## Problem Statement
 
-Need a standalone Claude API adapter that executes research prompts with web search tool enabled, returning structured results compatible with the orchestrator's synthesis flow.
+Need a standalone Claude API adapter that executes research prompts with web search tool enabled, returning structured results compatible with the researchAgent's synthesis flow.
 
 ---
 

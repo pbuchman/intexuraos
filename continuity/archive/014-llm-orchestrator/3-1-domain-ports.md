@@ -45,7 +45,7 @@ Define port interfaces that the domain layer uses to interact with:
 ### Step 1: Create ports directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/domain/research/ports
+mkdir -p apps/research-agent-service/src/domain/research/ports
 ```
 
 ### Step 2: Create ports/repository.ts

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createLlmOrchestratorClient } from '../../../infra/research/llmOrchestratorClient.js';
+import { createResearchAgentClient } from '../../../infra/research/ResearchAgentClient.js';
 
-describe('createLlmOrchestratorClient', () => {
-  const baseUrl = 'http://llm-orchestrator.local';
+describe('createResearchAgentClient', () => {
+  const baseUrl = 'http://research-agent.local';
   const internalAuthToken = 'test-token';
 
   beforeEach(() => {
@@ -26,7 +26,7 @@ describe('createLlmOrchestratorClient', () => {
           data: { id: 'draft-123' },
         });
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-456',
         title: 'AI Research',
@@ -51,7 +51,7 @@ describe('createLlmOrchestratorClient', () => {
         })
         .reply(200, { success: true, data: { id: 'draft-456' } });
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       await client.createDraft({
         userId: 'user-789',
         title: 'Test Research',
@@ -66,7 +66,7 @@ describe('createLlmOrchestratorClient', () => {
     it('returns error on non-ok HTTP response', async () => {
       nock(baseUrl).post('/internal/research/draft').reply(500);
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-123',
         title: 'Test',
@@ -88,7 +88,7 @@ describe('createLlmOrchestratorClient', () => {
           error: { message: 'User not found' },
         });
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-123',
         title: 'Test',
@@ -107,7 +107,7 @@ describe('createLlmOrchestratorClient', () => {
         success: true,
       });
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-123',
         title: 'Test',
@@ -126,7 +126,7 @@ describe('createLlmOrchestratorClient', () => {
         success: false,
       });
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-123',
         title: 'Test',
@@ -143,7 +143,7 @@ describe('createLlmOrchestratorClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).post('/internal/research/draft').replyWithError('Connection refused');
 
-      const client = createLlmOrchestratorClient({ baseUrl, internalAuthToken });
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
         userId: 'user-123',
         title: 'Test',

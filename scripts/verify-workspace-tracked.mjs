@@ -282,7 +282,7 @@ async function runVerifyWorkspace(workspace) {
 
   if (!workspace) {
     console.error('Usage: node scripts/verify-workspace-tracked.mjs <workspace-name>');
-    console.error('Example: node scripts/verify-workspace-tracked.mjs llm-orchestrator');
+    console.error('Example: node scripts/verify-workspace-tracked.mjs research-agent');
     process.exit(1);
   }
 
