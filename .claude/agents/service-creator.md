@@ -138,11 +138,14 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
    ```
 
 8. **Create Cloud Run Module Configuration**
+   - Add service to `local.services` map in `terraform/environments/dev/main.tf`
+   - Add service URL to `local.common_service_env_vars` (so all other services can reach it)
    - Add module in `terraform/environments/dev/main.tf`
    - Configure:
      - Reference service account via `module.iam.service_accounts["<service_name>"]`
-     - Environment variables (including `INTEXURAOS_GCP_PROJECT_ID` if using Firestore)
-     - Secret Manager bindings
+     - Use `secrets = local.common_service_secrets` (all services get auth secrets automatically)
+     - Use `env_vars = local.common_service_env_vars` (all services get all URLs automatically)
+     - For service-specific secrets/env_vars, use `merge(local.common_service_secrets, {...})`
      - Cloud Run service settings (min/max instances, memory, CPU)
    - Ensure all env vars in Terraform match `validateRequiredEnv()` in service code
 
@@ -153,13 +156,14 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
      - Only update container image
      - NOT modify env vars or secrets (Terraform-managed)
 
-9b. **Update Web App Cloud Build**
+9b. **Update Web App Cloud Build** (if web frontend needs to call the new service)
 
-- Update `cloudbuild/cloudbuild.yaml` `fetch-web-secrets` step to include the new service URL secret
-- Update `apps/web/cloudbuild.yaml` `fetch-secrets` step with the same secret
+- Add service to `CLOUD_RUN_SERVICES` array in both `cloudbuild/cloudbuild.yaml` and `apps/web/cloudbuild.yaml`
+- Format: `"<service-name>:<ENV_VAR_SUFFIX>"` (e.g., `"calendar-agent:CALENDAR_AGENT"`)
+- URLs are fetched from Cloud Run API automatically at build time - no secrets needed
 - Update `apps/web/src/config.ts` to read and export the new URL
 - Both Cloud Build files MUST stay in sync - the web app is a static SPA that gets env vars at build time
-- Failure symptom: Web app crashes with "Missing required environment variable" error
+- Note: Backend services already get all URLs via `local.common_service_env_vars` - this is only for web frontend
 
 10. **Execute Deployment Pipeline**
 
