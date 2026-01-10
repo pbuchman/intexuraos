@@ -45,6 +45,8 @@
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "verify:no-console": "node scripts/verify-no-console.mjs",
     "verify:llm-architecture": "npx tsx scripts/verify-llm-architecture.ts",
+    "verify:workspace": "./scripts/verify-workspace.sh",
+    "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
     "install-hooks": "node scripts/install-hooks.mjs",
