@@ -161,7 +161,7 @@ Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards
 1. Runs `.github/scripts/smart-dispatch.mjs` to analyze changes
 2. Triggers Cloud Build based on strategy:
    - **MONOLITH** — Rebuild all (>3 affected OR global change) → `intexuraos-dev-deploy` trigger
-   - **INDIVIDUAL** — Rebuild affected only (≤3) → `manual-<service>` triggers in parallel
+   - **INDIVIDUAL** — Rebuild affected only (≤3) → `<service>` triggers in parallel
    - **NONE** — No deployable changes, skip
 
 **Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all

@@ -142,9 +142,9 @@ resource "google_cloudbuild_trigger" "manual_main" {
 }
 
 # -----------------------------------------------------------------------------
-# Manual Per-Service Triggers (R2)
+# Per-Service Triggers
 # -----------------------------------------------------------------------------
-# These triggers are for manual execution only (via GCP Console).
+# Individual service triggers invoked by GitHub Actions (INDIVIDUAL strategy).
 # They deploy a single service without triggering on git push.
 # The `ignored_files = ["**"]` pattern ensures no automatic execution.
 
@@ -171,12 +171,12 @@ locals {
   ]
 }
 
-# Manual triggers for Docker-based services
-resource "google_cloudbuild_trigger" "manual_service" {
+# Individual triggers for Docker-based services
+resource "google_cloudbuild_trigger" "service" {
   for_each = toset(local.docker_services)
 
-  name        = "manual-${each.key}"
-  description = "Manual trigger: Deploy ${each.key} only"
+  name        = each.key
+  description = "Deploy ${each.key} only"
   location    = var.region
 
   source_to_build {
@@ -199,10 +199,10 @@ resource "google_cloudbuild_trigger" "manual_service" {
   service_account = google_service_account.cloud_build.id
 }
 
-# Manual trigger for web (special: npm build + secrets)
-resource "google_cloudbuild_trigger" "manual_web" {
-  name        = "manual-web"
-  description = "Manual trigger: Deploy web frontend only"
+# Web trigger (special: npm build + secrets)
+resource "google_cloudbuild_trigger" "web" {
+  name        = "web"
+  description = "Deploy web frontend only"
   location    = var.region
 
   source_to_build {
@@ -223,10 +223,10 @@ resource "google_cloudbuild_trigger" "manual_web" {
   service_account = google_service_account.cloud_build.id
 }
 
-# Manual trigger for Firestore migrations
-resource "google_cloudbuild_trigger" "manual_firestore" {
-  name        = "manual-firestore"
-  description = "Manual trigger: Deploy Firestore migrations only"
+# Firestore migrations trigger
+resource "google_cloudbuild_trigger" "firestore" {
+  name        = "firestore"
+  description = "Deploy Firestore migrations only"
   location    = var.region
 
   source_to_build {
