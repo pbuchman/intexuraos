@@ -25,12 +25,12 @@ export async function connectMobileNotifications(
 
 /**
  * Filter options for notifications list.
- * Arrays support multi-select (comma-separated on API).
+ * app supports multi-select (comma-separated on API), source is single-select.
  */
 export interface NotificationFilterOptions {
   limit?: number;
   cursor?: string;
-  source?: string[];
+  source?: string;
   app?: string[];
   title?: string;
 }
@@ -50,7 +50,7 @@ export async function getMobileNotifications(
     params.set('cursor', options.cursor);
   }
   if (options?.source !== undefined && options.source.length > 0) {
-    params.set('source', options.source.join(','));
+    params.set('source', options.source);
   }
   if (options?.app !== undefined && options.app.length > 0) {
     params.set('app', options.app.join(','));
@@ -84,13 +84,13 @@ export async function getNotificationFilters(
 
 /**
  * Input for creating a saved notification filter.
- * Filter dimensions are arrays for multi-select.
+ * app/device are arrays for multi-select, source is single-select.
  */
 export interface CreateSavedNotificationFilterInput {
   name: string;
   app?: string[];
   device?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 

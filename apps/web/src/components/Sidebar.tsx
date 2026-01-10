@@ -69,8 +69,8 @@ function buildFilterUrl(filter: SavedNotificationFilter): string {
   if (filter.app !== undefined && filter.app.length > 0) {
     params.set('app', filter.app.join(','));
   }
-  if (filter.source !== undefined && filter.source.length > 0) {
-    params.set('source', filter.source.join(','));
+  if (filter.source !== undefined && filter.source !== '') {
+    params.set('source', filter.source);
   }
   if (filter.title !== undefined && filter.title !== '') {
     params.set('title', filter.title);
@@ -97,8 +97,7 @@ function filterMatchesUrl(filter: SavedNotificationFilter, search: string): bool
   const urlTitle = params.get('title') ?? '';
 
   const filterApp = filter.app !== undefined && filter.app.length > 0 ? filter.app.join(',') : '';
-  const filterSource =
-    filter.source !== undefined && filter.source.length > 0 ? filter.source.join(',') : '';
+  const filterSource = filter.source ?? '';
   const filterTitle = filter.title ?? '';
 
   return filterApp === urlApp && filterSource === urlSource && filterTitle === urlTitle;

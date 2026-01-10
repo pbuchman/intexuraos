@@ -22,7 +22,7 @@ export const notificationItemSchema = z.object({
  */
 export const filterCriteriaSchema = z.object({
   app: z.array(z.string()).optional().describe('Filter by app names (any match)'),
-  source: z.array(z.string()).optional().describe('Filter by sources (any match)'),
+  source: z.string().optional().describe('Filter by source'),
   title: z.string().optional().describe('Filter by title containing this text'),
 });
 
