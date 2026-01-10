@@ -142,6 +142,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
+        logger: request.log,
       });
 
       const durationMs = Date.now() - startTime;

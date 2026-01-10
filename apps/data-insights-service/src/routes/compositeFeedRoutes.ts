@@ -135,6 +135,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
+        logger: request.log,
       }).catch((error: unknown) => {
         request.log.warn({ error, feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
       });
@@ -300,6 +301,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         compositeFeedRepository,
         dataSourceRepository,
         mobileNotificationsClient,
+        logger: request.log,
       }).catch((error: unknown) => {
         request.log.warn({ error, feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
       });
@@ -442,6 +444,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
+        logger: request.log,
       });
 
       if (!result.ok) {
