@@ -18,13 +18,13 @@ import {
   saveDraft,
   updateDraft,
   validateInput,
-} from '@/services/ResearchAgentApi';
+} from '@/services/researchAgentApi';
 import {
   getProviderForModel,
   type LlmProvider,
   type SupportedModel,
   type SaveDraftRequest,
-} from '@/services/ResearchAgentApi.types';
+} from '@/services/researchAgentApi.types';
 
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
@@ -313,7 +313,7 @@ export function ResearchAgentPage(): React.JSX.Element {
 
       if (isEditMode) {
         const { updateDraft: updateDraftFn, approveResearch } =
-          await import('@/services/ResearchAgentApi');
+          await import('@/services/researchAgentApi');
 
         const draftRequest: SaveDraftRequest = { prompt };
         if (selectedModels.length > 0) {
@@ -333,7 +333,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         if (synthesisModel === null) {
           throw new Error('Synthesis model is required');
         }
-        const { createResearch } = await import('@/services/ResearchAgentApi');
+        const { createResearch } = await import('@/services/researchAgentApi');
         const request: Parameters<typeof createResearch>[1] = {
           prompt,
           selectedModels,
@@ -464,7 +464,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     setDiscarding(true);
     try {
       const token = await getAccessToken();
-      const { deleteResearch } = await import('@/services/ResearchAgentApi');
+      const { deleteResearch } = await import('@/services/researchAgentApi');
       await deleteResearch(token, draftId);
       void navigate('/research');
     } catch {

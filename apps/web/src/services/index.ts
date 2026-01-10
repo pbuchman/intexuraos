@@ -13,7 +13,7 @@ export {
   type SetLlmKeyRequest,
   type SetLlmKeyResponse,
 } from './llmKeysApi.js';
-export * from './ResearchAgentApi.js';
+export * from './researchAgentApi.js';
 export * from './commandsApi.js';
 export * from './dataSourceApi.js';
 export {
