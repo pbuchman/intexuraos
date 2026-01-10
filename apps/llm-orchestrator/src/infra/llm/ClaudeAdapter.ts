@@ -4,8 +4,8 @@
  */
 
 import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
+import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -14,16 +14,36 @@ import type {
 
 export class ClaudeAdapter implements LlmResearchProvider {
   private readonly client: ClaudeClient;
+  private readonly model: string;
+  private readonly logger: Logger | undefined;
 
-  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+  constructor(
+    apiKey: string,
+    model: string,
+    userId: string,
+    pricing: ModelPricing,
+    logger?: Logger
+  ) {
     this.client = createClaudeClient({ apiKey, model, userId, pricing });
+    this.model = model;
+    this.logger = logger;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Claude research started');
     const result = await this.client.research(prompt);
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Claude research failed'
+      );
+      return { ok: false, error };
     }
+    this.logger?.info(
+      { model: this.model, usage: result.value.usage },
+      'Claude research completed'
+    );
     return result;
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
@@ -55,6 +55,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [discarding, setDiscarding] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const [improving, setImproving] = useState(false);
   const [showImprovementModal, setShowImprovementModal] = useState(false);
   const [pendingImprovedPrompt, setPendingImprovedPrompt] = useState<string | null>(null);
@@ -371,28 +372,33 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
     if (hasGoogleKey) {
       setValidating(true);
+      setShowValidationModal(true);
+      setValidationWarning(null);
       try {
         const token = await getAccessToken();
         const validation = await validateInput(token, { prompt, includeImprovement: true });
 
         if (validation.quality === 0) {
-          // INVALID - block submission
+          // INVALID - block submission, show warning in modal
           setValidationWarning(validation.reason);
           setValidating(false);
           return;
         }
 
         if (validation.quality === 1 && validation.improvedPrompt !== null) {
-          // WEAK_BUT_VALID - show improvement modal
+          // WEAK_BUT_VALID - close validation modal, show improvement modal
+          setShowValidationModal(false);
           setPendingImprovedPrompt(validation.improvedPrompt);
           setShowImprovementModal(true);
           setValidating(false);
           return;
         }
 
-        // GOOD (quality === 2) - proceed with submission
+        // GOOD (quality === 2) - close modal and proceed
+        setShowValidationModal(false);
       } catch {
-        // Silent degradation - proceed with original prompt on LLM failure
+        // Silent degradation - close modal and proceed with original prompt
+        setShowValidationModal(false);
       } finally {
         setValidating(false);
       }
@@ -414,6 +420,11 @@ export function LlmOrchestratorPage(): React.JSX.Element {
 
   const handleConfirmDiscard = (): void => {
     setShowSingleProviderConfirm(false);
+  };
+
+  const handleDismissValidationWarning = (): void => {
+    setShowValidationModal(false);
+    setValidationWarning(null);
   };
 
   const handleUseImprovedPrompt = (): void => {
@@ -555,18 +566,6 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
-        </div>
-      ) : null}
-
-      {validationWarning !== null && validationWarning !== '' ? (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">Input Quality Issue</p>
-              <p className="mt-1 text-sm text-amber-700">{validationWarning}</p>
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -870,6 +869,35 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               </Button>
               <Button onClick={handleUseImprovedPrompt}>Use Improved</Button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showValidationModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            {validating ? (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <p className="text-sm text-slate-600">Validating your research request...</p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Input Quality Issue</h3>
+                    <p className="mt-2 text-sm text-slate-600">{validationWarning}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Please revise your prompt and try again.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleDismissValidationWarning}>Got it</Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}
