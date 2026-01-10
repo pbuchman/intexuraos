@@ -97,7 +97,7 @@ export class FirestoreDataSourceRepository implements DataSourceRepository {
       const snapshot = await db
         .collection(COLLECTION_NAME)
         .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
+        .orderBy('updatedAt', 'desc')
         .get();
 
       const dataSources = snapshot.docs.map((doc) =>
