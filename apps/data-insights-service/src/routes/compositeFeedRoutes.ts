@@ -17,7 +17,7 @@ import {
   getCompositeFeedData,
   getCompositeFeedJsonSchema,
 } from '../domain/compositeFeed/index.js';
-import { getDataInsightSnapshot } from '../domain/snapshot/index.js';
+import { getDataInsightSnapshot, refreshSnapshot } from '../domain/snapshot/index.js';
 import {
   createCompositeFeedBodySchema,
   updateCompositeFeedBodySchema,
@@ -129,6 +129,15 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         }
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
+
+      refreshSnapshot(result.value.id, user.userId, {
+        snapshotRepository: services.snapshotRepository,
+        compositeFeedRepository: services.compositeFeedRepository,
+        dataSourceRepository: services.dataSourceRepository,
+        mobileNotificationsClient: services.mobileNotificationsClient,
+      }).catch((error: unknown) => {
+        request.log.warn({ error, feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
+      });
 
       void reply.status(201);
       return {
@@ -258,7 +267,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         return;
       }
 
-      const { compositeFeedRepository } = getServices();
+      const { compositeFeedRepository, snapshotRepository, dataSourceRepository, mobileNotificationsClient } = getServices();
       const updateData: {
         purpose?: string;
         staticSourceIds?: string[];
@@ -285,6 +294,15 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         }
         return await reply.fail('INTERNAL_ERROR', result.error);
       }
+
+      refreshSnapshot(request.params.id, user.userId, {
+        snapshotRepository,
+        compositeFeedRepository,
+        dataSourceRepository,
+        mobileNotificationsClient,
+      }).catch((error: unknown) => {
+        request.log.warn({ error, feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
+      });
 
       return await reply.ok(formatCompositeFeed(result.value));
     }

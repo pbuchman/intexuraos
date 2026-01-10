@@ -530,11 +530,13 @@ export function getConfig(): AppConfig {
 ```
 
 **Why both files?**
+
 - `cloudbuild/cloudbuild.yaml` runs when >3 services changed or global files trigger (MONOLITH strategy)
 - `apps/web/cloudbuild.yaml` runs when only web changed (INDIVIDUAL strategy)
 - Both must stay in sync for secrets
 
 **Failure symptom:** If this step is missed, the web app will crash on load with:
+
 ```
 Uncaught Error: Missing required environment variable: INTEXURAOS_<SERVICE_NAME>_URL
 ```

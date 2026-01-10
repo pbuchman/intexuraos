@@ -13,9 +13,10 @@ export function isInputQualityResult(value: unknown): value is InputQualityResul
   }
 
   const obj = value as Record<string, unknown>;
+  const qualityValue = obj['quality'] ?? obj['quality_scale'];
 
   return (
-    (obj['quality'] === 0 || obj['quality'] === 1 || obj['quality'] === 2) &&
+    (qualityValue === 0 || qualityValue === 1 || qualityValue === 2) &&
     typeof obj['reason'] === 'string' &&
     obj['reason'].length > 0
   );

@@ -21,6 +21,7 @@ npm run verify:workspace:tracked -- <app-name>   # e.g. llm-orchestrator
 ```
 
 This runs (in order):
+
 1. TypeCheck (source) — workspace-specific
 2. TypeCheck (tests) — workspace-specific
 3. Lint — workspace-specific

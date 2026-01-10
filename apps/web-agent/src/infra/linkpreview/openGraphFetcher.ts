@@ -11,7 +11,7 @@ export interface OpenGraphFetcherConfig {
 
 const DEFAULT_CONFIG: OpenGraphFetcherConfig = {
   timeoutMs: 5000,
-  maxResponseSize: 512000,
+  maxResponseSize: 2097152, // 2MB
   userAgent: 'Mozilla/5.0 (compatible; IntexuraOSBot/1.0; +https://intexuraos.cloud)',
 };
 

@@ -186,7 +186,8 @@ function parseCoverageErrors(output) {
   const failures = [];
   const clean = stripAnsi(output);
 
-  const coveragePattern = /ERROR: Coverage for (\w+) \(([\d.]+)%\) does not meet.*threshold \((\d+)%\)/g;
+  const coveragePattern =
+    /ERROR: Coverage for (\w+) \(([\d.]+)%\) does not meet.*threshold \((\d+)%\)/g;
 
   let match;
   while ((match = coveragePattern.exec(clean)) !== null) {
@@ -289,13 +290,23 @@ async function runVerifyWorkspace(workspace) {
   const branch = getCurrentBranch();
   const runNumber = getRunNumber(project, branch);
 
-  console.log(`\n📊 Workspace Verification #${runNumber} for ${workspace} on ${project}/${branch}\n`);
+  console.log(
+    `\n📊 Workspace Verification #${runNumber} for ${workspace} on ${project}/${branch}\n`
+  );
 
   const { code, output, durationMs } = await runVerifyWorkspace(workspace);
   const passed = code === 0;
   const failures = passed ? [] : parseAllFailures(output);
 
-  const filePath = saveFailures(project, branch, workspace, runNumber, passed, durationMs, failures);
+  const filePath = saveFailures(
+    project,
+    branch,
+    workspace,
+    runNumber,
+    passed,
+    durationMs,
+    failures
+  );
 
   if (!passed && failures.length > 0) {
     console.log(`\n📊 Tracked ${failures.length} failure(s) → ${filePath}`);
