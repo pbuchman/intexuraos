@@ -740,6 +740,7 @@ module "user_service" {
 
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_WEB_APP_URL    = "https://${var.web_app_domain}"
   }
 
   depends_on = [

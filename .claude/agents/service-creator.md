@@ -154,11 +154,12 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
      - NOT modify env vars or secrets (Terraform-managed)
 
 9b. **Update Web App Cloud Build**
-   - Update `cloudbuild/cloudbuild.yaml` `fetch-web-secrets` step to include the new service URL secret
-   - Update `apps/web/cloudbuild.yaml` `fetch-secrets` step with the same secret
-   - Update `apps/web/src/config.ts` to read and export the new URL
-   - Both Cloud Build files MUST stay in sync - the web app is a static SPA that gets env vars at build time
-   - Failure symptom: Web app crashes with "Missing required environment variable" error
+
+- Update `cloudbuild/cloudbuild.yaml` `fetch-web-secrets` step to include the new service URL secret
+- Update `apps/web/cloudbuild.yaml` `fetch-secrets` step with the same secret
+- Update `apps/web/src/config.ts` to read and export the new URL
+- Both Cloud Build files MUST stay in sync - the web app is a static SPA that gets env vars at build time
+- Failure symptom: Web app crashes with "Missing required environment variable" error
 
 10. **Execute Deployment Pipeline**
 
