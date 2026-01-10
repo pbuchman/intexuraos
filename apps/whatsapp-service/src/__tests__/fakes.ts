@@ -299,6 +299,8 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailSave = false;
   private shouldFailGetMessage = false;
   private shouldFailDeleteMessage = false;
+  private shouldThrowOnGetMessage = false;
+  private shouldThrowOnUpdateTranscription = false;
   private nextCursorToReturn: string | undefined = undefined;
 
   setFailSave(fail: boolean): void {
@@ -311,6 +313,14 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setFailDeleteMessage(fail: boolean): void {
     this.shouldFailDeleteMessage = fail;
+  }
+
+  setThrowOnGetMessage(shouldThrow: boolean): void {
+    this.shouldThrowOnGetMessage = shouldThrow;
+  }
+
+  setThrowOnUpdateTranscription(shouldThrow: boolean): void {
+    this.shouldThrowOnUpdateTranscription = shouldThrow;
   }
 
   /**
@@ -366,6 +376,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   }
 
   getMessage(messageId: string): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
+    if (this.shouldThrowOnGetMessage) {
+      return Promise.reject(new Error('Simulated unexpected getMessage exception'));
+    }
     if (this.shouldFailGetMessage) {
       return Promise.resolve(
         err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessage failure' })
@@ -400,6 +413,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     messageId: string,
     transcription: TranscriptionState
   ): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldThrowOnUpdateTranscription) {
+      return Promise.reject(new Error('Simulated unexpected updateTranscription exception'));
+    }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
       return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Message not found' }));
@@ -430,6 +446,8 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailSave = false;
     this.shouldFailGetMessage = false;
     this.shouldFailDeleteMessage = false;
+    this.shouldThrowOnGetMessage = false;
+    this.shouldThrowOnUpdateTranscription = false;
     this.nextCursorToReturn = undefined;
   }
 }
@@ -445,6 +463,7 @@ export class FakeMediaStorage implements MediaStoragePort {
   private shouldFailThumbnailUpload = false;
   private shouldFailGetSignedUrl = false;
   private shouldFailDelete = false;
+  private shouldThrowOnDelete = false;
 
   setFailUpload(fail: boolean): void {
     this.shouldFailUpload = fail;
@@ -460,6 +479,10 @@ export class FakeMediaStorage implements MediaStoragePort {
 
   setFailDelete(fail: boolean): void {
     this.shouldFailDelete = fail;
+  }
+
+  setThrowOnDelete(shouldThrow: boolean): void {
+    this.shouldThrowOnDelete = shouldThrow;
   }
 
   getDeletedPaths(): string[] {
@@ -501,6 +524,9 @@ export class FakeMediaStorage implements MediaStoragePort {
   }
 
   delete(gcsPath: string): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldThrowOnDelete) {
+      throw new Error('Simulated unexpected delete exception');
+    }
     if (this.shouldFailDelete) {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated delete failure' }));
     }
@@ -533,6 +559,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     this.signedUrls.clear();
     this.deletedPaths = [];
     this.shouldFailDelete = false;
+    this.shouldThrowOnDelete = false;
   }
 }
 
