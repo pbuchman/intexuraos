@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 
 const services = [
   'api-docs-hub',
-  'llm-orchestrator',
+  'research-agent',
   'mobile-notifications-service',
   'notion-service',
   'promptvault-service',

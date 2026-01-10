@@ -83,7 +83,7 @@ None (independent)
 
 ## Notes
 
-- Use existing pattern from llm-orchestrator
+- Use existing pattern from research-agent
 - Phone lookup is best-effort - don't fail if user not found
 - Messages published asynchronously - don't wait for delivery
 

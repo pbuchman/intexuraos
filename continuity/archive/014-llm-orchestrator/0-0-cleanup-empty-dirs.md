@@ -12,7 +12,7 @@ Empty directories exist:
 - `packages/infra-gemini/`
 - `packages/infra-claude/`
 - `packages/infra-gpt/`
-- `apps/llm-orchestrator-service/`
+- `apps/research-agent-service/`
 
 ## Actions
 
@@ -26,7 +26,7 @@ rm -rf packages/infra-whatsapp
 rm -rf packages/infra-gemini
 rm -rf packages/infra-claude
 rm -rf packages/infra-gpt
-rm -rf apps/llm-orchestrator-service
+rm -rf apps/research-agent-service
 git status
 ```
 

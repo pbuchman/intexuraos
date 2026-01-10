@@ -20,7 +20,7 @@ const FORBIDDEN_KEYWORDS = [
   // Domain models from apps
   'Action', // actions-agent domain
   'Command', // commands-router domain
-  'Research', // llm-orchestrator domain
+  'Research', // research-agent domain
   'Notification', // mobile-notifications-service domain
   'Note', // notes-agent domain
   'Feed', // data-insights-service domain

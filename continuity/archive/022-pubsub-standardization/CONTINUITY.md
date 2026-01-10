@@ -25,7 +25,7 @@ Reduce ~200 lines of duplicated publisher code and consolidate 4 separate `Publi
 - [x] Created `BasePubSubPublisher` in `packages/infra-pubsub`
 - [x] Consolidated `PublishError` type
 - [x] Migrated `whatsapp-service` publisher (5 methods, ~130 lines → ~60 lines)
-- [x] Migrated `llm-orchestrator` publishers (2 files, ~80 lines → ~45 lines)
+- [x] Migrated `research-agent` publishers (2 files, ~80 lines → ~45 lines)
 - [x] Migrated `commands-router` publisher (1 file, ~40 lines → ~20 lines)
 - [x] Fixed hardcoded topic names in commands-router
 - [x] Updated CLAUDE.md with Pub/Sub standards
@@ -47,8 +47,8 @@ Reduce ~200 lines of duplicated publisher code and consolidate 4 separate `Publi
 | `packages/infra-pubsub/src/basePublisher.ts`                        | NEW - shared base class               |
 | `packages/infra-pubsub/src/index.ts`                                | UPDATED - exports base class          |
 | `apps/whatsapp-service/src/infra/pubsub/publisher.ts`               | REFACTORED - extends base             |
-| `apps/llm-orchestrator/src/infra/pubsub/analyticsEventPublisher.ts` | REFACTORED - extends base             |
-| `apps/llm-orchestrator/src/infra/pubsub/researchEventPublisher.ts`  | REFACTORED - extends base             |
+| `apps/research-agent/src/infra/pubsub/analyticsEventPublisher.ts` | REFACTORED - extends base             |
+| `apps/research-agent/src/infra/pubsub/researchEventPublisher.ts`  | REFACTORED - extends base             |
 | `apps/commands-router/src/infra/pubsub/actionEventPublisher.ts`     | REFACTORED - extends base             |
 | `apps/commands-router/src/infra/pubsub/config.ts`                   | REFACTORED - env vars                 |
 | `apps/commands-router/src/domain/ports/eventPublisher.ts`           | REFACTORED - uses shared PublishError |
@@ -58,7 +58,7 @@ Reduce ~200 lines of duplicated publisher code and consolidate 4 separate `Publi
 | Component                   | Before  | After   | Reduction     |
 | --------------------------- | ------- | ------- | ------------- |
 | whatsapp-service publisher  | 232     | 103     | 129 (56%)     |
-| llm-orchestrator publishers | 168     | 92      | 76 (45%)      |
+| research-agent publishers | 168     | 92      | 76 (45%)      |
 | commands-router publisher   | 72      | 30      | 42 (58%)      |
 | **Total**                   | **472** | **225** | **247 (52%)** |
 

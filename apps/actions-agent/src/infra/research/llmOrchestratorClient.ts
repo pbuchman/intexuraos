@@ -6,10 +6,10 @@ import pino from 'pino';
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'llmOrchestratorClient',
+  name: 'ResearchAgentClient',
 });
 
-export interface LlmOrchestratorClientConfig {
+export interface ResearchAgentClientConfig {
   baseUrl: string;
   internalAuthToken: string;
 }
@@ -24,8 +24,8 @@ interface CreateDraftResponse {
   };
 }
 
-export function createLlmOrchestratorClient(
-  config: LlmOrchestratorClientConfig
+export function createResearchAgentClient(
+  config: ResearchAgentClientConfig
 ): ResearchServiceClient {
   return {
     async createDraft(params: {

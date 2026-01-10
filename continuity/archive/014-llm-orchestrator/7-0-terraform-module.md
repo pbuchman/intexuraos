@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator service implemented (Tier 5)
+- Research Agent service implemented (Tier 5)
 - Need Cloud Run deployment
 - Following patterns from existing Terraform modules
 
@@ -16,7 +16,7 @@
 
 ## Problem Statement
 
-Create Terraform module for llm-orchestrator-service:
+Create Terraform module for research-agent-service:
 
 1. Cloud Run service
 2. Service account with Firestore access
@@ -46,39 +46,39 @@ Create Terraform module for llm-orchestrator-service:
 ### Step 1: Create module directory
 
 ```bash
-mkdir -p terraform/modules/llm-orchestrator-service
+mkdir -p terraform/modules/research-agent-service
 ```
 
 ### Step 2: Create main.tf
 
 ```hcl
-# terraform/modules/llm-orchestrator-service/main.tf
+# terraform/modules/research-agent-service/main.tf
 
-resource "google_service_account" "llm_orchestrator" {
-  account_id   = "llm-orchestrator-sa"
-  display_name = "LLM Orchestrator Service Account"
+resource "google_service_account" "research_agent" {
+  account_id   = "research-agent-sa"
+  display_name = "Research Agent Service Account"
   project      = var.project_id
 }
 
 resource "google_project_iam_member" "firestore_user" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.llm_orchestrator.email}"
+  member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
 resource "google_project_iam_member" "secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.llm_orchestrator.email}"
+  member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-resource "google_cloud_run_v2_service" "llm_orchestrator" {
-  name     = "llm-orchestrator-service"
+resource "google_cloud_run_v2_service" "research_agent" {
+  name     = "research-agent-service"
   location = var.region
   project  = var.project_id
 
   template {
-    service_account = google_service_account.llm_orchestrator.email
+    service_account = google_service_account.research_agent.email
 
     containers {
       image = var.image
@@ -166,7 +166,7 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
   count    = var.allow_unauthenticated ? 1 : 0
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_service.llm_orchestrator.name
+  name     = google_cloud_run_v2_service.research_agent.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -175,7 +175,7 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
 ### Step 3: Create variables.tf
 
 ```hcl
-# terraform/modules/llm-orchestrator-service/variables.tf
+# terraform/modules/research-agent-service/variables.tf
 
 variable "project_id" {
   description = "GCP project ID"
@@ -214,16 +214,16 @@ variable "allow_unauthenticated" {
 ### Step 4: Create outputs.tf
 
 ```hcl
-# terraform/modules/llm-orchestrator-service/outputs.tf
+# terraform/modules/research-agent-service/outputs.tf
 
 output "service_url" {
   description = "URL of the Cloud Run service"
-  value       = google_cloud_run_v2_service.llm_orchestrator.uri
+  value       = google_cloud_run_v2_service.research_agent.uri
 }
 
 output "service_account_email" {
   description = "Service account email"
-  value       = google_service_account.llm_orchestrator.email
+  value       = google_service_account.research_agent.email
 }
 ```
 
@@ -232,12 +232,12 @@ output "service_account_email" {
 Update `terraform/environments/dev/main.tf`:
 
 ```hcl
-module "llm_orchestrator_service" {
-  source = "../../modules/llm-orchestrator-service"
+module "research_agent_service" {
+  source = "../../modules/research-agent-service"
 
   project_id            = var.project_id
   region                = var.region
-  image                 = "gcr.io/${var.project_id}/llm-orchestrator-service:latest"
+  image                 = "gcr.io/${var.project_id}/research-agent-service:latest"
   environment           = "dev"
   user_service_url      = module.user_service.service_url
   allow_unauthenticated = true

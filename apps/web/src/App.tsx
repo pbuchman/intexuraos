@@ -25,7 +25,7 @@ import {
   HomePage,
   InboxPage,
   LlmCostsPage,
-  LlmOrchestratorPage,
+  ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
@@ -187,12 +187,12 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
-      {/* LLM Orchestrator routes */}
+      {/* Research Agent routes */}
       <Route
         path="/research/new"
         element={
           <ProtectedRoute>
-            <LlmOrchestratorPage />
+            <ResearchAgentPage />
           </ProtectedRoute>
         }
       />

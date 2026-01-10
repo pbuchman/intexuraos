@@ -97,7 +97,7 @@ Introduce user approval workflow for all actions. Actions will no longer execute
 
 - user-service - User phone number lookup
 - whatsapp-service - WhatsApp message delivery
-- llm-orchestrator - Research draft creation
+- research-agent - Research draft creation
 - commands-router - Action classification
 
 ### Environment Variables

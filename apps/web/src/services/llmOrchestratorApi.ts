@@ -8,7 +8,7 @@ import type {
   Research,
   SaveDraftRequest,
   SupportedModel,
-} from './llmOrchestratorApi.types.js';
+} from './ResearchAgentApi.types.js';
 
 /**
  * Create a new research.
@@ -17,7 +17,7 @@ export async function createResearch(
   accessToken: string,
   request: CreateResearchRequest
 ): Promise<Research> {
-  return await apiRequest<Research>(config.llmOrchestratorUrl, '/research', accessToken, {
+  return await apiRequest<Research>(config.ResearchAgentUrl, '/research', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -31,7 +31,7 @@ export async function saveDraft(
   request: SaveDraftRequest
 ): Promise<{ id: string }> {
   return await apiRequest<{ id: string }>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     '/research/draft',
     accessToken,
     {
@@ -58,14 +58,14 @@ export async function listResearches(
   const query = params.toString();
   const path = query !== '' ? `/research?${query}` : '/research';
 
-  return await apiRequest<ListResearchesResponse>(config.llmOrchestratorUrl, path, accessToken);
+  return await apiRequest<ListResearchesResponse>(config.ResearchAgentUrl, path, accessToken);
 }
 
 /**
  * Get a single research by ID.
  */
 export async function getResearch(accessToken: string, id: string): Promise<Research> {
-  return await apiRequest<Research>(config.llmOrchestratorUrl, `/research/${id}`, accessToken);
+  return await apiRequest<Research>(config.ResearchAgentUrl, `/research/${id}`, accessToken);
 }
 
 /**
@@ -76,7 +76,7 @@ export async function updateDraft(
   id: string,
   request: SaveDraftRequest
 ): Promise<Research> {
-  return await apiRequest<Research>(config.llmOrchestratorUrl, `/research/${id}`, accessToken, {
+  return await apiRequest<Research>(config.ResearchAgentUrl, `/research/${id}`, accessToken, {
     method: 'PATCH',
     body: request,
   });
@@ -87,7 +87,7 @@ export async function updateDraft(
  */
 export async function approveResearch(accessToken: string, id: string): Promise<Research> {
   return await apiRequest<Research>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     `/research/${id}/approve`,
     accessToken,
     { method: 'POST' }
@@ -99,7 +99,7 @@ export async function approveResearch(accessToken: string, id: string): Promise<
  */
 export async function deleteResearch(accessToken: string, id: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     `/research/${id}`,
     accessToken,
     { method: 'DELETE' }
@@ -115,7 +115,7 @@ export async function confirmPartialFailure(
   action: PartialFailureDecision
 ): Promise<ConfirmPartialFailureResponse> {
   return await apiRequest<ConfirmPartialFailureResponse>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     `/research/${id}/confirm`,
     accessToken,
     {
@@ -130,7 +130,7 @@ export async function confirmPartialFailure(
  */
 export async function retryFromFailed(accessToken: string, id: string): Promise<Research> {
   return await apiRequest<Research>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     `/research/${id}/retry`,
     accessToken,
     { method: 'POST' }
@@ -141,7 +141,7 @@ export async function retryFromFailed(accessToken: string, id: string): Promise<
  * Remove public share access for a research.
  */
 export async function unshareResearch(accessToken: string, id: string): Promise<void> {
-  await apiRequest<null>(config.llmOrchestratorUrl, `/research/${id}/share`, accessToken, {
+  await apiRequest<null>(config.ResearchAgentUrl, `/research/${id}/share`, accessToken, {
     method: 'DELETE',
   });
 }
@@ -154,7 +154,7 @@ export async function validateInput(
   request: { prompt: string; includeImprovement?: boolean }
 ): Promise<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }> {
   return await apiRequest<{ quality: 0 | 1 | 2; reason: string; improvedPrompt: string | null }>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     '/research/validate-input',
     accessToken,
     {
@@ -172,7 +172,7 @@ export async function improveInput(
   request: { prompt: string }
 ): Promise<{ improvedPrompt: string }> {
   return await apiRequest<{ improvedPrompt: string }>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     '/research/improve-input',
     accessToken,
     {
@@ -198,7 +198,7 @@ export async function enhanceResearch(
   request: EnhanceResearchRequest
 ): Promise<Research> {
   return await apiRequest<Research>(
-    config.llmOrchestratorUrl,
+    config.ResearchAgentUrl,
     `/research/${id}/enhance`,
     accessToken,
     {
@@ -224,4 +224,4 @@ export type {
   SupportedModel,
   ValidateInputRequest,
   ValidateInputResponse,
-} from './llmOrchestratorApi.types.js';
+} from './ResearchAgentApi.types.js';

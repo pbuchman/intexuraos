@@ -119,7 +119,7 @@ export interface TranscriptionCompletedEvent {
 
 /**
  * Event received to send an outbound WhatsApp message.
- * Published by other services (e.g., llm-orchestrator) to request message sending.
+ * Published by other services (e.g., research-agent) to request message sending.
  * The phone number is looked up internally using userId.
  */
 export interface SendMessageEvent {

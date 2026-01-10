@@ -50,7 +50,7 @@ Create page showing research details:
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useResearch } from '../hooks/useResearch.js';
-import type { LlmResult, ResearchStatus } from '../services/llmOrchestratorApi.types.js';
+import type { LlmResult, ResearchStatus } from '../services/ResearchAgentApi.types.js';
 
 const STATUS_CONFIG: Record<ResearchStatus, { color: string; label: string }> = {
   pending: { color: 'text-gray-600', label: 'Waiting to start...' },

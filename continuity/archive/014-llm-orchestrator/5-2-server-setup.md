@@ -69,7 +69,7 @@ export async function buildServer(): Promise<ReturnType<typeof Fastify>> {
   await fastify.register(swagger, {
     openapi: {
       info: {
-        title: 'LLM Orchestrator Service',
+        title: 'Research Agent Service',
         description: 'Multi-LLM research with synthesis',
         version: '1.0.0',
       },

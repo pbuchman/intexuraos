@@ -23,7 +23,7 @@ Create `firestore-collections.json` at repo root with all 10 current collections
   - mobile_notification_signatures → mobile-notifications-service
   - user_settings → user-service
   - auth_tokens → user-service
-  - researches → llm-orchestrator-service
+  - researches → research-agent-service
 
 ## Definition of Done
 

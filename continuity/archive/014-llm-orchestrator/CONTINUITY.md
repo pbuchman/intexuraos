@@ -1,13 +1,13 @@
-# Continuity Ledger — LLM Orchestrator
+# Continuity Ledger — Research Agent
 
 ## Goal
 
-Build an LLM Orchestrator module for multi-LLM research with synthesis.
+Build an Research Agent module for multi-LLM research with synthesis.
 
 **Success Criteria:**
 
 - All infra packages created (infra-gemini, infra-claude, infra-gpt, infra-whatsapp)
-- llm-orchestrator-service with REST API
+- research-agent-service with REST API
 - user-service extended with llmApiKeys
 - Web frontend pages
 - WhatsApp notification
@@ -67,7 +67,7 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 ### Tier 0: Setup ✓
 
 - 0-0: Cleanup empty placeholder directories ✓
-- 0-1: Create llm-orchestrator-service scaffold ✓
+- 0-1: Create research-agent-service scaffold ✓
 - 0-2: Add to root tsconfig, ESLint config ✓
 
 ### Tier 1: Infra Packages ✓
@@ -107,8 +107,8 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 
 - 6-0: Create API Keys service client (`llmKeysApi.ts`) ✓
 - 6-1: Create API Keys page (`ApiKeysSettingsPage.tsx`) ✓
-- 6-2: Create orchestrator types and API (`llmOrchestratorApi.ts`) ✓
-- 6-3: Create New Research page (`LlmOrchestratorPage.tsx`) ✓
+- 6-2: Create researchAgent types and API (`ResearchAgentApi.ts`) ✓
+- 6-3: Create New Research page (`ResearchAgentPage.tsx`) ✓
 - 6-4: Create Research List page (`ResearchListPage.tsx`) ✓
 - 6-5: Create Research Detail page (`ResearchDetailPage.tsx`) ✓
 - 6-6: Update sidebar navigation (`Sidebar.tsx` with LLM Research section) ✓
@@ -116,7 +116,7 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 ### Tier 7: Deployment ✓
 
 - 7-0: Terraform module (in `terraform/environments/dev/main.tf`) ✓
-- 7-1: Dockerfile for llm-orchestrator-service ✓
+- 7-1: Dockerfile for research-agent-service ✓
 - 7-2: API docs hub integration (`apps/api-docs-hub/src/config.ts`) ✓
 
 ### Tier 8: Verification ✓
@@ -130,7 +130,7 @@ Created detailed task files following `.github/prompts/continuity.prompt.md` for
 
 Completed all remaining tasks:
 
-- Created Dockerfile for llm-orchestrator-service
+- Created Dockerfile for research-agent-service
 - Verified all frontend components already existed (Tier 6 was complete)
 - Verified `npm run ci` passes
 - Verified `terraform validate` passes
@@ -155,7 +155,7 @@ Completed all remaining tasks:
 
 ### New Service Created
 
-- `apps/llm-orchestrator-service/` — Multi-LLM research orchestration service
+- `apps/research-agent-service/` — Multi-LLM research orchestration service
   - Domain models: Research, LlmResponse, SynthesizedResult
   - Usecases: CreateResearch, GetResearch, ListResearches
   - Routes: POST /research, GET /research/:id, GET /research
@@ -170,14 +170,14 @@ Completed all remaining tasks:
 ### Frontend Pages
 
 - `ApiKeysSettingsPage.tsx` — Manage LLM API keys
-- `LlmOrchestratorPage.tsx` — Create new research
+- `ResearchAgentPage.tsx` — Create new research
 - `ResearchListPage.tsx` — List previous researches
 - `ResearchDetailPage.tsx` — View research results
 - Updated Sidebar with LLM Research navigation
 
 ### Deployment
 
-- Terraform module for llm-orchestrator-service
+- Terraform module for research-agent-service
 - Dockerfile for container deployment
 - API docs hub integration
 
@@ -191,4 +191,4 @@ terraform validate                # ✓ PASSES
 
 ## Archive Status
 
-**Ready for archive.** Move to `continuity/archive/014-llm-orchestrator/`
+**Ready for archive.** Move to `continuity/archive/014-research-agent/`

@@ -35,7 +35,7 @@ grep -n "google:\|openai:\|anthropic:\|perplexity:" apps/user-service/src/infra/
 cat apps/image-service/src/domain/models/ImageGenerationModel.ts
 
 # Check research execution
-grep -rn "model:" apps/llm-orchestrator/src/domain/ --include="*.ts" | head -30
+grep -rn "model:" apps/research-agent/src/domain/ --include="*.ts" | head -30
 ```
 
 ### Step 1.2: Document Model Registry

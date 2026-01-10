@@ -1,5 +1,5 @@
 /**
- * LLM Orchestrator types for research management.
+ * Research Agent types for research management.
  */
 
 import type { LlmProvider as ContractLlmProvider, ResearchModel } from '@intexuraos/llm-contract';

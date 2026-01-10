@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 When modifying a specific app, first verify that workspace passes all checks:
 
 ```bash
-npm run verify:workspace:tracked -- <app-name>   # e.g. llm-orchestrator
+npm run verify:workspace:tracked -- <app-name>   # e.g. research-agent
 ```
 
 This runs (in order):

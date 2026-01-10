@@ -46,12 +46,12 @@ Create integration tests for research routes:
 ### Step 1: Create fakes directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/__tests__/fakes
+mkdir -p apps/research-agent-service/src/__tests__/fakes
 ```
 
 ### Step 2: Create FakeResearchRepository
 
-`apps/llm-orchestrator-service/src/__tests__/fakes/FakeResearchRepository.ts`:
+`apps/research-agent-service/src/__tests__/fakes/FakeResearchRepository.ts`:
 
 ```typescript
 import { ok, err, type Result } from '@intexuraos/common-core';
@@ -130,7 +130,7 @@ export class FakeResearchRepository implements ResearchRepository {
 
 ### Step 3: Create route tests
 
-`apps/llm-orchestrator-service/src/__tests__/researchRoutes.test.ts`:
+`apps/research-agent-service/src/__tests__/researchRoutes.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -345,7 +345,7 @@ describe('Research Routes', () => {
 ## Verification Commands
 
 ```bash
-npm run test -- apps/llm-orchestrator-service
+npm run test -- apps/research-agent-service
 ```
 
 ---

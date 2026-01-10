@@ -19,8 +19,8 @@ variable "labels" {
   default     = {}
 }
 
-variable "llm_orchestrator_service_account" {
-  description = "Service account email for llm-orchestrator (for upload/delete access)"
+variable "research_agent_service_account" {
+  description = "Service account email for research-agent (for upload/delete access)"
   type        = string
   default     = ""
 }
