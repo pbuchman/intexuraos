@@ -70,7 +70,7 @@ const configSchema = z.object({
 
   /**
    * Pub/Sub topic for commands ingest events.
-   * Optional - commands-router integration.
+   * Optional - commands-agent integration.
    */
   commandsIngestTopic: z.string().optional(),
 

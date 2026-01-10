@@ -23,7 +23,7 @@ const SERVICES = [
   'api-docs-hub',
   'mobile-notifications-service',
   'research-agent',
-  'commands-router',
+  'commands-agent',
   'actions-agent',
   'data-insights-service',
   'image-service',

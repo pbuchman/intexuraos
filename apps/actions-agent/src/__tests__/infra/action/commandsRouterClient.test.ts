@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
-import { createCommandsRouterClient } from '../../../infra/action/commandsRouterClient.js';
+import { createCommandsAgentClient } from '../../../infra/action/commandsAgentClient.js';
 
-describe('createCommandsRouterClient', () => {
-  const baseUrl = 'http://commands-router.local';
+describe('createCommandsAgentClient', () => {
+  const baseUrl = 'http://commands-agent.local';
   const internalAuthToken = 'test-token';
 
   beforeEach(() => {
@@ -29,7 +29,7 @@ describe('createCommandsRouterClient', () => {
         .matchHeader('Content-Type', 'application/json')
         .reply(200, mockAction);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.getAction('action-123');
 
       expect(result.ok).toBe(true);
@@ -41,7 +41,7 @@ describe('createCommandsRouterClient', () => {
     it('returns null for 404 response', async () => {
       nock(baseUrl).get('/internal/actions/not-found').reply(404);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.getAction('not-found');
 
       expect(result.ok).toBe(true);
@@ -53,7 +53,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on non-404 error response', async () => {
       nock(baseUrl).get('/internal/actions/action-123').reply(500);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.getAction('action-123');
 
       expect(result.ok).toBe(false);
@@ -65,7 +65,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).get('/internal/actions/action-123').replyWithError('Connection refused');
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.getAction('action-123');
 
       expect(result.ok).toBe(false);
@@ -83,7 +83,7 @@ describe('createCommandsRouterClient', () => {
         .matchHeader('Content-Type', 'application/json')
         .reply(200);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateActionStatus('action-123', 'completed');
 
       expect(result.ok).toBe(true);
@@ -94,7 +94,7 @@ describe('createCommandsRouterClient', () => {
         .patch('/internal/actions/action-456', { status: 'in_progress' })
         .reply(200);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       await client.updateActionStatus('action-456', 'in_progress');
 
       expect(scope.isDone()).toBe(true);
@@ -103,7 +103,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on non-ok response', async () => {
       nock(baseUrl).patch('/internal/actions/action-123').reply(500);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateActionStatus('action-123', 'completed');
 
       expect(result.ok).toBe(false);
@@ -115,7 +115,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).patch('/internal/actions/action-123').replyWithError('Connection refused');
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateActionStatus('action-123', 'completed');
 
       expect(result.ok).toBe(false);
@@ -132,7 +132,7 @@ describe('createCommandsRouterClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateAction('action-789', { status: 'completed' });
 
       expect(result.ok).toBe(true);
@@ -146,7 +146,7 @@ describe('createCommandsRouterClient', () => {
         })
         .reply(200);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       await client.updateAction('action-789', {
         status: 'completed',
         payload: { researchId: 'research-123' },
@@ -158,7 +158,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on non-ok response', async () => {
       nock(baseUrl).patch('/internal/actions/action-789').reply(404);
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateAction('action-789', { status: 'failed' });
 
       expect(result.ok).toBe(false);
@@ -170,7 +170,7 @@ describe('createCommandsRouterClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).patch('/internal/actions/action-789').replyWithError('ECONNREFUSED');
 
-      const client = createCommandsRouterClient({ baseUrl, internalAuthToken });
+      const client = createCommandsAgentClient({ baseUrl, internalAuthToken });
       const result = await client.updateAction('action-789', { status: 'failed' });
 
       expect(result.ok).toBe(false);

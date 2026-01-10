@@ -164,9 +164,9 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    commands_router = {
-      name      = "intexuraos-commands-router"
-      app_path  = "apps/commands-router"
+    commands_agent = {
+      name      = "intexuraos-commands-agent"
+      app_path  = "apps/commands-agent"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -255,7 +255,7 @@ locals {
     INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_COMMANDS_ROUTER_URL              = "https://${local.services.commands_router.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_COMMANDS_AGENT_URL              = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_URL        = "https://${local.services.data_insights_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_IMAGE_SERVICE_URL                = "https://${local.services.image_service.name}-${local.cloud_run_url_suffix}"
@@ -580,7 +580,7 @@ module "pubsub_whatsapp_transcription" {
   ]
 }
 
-# Topic for commands ingest (whatsapp -> commands-router)
+# Topic for commands ingest (whatsapp -> commands-agent)
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
 
@@ -589,9 +589,9 @@ module "pubsub_commands_ingest" {
   topic_name     = "intexuraos-commands-ingest-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = "${module.commands_router.service_url}/internal/router/commands"
-  push_service_account_email = module.iam.service_accounts["commands_router"]
-  push_audience              = module.commands_router.service_url
+  push_endpoint              = "${module.commands_agent.service_url}/internal/commands"
+  push_service_account_email = module.iam.service_accounts["commands_agent"]
+  push_audience              = module.commands_agent.service_url
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -600,7 +600,7 @@ module "pubsub_commands_ingest" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.commands_router,
+    module.commands_agent,
   ]
 }
 
@@ -618,7 +618,7 @@ module "pubsub_actions_queue" {
   push_audience              = module.actions_agent.service_url
 
   publisher_service_accounts = {
-    commands_router = module.iam.service_accounts["commands_router"]
+    commands_agent = module.iam.service_accounts["commands_agent"]
     actions_agent   = module.iam.service_accounts["actions_agent"]
   }
 
@@ -920,7 +920,7 @@ module "api_docs_hub" {
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
     INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
-    INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
+    INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL              = "${module.commands_agent.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
@@ -941,7 +941,7 @@ module "api_docs_hub" {
     module.whatsapp_service,
     module.mobile_notifications_service,
     module.research_agent,
-    module.commands_router,
+    module.commands_agent,
     module.actions_agent,
     module.data_insights_service,
     module.image_service,
@@ -989,21 +989,21 @@ module "research_agent" {
   ]
 }
 
-# Commands Router - Command ingestion and classification
-module "commands_router" {
+# Commands Agent - Command ingestion and classification
+module "commands_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.commands_router.name
-  service_account = module.iam.service_accounts["commands_router"]
-  port            = local.services.commands_router.port
-  min_scale       = local.services.commands_router.min_scale
-  max_scale       = local.services.commands_router.max_scale
+  service_name    = local.services.commands_agent.name
+  service_account = module.iam.service_accounts["commands_agent"]
+  port            = local.services.commands_agent.port
+  min_scale       = local.services.commands_agent.min_scale
+  max_scale       = local.services.commands_agent.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-router:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/commands-agent:latest"
 
   secrets = local.common_service_secrets
 
@@ -1360,14 +1360,14 @@ resource "google_service_account" "cloud_scheduler" {
   description  = "Service account for Cloud Scheduler to invoke Cloud Run endpoints"
 }
 
-resource "google_cloud_run_service_iam_member" "scheduler_invokes_commands_router" {
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_commands_agent" {
   project  = var.project_id
   location = var.region
-  service  = local.services.commands_router.name
+  service  = local.services.commands_agent.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
 
-  depends_on = [module.commands_router]
+  depends_on = [module.commands_agent]
 }
 
 resource "google_cloud_scheduler_job" "retry_pending_commands" {
@@ -1379,11 +1379,11 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 
   http_target {
     http_method = "POST"
-    uri         = "${module.commands_router.service_url}/internal/router/retry-pending"
+    uri         = "${module.commands_agent.service_url}/internal/retry-pending"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.commands_router.service_url
+      audience              = module.commands_agent.service_url
     }
   }
 
@@ -1396,8 +1396,8 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 
   depends_on = [
     google_project_service.apis,
-    google_cloud_run_service_iam_member.scheduler_invokes_commands_router,
-    module.commands_router,
+    google_cloud_run_service_iam_member.scheduler_invokes_commands_agent,
+    module.commands_agent,
   ]
 }
 
@@ -1623,9 +1623,9 @@ output "research_agent_url" {
   value       = module.research_agent.service_url
 }
 
-output "commands_router_url" {
-  description = "Commands Router Service URL"
-  value       = module.commands_router.service_url
+output "commands_agent_url" {
+  description = "Commands Agent Service URL"
+  value       = module.commands_agent.service_url
 }
 
 output "actions_agent_url" {

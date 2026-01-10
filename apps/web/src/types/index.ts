@@ -173,7 +173,7 @@ export interface AppConfig {
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
   ResearchAgentUrl: string;
-  commandsRouterServiceUrl: string;
+  commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
   dataInsightsServiceUrl: string;
   notesAgentUrl: string;
@@ -272,7 +272,7 @@ export interface UserSettings {
 }
 
 /**
- * Command classification type from commands-router
+ * Command classification type from commands-agent
  */
 export type CommandType =
   | 'todo'
@@ -309,7 +309,7 @@ export interface CommandClassification {
 }
 
 /**
- * Command from commands-router
+ * Command from commands-agent
  */
 export interface Command {
   id: string;
@@ -338,7 +338,7 @@ export type ActionStatus =
   | 'archived';
 
 /**
- * Action from commands-router
+ * Action from commands-agent
  */
 export interface Action {
   id: string;

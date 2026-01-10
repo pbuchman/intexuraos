@@ -12,13 +12,13 @@ import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
 import { registerRoutes } from './routes/index.js';
 
-const SERVICE_NAME = 'commands-router';
+const SERVICE_NAME = 'commands-agent';
 const SERVICE_VERSION = '0.0.4';
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [
     {
-      url: 'https://intexuraos-commands-router-cj44trunra-lm.a.run.app',
+      url: 'https://intexuraos-commands-agent-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8080', description: 'Local' },
@@ -29,7 +29,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description: 'IntexuraOS Commands Router - Routes and classifies incoming commands',
+        description: 'IntexuraOS Commands Agent - Routes and classifies incoming commands',
         version: SERVICE_VERSION,
       },
       servers,
@@ -113,7 +113,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       },
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },
-        { name: 'router', description: 'Commands and actions' },
+        { name: 'commands', description: 'Commands' },
         { name: 'internal', description: 'Internal endpoints (PubSub)' },
       ],
     },

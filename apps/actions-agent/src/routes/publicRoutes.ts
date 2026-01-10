@@ -61,7 +61,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         summary: 'List actions',
         description:
           'List actions for the authenticated user. Use status param to filter by status (comma-separated).',
-        tags: ['router'],
+        tags: ['actions'],
         querystring: {
           type: 'object',
           properties: {
@@ -136,7 +136,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         summary: 'Update action',
         description:
           'Update action status (proceed to processing, reject, or archive) and/or type (for pending/awaiting_approval actions).',
-        tags: ['router'],
+        tags: ['actions'],
         params: {
           type: 'object',
           properties: {
@@ -257,7 +257,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'deleteAction',
         summary: 'Delete action',
         description: 'Delete an action.',
-        tags: ['router'],
+        tags: ['actions'],
         params: {
           type: 'object',
           properties: {
@@ -330,7 +330,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         description:
           'Fetch multiple actions by their IDs in a single request. ' +
           'Maximum 50 action IDs per request.',
-        tags: ['router'],
+        tags: ['actions'],
         body: {
           type: 'object',
           properties: {
@@ -421,7 +421,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         summary: 'Execute action',
         description:
           'Execute an action (e.g., create research draft). Synchronous - waits for completion.',
-        tags: ['router'],
+        tags: ['actions'],
         params: {
           type: 'object',
           properties: {

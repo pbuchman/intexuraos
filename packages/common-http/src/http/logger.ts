@@ -112,7 +112,7 @@ export interface LogIncomingRequestOptions {
  * ```typescript
  * async (request: FastifyRequest, reply: FastifyReply) => {
  *   logIncomingRequest(request, {
- *     message: 'Received PubSub push to /internal/router/commands',
+ *     message: 'Received PubSub push to /internal/commands',
  *     bodyPreviewLength: 200,
  *   });
  *

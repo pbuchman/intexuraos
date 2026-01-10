@@ -189,7 +189,7 @@ export function createFakeServices(deps: {
   eventPublisher: FakeEventPublisher;
 }): Services {
   const classifierFactory: ClassifierFactory = () => deps.classifier;
-  const logger = pino({ name: 'commands-router-test', level: 'silent' });
+  const logger = pino({ name: 'commands-agent-test', level: 'silent' });
 
   return {
     commandRepository: deps.commandRepository,

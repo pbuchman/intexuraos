@@ -18,7 +18,7 @@ steps:
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
           "research-agent:RESEARCH_AGENT"
-          "commands-router:COMMANDS_ROUTER"
+          "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
           "data-insights-service:DATA_INSIGHTS_SERVICE"
           "notes-agent:NOTES_AGENT"

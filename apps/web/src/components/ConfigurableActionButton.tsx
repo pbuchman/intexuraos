@@ -90,7 +90,7 @@ export function ConfigurableActionButton({
     setIsExecuting(true);
 
     try {
-      const baseUrl = button.endpoint.baseUrl ?? config.commandsRouterServiceUrl;
+      const baseUrl = button.endpoint.baseUrl ?? config.commandsAgentServiceUrl;
 
       const result = await executeAction(button.endpoint, button.action, request, baseUrl);
 

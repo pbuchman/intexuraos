@@ -8,7 +8,7 @@ output "service_accounts" {
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
     research_agent               = google_service_account.research_agent.email
-    commands_router              = google_service_account.commands_router.email
+    commands_agent              = google_service_account.commands_agent.email
     actions_agent                = google_service_account.actions_agent.email
     data_insights_service        = google_service_account.data_insights_service.email
     image_service                = google_service_account.image_service.email
@@ -56,9 +56,9 @@ output "research_agent_sa" {
   value       = google_service_account.research_agent.email
 }
 
-output "commands_router_sa" {
-  description = "Commands Router service account email"
-  value       = google_service_account.commands_router.email
+output "commands_agent_sa" {
+  description = "Commands Agent service account email"
+  value       = google_service_account.commands_agent.email
 }
 
 output "actions_agent_sa" {
