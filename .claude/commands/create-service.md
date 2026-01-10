@@ -143,6 +143,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   // Add service-specific required vars here
 ];
 

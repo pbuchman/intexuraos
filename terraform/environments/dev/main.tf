@@ -310,6 +310,7 @@ module "shared_content" {
   environment = var.environment
   labels      = local.common_labels
 
+  enable_research_agent_access   = true
   research_agent_service_account = module.iam.service_accounts["research_agent"]
 
   depends_on = [google_project_service.apis, module.iam]
@@ -368,6 +369,7 @@ module "generated_images_bucket" {
   project_id                    = var.project_id
   region                        = var.region
   environment                   = var.environment
+  enable_image_service_access   = true
   image_service_service_account = module.iam.service_accounts["image_service"]
   labels                        = local.common_labels
 
@@ -432,7 +434,7 @@ module "secret_manager" {
     "INTEXURAOS_WHATSAPP_SERVICE_URL"             = "WhatsApp service Cloud Run URL for web frontend"
     "INTEXURAOS_NOTION_SERVICE_URL"               = "Notion service Cloud Run URL for web frontend"
     "INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL" = "Mobile notifications service Cloud Run URL for web frontend"
-    "INTEXURAOS_RESEARCH_AGENT_URL"             = "Research Agent Cloud Run URL for web frontend"
+    "INTEXURAOS_RESEARCH_AGENT_URL"               = "Research Agent Cloud Run URL for web frontend"
     "INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL"      = "Commands Router service Cloud Run URL for web frontend"
     "INTEXURAOS_ACTIONS_AGENT_SERVICE_URL"        = "Actions Agent Cloud Run URL for commands-router"
     "INTEXURAOS_DATA_INSIGHTS_SERVICE_URL"        = "Data Insights service Cloud Run URL for web frontend"
@@ -692,7 +694,7 @@ module "pubsub_whatsapp_send" {
   push_audience              = module.whatsapp_service.service_url
 
   publisher_service_accounts = {
-    actions_agent    = module.iam.service_accounts["actions_agent"]
+    actions_agent  = module.iam.service_accounts["actions_agent"]
     research_agent = module.iam.service_accounts["research_agent"]
   }
 
@@ -928,7 +930,7 @@ module "api_docs_hub" {
     INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
-    INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL             = "${module.research_agent.service_url}/openapi.json"
+    INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
     INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL              = "${module.commands_router.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
     INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
@@ -1070,7 +1072,7 @@ module "actions_agent" {
 
   env_vars = {
     INTEXURAOS_GCP_PROJECT_ID             = var.project_id
-    INTEXURAOS_RESEARCH_AGENT_URL       = module.research_agent.service_url
+    INTEXURAOS_RESEARCH_AGENT_URL         = module.research_agent.service_url
     INTEXURAOS_USER_SERVICE_URL           = module.user_service.service_url
     INTEXURAOS_COMMANDS_ROUTER_URL        = module.commands_router.service_url
     INTEXURAOS_TODOS_AGENT_URL            = module.todos_agent.service_url

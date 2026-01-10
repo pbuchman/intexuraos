@@ -24,3 +24,9 @@ variable "research_agent_service_account" {
   type        = string
   default     = ""
 }
+
+variable "enable_research_agent_access" {
+  description = "Whether to grant research-agent storage access (separate from service account to avoid count issues)"
+  type        = bool
+  default     = false
+}
