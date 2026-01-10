@@ -175,7 +175,7 @@ export interface AppConfig {
   ResearchAgentUrl: string;
   commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
-  dataInsightsServiceUrl: string;
+  dataInsightsAgentUrl: string;
   notesAgentUrl: string;
   todosAgentUrl: string;
   bookmarksAgentUrl: string;

@@ -1,5 +1,5 @@
 {
-  "name": "@intexuraos/data-insights-service",
+  "name": "@intexuraos/data-insights-agent",
   "version": "0.0.4",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "node ../../scripts/build-service.mjs data-insights-service",
+    "build": "node ../../scripts/build-service.mjs data-insights-agent",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "dev": "node --watch --experimental-strip-types src/index.ts"

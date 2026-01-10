@@ -21,7 +21,7 @@ export function getConfig(): AppConfig {
     ResearchAgentUrl: getEnvVar('INTEXURAOS_RESEARCH_AGENT_URL'),
     commandsAgentServiceUrl: getEnvVar('INTEXURAOS_COMMANDS_AGENT_URL'),
     actionsAgentUrl: getEnvVar('INTEXURAOS_ACTIONS_AGENT_URL'),
-    dataInsightsServiceUrl: getEnvVar('INTEXURAOS_DATA_INSIGHTS_SERVICE_URL'),
+    dataInsightsAgentUrl: getEnvVar('INTEXURAOS_DATA_INSIGHTS_AGENT_URL'),
     notesAgentUrl: getEnvVar('INTEXURAOS_NOTES_AGENT_URL'),
     todosAgentUrl: getEnvVar('INTEXURAOS_TODOS_AGENT_URL'),
     bookmarksAgentUrl: getEnvVar('INTEXURAOS_BOOKMARKS_AGENT_URL'),

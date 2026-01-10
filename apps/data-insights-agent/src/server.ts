@@ -34,7 +34,7 @@ function checkSecrets(): HealthCheck {
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   const servers = [
     {
-      url: 'https://intexuraos-data-insights-service-cj44trunra-lm.a.run.app',
+      url: 'https://intexuraos-data-insights-agent-cj44trunra-lm.a.run.app',
       description: 'Cloud (Development)',
     },
     { url: 'http://localhost:8119', description: 'Local' },
@@ -45,7 +45,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       openapi: '3.1.1',
       info: {
         title: SERVICE_NAME,
-        description: 'IntexuraOS Data Insights Service - Custom data sources management',
+        description: 'IntexuraOS Data Insights Agent - Custom data sources management',
         version: SERVICE_VERSION,
       },
       servers,

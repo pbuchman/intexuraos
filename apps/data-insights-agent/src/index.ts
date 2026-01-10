@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   const logger = pino({
-    name: 'data-insights-service',
+    name: 'data-insights-agent',
     level: process.env['LOG_LEVEL'] ?? 'info',
   });
 

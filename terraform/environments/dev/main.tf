@@ -178,9 +178,9 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    data_insights_service = {
-      name      = "intexuraos-data-insights-service"
-      app_path  = "apps/data-insights-service"
+    data_insights_agent = {
+      name      = "intexuraos-data-insights-agent"
+      app_path  = "apps/data-insights-agent"
       port      = 8080
       min_scale = 0
       max_scale = 1
@@ -257,7 +257,7 @@ locals {
     INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_COMMANDS_AGENT_URL              = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_DATA_INSIGHTS_SERVICE_URL        = "https://${local.services.data_insights_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_DATA_INSIGHTS_AGENT_URL        = "https://${local.services.data_insights_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_IMAGE_SERVICE_URL                = "https://${local.services.image_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
@@ -922,7 +922,7 @@ module "api_docs_hub" {
     INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
     INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL              = "${module.commands_agent.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
-    INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL        = "${module.data_insights_service.service_url}/openapi.json"
+    INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL        = "${module.data_insights_agent.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
     INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL         = "${module.app_settings_service.service_url}/openapi.json"
     INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
@@ -943,7 +943,7 @@ module "api_docs_hub" {
     module.research_agent,
     module.commands_agent,
     module.actions_agent,
-    module.data_insights_service,
+    module.data_insights_agent,
     module.image_service,
     module.notes_agent,
     module.todos_agent,
@@ -1049,21 +1049,21 @@ module "actions_agent" {
   ]
 }
 
-# Data Insights Service - Analytics aggregation from other services
-module "data_insights_service" {
+# Data Insights Agent - Analytics aggregation from other services
+module "data_insights_agent" {
   source = "../../modules/cloud-run-service"
 
   project_id      = var.project_id
   region          = var.region
   environment     = var.environment
-  service_name    = local.services.data_insights_service.name
-  service_account = module.iam.service_accounts["data_insights_service"]
-  port            = local.services.data_insights_service.port
-  min_scale       = local.services.data_insights_service.min_scale
-  max_scale       = local.services.data_insights_service.max_scale
+  service_name    = local.services.data_insights_agent.name
+  service_account = module.iam.service_accounts["data_insights_agent"]
+  port            = local.services.data_insights_agent.port
+  min_scale       = local.services.data_insights_agent.min_scale
+  max_scale       = local.services.data_insights_agent.max_scale
   labels          = local.common_labels
 
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-service:latest"
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-agent:latest"
 
   secrets = local.common_service_secrets
 
@@ -1458,9 +1458,9 @@ module "snapshot_refresh_pubsub" {
   project_number = local.project_number
   topic_name     = "snapshot-refresh-${var.environment}"
 
-  push_endpoint              = "${module.data_insights_service.service_url}/internal/snapshots/refresh"
+  push_endpoint              = "${module.data_insights_agent.service_url}/internal/snapshots/refresh"
   push_service_account_email = google_service_account.cloud_scheduler.email
-  push_audience              = module.data_insights_service.service_url
+  push_audience              = module.data_insights_agent.service_url
 
   # Longer ack deadline for batch processing (up to 10 minutes)
   ack_deadline_seconds = 600
@@ -1473,7 +1473,7 @@ module "snapshot_refresh_pubsub" {
 
   depends_on = [
     google_project_service.apis,
-    module.data_insights_service,
+    module.data_insights_agent,
   ]
 }
 
@@ -1481,11 +1481,11 @@ module "snapshot_refresh_pubsub" {
 resource "google_cloud_run_service_iam_member" "scheduler_invokes_data_insights" {
   project  = var.project_id
   location = var.region
-  service  = local.services.data_insights_service.name
+  service  = local.services.data_insights_agent.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
 
-  depends_on = [module.data_insights_service]
+  depends_on = [module.data_insights_agent]
 }
 
 # Cloud Scheduler job - triggers snapshot refresh every 15 minutes
@@ -1511,7 +1511,7 @@ resource "google_cloud_scheduler_job" "refresh_snapshots" {
   depends_on = [
     google_project_service.apis,
     module.snapshot_refresh_pubsub,
-    module.data_insights_service,
+    module.data_insights_agent,
   ]
 }
 
@@ -1633,9 +1633,9 @@ output "actions_agent_url" {
   value       = module.actions_agent.service_url
 }
 
-output "data_insights_service_url" {
-  description = "Data Insights Service URL"
-  value       = module.data_insights_service.service_url
+output "data_insights_agent_url" {
+  description = "Data Insights Agent URL"
+  value       = module.data_insights_agent.service_url
 }
 
 output "image_service_url" {

@@ -5,7 +5,7 @@
 import { z } from 'zod';
 
 /**
- * Schema for data insights service configuration.
+ * Schema for data insights agent configuration.
  * All values are sourced from environment variables.
  */
 const configSchema = z.object({
