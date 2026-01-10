@@ -502,6 +502,43 @@ echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE
 echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
 ```
 
+### 11b. Update Web App Cloud Build
+
+**CRITICAL:** Update both Cloud Build files for the web app. The web app is a static SPA that needs environment variables baked in at **build time** (not runtime like Cloud Run services).
+
+**Update `cloudbuild/cloudbuild.yaml`** - In the `fetch-web-secrets` step, add:
+
+```bash
+INTEXURAOS_<SERVICE_NAME>_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_<SERVICE_NAME>_URL)
+```
+
+**Update `apps/web/cloudbuild.yaml`** - In the `fetch-secrets` step, add the same line:
+
+```bash
+INTEXURAOS_<SERVICE_NAME>_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_<SERVICE_NAME>_URL)
+```
+
+**Also update the web app config** (`apps/web/src/config.ts`):
+
+```typescript
+export function getConfig(): AppConfig {
+  return {
+    // ... existing config ...
+    <serviceName>Url: getEnvVar('INTEXURAOS_<SERVICE_NAME>_URL'),
+  };
+}
+```
+
+**Why both files?**
+- `cloudbuild/cloudbuild.yaml` runs when >3 services changed or global files trigger (MONOLITH strategy)
+- `apps/web/cloudbuild.yaml` runs when only web changed (INDIVIDUAL strategy)
+- Both must stay in sync for secrets
+
+**Failure symptom:** If this step is missed, the web app will crash on load with:
+```
+Uncaught Error: Missing required environment variable: INTEXURAOS_<SERVICE_NAME>_URL
+```
+
 ### 12. Add to Root tsconfig.json
 
 Edit `tsconfig.json`:
@@ -579,6 +616,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
 - [ ] Registered in api-docs-hub
 - [ ] Service URL secret created (post-deployment)
+- [ ] Web Cloud Build files updated with service URL secret
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
