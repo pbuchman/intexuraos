@@ -23,6 +23,32 @@ function truncateContent(content: string, maxLength = 150): string {
   return content.slice(0, maxLength).trim() + '...';
 }
 
+function renderTextWithLinks(text: string): React.JSX.Element {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlPattern);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlPattern) !== null) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 interface NoteModalProps {
   note: Note;
   onClose: () => void;
@@ -147,7 +173,9 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                   ))}
                 </div>
               ) : null}
-              <div className="whitespace-pre-wrap break-words text-slate-700">{note.content}</div>
+              <div className="whitespace-pre-wrap break-words text-slate-700">
+                {renderTextWithLinks(note.content)}
+              </div>
               <div className="text-xs text-slate-400">
                 <span>Created: {formatDate(note.createdAt)}</span>
                 <span className="mx-2">·</span>
