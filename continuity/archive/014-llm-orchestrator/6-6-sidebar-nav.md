@@ -18,7 +18,7 @@
 
 Update sidebar and router to include:
 
-1. LLM Orchestrator section
+1. Research Agent section
 2. Settings → API Keys
 
 ---
@@ -48,7 +48,7 @@ Find existing sidebar component and add:
 const navItems = [
   // ... existing items
   {
-    section: 'LLM Orchestrator',
+    section: 'Research Agent',
     items: [
       { path: '/#/research/new', label: 'New Research', icon: PlusIcon },
       { path: '/#/research', label: 'Previous Researches', icon: ListIcon },
@@ -67,13 +67,13 @@ Add routes in the HashRouter:
 
 ```typescript
 import { ApiKeysSettingsPage } from './pages/ApiKeysSettingsPage';
-import { LlmOrchestratorPage } from './pages/LlmOrchestratorPage';
+import { ResearchAgentPage } from './pages/ResearchAgentPage';
 import { ResearchListPage } from './pages/ResearchListPage';
 import { ResearchDetailPage } from './pages/ResearchDetailPage';
 
 // In routes
 <Route path="/settings/api-keys" element={<ApiKeysSettingsPage />} />
-<Route path="/research/new" element={<LlmOrchestratorPage />} />
+<Route path="/research/new" element={<ResearchAgentPage />} />
 <Route path="/research/:id" element={<ResearchDetailPage />} />
 <Route path="/research" element={<ResearchListPage />} />
 ```
@@ -90,7 +90,7 @@ Verify all links use hash format:
 ## Step Checklist
 
 - [ ] Identify current sidebar component
-- [ ] Add LLM Orchestrator navigation section
+- [ ] Add Research Agent navigation section
 - [ ] Add Settings → API Keys link
 - [ ] Update App.tsx with new routes
 - [ ] Verify hash routing format
@@ -100,7 +100,7 @@ Verify all links use hash format:
 
 ## Definition of Done
 
-1. Sidebar shows LLM Orchestrator section
+1. Sidebar shows Research Agent section
 2. Sidebar shows Settings → API Keys
 3. All routes work correctly
 4. Hash routing preserved

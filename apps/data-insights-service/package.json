@@ -26,6 +26,7 @@
     "@intexuraos/llm-contract": "*",
     "@intexuraos/llm-pricing": "*",
     "fastify": "^5.1.0",
+    "pino": "^10.1.0",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"
   },

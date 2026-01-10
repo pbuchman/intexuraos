@@ -28,7 +28,7 @@ resource "google_storage_bucket_iam_member" "public_read" {
 
 # Image Service: Full object access for upload
 resource "google_storage_bucket_iam_member" "image_service_admin" {
-  count  = var.image_service_service_account != "" ? 1 : 0
+  count  = var.enable_image_service_access ? 1 : 0
   bucket = google_storage_bucket.generated_images.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.image_service_service_account}"

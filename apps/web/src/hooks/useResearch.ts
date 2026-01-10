@@ -8,12 +8,12 @@ import {
   getResearch as getResearchApi,
   listResearches as listResearchesApi,
   saveDraft as saveDraftApi,
-} from '@/services/llmOrchestratorApi';
+} from '@/services/researchAgentApi';
 import type {
   CreateResearchRequest,
   Research,
   SaveDraftRequest,
-} from '@/services/llmOrchestratorApi.types';
+} from '@/services/researchAgentApi.types';
 import {
   getFirestoreClient,
   authenticateFirebase,

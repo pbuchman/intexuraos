@@ -7,7 +7,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_LLM_ORCHESTRATOR_URL',
+  'INTEXURAOS_RESEARCH_AGENT_URL',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_COMMANDS_ROUTER_URL',
   'INTEXURAOS_TODOS_AGENT_URL',
@@ -23,7 +23,7 @@ validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
   initServices({
-    llmOrchestratorUrl: process.env['INTEXURAOS_LLM_ORCHESTRATOR_URL'] as string,
+    ResearchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] as string,
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     commandsRouterUrl: process.env['INTEXURAOS_COMMANDS_ROUTER_URL'] as string,
     todosAgentUrl: process.env['INTEXURAOS_TODOS_AGENT_URL'] as string,

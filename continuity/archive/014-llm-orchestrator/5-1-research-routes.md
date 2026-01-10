@@ -47,7 +47,7 @@ Implement REST endpoints:
 ### Step 1: Create routes directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/routes
+mkdir -p apps/research-agent-service/src/routes
 ```
 
 ### Step 2: Create routes/researchRoutes.ts

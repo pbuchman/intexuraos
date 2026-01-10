@@ -40,7 +40,7 @@ Create adapter classes that implement domain ports using the infra packages. The
 ### Step 1: Create llm adapters directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/infra/llm
+mkdir -p apps/research-agent-service/src/infra/llm
 ```
 
 ### Step 2: Create infra/llm/GeminiAdapter.ts

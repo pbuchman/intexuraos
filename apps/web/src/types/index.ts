@@ -172,7 +172,7 @@ export interface AppConfig {
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
-  llmOrchestratorUrl: string;
+  ResearchAgentUrl: string;
   commandsRouterServiceUrl: string;
   actionsAgentUrl: string;
   dataInsightsServiceUrl: string;

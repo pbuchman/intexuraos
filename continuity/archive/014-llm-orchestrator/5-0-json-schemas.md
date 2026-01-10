@@ -45,7 +45,7 @@ Create JSON schemas for:
 ### Step 1: Create schemas directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/routes/schemas
+mkdir -p apps/research-agent-service/src/routes/schemas
 ```
 
 ### Step 2: Create schemas/common.ts

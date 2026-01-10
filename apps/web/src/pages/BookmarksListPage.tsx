@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   Archive,
   ArchiveRestore,
   Bookmark,
@@ -14,9 +15,12 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
-import { useBookmarks } from '@/hooks';
-import type { ListBookmarksFilters } from '@/services/bookmarksApi';
+import { useAuth } from '@/context';
+import { useBookmarkChanges, useBookmarks } from '@/hooks';
+import { ApiError } from '@/services/apiClient';
+import { getBookmark as getBookmarkApi, type ListBookmarksFilters } from '@/services/bookmarksApi';
 import type { Bookmark as BookmarkType, OgFetchStatus, UpdateBookmarkRequest } from '@/types';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 
 function formatDate(isoString: string): string {
   const date = new Date(isoString);
@@ -254,12 +258,21 @@ function BookmarkModal({
     setShowDeleteConfirm(false);
   };
 
-  const ogImage = bookmark.ogPreview?.image;
-  const favicon = bookmark.ogPreview?.favicon;
+  const ogImage = getProxiedImageUrl(bookmark.ogPreview?.image);
+  const favicon = getProxiedImageUrl(bookmark.ogPreview?.favicon);
   const siteName = bookmark.ogPreview?.siteName;
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -310,7 +323,7 @@ function BookmarkModal({
             </div>
           ) : (
             <div className="space-y-4">
-              {ogImage !== undefined && ogImage !== '' ? (
+              {ogImage !== null ? (
                 <div className="overflow-hidden rounded-lg border border-slate-200">
                   <img
                     src={ogImage}
@@ -324,7 +337,7 @@ function BookmarkModal({
               ) : null}
 
               <div className="flex items-center gap-2 text-sm text-slate-500">
-                {favicon !== undefined && favicon !== '' ? (
+                {favicon !== null ? (
                   <img
                     src={favicon}
                     alt=""
@@ -523,15 +536,21 @@ interface CreateBookmarkModalProps {
     description: string | null,
     tags: string[]
   ) => Promise<void>;
+  onViewExisting: (bookmarkId: string) => void;
 }
 
-function CreateBookmarkModal({ onClose, onCreate }: CreateBookmarkModalProps): React.JSX.Element {
+function CreateBookmarkModal({
+  onClose,
+  onCreate,
+  onViewExisting,
+}: CreateBookmarkModalProps): React.JSX.Element {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateBookmarkId, setDuplicateBookmarkId] = useState<string | null>(null);
 
   const handleCreate = async (): Promise<void> => {
     if (url.trim() === '') {
@@ -548,6 +567,7 @@ function CreateBookmarkModal({ onClose, onCreate }: CreateBookmarkModalProps): R
 
     setSaving(true);
     setError(null);
+    setDuplicateBookmarkId(null);
     try {
       const parsedTags = tags
         .split(',')
@@ -561,14 +581,40 @@ function CreateBookmarkModal({ onClose, onCreate }: CreateBookmarkModalProps): R
       );
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create bookmark');
+      if (err instanceof ApiError && err.code === 'CONFLICT') {
+        const existingId = (err.details as { existingBookmarkId?: string } | undefined)
+          ?.existingBookmarkId;
+        if (existingId !== undefined) {
+          setDuplicateBookmarkId(existingId);
+          setError('You already have a bookmark for this URL.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to create bookmark');
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  const handleViewExisting = (): void => {
+    if (duplicateBookmarkId !== null) {
+      onViewExisting(duplicateBookmarkId);
+    }
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">Create New Bookmark</h2>
@@ -581,7 +627,27 @@ function CreateBookmarkModal({ onClose, onCreate }: CreateBookmarkModalProps): R
         </div>
 
         <div className="p-6">
-          {error !== null ? (
+          {duplicateBookmarkId !== null ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800">Duplicate URL</p>
+                  <p className="mt-1 text-sm text-amber-700">{error}</p>
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleViewExisting}
+                    >
+                      View Existing Bookmark
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : error !== null ? (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {error}
             </div>
@@ -682,15 +748,15 @@ function BookmarkRow({
 
   const displayTitle = getDisplayTitle(bookmark);
   const displayDescription = getDisplayDescription(bookmark);
-  const favicon = bookmark.ogPreview?.favicon;
-  const ogImage = bookmark.ogPreview?.image;
+  const favicon = getProxiedImageUrl(bookmark.ogPreview?.favicon);
+  const ogImage = getProxiedImageUrl(bookmark.ogPreview?.image);
   const hasAiSummary = bookmark.aiSummary !== null && bookmark.aiSummary !== '';
 
   return (
     <Card>
       <div className="flex gap-4">
         <div className="shrink-0">
-          {ogImage !== undefined && ogImage !== '' ? (
+          {ogImage !== null ? (
             <img
               src={ogImage}
               alt=""
@@ -705,9 +771,9 @@ function BookmarkRow({
             />
           ) : null}
           <div
-            className={`h-16 w-16 items-center justify-center rounded-lg bg-slate-100 ${ogImage !== undefined && ogImage !== '' ? 'hidden' : 'flex'}`}
+            className={`h-16 w-16 items-center justify-center rounded-lg bg-slate-100 ${ogImage !== null ? 'hidden' : 'flex'}`}
           >
-            {favicon !== undefined && favicon !== '' ? (
+            {favicon !== null ? (
               <img
                 src={favicon}
                 alt=""
@@ -722,13 +788,13 @@ function BookmarkRow({
               />
             ) : null}
             <Globe
-              className={`h-8 w-8 text-slate-400 ${favicon !== undefined && favicon !== '' ? 'hidden' : ''}`}
+              className={`h-8 w-8 text-slate-400 ${favicon !== null ? 'hidden' : ''}`}
             />
           </div>
         </div>
 
         <div className="min-w-0 flex-1">
-          <button onClick={onOpen} className="w-full text-left" type="button">
+          <button onClick={onOpen} className="w-full cursor-pointer text-left" type="button">
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-medium text-slate-900 transition-colors hover:text-blue-600">
                 {displayTitle}
@@ -845,13 +911,18 @@ function BookmarkRow({
   );
 }
 
+// 💰 CostGuard: Debounce delay for batch fetching changed bookmarks
+const DEBOUNCE_DELAY_MS = 500;
+
 export function BookmarksListPage(): React.JSX.Element {
+  const { getAccessToken } = useAuth();
   const {
     bookmarks,
     loading,
     error,
     filters,
     setFilters,
+    refreshBookmarkById,
     createBookmark,
     updateBookmark,
     deleteBookmark,
@@ -861,6 +932,33 @@ export function BookmarksListPage(): React.JSX.Element {
   const [selectedBookmark, setSelectedBookmark] = useState<BookmarkType | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // 💰 CostGuard: Real-time bookmark listener for enrichment updates
+  const { changedBookmarkIds, clearChangedIds } = useBookmarkChanges();
+  const debounceTimeoutRef = useRef<number | null>(null);
+
+  // 💰 CostGuard: Debounced effect for fetching changed bookmarks
+  useEffect(() => {
+    if (changedBookmarkIds.length === 0) return;
+
+    if (debounceTimeoutRef.current !== null) {
+      window.clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = window.setTimeout(() => {
+      // Fetch each changed bookmark (typically just one at a time for enrichment)
+      for (const id of changedBookmarkIds) {
+        void refreshBookmarkById(id);
+      }
+      clearChangedIds();
+    }, DEBOUNCE_DELAY_MS);
+
+    return (): void => {
+      if (debounceTimeoutRef.current !== null) {
+        window.clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [changedBookmarkIds, refreshBookmarkById, clearChangedIds]);
 
   useEffect(() => {
     const bookmarkId = searchParams.get('id');
@@ -1013,6 +1111,19 @@ export function BookmarksListPage(): React.JSX.Element {
               request.description = description;
             }
             await createBookmark(request);
+          }}
+          onViewExisting={(bookmarkId): void => {
+            setShowCreateModal(false);
+            const existingBookmark = bookmarks.find((b) => b.id === bookmarkId);
+            if (existingBookmark !== undefined) {
+              setSelectedBookmark(existingBookmark);
+            } else {
+              void (async (): Promise<void> => {
+                const token = await getAccessToken();
+                const bookmark = await getBookmarkApi(token, bookmarkId);
+                setSelectedBookmark(bookmark);
+              })();
+            }
           }}
         />
       ) : null}

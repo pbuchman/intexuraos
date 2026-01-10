@@ -19,8 +19,14 @@ variable "labels" {
   default     = {}
 }
 
-variable "llm_orchestrator_service_account" {
-  description = "Service account email for llm-orchestrator (for upload/delete access)"
+variable "research_agent_service_account" {
+  description = "Service account email for research-agent (for upload/delete access)"
   type        = string
   default     = ""
+}
+
+variable "enable_research_agent_access" {
+  description = "Whether to grant research-agent storage access (separate from service account to avoid count issues)"
+  type        = bool
+  default     = false
 }

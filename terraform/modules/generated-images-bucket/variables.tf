@@ -24,3 +24,9 @@ variable "image_service_service_account" {
   type        = string
   default     = ""
 }
+
+variable "enable_image_service_access" {
+  description = "Whether to grant image-service storage access (separate from service account to avoid count issues)"
+  type        = bool
+  default     = false
+}

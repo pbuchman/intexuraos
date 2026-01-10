@@ -1,6 +1,7 @@
 export interface CommandWithText {
   id: string;
   text: string;
+  sourceType: string;
 }
 
 export interface CommandsRouterClient {

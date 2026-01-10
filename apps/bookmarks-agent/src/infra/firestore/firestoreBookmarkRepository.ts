@@ -161,7 +161,7 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
         query = query.where('ogFetchStatus', '==', filters.ogFetchStatus);
       }
 
-      query = query.orderBy('createdAt', 'desc');
+      query = query.orderBy('updatedAt', 'desc');
 
       const snapshot = await query.get();
       let bookmarks = snapshot.docs.map((doc) =>

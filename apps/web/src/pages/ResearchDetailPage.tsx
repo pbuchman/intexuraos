@@ -40,7 +40,7 @@ import {
   enhanceResearch,
   retryFromFailed,
   unshareResearch,
-} from '@/services/llmOrchestratorApi';
+} from '@/services/researchAgentApi';
 import {
   getProviderForModel,
   type InputContext,
@@ -50,7 +50,7 @@ import {
   type PartialFailureDecision,
   type ResearchStatus,
   type SupportedModel,
-} from '@/services/llmOrchestratorApi.types';
+} from '@/services/researchAgentApi.types';
 
 /**
  * Format elapsed time in a human-readable format.

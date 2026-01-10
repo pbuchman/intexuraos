@@ -29,7 +29,7 @@ Create page for submitting new research:
 
 **In scope:**
 
-- LlmOrchestratorPage component
+- ResearchAgentPage component
 - Prompt textarea
 - LLM selection checkboxes
 - Integration with useLlmKeys for availability
@@ -46,14 +46,14 @@ Create page for submitting new research:
 
 ### Step 1: Create page component
 
-`apps/web/src/pages/LlmOrchestratorPage.tsx`:
+`apps/web/src/pages/ResearchAgentPage.tsx`:
 
 ```typescript
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLlmKeys } from '../hooks/useLlmKeys.js';
 import { useResearches } from '../hooks/useResearch.js';
-import type { LlmProvider } from '../services/llmOrchestratorApi.types.js';
+import type { LlmProvider } from '../services/ResearchAgentApi.types.js';
 
 const PROVIDERS: Array<{ id: LlmProvider; name: string }> = [
   { id: 'google', name: 'Gemini (with web search)' },
@@ -61,7 +61,7 @@ const PROVIDERS: Array<{ id: LlmProvider; name: string }> = [
   { id: 'anthropic', name: 'Claude (with web search)' },
 ];
 
-export function LlmOrchestratorPage(): JSX.Element {
+export function ResearchAgentPage(): JSX.Element {
   const navigate = useNavigate();
   const { keys, loading: keysLoading } = useLlmKeys();
   const { createResearch } = useResearches();
@@ -196,7 +196,7 @@ export function LlmOrchestratorPage(): JSX.Element {
 
 ## Step Checklist
 
-- [ ] Create `LlmOrchestratorPage.tsx`
+- [ ] Create `ResearchAgentPage.tsx`
 - [ ] Implement prompt textarea
 - [ ] Implement LLM checkboxes with availability check
 - [ ] Implement submit with redirect
@@ -228,7 +228,7 @@ npm run lint
 
 If verification fails:
 
-1. Remove `LlmOrchestratorPage.tsx`
+1. Remove `ResearchAgentPage.tsx`
 
 ---
 

@@ -29,7 +29,7 @@ Create Cloud Build configuration for:
 **In scope:**
 
 - Deploy script
-- Cloud Build steps for llm-orchestrator-service
+- Cloud Build steps for research-agent-service
 - Dockerfile verification
 
 **Non-scope:**
@@ -42,18 +42,18 @@ Create Cloud Build configuration for:
 
 ### Step 1: Create deploy script
 
-`cloudbuild/scripts/deploy-llm-orchestrator-service.sh`:
+`cloudbuild/scripts/deploy-research-agent-service.sh`:
 
 ```bash
 #!/bin/bash
 set -e
 
-SERVICE_NAME="llm-orchestrator-service"
+SERVICE_NAME="research-agent-service"
 REGION="${REGION:-us-central1}"
 
 echo "Building ${SERVICE_NAME}..."
 docker build \
-  -f apps/llm-orchestrator-service/Dockerfile \
+  -f apps/research-agent-service/Dockerfile \
   -t "gcr.io/${PROJECT_ID}/${SERVICE_NAME}:${COMMIT_SHA}" \
   -t "gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest" \
   .
@@ -74,7 +74,7 @@ echo "${SERVICE_NAME} deployed successfully!"
 
 ### Step 2: Verify/Create Dockerfile
 
-`apps/llm-orchestrator-service/Dockerfile`:
+`apps/research-agent-service/Dockerfile`:
 
 ```dockerfile
 FROM node:20-slim AS builder
@@ -90,17 +90,17 @@ COPY packages/infra-gemini/package*.json packages/infra-gemini/
 COPY packages/infra-claude/package*.json packages/infra-claude/
 COPY packages/infra-gpt/package*.json packages/infra-gpt/
 COPY packages/infra-whatsapp/package*.json packages/infra-whatsapp/
-COPY apps/llm-orchestrator-service/package*.json apps/llm-orchestrator-service/
+COPY apps/research-agent-service/package*.json apps/research-agent-service/
 
-RUN npm ci --workspace=@intexuraos/llm-orchestrator-service
+RUN npm ci --workspace=@intexuraos/research-agent-service
 
 # Copy source
 COPY tsconfig*.json ./
 COPY packages/ packages/
-COPY apps/llm-orchestrator-service/ apps/llm-orchestrator-service/
+COPY apps/research-agent-service/ apps/research-agent-service/
 
 # Build
-RUN npm run build --workspace=@intexuraos/llm-orchestrator-service
+RUN npm run build --workspace=@intexuraos/research-agent-service
 
 FROM node:20-slim
 
@@ -122,13 +122,13 @@ COPY --from=builder /app/packages/infra-gpt/dist packages/infra-gpt/dist
 COPY --from=builder /app/packages/infra-gpt/package.json packages/infra-gpt/
 COPY --from=builder /app/packages/infra-whatsapp/dist packages/infra-whatsapp/dist
 COPY --from=builder /app/packages/infra-whatsapp/package.json packages/infra-whatsapp/
-COPY --from=builder /app/apps/llm-orchestrator-service/dist apps/llm-orchestrator-service/dist
-COPY --from=builder /app/apps/llm-orchestrator-service/package.json apps/llm-orchestrator-service/
+COPY --from=builder /app/apps/research-agent-service/dist apps/research-agent-service/dist
+COPY --from=builder /app/apps/research-agent-service/package.json apps/research-agent-service/
 
 ENV NODE_ENV=production
 EXPOSE 8080
 
-CMD ["node", "apps/llm-orchestrator-service/dist/index.js"]
+CMD ["node", "apps/research-agent-service/dist/index.js"]
 ```
 
 ### Step 3: Update cloudbuild.yaml
@@ -137,14 +137,14 @@ Add build step to `cloudbuild/cloudbuild.yaml`:
 
 ```yaml
 # Add to steps
-- id: 'deploy-llm-orchestrator-service'
+- id: 'deploy-research-agent-service'
   name: 'gcr.io/cloud-builders/docker'
   dir: '.'
   entrypoint: 'bash'
   args:
     - '-c'
     - |
-      ./cloudbuild/scripts/deploy-llm-orchestrator-service.sh
+      ./cloudbuild/scripts/deploy-research-agent-service.sh
   env:
     - 'PROJECT_ID=${PROJECT_ID}'
     - 'COMMIT_SHA=${COMMIT_SHA}'
@@ -176,8 +176,8 @@ Add build step to `cloudbuild/cloudbuild.yaml`:
 ## Verification Commands
 
 ```bash
-chmod +x cloudbuild/scripts/deploy-llm-orchestrator-service.sh
-docker build -f apps/llm-orchestrator-service/Dockerfile -t test-build .
+chmod +x cloudbuild/scripts/deploy-research-agent-service.sh
+docker build -f apps/research-agent-service/Dockerfile -t test-build .
 ```
 
 ---

@@ -136,14 +136,17 @@ describe('Internal Routes', () => {
       expect(body.data.bookmark.ogFetchStatus).toBe('pending');
     });
 
-    it('prevents duplicate URLs', async () => {
-      await ctx.bookmarkRepository.create({
+    it('prevents duplicate URLs and returns existing bookmark ID', async () => {
+      const existingResult = await ctx.bookmarkRepository.create({
         userId: 'user-1',
         url: 'https://example.com',
         tags: [],
         source: 'web',
         sourceId: 'src-1',
       });
+
+      expect(existingResult.ok).toBe(true);
+      const existingId = existingResult.ok ? existingResult.value.id : '';
 
       const response = await ctx.app.inject({
         method: 'POST',
@@ -162,6 +165,10 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.details?.existingBookmarkId).toBe(existingId);
     });
   });
 

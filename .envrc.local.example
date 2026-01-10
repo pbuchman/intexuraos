@@ -41,9 +41,9 @@ export INTEXURAOS_PROMPTVAULT_SERVICE_URL=http://localhost:8111
 export INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
 export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
 export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
-export INTEXURAOS_LLM_ORCHESTRATOR_URL=http://localhost:8116
-export INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=http://localhost:8117
-export INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=http://localhost:8118
+export INTEXURAOS_RESEARCH_AGENT_URL=http://localhost:8116
+export INTEXURAOS_COMMANDS_ROUTER_URL=http://localhost:8117
+export INTEXURAOS_ACTIONS_AGENT_URL=http://localhost:8118
 export INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=http://localhost:8119
 export INTEXURAOS_IMAGE_SERVICE_URL=http://localhost:8120
 export INTEXURAOS_NOTES_AGENT_URL=http://localhost:8121
@@ -67,7 +67,7 @@ export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC=media-cleanup-local
 export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub-local
 
 # Required for WhatsApp message sending via Pub/Sub
-# llm-orchestrator publishes, whatsapp-service subscribes
+# research-agent publishes, whatsapp-service subscribes
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-sub
 
@@ -111,7 +111,7 @@ export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
 # =============================================================================
 # Override default ports if needed (e.g., port conflict).
 # Default ports: user=8110, promptvault=8111, notion=8112, whatsapp=8113,
-# mobile-notifications=8114, api-docs-hub=8115, llm-orchestrator=8116,
+# mobile-notifications=8114, api-docs-hub=8115, research-agent=8116,
 # web=3000
 
 # export USER_SERVICE_PORT=9110

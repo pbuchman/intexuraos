@@ -32,6 +32,29 @@ const logger = pino({ name: 'speechmatics-adapter' });
 const SPEECHMATICS_EU_API_URL = 'https://asr.api.speechmatics.com/v2';
 
 /**
+ * Extract a human-readable message from an error object.
+ * Handles various error formats from Speechmatics API.
+ */
+function extractErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error !== null && typeof error === 'object') {
+    const obj = error as Record<string, unknown>;
+    if (typeof obj['message'] === 'string') {
+      return obj['message'];
+    }
+    if (typeof obj['error'] === 'string') {
+      return obj['error'];
+    }
+    if (typeof obj['reason'] === 'string') {
+      return obj['reason'];
+    }
+  }
+  return JSON.stringify(error);
+}
+
+/**
  * Create a TranscriptionApiCall record.
  */
 function createApiCall(
@@ -187,12 +210,9 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         const errorsValue: unknown = response.job.errors;
         let errorMessage: string;
         if (Array.isArray(errorsValue)) {
-          errorMessage = errorsValue
-            .map((e: unknown) => (typeof e === 'string' ? e : JSON.stringify(e)))
-            .join('; ');
+          errorMessage = errorsValue.map((e: unknown) => extractErrorMessage(e)).join('; ');
         } else {
-          errorMessage =
-            typeof errorsValue === 'string' ? errorsValue : JSON.stringify(errorsValue);
+          errorMessage = extractErrorMessage(errorsValue);
         }
         result.error = {
           code: 'JOB_REJECTED',

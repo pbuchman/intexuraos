@@ -50,6 +50,23 @@ describe('FirestoreCompositeFeedRepository', () => {
         expect(result.value.updatedAt).toBeInstanceOf(Date);
       }
     });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Write failed') });
+
+      const result = await repo.create(userId, 'Test', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to create composite feed');
+      }
+
+      fakeFirestore.configure({});
+    });
   });
 
   describe('getById', () => {
@@ -92,6 +109,19 @@ describe('FirestoreCompositeFeedRepository', () => {
       if (result.ok) {
         expect(result.value).toBeNull();
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read failed') });
+
+      const result = await repo.getById('any-id', userId);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to get composite feed');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 
@@ -150,6 +180,19 @@ describe('FirestoreCompositeFeedRepository', () => {
         expect(result.value[0]?.name).toBe('Second');
         expect(result.value[1]?.name).toBe('First');
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+
+      const result = await repo.listByUserId(userId);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to list composite feeds');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 
@@ -258,6 +301,21 @@ describe('FirestoreCompositeFeedRepository', () => {
         expect(result.error).toBe('Composite feed not found');
       }
     });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.update('any-id', userId, {
+        purpose: 'Updated',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to update composite feed');
+      }
+
+      fakeFirestore.configure({});
+    });
   });
 
   describe('delete', () => {
@@ -303,6 +361,63 @@ describe('FirestoreCompositeFeedRepository', () => {
       if (!result.ok) {
         expect(result.error).toBe('Composite feed not found');
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
+
+      const result = await repo.delete('any-id', userId);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to delete composite feed');
+      }
+
+      fakeFirestore.configure({});
+    });
+  });
+
+  describe('listAll', () => {
+    it('returns all feeds regardless of user', async () => {
+      await repo.create(userId, 'Feed 1', {
+        purpose: 'Purpose 1',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      await repo.create('other-user', 'Feed 2', {
+        purpose: 'Purpose 2',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+
+      const result = await repo.listAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(2);
+      }
+    });
+
+    it('returns empty array when no feeds exist', async () => {
+      const result = await repo.listAll();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+
+      const result = await repo.listAll();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to list all composite feeds');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 
@@ -362,6 +477,19 @@ describe('FirestoreCompositeFeedRepository', () => {
         expect(result.value).toHaveLength(1);
         expect(result.value[0]?.userId).toBe(userId);
       }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+
+      const result = await repo.findByStaticSourceId(userId, 'target-source');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to find composite feeds');
+      }
+
+      fakeFirestore.configure({});
     });
   });
 });

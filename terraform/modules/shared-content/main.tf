@@ -38,10 +38,10 @@ resource "google_storage_bucket_iam_member" "public_read" {
   member = "allUsers"
 }
 
-# LLM Orchestrator: Full object access for upload/delete of shared research HTML
-resource "google_storage_bucket_iam_member" "llm_orchestrator_admin" {
-  count  = var.llm_orchestrator_service_account != "" ? 1 : 0
+# Research Agent: Full object access for upload/delete of shared research HTML
+resource "google_storage_bucket_iam_member" "research_agent_admin" {
+  count  = var.enable_research_agent_access ? 1 : 0
   bucket = google_storage_bucket.shared_content.name
   role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${var.llm_orchestrator_service_account}"
+  member = "serviceAccount:${var.research_agent_service_account}"
 }

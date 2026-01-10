@@ -48,7 +48,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
-const orchestratorItems: NavItem[] = [
+const researchAgentItems: NavItem[] = [
   { to: '/research', label: 'Library', icon: List },
   { to: '/research/new', label: 'New Study', icon: Plus },
 ];
@@ -109,7 +109,7 @@ export function Sidebar(): React.JSX.Element {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isOrchestratorOpen, setIsOrchestratorOpen] = useState(() =>
+  const [isResearchAgentOpen, setIsResearchAgentOpen] = useState(() =>
     window.location.hash.includes('/research')
   );
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
@@ -133,10 +133,10 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Auto-expand orchestrator when on research page
+  // Auto-expand researchAgent when on research page
   useEffect(() => {
     if (location.pathname.startsWith('/research')) {
-      setIsOrchestratorOpen(true);
+      setIsResearchAgentOpen(true);
     }
   }, [location.pathname]);
 
@@ -263,11 +263,11 @@ export function Sidebar(): React.JSX.Element {
             {!isCollapsed ? <span>Inbox</span> : null}
           </NavLink>
 
-          {/* LLM Orchestrator section (collapsible) */}
+          {/* Research Agent section (collapsible) */}
           <div className="pt-2">
             <button
               onClick={(): void => {
-                setIsOrchestratorOpen(!isOrchestratorOpen);
+                setIsResearchAgentOpen(!isResearchAgentOpen);
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                 location.pathname.startsWith('/research')
@@ -279,7 +279,7 @@ export function Sidebar(): React.JSX.Element {
               {!isCollapsed ? (
                 <>
                   <span className="flex-1 text-left">Research Studio</span>
-                  {isOrchestratorOpen ? (
+                  {isResearchAgentOpen ? (
                     <ChevronUp className="h-4 w-4" />
                   ) : (
                     <ChevronDown className="h-4 w-4" />
@@ -288,10 +288,10 @@ export function Sidebar(): React.JSX.Element {
               ) : null}
             </button>
 
-            {/* Orchestrator sub-items */}
-            {isOrchestratorOpen && !isCollapsed ? (
+            {/* ResearchAgent sub-items */}
+            {isResearchAgentOpen && !isCollapsed ? (
               <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
-                {orchestratorItems.map((item) => (
+                {researchAgentItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -407,6 +407,22 @@ export function Sidebar(): React.JSX.Element {
           >
             <Bookmark className="h-5 w-5 shrink-0" />
             {!isCollapsed ? <span>My Bookmarks</span> : null}
+          </NavLink>
+
+          {/* Calendar */}
+          <NavLink
+            to="/calendar"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <Calendar className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Calendar</span> : null}
           </NavLink>
 
           {/* WhatsApp */}

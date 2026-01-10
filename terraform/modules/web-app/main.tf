@@ -238,10 +238,20 @@ data "google_secret_manager_secret_version" "ssl_key" {
   project = var.project_id
 }
 
+# Hash-based suffix for custom certificate - only recreates when cert file actually changes
+resource "random_id" "custom_cert_suffix" {
+  count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
+  byte_length = 4
+
+  keepers = {
+    cert_hash = filemd5(var.ssl_certificate_path)
+  }
+}
+
 # Self-managed SSL certificate (used when use_custom_certificate = true)
 resource "google_compute_ssl_certificate" "custom" {
   count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
-  name_prefix = "intexuraos-web-${var.environment}-cert-"
+  name        = "intexuraos-web-${var.environment}-cert-${random_id.custom_cert_suffix[0].hex}"
   project     = var.project_id
   certificate = file(var.ssl_certificate_path)
   private_key = data.google_secret_manager_secret_version.ssl_key[0].secret_data

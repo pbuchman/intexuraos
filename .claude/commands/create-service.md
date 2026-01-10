@@ -143,6 +143,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   // Add service-specific required vars here
 ];
 
@@ -267,26 +268,62 @@ export function resetServices(): void {
 
 Edit `terraform/environments/dev/main.tf`:
 
+**Step 1:** Add the service to `local.services` map (around line 160):
+
 ```hcl
-module "<service_name_underscored>" {
-  source = "../../modules/cloud-run-service"
-
-  project_id    = var.project_id
-  region        = var.region
-  service_name  = "intexuraos-<service-name>"
-  image         = "${var.region}-docker.pkg.dev/${var.project_id}/intexuraos/intexuraos-<service-name>:latest"
-
-  service_account_email = module.iam.service_accounts["<service-name>"]
-
-  env_vars = {
-    NODE_ENV = "production"
-  }
-
-  secret_env_vars = {
-    # Add secrets as needed
-  }
+<service_name> = {
+  name      = "intexuraos-<service-name>"
+  port      = 8080
+  min_scale = 0
+  max_scale = 1
 }
 ```
+
+**Step 2:** Add the module (after other service modules):
+
+```hcl
+module "<service_name>" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.<service_name>.name
+  service_account = module.iam.service_accounts["<service_name>"]
+  port            = local.services.<service_name>.port
+  min_scale       = local.services.<service_name>.min_scale
+  max_scale       = local.services.<service_name>.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/<service-name>:latest"
+
+  # All services get common auth secrets + all service URLs automatically
+  secrets  = local.common_service_secrets
+  env_vars = local.common_service_env_vars
+
+  # If service needs additional secrets or env_vars, use merge():
+  # secrets = merge(local.common_service_secrets, {
+  #   INTEXURAOS_SOME_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SOME_API_KEY"]
+  # })
+  # env_vars = merge(local.common_service_env_vars, {
+  #   INTEXURAOS_PUBSUB_TOPIC = "my-topic-name"
+  # })
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+```
+
+**Step 3:** Add the service URL to `local.common_service_env_vars` (around line 250):
+
+```hcl
+INTEXURAOS_<SERVICE_NAME>_URL = "https://${local.services.<service_name>.name}-${local.cloud_run_url_suffix}"
+```
+
+This ensures all other services can call your new service via environment variable.
 
 ### 7. Add Service Account to IAM
 
@@ -485,40 +522,27 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
 
 Note: Get the actual Cloud Run URL after first deployment.
 
-### 11. Create Service URL Secret (Post-Deployment)
+### 11. Update Cloud Build for Web App (if web needs the service URL)
 
-After first deployment, create a secret for the service URL so other services can call it:
+If the web app needs to call your new service, update **both** Cloud Build files to include it:
 
-```bash
-# Get the Cloud Run URL (no trailing slash!)
-SERVICE_URL=$(gcloud run services describe intexuraos-<service-name> \
-  --region=europe-central2 \
-  --format='value(status.url)')
-
-# Create the secret
-echo -n "$SERVICE_URL" | gcloud secrets create INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
-
-# Or update existing secret
-echo -n "$SERVICE_URL" | gcloud secrets versions add INTEXURAOS_<SERVICE_NAME>_SERVICE_URL --data-file=-
-```
-
-### 11b. Update Web App Cloud Build
-
-**CRITICAL:** Update both Cloud Build files for the web app. The web app is a static SPA that needs environment variables baked in at **build time** (not runtime like Cloud Run services).
-
-**Update `cloudbuild/cloudbuild.yaml`** - In the `fetch-web-secrets` step, add:
+**Update `cloudbuild/cloudbuild.yaml`** and **`apps/web/cloudbuild.yaml`** - Add to `CLOUD_RUN_SERVICES` array:
 
 ```bash
-INTEXURAOS_<SERVICE_NAME>_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_<SERVICE_NAME>_URL)
+CLOUD_RUN_SERVICES=(
+  # ... existing services ...
+  "<service-name>:<SERVICE_NAME>"  # Add your service here
+)
 ```
 
-**Update `apps/web/cloudbuild.yaml`** - In the `fetch-secrets` step, add the same line:
+The format is `service-name:ENV_VAR_SUFFIX` where:
 
-```bash
-INTEXURAOS_<SERVICE_NAME>_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_<SERVICE_NAME>_URL)
-```
+- `service-name` matches the Cloud Run service (without `intexuraos-` prefix)
+- `ENV_VAR_SUFFIX` becomes `INTEXURAOS_<ENV_VAR_SUFFIX>_URL` in the .env file
 
-**Also update the web app config** (`apps/web/src/config.ts`):
+URLs are automatically fetched from Cloud Run API at build time - no secrets needed.
+
+**Also update the web app config** (`apps/web/src/config.ts`) if needed:
 
 ```typescript
 export function getConfig(): AppConfig {
@@ -529,15 +553,7 @@ export function getConfig(): AppConfig {
 }
 ```
 
-**Why both files?**
-- `cloudbuild/cloudbuild.yaml` runs when >3 services changed or global files trigger (MONOLITH strategy)
-- `apps/web/cloudbuild.yaml` runs when only web changed (INDIVIDUAL strategy)
-- Both must stay in sync for secrets
-
-**Failure symptom:** If this step is missed, the web app will crash on load with:
-```
-Uncaught Error: Missing required environment variable: INTEXURAOS_<SERVICE_NAME>_URL
-```
+**Note:** Backend services already get all service URLs via `local.common_service_env_vars` in Terraform, so this step is only needed if the web frontend specifically needs to call your service.
 
 ### 12. Add to Root tsconfig.json
 
@@ -607,7 +623,9 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Swagger UI at `/docs`
 - [ ] Health endpoint at `/health`
 - [ ] CORS enabled
-- [ ] Terraform module created
+- [ ] Added to `local.services` map in Terraform
+- [ ] Added service URL to `local.common_service_env_vars` in Terraform
+- [ ] Terraform module created with `local.common_service_secrets` and `local.common_service_env_vars`
 - [ ] Service account in IAM module
 - [ ] Build steps added to `cloudbuild/cloudbuild.yaml`
 - [ ] Per-service `apps/<service>/cloudbuild.yaml` created
@@ -615,12 +633,11 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
 - [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
 - [ ] Registered in api-docs-hub
-- [ ] Service URL secret created (post-deployment)
-- [ ] Web Cloud Build files updated with service URL secret
+- [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
-- [ ] Updated domain docs registry (if service has domain layer)
+- [ ] Updated domain docs registry
 - [ ] `npm run ci` passes
 - [ ] `terraform validate` passes
 

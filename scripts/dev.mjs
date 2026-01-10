@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Local development orchestrator.
+ * Local development researchAgent.
  *
  * Features:
  * - Starts emulators (Firestore, Pub/Sub, GCS) via docker compose
@@ -63,7 +63,7 @@ const SERVICES = [
 
   // these services depend on app-settings-service, so start them after
   { name: 'user-service', port: 8110, color: '\x1b[36m' },
-  { name: 'llm-orchestrator', port: 8116, color: '\x1b[96m' },
+  { name: 'research-agent', port: 8116, color: '\x1b[96m' },
   { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
   { name: 'image-service', port: 8120, color: '\x1b[91m' },
 ];
@@ -149,7 +149,7 @@ function logEmulator(message) {
   log('[emulators]', message, '\x1b[90m');
 }
 
-function logOrchestrator(message) {
+function logResearchAgent(message) {
   log('[dev]', message, `${BOLD}\x1b[97m`);
 }
 
@@ -163,19 +163,19 @@ async function checkDockerRunning() {
 }
 
 async function generateFirestoreConfig() {
-  logOrchestrator('Generating Firestore config from migrations...');
+  logResearchAgent('Generating Firestore config from migrations...');
   const generatorPath = join(ROOT_DIR, 'scripts', 'generate-firestore-config.mjs');
   const module = await import(pathToFileURL(generatorPath).href);
   if (module.generate) {
     const stats = await module.generate(true);
-    logOrchestrator(
+    logResearchAgent(
       `Generated ${stats.indexCount} indexes, ${stats.collectionCount} collection rules`
     );
   }
 }
 
 async function syncFirestore() {
-  logOrchestrator('Syncing Firestore data from GCP...');
+  logResearchAgent('Syncing Firestore data from GCP...');
 
   const syncScript = join(ROOT_DIR, 'scripts', 'sync-firestore.sh');
   if (!existsSync(syncScript)) {
@@ -206,14 +206,14 @@ async function syncFirestore() {
     },
   });
 
-  logOrchestrator('Firestore sync completed');
+  logResearchAgent('Firestore sync completed');
 }
 
 async function startEmulators() {
   // Sync Firestore data from GCP first
   await syncFirestore();
 
-  logOrchestrator('Starting emulators...');
+  logResearchAgent('Starting emulators...');
 
   const composeFile = join(ROOT_DIR, 'docker', 'docker-compose.local.yaml');
   if (!existsSync(composeFile)) {
@@ -297,7 +297,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
-  INTEXURAOS_LLM_ORCHESTRATOR_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL: 'http://localhost:8117/openapi.json',
   INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
   INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
@@ -309,6 +309,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
 };
 
+// Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
 const COMMON_SERVICE_ENV = {
   INTEXURAOS_AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
   INTEXURAOS_AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
@@ -319,16 +320,31 @@ const COMMON_SERVICE_ENV = {
   FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
 };
 
+// All service URLs - mirrors Terraform local.common_service_env_vars
+// All services get all URLs so they can call each other
+const COMMON_SERVICE_URLS = {
+  INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
+  INTEXURAOS_PROMPTVAULT_SERVICE_URL: 'http://localhost:8111',
+  INTEXURAOS_NOTION_SERVICE_URL: 'http://localhost:8112',
+  INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
+  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
+  INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
+  INTEXURAOS_COMMANDS_ROUTER_URL: 'http://localhost:8117',
+  INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
+  INTEXURAOS_DATA_INSIGHTS_SERVICE_URL: 'http://localhost:8119',
+  INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
+  INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
+  INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
+  INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
+  INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
+  INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
+  INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8126',
+};
+
+// Service-specific env vars (Pub/Sub topics, non-URL config)
+// URL configs removed - now provided by COMMON_SERVICE_URLS
 const SERVICE_ENV_MAPPINGS = {
-  'commands-router': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL:
-      process.env.INTEXURAOS_ACTIONS_AGENT_SERVICE_URL ?? 'http://localhost:8118',
-  },
-  'llm-orchestrator': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTEXURAOS_IMAGE_SERVICE_URL:
-      process.env.INTEXURAOS_IMAGE_SERVICE_URL ?? 'http://localhost:8120',
+  'research-agent': {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -343,20 +359,10 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
   'actions-agent': {
-    INTEXURAOS_COMMANDS_ROUTER_URL: 'http://localhost:8117',
-    INTEXURAOS_LLM_ORCHESTRATOR_URL:
-      process.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? 'http://localhost:8116',
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
-  },
-  'data-insights-service': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-  },
-  'image-service': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
 };
 
@@ -370,6 +376,7 @@ function startService(service) {
   const env = {
     ...process.env,
     ...COMMON_SERVICE_ENV,
+    ...COMMON_SERVICE_URLS,
     ...(SERVICE_ENV_MAPPINGS[service.name] ?? {}),
     ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
     PORT: String(service.port),
@@ -506,23 +513,23 @@ async function startAllServices() {
     initUI(SERVICES, WEB_APP);
   }
 
-  logOrchestrator('Following docker container logs...');
+  logResearchAgent('Following docker container logs...');
   for (const dockerService of DOCKER_LOG_SERVICES) {
     followDockerLogs(dockerService);
   }
 
-  logOrchestrator('Starting services...');
+  logResearchAgent('Starting services...');
 
   for (const service of SERVICES) {
     startService(service);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  logOrchestrator('Starting web app...');
+  logResearchAgent('Starting web app...');
   startWebApp();
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
-  logOrchestrator(`All ${String(SERVICES.length)} services + web app started!`);
+  logResearchAgent(`All ${String(SERVICES.length)} services + web app started!`);
 
   if (useTUI) {
     healthPollInterval = setInterval(() => {
@@ -530,18 +537,18 @@ async function startAllServices() {
     }, 3000);
     void pollHealth(SERVICES, WEB_APP);
   } else {
-    logOrchestrator('');
+    logResearchAgent('');
     console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
     console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
     console.log(`  Firebase UI:      http://localhost:8100`);
     console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
-    logOrchestrator('');
-    logOrchestrator('Press Ctrl+C to stop all services');
+    logResearchAgent('');
+    logResearchAgent('Press Ctrl+C to stop all services');
   }
 }
 
 async function stopEmulators() {
-  logOrchestrator('Stopping emulators...');
+  logResearchAgent('Stopping emulators...');
   const composeFile = join(ROOT_DIR, 'docker', 'docker-compose.local.yaml');
   try {
     execSync(`docker compose -f "${composeFile}" down`, {
@@ -618,8 +625,8 @@ async function main() {
   useTUI = !noTUI && !emulatorsOnly && process.stdout.isTTY;
 
   if (!useTUI) {
-    logOrchestrator('IntexuraOS Local Development Environment');
-    logOrchestrator('');
+    logResearchAgent('IntexuraOS Local Development Environment');
+    logResearchAgent('');
   }
 
   if (!(await checkDockerRunning())) {
@@ -634,12 +641,12 @@ async function main() {
 
     if (servicesOnly) {
       // Assume emulators are already running
-      logOrchestrator('Starting services only (emulators should be running)...');
+      logResearchAgent('Starting services only (emulators should be running)...');
       await startAllServices();
     } else if (emulatorsOnly) {
       // Start only emulators
       await startEmulators();
-      logOrchestrator('Emulators started. Press Ctrl+C to stop.');
+      logResearchAgent('Emulators started. Press Ctrl+C to stop.');
     } else {
       // Full startup: emulators + services
       await startEmulators();

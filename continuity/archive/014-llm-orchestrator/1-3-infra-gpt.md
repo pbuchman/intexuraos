@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator runs research prompts on multiple LLMs including GPT
+- Research Agent runs research prompts on multiple LLMs including GPT
 - Uses OpenAI `openai` SDK
 - Model: `gpt-4o` (or latest available)
 - GPT does not have built-in web search; relies on knowledge cutoff
@@ -17,7 +17,7 @@
 
 ## Problem Statement
 
-Need a standalone OpenAI GPT adapter that executes research prompts, returning structured results compatible with the orchestrator's synthesis flow.
+Need a standalone OpenAI GPT adapter that executes research prompts, returning structured results compatible with the researchAgent's synthesis flow.
 
 ---
 

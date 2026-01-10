@@ -76,7 +76,7 @@ export function createExecuteResearchActionUseCase(
 
     logger.info(
       { actionId, userId: action.userId, title: action.title, models: selectedModels },
-      'Creating research draft via llm-orchestrator'
+      'Creating research draft via research-agent'
     );
 
     const result = await researchServiceClient.createDraft({
@@ -90,7 +90,7 @@ export function createExecuteResearchActionUseCase(
     if (!result.ok) {
       logger.error(
         { actionId, error: getErrorMessage(result.error) },
-        'Failed to create research draft via llm-orchestrator'
+        'Failed to create research draft via research-agent'
       );
       const failedAction: Action = {
         ...action,

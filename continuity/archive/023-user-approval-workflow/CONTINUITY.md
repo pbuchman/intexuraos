@@ -94,14 +94,14 @@ All tiers completed. Remaining work:
 
 ### Decision 3: WhatsApp notifications via Pub/Sub (not HTTP)
 
-**Reasoning**: Async, reliable, existing pattern in llm-orchestrator
+**Reasoning**: Async, reliable, existing pattern in research-agent
 **Impact**: Requires `@intexuraos/infra-pubsub` dependency
 **Alternative considered**: Direct HTTP to whatsapp-service (rejected - tight coupling)
 
 ### Decision 4: Synchronous execute endpoint
 
 **Reasoning**: UI needs immediate feedback with resource_url for navigation
-**Impact**: 5-minute timeout required, llm-orchestrator can be slow
+**Impact**: 5-minute timeout required, research-agent can be slow
 **Alternative considered**: Async with polling (rejected - poor UX)
 
 ### Decision 5: Duplicate Action type in each app
@@ -255,7 +255,7 @@ None currently.
 - ✅ `@intexuraos/infra-pubsub` - Added to actions-agent package.json
 - ✅ user-service - Phone lookup endpoint exists
 - ✅ whatsapp-service - Pub/Sub consumer exists
-- ✅ llm-orchestrator - Research creation endpoint exists
+- ✅ research-agent - Research creation endpoint exists
 
 ---
 

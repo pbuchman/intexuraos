@@ -28,18 +28,18 @@ Remove unjustified coverage exclusions from vitest.config.ts by writing tests fo
 
 ### Investigation Results
 
-| Exclusion                                                                     | Finding                                   | Action                         | Status  |
-| ----------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------ | ------- |
-| packages/infra-whatsapp/\*\*                                                  | Tests exist in `__tests__/client.test.ts` | Removed exclusion              | ✅ Done |
-| apps/llm-orchestrator-service/src/routes/\*\*                                 | Tests exist but had broken JWT auth       | Fixed tests, removed exclusion | ✅ Done |
-| packages/infra-\*/src/types.ts                                                | Pure TypeScript interfaces                | Added exclusion (justified)    | ✅ Done |
-| packages/infra-claude/\*\*                                                    | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-gemini/\*\*                                                    | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-gpt/\*\*                                                       | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-llm-audit/\*\*                                                 | Pure functions + Firestore                | Tests written, removed         | ✅ Done |
-| apps/llm-orchestrator-service/src/infra/\*\*                                  | Factory + Firestore repo                  | Tests written, removed         | ✅ Done |
-| apps/llm-orchestrator-service/src/domain/research/config/\*\*                 | Pure function                             | Tests written, removed         | ✅ Done |
-| apps/llm-orchestrator-service/src/domain/research/usecases/processResearch.ts | Full DI, testable                         | Tests written, removed         | ✅ Done |
+| Exclusion                                                                   | Finding                                   | Action                         | Status  |
+| --------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------ | ------- |
+| packages/infra-whatsapp/\*\*                                                | Tests exist in `__tests__/client.test.ts` | Removed exclusion              | ✅ Done |
+| apps/research-agent-service/src/routes/\*\*                                 | Tests exist but had broken JWT auth       | Fixed tests, removed exclusion | ✅ Done |
+| packages/infra-\*/src/types.ts                                              | Pure TypeScript interfaces                | Added exclusion (justified)    | ✅ Done |
+| packages/infra-claude/\*\*                                                  | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-gemini/\*\*                                                  | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-gpt/\*\*                                                     | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-llm-audit/\*\*                                               | Pure functions + Firestore                | Tests written, removed         | ✅ Done |
+| apps/research-agent-service/src/infra/\*\*                                  | Factory + Firestore repo                  | Tests written, removed         | ✅ Done |
+| apps/research-agent-service/src/domain/research/config/\*\*                 | Pure function                             | Tests written, removed         | ✅ Done |
+| apps/research-agent-service/src/domain/research/usecases/processResearch.ts | Full DI, testable                         | Tests written, removed         | ✅ Done |
 
 ### Work Completed
 
@@ -47,7 +47,7 @@ Remove unjustified coverage exclusions from vitest.config.ts by writing tests fo
    - Already had comprehensive tests using nock for HTTP mocking
    - Coverage: 100% across all metrics
 
-2. **Removed `apps/llm-orchestrator-service/src/routes/**` exclusion\*\*
+2. **Removed `apps/research-agent-service/src/routes/**` exclusion\*\*
    - Fixed routes tests by implementing proper JWT authentication:
      - Used `jose` library to generate real RSA key pairs
      - Created local Fastify JWKS server to serve public key
@@ -72,7 +72,7 @@ Remove unjustified coverage exclusions from vitest.config.ts by writing tests fo
    - Tests AuditContext success/error paths
    - Tests idempotency and Firestore error handling
 
-7. **Created llm-orchestrator infra tests:**
+7. **Created research-agent infra tests:**
    - `FirestoreResearchRepository.test.ts` (18 tests) - CRUD operations
    - `userServiceClient.test.ts` (11 tests) - HTTP mocking with nock
    - `LlmAdapterFactory.test.ts` (7 tests) - Factory functions
@@ -100,13 +100,13 @@ All metrics above 95% threshold.
 
 - ✅ Investigated all 9 exclusion categories
 - ✅ Removed infra-whatsapp exclusion (already had tests)
-- ✅ Fixed llm-orchestrator routes tests with proper JWT signing
+- ✅ Fixed research-agent routes tests with proper JWT signing
 - ✅ Removed routes exclusion
 - ✅ Added justified types.ts exclusion
 - ✅ Wrote tests for infra-gemini (30 tests)
 - ✅ Wrote tests for infra-gpt (32 tests)
 - ✅ Wrote tests for infra-llm-audit (21 tests)
-- ✅ Wrote tests for llm-orchestrator infra (44 tests across 4 files)
+- ✅ Wrote tests for research-agent infra (44 tests across 4 files)
 - ✅ Wrote tests for processResearch.ts (17 tests)
 - ✅ Wrote tests for synthesisPrompt.ts (12 tests)
 - ✅ Removed all unjustified exclusions
@@ -123,13 +123,13 @@ None - all tasks completed.
 ## Files Modified
 
 - `vitest.config.ts` - Removed 7 unjustified exclusions, kept justified ones
-- `apps/llm-orchestrator-service/src/__tests__/routes.test.ts` - Complete rewrite with proper JWT auth
+- `apps/research-agent-service/src/__tests__/routes.test.ts` - Complete rewrite with proper JWT auth
 - `packages/infra-gemini/src/__tests__/client.test.ts` - New test file (30 tests)
 - `packages/infra-gpt/src/__tests__/client.test.ts` - New test file (32 tests)
 - `packages/infra-llm-audit/src/__tests__/audit.test.ts` - New test file (21 tests)
-- `apps/llm-orchestrator-service/src/__tests__/infra/research/FirestoreResearchRepository.test.ts` - New (18 tests)
-- `apps/llm-orchestrator-service/src/__tests__/infra/user/userServiceClient.test.ts` - New (11 tests)
-- `apps/llm-orchestrator-service/src/__tests__/infra/llm/LlmAdapterFactory.test.ts` - New (7 tests)
-- `apps/llm-orchestrator-service/src/__tests__/infra/llm/ClaudeAdapter.test.ts` - New (8 tests)
-- `apps/llm-orchestrator-service/src/__tests__/domain/research/usecases/processResearch.test.ts` - New (17 tests)
-- `apps/llm-orchestrator-service/src/__tests__/domain/research/config/synthesisPrompt.test.ts` - New (12 tests)
+- `apps/research-agent-service/src/__tests__/infra/research/FirestoreResearchRepository.test.ts` - New (18 tests)
+- `apps/research-agent-service/src/__tests__/infra/user/userServiceClient.test.ts` - New (11 tests)
+- `apps/research-agent-service/src/__tests__/infra/llm/LlmAdapterFactory.test.ts` - New (7 tests)
+- `apps/research-agent-service/src/__tests__/infra/llm/ClaudeAdapter.test.ts` - New (8 tests)
+- `apps/research-agent-service/src/__tests__/domain/research/usecases/processResearch.test.ts` - New (17 tests)
+- `apps/research-agent-service/src/__tests__/domain/research/config/synthesisPrompt.test.ts` - New (12 tests)

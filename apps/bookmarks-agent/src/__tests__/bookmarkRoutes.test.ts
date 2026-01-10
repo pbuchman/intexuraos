@@ -1,5 +1,6 @@
-import { describe, it, expect } from './testUtils.js';
+import { describe, it, expect, afterEach, vi } from './testUtils.js';
 import { setupTestContext, createToken } from './testUtils.js';
+import nock from 'nock';
 
 describe('Bookmark Routes', () => {
   const ctx = setupTestContext();
@@ -164,14 +165,17 @@ describe('Bookmark Routes', () => {
       expect(body.data.ogFetchStatus).toBe('pending');
     });
 
-    it('prevents duplicate URLs for same user', async () => {
-      await ctx.bookmarkRepository.create({
+    it('prevents duplicate URLs for same user and returns existing bookmark ID', async () => {
+      const existingResult = await ctx.bookmarkRepository.create({
         userId: 'user-1',
         url: 'https://example.com',
         tags: [],
         source: 'web',
         sourceId: 'src-1',
       });
+
+      expect(existingResult.ok).toBe(true);
+      const existingId = existingResult.ok ? existingResult.value.id : '';
 
       const token = await createToken({ sub: 'user-1' });
       const response = await ctx.app.inject({
@@ -190,6 +194,10 @@ describe('Bookmark Routes', () => {
       });
 
       expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.details?.existingBookmarkId).toBe(existingId);
     });
 
     it('returns 400 for missing required fields', async () => {
@@ -959,6 +967,135 @@ describe('Bookmark Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.archived).toBe(false);
+    });
+  });
+
+  describe('GET /images/proxy', () => {
+    afterEach(() => {
+      nock.cleanAll();
+    });
+
+    it('returns 400 for missing url parameter', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/images/proxy',
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for invalid URL format', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/images/proxy?url=not-a-valid-url',
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('INVALID_URL');
+    });
+
+    it('returns 400 for non-http URL', async () => {
+      const encodedUrl = encodeURIComponent('ftp://example.com/image.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('INVALID_URL');
+      expect(body.error.message).toBe('Only HTTP/HTTPS URLs are allowed');
+    });
+
+    it('proxies valid image URL', async () => {
+      const imageData = Buffer.from('fake-image-data');
+      nock('https://example.com')
+        .get('/test-image.jpg')
+        .reply(200, imageData, { 'content-type': 'image/jpeg' });
+
+      const encodedUrl = encodeURIComponent('https://example.com/test-image.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toBe('image/jpeg');
+      expect(response.headers['cache-control']).toBe('public, max-age=86400');
+      expect(response.headers['access-control-allow-origin']).toBe('*');
+    });
+
+    it('returns error for non-image content type', async () => {
+      nock('https://example.com')
+        .get('/not-an-image.html')
+        .reply(200, '<html></html>', { 'content-type': 'text/html' });
+
+      const encodedUrl = encodeURIComponent('https://example.com/not-an-image.html');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('NOT_AN_IMAGE');
+    });
+
+    it('returns upstream error status on fetch failure', async () => {
+      nock('https://example.com').get('/missing.jpg').reply(404);
+
+      const encodedUrl = encodeURIComponent('https://example.com/missing.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('FETCH_FAILED');
+    });
+
+    it('handles network errors gracefully', async () => {
+      nock('https://example.com')
+        .get('/error.jpg')
+        .replyWithError('Network error');
+
+      const encodedUrl = encodeURIComponent('https://example.com/error.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('PROXY_ERROR');
+    });
+
+    it('returns 504 timeout when fetch takes too long', async () => {
+      vi.useFakeTimers();
+
+      nock('https://example.com')
+        .get('/slow-image.jpg')
+        .delay(15000)
+        .reply(200, Buffer.from('image-data'), { 'content-type': 'image/jpeg' });
+
+      const encodedUrl = encodeURIComponent('https://example.com/slow-image.jpg');
+      const responsePromise = ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      await vi.advanceTimersByTimeAsync(10001);
+
+      const response = await responsePromise;
+
+      vi.useRealTimers();
+
+      expect(response.statusCode).toBe(504);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('TIMEOUT');
+      expect(body.error.message).toBe('Image fetch timed out');
     });
   });
 });

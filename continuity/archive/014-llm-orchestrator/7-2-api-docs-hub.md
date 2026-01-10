@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator service deployed (7-0, 7-1)
+- Research Agent service deployed (7-0, 7-1)
 - api-docs-hub aggregates OpenAPI specs
 - Need to add new service
 
@@ -16,7 +16,7 @@
 
 ## Problem Statement
 
-Add llm-orchestrator-service to the API docs hub so its OpenAPI spec is visible in the aggregated documentation.
+Add research-agent-service to the API docs hub so its OpenAPI spec is visible in the aggregated documentation.
 
 ---
 
@@ -43,9 +43,9 @@ Modify `apps/api-docs-hub/src/config.ts`:
 export const API_SERVICES = [
   // ... existing services
   {
-    name: 'LLM Orchestrator',
-    slug: 'llm-orchestrator',
-    url: process.env.LLM_ORCHESTRATOR_URL ?? 'http://localhost:8082',
+    name: 'Research Agent',
+    slug: 'research-agent',
+    url: process.env.RESEARCH_AGENT_URL ?? 'http://localhost:8082',
     openApiPath: '/openapi.json',
   },
 ];
@@ -53,13 +53,13 @@ export const API_SERVICES = [
 
 ### Step 2: Add environment variable
 
-Update the deployment configuration to include `LLM_ORCHESTRATOR_URL` environment variable.
+Update the deployment configuration to include `RESEARCH_AGENT_URL` environment variable.
 
 ### Step 3: Verify locally
 
 ```bash
-# Start llm-orchestrator-service
-cd apps/llm-orchestrator-service
+# Start research-agent-service
+cd apps/research-agent-service
 npm run dev
 
 # In another terminal, verify OpenAPI
@@ -71,7 +71,7 @@ curl http://localhost:8082/openapi.json
 ## Step Checklist
 
 - [ ] Update api-docs-hub config.ts
-- [ ] Add LLM_ORCHESTRATOR_URL to environment
+- [ ] Add RESEARCH_AGENT_URL to environment
 - [ ] Verify OpenAPI endpoint locally
 - [ ] Run verification commands
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CI Pipeline Orchestrator
+ * CI Pipeline ResearchAgent
  *
  * Runs CI checks in phases with clean, scannable output.
  * Phases are ordered by failure likelihood (fail-fast).

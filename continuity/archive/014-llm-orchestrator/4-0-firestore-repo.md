@@ -41,7 +41,7 @@ Implement the ResearchRepository port using Firestore for persistence. Handle al
 ### Step 1: Create infra directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/infra/research
+mkdir -p apps/research-agent-service/src/infra/research
 ```
 
 ### Step 2: Create FirestoreResearchRepository.ts

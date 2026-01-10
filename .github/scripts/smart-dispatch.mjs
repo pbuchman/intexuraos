@@ -22,7 +22,7 @@ const SERVICES = [
   'whatsapp-service',
   'api-docs-hub',
   'mobile-notifications-service',
-  'llm-orchestrator',
+  'research-agent',
   'commands-router',
   'actions-agent',
   'data-insights-service',
@@ -285,7 +285,7 @@ function decide(affected, globalChange) {
     };
   }
 
-  const targets = Array.from(affected.keys()).map((svc) => `manual-${svc}`);
+  const targets = Array.from(affected.keys());
 
   return {
     strategy: 'INDIVIDUAL',

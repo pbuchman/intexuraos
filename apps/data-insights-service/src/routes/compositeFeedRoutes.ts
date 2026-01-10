@@ -17,7 +17,7 @@ import {
   getCompositeFeedData,
   getCompositeFeedJsonSchema,
 } from '../domain/compositeFeed/index.js';
-import { getDataInsightSnapshot } from '../domain/snapshot/index.js';
+import { getDataInsightSnapshot, refreshSnapshot } from '../domain/snapshot/index.js';
 import {
   createCompositeFeedBodySchema,
   updateCompositeFeedBodySchema,
@@ -129,6 +129,16 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         }
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
+
+      refreshSnapshot(result.value.id, user.userId, {
+        snapshotRepository: services.snapshotRepository,
+        compositeFeedRepository: services.compositeFeedRepository,
+        dataSourceRepository: services.dataSourceRepository,
+        mobileNotificationsClient: services.mobileNotificationsClient,
+        logger: request.log,
+      }).catch((error: unknown) => {
+        request.log.warn({ error, feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
+      });
 
       void reply.status(201);
       return {
@@ -258,7 +268,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         return;
       }
 
-      const { compositeFeedRepository } = getServices();
+      const { compositeFeedRepository, snapshotRepository, dataSourceRepository, mobileNotificationsClient } = getServices();
       const updateData: {
         purpose?: string;
         staticSourceIds?: string[];
@@ -285,6 +295,16 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         }
         return await reply.fail('INTERNAL_ERROR', result.error);
       }
+
+      refreshSnapshot(request.params.id, user.userId, {
+        snapshotRepository,
+        compositeFeedRepository,
+        dataSourceRepository,
+        mobileNotificationsClient,
+        logger: request.log,
+      }).catch((error: unknown) => {
+        request.log.warn({ error, feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
+      });
 
       return await reply.ok(formatCompositeFeed(result.value));
     }
@@ -424,6 +444,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         mobileNotificationsClient: services.mobileNotificationsClient,
+        logger: request.log,
       });
 
       if (!result.ok) {
@@ -438,17 +459,23 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
     }
   );
 
-  fastify.get<{ Params: CompositeFeedParams }>(
+  fastify.get<{ Params: CompositeFeedParams; Querystring: { refresh?: string } }>(
     '/composite-feeds/:id/snapshot',
     {
       schema: {
         operationId: 'getCompositeFeedSnapshot',
         summary: 'Get composite feed snapshot',
         description:
-          'Get pre-computed snapshot data for a composite feed. Returns cached data computed by scheduler.',
+          'Get pre-computed snapshot data for a composite feed. Use ?refresh=true to force recalculation.',
         tags: ['composite-feeds'],
         security: [{ bearerAuth: [] }],
         params: compositeFeedParamsSchema,
+        querystring: {
+          type: 'object',
+          properties: {
+            refresh: { type: 'string', enum: ['true', 'false'] },
+          },
+        },
         response: {
           200: {
             description: 'Pre-computed snapshot data',
@@ -475,15 +502,43 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         },
       },
     },
-    async (request: FastifyRequest<{ Params: CompositeFeedParams }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: CompositeFeedParams; Querystring: { refresh?: string } }>,
+      reply: FastifyReply
+    ) => {
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
       }
 
       const services = getServices();
+      const {
+        snapshotRepository,
+        compositeFeedRepository,
+        dataSourceRepository,
+        mobileNotificationsClient,
+      } = services;
+
+      if (request.query.refresh === 'true') {
+        request.log.info({ feedId: request.params.id }, 'Forcing snapshot refresh');
+        const refreshResult = await refreshSnapshot(request.params.id, user.userId, {
+          compositeFeedRepository,
+          snapshotRepository,
+          dataSourceRepository,
+          mobileNotificationsClient,
+          logger: request.log,
+        });
+        if (!refreshResult.ok) {
+          request.log.warn(
+            { feedId: request.params.id, error: refreshResult.error },
+            'Failed to refresh snapshot'
+          );
+          return await reply.fail('INTERNAL_ERROR', refreshResult.error.message);
+        }
+      }
+
       const result = await getDataInsightSnapshot(request.params.id, user.userId, {
-        snapshotRepository: services.snapshotRepository,
+        snapshotRepository,
       });
 
       if (!result.ok) {

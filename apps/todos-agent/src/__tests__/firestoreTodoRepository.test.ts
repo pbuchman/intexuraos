@@ -316,6 +316,31 @@ describe('FirestoreTodoRepository', () => {
       }
     });
 
+    it('updates todo with completedAt', async () => {
+      const createResult = await repository.create(createTestInput());
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const completedAt = new Date('2025-01-15T10:00:00Z');
+      const updatedTodo: Todo = {
+        ...createResult.value,
+        status: 'completed',
+        completedAt,
+        updatedAt: new Date(),
+      };
+
+      const updateResult = await repository.update(createResult.value.id, updatedTodo);
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const findResult = await repository.findById(createResult.value.id);
+      expect(findResult.ok).toBe(true);
+      if (findResult.ok && findResult.value) {
+        expect(findResult.value.completedAt).toBeInstanceOf(Date);
+        expect(findResult.value.completedAt?.toISOString()).toBe(completedAt.toISOString());
+      }
+    });
+
     it('preserves items when updating', async () => {
       const createResult = await repository.create(
         createTestInput({

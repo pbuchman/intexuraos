@@ -231,7 +231,6 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
           void handleToggleStatus();
         }}
         className="mt-0.5 shrink-0"
-        disabled={!isEditing}
       >
         <ItemStatusIcon status={item.status} />
       </button>
@@ -422,8 +421,17 @@ function TodoModal({
   const completedCount = currentTodo.items.filter((i) => i.status === 'completed').length;
   const canArchive = currentTodo.status === 'completed' || currentTodo.status === 'cancelled';
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -774,8 +782,17 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
     }
   };
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">Create New Todo</h2>
@@ -893,7 +910,7 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
 
   return (
     <Card>
-      <button onClick={onOpen} className="w-full text-left" type="button">
+      <button onClick={onOpen} className="w-full cursor-pointer text-left" type="button">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
