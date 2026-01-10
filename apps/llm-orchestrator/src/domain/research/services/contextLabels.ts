@@ -4,6 +4,7 @@
  */
 
 import { LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import type { ModelPricing, Gemini25Flash } from '@intexuraos/llm-contract';
 import type { TitleGenerator } from '../ports/llmProvider.js';
 
@@ -20,15 +21,17 @@ export async function generateContextLabels(
     model: Gemini25Flash,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing
+    pricing: ModelPricing,
+    logger?: Logger
   ) => TitleGenerator,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;
   }
 
-  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, pricing);
+  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, pricing, logger);
 
   return await Promise.all(
     contexts.map(async (ctx) => {

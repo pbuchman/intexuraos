@@ -5,8 +5,8 @@
  */
 
 import { createPerplexityClient, type PerplexityClient } from '@intexuraos/infra-perplexity';
+import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -15,21 +15,41 @@ import type {
 
 export class PerplexityAdapter implements LlmResearchProvider {
   private readonly client: PerplexityClient;
+  private readonly model: string;
+  private readonly logger: Logger | undefined;
 
-  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+  constructor(
+    apiKey: string,
+    model: string,
+    userId: string,
+    pricing: ModelPricing,
+    logger?: Logger
+  ) {
     this.client = createPerplexityClient({
       apiKey,
       model,
       userId,
       pricing,
     });
+    this.model = model;
+    this.logger = logger;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Perplexity research started');
     const result = await this.client.research(prompt);
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Perplexity research failed'
+      );
+      return { ok: false, error };
     }
+    this.logger?.info(
+      { model: this.model, usage: result.value.usage },
+      'Perplexity research completed'
+    );
     return result;
   }
 }

@@ -30,7 +30,8 @@ export function createSynthesisProviders(
     synthesisModel,
     synthesisKey as string,
     userId,
-    pricingContext.getPricing(synthesisModel)
+    pricingContext.getPricing(synthesisModel),
+    logger
   );
 
   const result: SynthesisProviders = { synthesizer };

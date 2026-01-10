@@ -30,19 +30,20 @@ export function createResearchProvider(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing);
+      return new GeminiAdapter(apiKey, model, userId, pricing, logger);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId, pricing);
+      return new ClaudeAdapter(apiKey, model, userId, pricing, logger);
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing);
+      return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, pricing);
+      return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
   }
 }
 
@@ -50,17 +51,18 @@ export function createSynthesizer(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing);
+      return new GeminiAdapter(apiKey, model, userId, pricing, logger);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing);
+      return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
   }
@@ -70,9 +72,10 @@ export function createTitleGenerator(
   model: FastModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, pricing);
+  return new GeminiAdapter(apiKey, model, userId, pricing, logger);
 }
 
 export function createContextInferrer(
@@ -89,9 +92,10 @@ export function createInputValidator(
   model: FastModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing
+  pricing: ModelPricing,
+  logger?: Logger
 ): InputValidationProvider {
-  return new InputValidationAdapter(apiKey, model, userId, pricing);
+  return new InputValidationAdapter(apiKey, model, userId, pricing, logger);
 }
 
 export type { InputValidationProvider };

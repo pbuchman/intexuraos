@@ -87,11 +87,11 @@ describe('Research Routes - Unauthenticated', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: () => createFakeLlmResearchProvider(),
-      createSynthesizer: () => createFakeSynthesizer(),
-      createTitleGenerator: () => createFakeTitleGenerator(),
-      createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -288,11 +288,11 @@ describe('Research Routes - Authenticated', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: () => createFakeLlmResearchProvider(),
-      createSynthesizer: () => createFakeSynthesizer(),
-      createTitleGenerator: () => createFakeTitleGenerator(),
-      createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -1635,11 +1635,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFailingSynthesizer('LLM API unavailable'),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
       };
       setServices(services);
 
@@ -1906,11 +1906,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFailingSynthesizer('LLM API unavailable'),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFailingSynthesizer('LLM API unavailable'),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
       };
       setServices(services);
 
@@ -2038,11 +2038,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
       };
       setServices(newServices);
 
@@ -2082,11 +2082,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: () => createFakeLlmResearchProvider(),
-          createSynthesizer: () => createFakeSynthesizer(),
-          createTitleGenerator: () => createFakeTitleGenerator(),
-          createContextInferrer: () => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
         });
       }
     });
@@ -2125,11 +2125,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
       };
       setServices(newServices);
 
@@ -2169,11 +2169,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: () => createFakeLlmResearchProvider(),
-          createSynthesizer: () => createFakeSynthesizer(),
-          createTitleGenerator: () => createFakeTitleGenerator(),
-          createContextInferrer: () => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
         });
       }
     });
@@ -2213,11 +2213,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
       };
       setServices(newServices);
 
@@ -2257,11 +2257,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: () => createFakeLlmResearchProvider(),
-          createSynthesizer: () => createFakeSynthesizer(),
-          createTitleGenerator: () => createFakeTitleGenerator(),
-          createContextInferrer: () => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
         });
       }
     });
@@ -2300,11 +2300,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing) => failingValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
       };
       setServices(newServices);
 
@@ -2343,11 +2343,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: () => createFakeLlmResearchProvider(),
-          createSynthesizer: () => createFakeSynthesizer(),
-          createTitleGenerator: () => createFakeTitleGenerator(),
-          createContextInferrer: () => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
         });
       }
     });
@@ -2463,11 +2463,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing) => failingValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
       };
       setServices(newServices);
 
@@ -2504,11 +2504,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: () => createFakeLlmResearchProvider(),
-          createSynthesizer: () => createFakeSynthesizer(),
-          createTitleGenerator: () => createFakeTitleGenerator(),
-          createContextInferrer: () => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
         });
       }
     });
@@ -2634,11 +2634,11 @@ describe('System Endpoints', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: () => createFakeLlmResearchProvider(),
-      createSynthesizer: () => createFakeSynthesizer(),
-      createTitleGenerator: () => createFakeTitleGenerator(),
-      createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -2701,11 +2701,11 @@ describe('Internal Routes', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: () => createFakeLlmResearchProvider(),
-      createSynthesizer: () => createFakeSynthesizer(),
-      createTitleGenerator: () => createFakeTitleGenerator(),
-      createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
     };
     setServices(services);
 
@@ -3144,11 +3144,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFakeLlmResearchProvider(),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
       };
       setServices(services);
     });
@@ -3704,11 +3704,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: () => createFailingLlmResearchProvider('LLM API error'),
-        createSynthesizer: () => createFakeSynthesizer(),
-        createTitleGenerator: () => createFakeTitleGenerator(),
-        createContextInferrer: () => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFailingLlmResearchProvider('LLM API error'),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
       };
       setServices(services);
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
@@ -52,10 +52,10 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showSingleProviderConfirm, setShowSingleProviderConfirm] = useState(false);
-  const [pendingResearchId, setPendingResearchId] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const [improving, setImproving] = useState(false);
   const [showImprovementModal, setShowImprovementModal] = useState(false);
   const [pendingImprovedPrompt, setPendingImprovedPrompt] = useState<string | null>(null);
@@ -303,7 +303,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const selectedModels = getSelectedModelsList(modelSelections);
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
-  const executeSubmit = async (showConfirmation: boolean): Promise<void> => {
+  const executeSubmit = async (): Promise<void> => {
     setSubmitting(true);
     setError(null);
 
@@ -343,14 +343,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
           request.inputContexts = contextObjects;
         }
         const research = await createResearch(token, request);
-
-        if (showConfirmation) {
-          setPendingResearchId(research.id);
-          setShowSingleProviderConfirm(true);
-          setSubmitting(false);
-        } else {
-          void navigate(`/research/${research.id}`);
-        }
+        void navigate(`/research/${research.id}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create research');
@@ -379,56 +372,59 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
     if (hasGoogleKey) {
       setValidating(true);
+      setShowValidationModal(true);
+      setValidationWarning(null);
       try {
         const token = await getAccessToken();
         const validation = await validateInput(token, { prompt, includeImprovement: true });
 
         if (validation.quality === 0) {
-          // INVALID - block submission
+          // INVALID - block submission, show warning in modal
           setValidationWarning(validation.reason);
           setValidating(false);
           return;
         }
 
         if (validation.quality === 1 && validation.improvedPrompt !== null) {
-          // WEAK_BUT_VALID - show improvement modal
+          // WEAK_BUT_VALID - close validation modal, show improvement modal
+          setShowValidationModal(false);
           setPendingImprovedPrompt(validation.improvedPrompt);
           setShowImprovementModal(true);
           setValidating(false);
           return;
         }
 
-        // GOOD (quality === 2) - proceed with submission
+        // GOOD (quality === 2) - close modal and proceed
+        setShowValidationModal(false);
       } catch {
-        // Silent degradation - proceed with original prompt on LLM failure
+        // Silent degradation - close modal and proceed with original prompt
+        setShowValidationModal(false);
       } finally {
         setValidating(false);
       }
     }
 
-    await executeSubmit(isSingleModelNoContext);
+    // Show confirmation dialog for single model without context (new research only)
+    if (isSingleModelNoContext && !isEditMode) {
+      setShowSingleProviderConfirm(true);
+      return;
+    }
+
+    await executeSubmit();
   };
 
   const handleConfirmProceed = (): void => {
-    if (pendingResearchId !== null) {
-      setShowSingleProviderConfirm(false);
-      void navigate(`/research/${pendingResearchId}`);
-    }
+    setShowSingleProviderConfirm(false);
+    void executeSubmit();
   };
 
-  const handleConfirmDiscard = async (): Promise<void> => {
-    if (pendingResearchId === null) return;
+  const handleConfirmDiscard = (): void => {
+    setShowSingleProviderConfirm(false);
+  };
 
-    setDiscarding(true);
-    try {
-      const token = await getAccessToken();
-      const { deleteResearch } = await import('@/services/llmOrchestratorApi');
-      await deleteResearch(token, pendingResearchId);
-      window.location.reload();
-    } catch {
-      setError('Failed to discard research');
-      setDiscarding(false);
-    }
+  const handleDismissValidationWarning = (): void => {
+    setShowValidationModal(false);
+    setValidationWarning(null);
   };
 
   const handleUseImprovedPrompt = (): void => {
@@ -438,8 +434,13 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       setShowImprovementModal(false);
       setValidationWarning(null);
 
-      // Proceed with submission after accepting improved prompt
-      void executeSubmit(isSingleModelNoContext);
+      // Check for single model confirmation after improvement modal
+      if (isSingleModelNoContext && !isEditMode) {
+        setShowSingleProviderConfirm(true);
+        return;
+      }
+
+      void executeSubmit();
     }
   };
 
@@ -448,8 +449,13 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setShowImprovementModal(false);
     setValidationWarning(null);
 
-    // Proceed with submission using original prompt
-    void executeSubmit(isSingleModelNoContext);
+    // Check for single model confirmation after improvement modal
+    if (isSingleModelNoContext && !isEditMode) {
+      setShowSingleProviderConfirm(true);
+      return;
+    }
+
+    void executeSubmit();
   };
 
   const handleDiscardDraft = async (): Promise<void> => {
@@ -560,18 +566,6 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
-        </div>
-      ) : null}
-
-      {validationWarning !== null && validationWarning !== '' ? (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">Input Quality Issue</p>
-              <p className="mt-1 text-sm text-amber-700">{validationWarning}</p>
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -774,7 +768,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Single Model Research</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Research started with only one model (
+                  You selected only one model (
                   {PROVIDER_MODELS.flatMap((p) => p.models).find((m) => m.id === selectedModels[0])
                     ?.name ?? selectedModels[0]}
                   ) and no additional context.
@@ -787,15 +781,16 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             <div className="flex justify-end gap-3">
               <Button
                 variant="secondary"
-                onClick={(): void => {
-                  void handleConfirmDiscard();
-                }}
-                disabled={discarding}
-                isLoading={discarding}
+                onClick={handleConfirmDiscard}
+                disabled={submitting}
               >
-                Discard
+                Cancel
               </Button>
-              <Button onClick={handleConfirmProceed} disabled={discarding}>
+              <Button
+                onClick={handleConfirmProceed}
+                disabled={submitting}
+                isLoading={submitting}
+              >
                 Proceed
               </Button>
             </div>
@@ -874,6 +869,35 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               </Button>
               <Button onClick={handleUseImprovedPrompt}>Use Improved</Button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showValidationModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            {validating ? (
+              <div className="flex flex-col items-center gap-4 py-4">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <p className="text-sm text-slate-600">Validating your research request...</p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Input Quality Issue</h3>
+                    <p className="mt-2 text-sm text-slate-600">{validationWarning}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Please revise your prompt and try again.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleDismissValidationWarning}>Got it</Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}

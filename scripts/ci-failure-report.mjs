@@ -57,7 +57,7 @@ function loadAllRuns(daysLimit) {
           runs.push(entry);
         }
       } catch {
-        // Skip malformed lines
+        // Skip malformed JSONL lines - corrupted entries shouldn't break reporting
       }
     }
   }

@@ -4,6 +4,7 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
+import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
   buildSynthesisPrompt,
@@ -11,7 +12,6 @@ import {
   labelPrompt,
   type SynthesisContext,
 } from '@intexuraos/llm-common';
-import type { Result } from '@intexuraos/common-core';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -24,16 +24,36 @@ import type {
 
 export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GeminiClient;
+  private readonly model: string;
+  private readonly logger: Logger | undefined;
 
-  constructor(apiKey: string, model: string, userId: string, pricing: ModelPricing) {
+  constructor(
+    apiKey: string,
+    model: string,
+    userId: string,
+    pricing: ModelPricing,
+    logger?: Logger
+  ) {
     this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.model = model;
+    this.logger = logger;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
+    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Gemini research started');
     const result = await this.client.research(prompt);
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Gemini research failed'
+      );
+      return { ok: false, error };
     }
+    this.logger?.info(
+      { model: this.model, usage: result.value.usage },
+      'Gemini research completed'
+    );
     return result;
   }
 
@@ -43,6 +63,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     additionalSources?: { content: string; label?: string }[],
     synthesisContext?: SynthesisContext
   ): Promise<Result<LlmSynthesisResult, LlmError>> {
+    this.logger?.info(
+      { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
+      'Gemini synthesis started'
+    );
     const synthesisPrompt =
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
@@ -50,9 +74,15 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     const result = await this.client.generate(synthesisPrompt);
 
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Gemini synthesis failed'
+      );
+      return { ok: false, error };
     }
     const { usage } = result.value;
+    this.logger?.info({ model: this.model, usage }, 'Gemini synthesis completed');
     return {
       ok: true,
       value: {
@@ -67,6 +97,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   }
 
   async generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
+    this.logger?.info({ model: this.model }, 'Gemini title generation started');
     const builtPrompt = titlePrompt.build(
       { content: prompt },
       { wordRange: { min: 5, max: 8 }, includeExamples: true }
@@ -74,9 +105,15 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Gemini title generation failed'
+      );
+      return { ok: false, error };
     }
     const { usage } = result.value;
+    this.logger?.info({ model: this.model, usage }, 'Gemini title generation completed');
     return {
       ok: true,
       value: {
@@ -91,13 +128,20 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   }
 
   async generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>> {
+    this.logger?.info({ model: this.model, contentLength: content.length }, 'Gemini label generation started');
     const builtPrompt = labelPrompt.build({ content }, { contentPreviewLimit: 2000 });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Gemini label generation failed'
+      );
+      return { ok: false, error };
     }
     const { usage } = result.value;
+    this.logger?.info({ model: this.model, usage }, 'Gemini label generation completed');
     return {
       ok: true,
       value: {
