@@ -13,7 +13,7 @@ import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexura
 import { dataInsightsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
-const SERVICE_NAME = 'data-insights-service';
+const SERVICE_NAME = 'data-insights-agent';
 const SERVICE_VERSION = '0.0.4';
 
 /**

@@ -64,7 +64,7 @@ resource "google_service_account" "actions_agent" {
   description  = "Service account for actions-agent Cloud Run deployment"
 }
 
-# Service account for data-insights-service
+# Service account for data-insights-agent
 resource "google_service_account" "data_insights_service" {
   account_id   = "intexuraos-insights-${var.environment}"
   display_name = "IntexuraOS Data Insights Service (${var.environment})"

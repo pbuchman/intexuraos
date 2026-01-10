@@ -1,5 +1,5 @@
 /**
- * Service wiring for data-insights-service.
+ * Service wiring for data-insights-agent.
  * Provides dependency injection for domain adapters.
  */
 import type { DataSourceRepository } from './domain/dataSource/index.js';

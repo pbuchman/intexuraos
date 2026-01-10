@@ -1,5 +1,5 @@
 /**
- * Fake repositories for data-insights-service testing.
+ * Fake repositories for data-insights-agent testing.
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */

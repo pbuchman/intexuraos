@@ -311,9 +311,9 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== data-insights-service =====
+  # ===== data-insights-agent =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-data-insights-service'
+    id: 'build-push-data-insights-agent'
     waitFor: ['-']
     entrypoint: 'bash'
     args:
@@ -333,10 +333,10 @@ steps:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-data-insights-service'
-    waitFor: ['build-push-data-insights-service']
+    id: 'deploy-data-insights-agent'
+    waitFor: ['build-push-data-insights-agent']
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-service.sh']
+    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
