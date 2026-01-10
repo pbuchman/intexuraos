@@ -107,7 +107,7 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
       const snapshot = await db
         .collection(COLLECTION_NAME)
         .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
+        .orderBy('updatedAt', 'desc')
         .get();
 
       const feeds = snapshot.docs.map((doc) =>
@@ -125,7 +125,7 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
   async listAll(): Promise<Result<CompositeFeed[], string>> {
     try {
       const db = getFirestore();
-      const snapshot = await db.collection(COLLECTION_NAME).orderBy('createdAt', 'desc').get();
+      const snapshot = await db.collection(COLLECTION_NAME).orderBy('updatedAt', 'desc').get();
 
       const feeds = snapshot.docs.map((doc) =>
         toCompositeFeed(doc.id, doc.data() as CompositeFeedDoc)
