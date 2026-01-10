@@ -39,18 +39,18 @@ output "github_actions_service_account" {
   value       = google_service_account.cloud_build.email
 }
 
-output "manual_service_triggers" {
-  description = "Manual per-service trigger names"
-  value       = { for k, v in google_cloudbuild_trigger.manual_service : k => v.name }
+output "service_triggers" {
+  description = "Per-service trigger names"
+  value       = { for k, v in google_cloudbuild_trigger.service : k => v.name }
 }
 
-output "manual_web_trigger" {
-  description = "Manual web trigger name"
-  value       = google_cloudbuild_trigger.manual_web.name
+output "web_trigger" {
+  description = "Web trigger name"
+  value       = google_cloudbuild_trigger.web.name
 }
 
-output "manual_firestore_trigger" {
-  description = "Manual Firestore trigger name"
-  value       = google_cloudbuild_trigger.manual_firestore.name
+output "firestore_trigger" {
+  description = "Firestore trigger name"
+  value       = google_cloudbuild_trigger.firestore.name
 }
 

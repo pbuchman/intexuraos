@@ -285,7 +285,7 @@ function decide(affected, globalChange) {
     };
   }
 
-  const targets = Array.from(affected.keys()).map((svc) => `manual-${svc}`);
+  const targets = Array.from(affected.keys());
 
   return {
     strategy: 'INDIVIDUAL',
