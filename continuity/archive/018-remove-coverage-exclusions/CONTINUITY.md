@@ -28,15 +28,15 @@ Remove unjustified coverage exclusions from vitest.config.ts by writing tests fo
 
 ### Investigation Results
 
-| Exclusion                                                                     | Finding                                   | Action                         | Status  |
-| ----------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------ | ------- |
-| packages/infra-whatsapp/\*\*                                                  | Tests exist in `__tests__/client.test.ts` | Removed exclusion              | ✅ Done |
+| Exclusion                                                                   | Finding                                   | Action                         | Status  |
+| --------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------ | ------- |
+| packages/infra-whatsapp/\*\*                                                | Tests exist in `__tests__/client.test.ts` | Removed exclusion              | ✅ Done |
 | apps/research-agent-service/src/routes/\*\*                                 | Tests exist but had broken JWT auth       | Fixed tests, removed exclusion | ✅ Done |
-| packages/infra-\*/src/types.ts                                                | Pure TypeScript interfaces                | Added exclusion (justified)    | ✅ Done |
-| packages/infra-claude/\*\*                                                    | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-gemini/\*\*                                                    | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-gpt/\*\*                                                       | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
-| packages/infra-llm-audit/\*\*                                                 | Pure functions + Firestore                | Tests written, removed         | ✅ Done |
+| packages/infra-\*/src/types.ts                                              | Pure TypeScript interfaces                | Added exclusion (justified)    | ✅ Done |
+| packages/infra-claude/\*\*                                                  | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-gemini/\*\*                                                  | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-gpt/\*\*                                                     | SDK wrapper, testable with vi.mock        | Tests written, removed         | ✅ Done |
+| packages/infra-llm-audit/\*\*                                               | Pure functions + Firestore                | Tests written, removed         | ✅ Done |
 | apps/research-agent-service/src/infra/\*\*                                  | Factory + Firestore repo                  | Tests written, removed         | ✅ Done |
 | apps/research-agent-service/src/domain/research/config/\*\*                 | Pure function                             | Tests written, removed         | ✅ Done |
 | apps/research-agent-service/src/domain/research/usecases/processResearch.ts | Full DI, testable                         | Tests written, removed         | ✅ Done |

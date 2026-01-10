@@ -25,8 +25,8 @@ When synthesis output has missing or malformed Attribution lines, attempt a sing
 
 ## Files to Create
 
-| File                                                                      | Action     |
-| ------------------------------------------------------------------------- | ---------- |
+| File                                                                    | Action     |
+| ----------------------------------------------------------------------- | ---------- |
 | `apps/research-agent/src/domain/research/usecases/repairAttribution.ts` | **CREATE** |
 
 ## Files to Read First

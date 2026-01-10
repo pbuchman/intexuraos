@@ -61,11 +61,11 @@ Format: `[tier]-[sequence]-[title].md`
 
 ## Key Files
 
-| File                                                                 | Purpose                        |
-| -------------------------------------------------------------------- | ------------------------------ |
-| `packages/common-core/src/prompts/synthesisPrompt.ts`                | Prompt builder to modify       |
-| `packages/common-core/src/prompts/index.ts`                          | Re-exports for new module      |
-| `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` | Central researchAgent           |
+| File                                                               | Purpose                        |
+| ------------------------------------------------------------------ | ------------------------------ |
+| `packages/common-core/src/prompts/synthesisPrompt.ts`              | Prompt builder to modify       |
+| `packages/common-core/src/prompts/index.ts`                        | Re-exports for new module      |
+| `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` | Central researchAgent          |
 | `apps/research-agent/src/infra/llm/GeminiAdapter.ts`               | Synthesizer (for repair calls) |
 
 ## Definition of Done
