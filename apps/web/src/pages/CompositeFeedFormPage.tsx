@@ -324,6 +324,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     const loadFilterOptions = async (): Promise<void> => {
@@ -442,7 +443,14 @@ export function CompositeFeedFormPage(): React.JSX.Element {
         });
       }
 
-      void navigate('/data-insights/composite-feeds');
+      if (isEditMode) {
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+        }, 3000);
+      } else {
+        void navigate('/data-insights/composite-feeds');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save composite feed');
     } finally {
@@ -492,6 +500,13 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {showSuccess ? (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <Check className="h-5 w-5" />
+          <span>Composite feed saved successfully</span>
         </div>
       ) : null}
 
