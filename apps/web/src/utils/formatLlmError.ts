@@ -60,6 +60,11 @@ function parseGeminiError(raw: string): FormattedError | null {
     return null;
   }
 
+  // Skip Anthropic format (has top-level "type":"error")
+  if (raw.includes('"type":"error"') || raw.includes('"type": "error"')) {
+    return null;
+  }
+
   try {
     const parsed = JSON.parse(raw) as GoogleError;
 
@@ -176,8 +181,89 @@ function parseOpenaiRateLimit(raw: string): FormattedError | null {
   return null;
 }
 
+interface AnthropicError {
+  type: 'error';
+  error: {
+    type: string;
+    message: string;
+  };
+}
+
+function isAnthropicError(parsed: unknown): parsed is AnthropicError {
+  return (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'type' in parsed &&
+    parsed.type === 'error' &&
+    'error' in parsed &&
+    typeof parsed.error === 'object' &&
+    parsed.error !== null &&
+    'type' in parsed.error &&
+    'message' in parsed.error
+  );
+}
+
 function parseAnthropicError(raw: string): FormattedError | null {
-  // Anthropic rate limit
+  // Try to parse Anthropic JSON error format
+  // Format: '400 {"type":"error","error":{"type":"invalid_request_error","message":"..."}}'
+  // or just: '{"type":"error","error":{"type":"invalid_request_error","message":"..."}}'
+  const jsonMatch = /\{[\s\S]*"type"\s*:\s*"error"[\s\S]*\}/.exec(raw);
+  if (jsonMatch !== null) {
+    try {
+      const parsed: unknown = JSON.parse(jsonMatch[0]);
+      if (isAnthropicError(parsed)) {
+        const { type: errorType, message } = parsed.error;
+        const cleanMessage = message.length > 150 ? message.slice(0, 147) + '...' : message;
+
+        switch (errorType) {
+          case 'authentication_error':
+            return {
+              title: 'Invalid API key',
+              detail: cleanMessage,
+            };
+          case 'invalid_request_error':
+            return {
+              title: 'Invalid request',
+              detail: cleanMessage,
+            };
+          case 'rate_limit_error':
+            return {
+              title: 'Rate limit exceeded',
+              detail: cleanMessage,
+            };
+          case 'overloaded_error':
+            return {
+              title: 'Service overloaded',
+              detail: cleanMessage,
+            };
+          case 'api_error':
+            return {
+              title: 'API error',
+              detail: cleanMessage,
+            };
+          case 'permission_error':
+            return {
+              title: 'Permission denied',
+              detail: cleanMessage,
+            };
+          case 'not_found_error':
+            return {
+              title: 'Not found',
+              detail: cleanMessage,
+            };
+          default:
+            return {
+              title: 'API error',
+              detail: cleanMessage,
+            };
+        }
+      }
+    } catch {
+      // Fall through to string matching
+    }
+  }
+
+  // Fallback string matching for non-JSON errors
   if (raw.includes('rate_limit') || (raw.includes('429') && raw.includes('anthropic'))) {
     return {
       title: 'Rate limit exceeded',
@@ -185,7 +271,6 @@ function parseAnthropicError(raw: string): FormattedError | null {
     };
   }
 
-  // Anthropic overloaded
   if (raw.includes('overloaded')) {
     return {
       title: 'Service overloaded',
