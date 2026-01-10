@@ -193,5 +193,71 @@ describe('internalRoutes', () => {
       const body = JSON.parse(response.payload);
       expect(body.error).toContain('Failed to list feeds');
     });
+
+    it('accepts Pub/Sub push from Google without X-Internal-Auth', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/snapshots/refresh',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify({ trigger: 'scheduled' })).toString('base64'),
+            messageId: 'test-message-id',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('handles invalid base64 in message data gracefully', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/snapshots/refresh',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          message: {
+            data: 'not-valid-base64!!!',
+            messageId: 'test-message-id',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('reports errors when snapshot upsert fails', async () => {
+      const app = await buildServer();
+
+      await fakeCompositeFeedRepo.create('user-1', 'Feed 1', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+
+      fakeSnapshotRepo.setFailNextUpsert(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/snapshots/refresh',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify({ trigger: 'scheduled' })).toString('base64'),
+            messageId: 'test-message-id',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(true);
+      expect(body.data.failed).toBe(1);
+      expect(body.data.errors.length).toBeGreaterThan(0);
+    });
   });
 });
