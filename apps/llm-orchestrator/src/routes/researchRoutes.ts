@@ -141,7 +141,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash)
+          pricingContext.getPricing(LlmModels.Gemini25Flash),
+          request.log
         );
         submitParams.inputContexts = contextsWithLabels;
       }
@@ -202,7 +203,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          pricingContext.getPricing(LlmModels.Gemini25Flash)
+          pricingContext.getPricing(LlmModels.Gemini25Flash),
+          request.log
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -227,7 +229,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash)
+          pricingContext.getPricing(LlmModels.Gemini25Flash),
+          request.log
         );
         const now = new Date().toISOString();
         draftParams.inputContexts = contextsWithLabels.map((ctx) => {
@@ -314,7 +317,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            pricingContext.getPricing(LlmModels.Gemini25Flash)
+            pricingContext.getPricing(LlmModels.Gemini25Flash),
+            request.log
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -339,7 +343,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash)
+          pricingContext.getPricing(LlmModels.Gemini25Flash),
+          request.log
         );
         const now = new Date().toISOString();
         updates.inputContexts = contextsWithLabels.map((ctx) => {
@@ -410,13 +415,18 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        pricingContext.getPricing(LlmModels.Gemini25Flash)
+        pricingContext.getPricing(LlmModels.Gemini25Flash),
+        request.log
       );
 
       // Validate
       const validationResult = await validator.validateInput(body.prompt);
       if (!validationResult.ok) {
         // Silent degradation - return GOOD quality if validation fails
+        request.log.warn(
+          { errorCode: validationResult.error.code, errorMessage: validationResult.error.message },
+          'Validation failed, returning GOOD quality as fallback'
+        );
         return await reply.ok({
           quality: 2,
           reason: 'Validation unavailable',
@@ -481,12 +491,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        pricingContext.getPricing(LlmModels.Gemini25Flash)
+        pricingContext.getPricing(LlmModels.Gemini25Flash),
+        request.log
       );
 
       const result = await validator.improveInput(body.prompt);
       if (!result.ok) {
         // Silent degradation - return original prompt
+        request.log.warn(
+          { errorCode: result.error.code, errorMessage: result.error.message },
+          'Improvement failed, returning original prompt'
+        );
         return await reply.ok({ improvedPrompt: body.prompt });
       }
 
@@ -978,7 +993,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash)
+          pricingContext.getPricing(LlmModels.Gemini25Flash),
+          request.log
         );
         enhanceInput.additionalContexts = contextsWithLabels;
       }

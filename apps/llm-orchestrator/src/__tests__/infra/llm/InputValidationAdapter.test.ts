@@ -154,8 +154,8 @@ describe('InputValidationAdapter', () => {
       }
     });
 
-    it('logs warning when parsing fails', async () => {
-      const mockLogger = { warn: vi.fn() };
+    it('logs error when parsing fails', async () => {
+      const mockLogger = { info: vi.fn(), error: vi.fn() };
       mockGenerate.mockResolvedValueOnce({
         ok: true,
         value: {
@@ -173,9 +173,9 @@ describe('InputValidationAdapter', () => {
       );
       await adapter.validateInput('Test prompt');
 
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.any(String) }),
-        'Failed to parse input quality result'
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ parseError: expect.any(String), rawContent: 'invalid json' }),
+        'Input validation parse failed'
       );
     });
   });

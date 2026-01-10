@@ -16,6 +16,7 @@ import { config } from '@/config';
 import {
   ApiKeysSettingsPage,
   BookmarksListPage,
+  CalendarPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataSourceFormPage,
@@ -322,6 +323,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <BookmarksListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <CalendarPage />
           </ProtectedRoute>
         }
       />

@@ -48,7 +48,7 @@ function getRunNumber(project, branch) {
       const entry = JSON.parse(line);
       if (entry.runNumber > maxRun) maxRun = entry.runNumber;
     } catch {
-      // Skip malformed lines
+      // Skip malformed JSONL lines - corrupted entries shouldn't break tracking
     }
   }
 
@@ -88,6 +88,7 @@ function getCodeSnippet(filePath, line, contextLines = 2) {
       context: snippet,
     };
   } catch {
+    // File may not exist or be readable - return null to skip snippet
     return null;
   }
 }
