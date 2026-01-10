@@ -245,17 +245,17 @@ Observation to store:
 
 ## Services Reference
 
-| Service                      | Cloud Run Name                          |
-| ---------------------------- | --------------------------------------- |
-| user-service                 | intexuraos-user-service                 |
-| promptvault-service          | intexuraos-promptvault-service          |
-| notion-service               | intexuraos-notion-service               |
-| whatsapp-service             | intexuraos-whatsapp-service             |
-| mobile-notifications-service | intexuraos-mobile-notifications-service |
-| research-agent               | intexuraos-research-agent               |
-| commands-agent              | intexuraos-commands-agent              |
-| actions-agent                | intexuraos-actions-agent                |
-| data-insights-service        | intexuraos-data-insights-service        |
+| Service                       | Cloud Run Name                           |
+|-------------------------------|------------------------------------------|
+| user-service                  | intexuraos-user-service                  |
+| promptvault-service           | intexuraos-promptvault-service           |
+| notion-service                | intexuraos-notion-service                |
+| whatsapp-service              | intexuraos-whatsapp-service              |
+| mobile-notifications-service  | intexuraos-mobile-notifications-service  |
+| research-agent                | intexuraos-research-agent                |
+| commands-agent                | intexuraos-commands-agent                |
+| actions-agent                 | intexuraos-actions-agent                 |
+| data-insights-service         | intexuraos-data-insights-service         |
 
 ---
 
