@@ -230,14 +230,14 @@ export interface NotificationFilter {
 
 /**
  * Saved notification filter from mobile-notifications-service.
- * Filter dimensions are arrays for multi-select.
+ * app/device are arrays for multi-select, source is single-select.
  */
 export interface SavedNotificationFilter {
   id: string;
   name: string;
   app?: string[];
   device?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
   createdAt: string;
 }
@@ -406,12 +406,13 @@ export interface GenerateTitleResponse {
 
 /**
  * Notification filter configuration for composite feeds.
+ * app is multi-select (array), source is single-select (string).
  */
 export interface CompositeFeedNotificationFilter {
   id: string;
   name: string;
   app?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 

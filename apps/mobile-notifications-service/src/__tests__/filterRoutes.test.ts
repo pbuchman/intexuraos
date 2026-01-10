@@ -189,7 +189,7 @@ describe('Filter Routes', () => {
           name: 'Work Emails',
           app: ['com.google.android.gm'],
           device: ['Pixel 7'],
-          source: ['mail'],
+          source: 'mail',
           title: 'meeting',
         },
       });
@@ -201,7 +201,7 @@ describe('Filter Routes', () => {
           name: string;
           app?: string[];
           device?: string[];
-          source?: string[];
+          source?: string;
           title?: string;
         };
       };
@@ -209,7 +209,7 @@ describe('Filter Routes', () => {
       expect(body.data.name).toBe('Work Emails');
       expect(body.data.app).toEqual(['com.google.android.gm']);
       expect(body.data.device).toEqual(['Pixel 7']);
-      expect(body.data.source).toEqual(['mail']);
+      expect(body.data.source).toBe('mail');
       expect(body.data.title).toBe('meeting');
     });
 

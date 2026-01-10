@@ -4,12 +4,13 @@
 
 /**
  * Configuration for a notification filter within a composite feed.
+ * app is multi-select (array), source is single-select (string).
  */
 export interface NotificationFilterConfig {
   id: string;
   name: string;
   app?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 

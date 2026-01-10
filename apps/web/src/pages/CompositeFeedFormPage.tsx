@@ -16,7 +16,7 @@ interface NotificationFilterFormData {
   tempId: string;
   name: string;
   app: string[];
-  source: string[];
+  source: string;
   title: string;
 }
 
@@ -29,7 +29,7 @@ function createEmptyFilter(): NotificationFilterFormData {
     tempId: generateTempId(),
     name: '',
     app: [],
-    source: [],
+    source: '',
     title: '',
   };
 }
@@ -258,16 +258,24 @@ function NotificationFilterCard({
             disabled={disabled}
           />
 
-          <MultiSelectDropdown
-            label="Sources"
-            options={filterOptions.source}
-            selected={filter.source}
-            onChange={(selected): void => {
-              onChange({ ...filter, source: selected });
-            }}
-            allLabel="All Sources"
-            disabled={disabled}
-          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Source</label>
+            <select
+              value={filter.source}
+              onChange={(e): void => {
+                onChange({ ...filter, source: e.target.value });
+              }}
+              disabled={disabled}
+              className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <option value="">All Sources</option>
+              {filterOptions.source.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">Title contains</label>
@@ -339,7 +347,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
           tempId: f.id,
           name: f.name,
           app: f.app ?? [],
-          source: f.source ?? [],
+          source: f.source ?? '',
           title: f.title ?? '',
         }))
       );
@@ -376,7 +384,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       if (filter.name.trim() === '') {
         return `Filter ${String(i + 1)} requires a name`;
       }
-      if (filter.app.length === 0 && filter.source.length === 0 && filter.title.trim() === '') {
+      if (filter.app.length === 0 && filter.source === '' && filter.title.trim() === '') {
         return `Filter ${String(i + 1)} requires at least one criterion (app, source, or title)`;
       }
     }
@@ -410,11 +418,11 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
     try {
       const filtersToSave = notificationFilters.map((f) => {
-        const result: { name: string; app?: string[]; source?: string[]; title?: string } = {
+        const result: { name: string; app?: string[]; source?: string; title?: string } = {
           name: f.name.trim(),
         };
         if (f.app.length > 0) result.app = f.app;
-        if (f.source.length > 0) result.source = f.source;
+        if (f.source !== '') result.source = f.source;
         if (f.title.trim() !== '') result.title = f.title.trim();
         return result;
       });
