@@ -1,5 +1,5 @@
 /**
- * Internal routes for data-insights-service.
+ * Internal routes for data-insights-agent.
  * Endpoints called by Cloud Scheduler and other services.
  */
 

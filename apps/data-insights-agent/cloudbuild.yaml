@@ -1,4 +1,4 @@
-# Manual trigger: Deploy data-insights-service only
+# Manual trigger: Deploy data-insights-agent only
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
@@ -20,7 +20,7 @@ steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-service.sh']
+    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'

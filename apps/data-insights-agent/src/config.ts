@@ -1,5 +1,5 @@
 /**
- * Configuration module for data-insights-service.
+ * Configuration module for data-insights-agent.
  * Validates required environment variables using Zod.
  */
 import { z } from 'zod';

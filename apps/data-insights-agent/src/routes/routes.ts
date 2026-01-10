@@ -1,5 +1,5 @@
 /**
- * Routes for data-insights-service.
+ * Routes for data-insights-agent.
  */
 import type { FastifyPluginAsync } from 'fastify';
 import { dataSourceRoutes } from './dataSourceRoutes.js';

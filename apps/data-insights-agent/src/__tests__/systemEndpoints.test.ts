@@ -48,7 +48,7 @@ describe('System Endpoints', () => {
       checks: { name: string; status: string }[];
     };
     expect(body.status).toBe('ok');
-    expect(body.serviceName).toBe('data-insights-service');
+    expect(body.serviceName).toBe('data-insights-agent');
     expect(body.checks).toBeInstanceOf(Array);
   });
 
@@ -78,7 +78,7 @@ describe('System Endpoints', () => {
       paths: Record<string, unknown>;
     };
     expect(spec.openapi).toMatch(/^3\./);
-    expect(spec.info.title).toBe('data-insights-service');
+    expect(spec.info.title).toBe('data-insights-agent');
     expect(spec.paths['/data-sources']).toBeDefined();
     expect(spec.paths['/data-sources/{id}']).toBeDefined();
     expect(spec.paths['/data-sources/generate-title']).toBeDefined();

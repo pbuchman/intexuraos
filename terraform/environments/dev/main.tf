@@ -1477,7 +1477,7 @@ module "snapshot_refresh_pubsub" {
   ]
 }
 
-# Grant scheduler permission to invoke data-insights-service
+# Grant scheduler permission to invoke data-insights-agent
 resource "google_cloud_run_service_iam_member" "scheduler_invokes_data_insights" {
   project  = var.project_id
   location = var.region

@@ -21,7 +21,7 @@ COPY packages/ ./packages/
 COPY apps/data-insights-service/ ./apps/data-insights-service/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/data-insights-service
+RUN npm run build -w @intexuraos/data-insights-agent
 
 # Stage 2: Production
 FROM node:22-alpine

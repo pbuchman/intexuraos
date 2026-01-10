@@ -370,7 +370,7 @@ export interface ActionsResponse {
 }
 
 /**
- * Custom data source from data-insights-service
+ * Custom data source from data-insights-agent
  */
 export interface DataSource {
   id: string;
@@ -417,7 +417,7 @@ export interface CompositeFeedNotificationFilter {
 }
 
 /**
- * Composite feed from data-insights-service.
+ * Composite feed from data-insights-agent.
  * Aggregates static data sources and notification filters.
  */
 export interface CompositeFeed {

@@ -25,7 +25,7 @@ const SERVICES = [
   'research-agent',
   'commands-agent',
   'actions-agent',
-  'data-insights-service',
+  'data-insights-agent',
   'image-service',
   'notes-agent',
   'todos-agent',
