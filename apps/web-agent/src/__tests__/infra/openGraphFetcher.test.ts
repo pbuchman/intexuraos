@@ -1,7 +1,3 @@
-/**
- * Tests for Open Graph metadata fetcher.
- * Mocks fetch() to simulate HTML responses.
- */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { OpenGraphFetcher } from '../../infra/linkpreview/openGraphFetcher.js';
@@ -257,17 +253,14 @@ describe('OpenGraphFetcher', () => {
     });
 
     it('returns TOO_LARGE when streaming response exceeds limit (no content-length header)', async () => {
-      // Create a fetcher with small max response size to trigger streaming limit
       const smallFetcher = new OpenGraphFetcher({
         timeoutMs: 5000,
         maxResponseSize: 50,
       });
 
-      // Return a large response without content-length header so size is checked during streaming
       const largeContent = '<html>'.padEnd(100, 'x') + '</html>';
       nock('https://example.com').get('/large-stream').reply(200, largeContent, {
         'content-type': 'text/html',
-        // No content-length header, so size is checked during streaming
       });
 
       const result = await smallFetcher.fetchPreview('https://example.com/large-stream');
@@ -280,7 +273,6 @@ describe('OpenGraphFetcher', () => {
     });
 
     it('returns FETCH_FAILED for unknown non-Error exceptions', async () => {
-      // Mock the global fetch to throw a non-Error value
       const originalFetch = global.fetch;
       global.fetch = (): never => {
         throw 'string-error';
@@ -300,7 +292,6 @@ describe('OpenGraphFetcher', () => {
     });
 
     it('returns FETCH_FAILED when response has no body', async () => {
-      // Mock fetch to return a response with null body
       const originalFetch = global.fetch;
       global.fetch = (): Promise<Response> =>
         Promise.resolve({

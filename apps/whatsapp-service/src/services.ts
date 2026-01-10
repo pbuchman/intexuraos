@@ -12,7 +12,7 @@ import { GcpPubSubPublisher, type GcpPubSubPublisherConfig } from './infra/pubsu
 import { WhatsAppCloudApiAdapter, WhatsAppCloudApiSender } from './infra/whatsapp/index.js';
 import { SpeechmaticsTranscriptionAdapter } from './infra/speechmatics/index.js';
 import { ThumbnailGeneratorAdapter } from './infra/media/index.js';
-import { OpenGraphFetcher } from './infra/linkpreview/openGraphFetcher.js';
+import { createWebAgentLinkPreviewClient } from './infra/linkpreview/webAgentLinkPreviewClient.js';
 import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
@@ -39,6 +39,8 @@ export interface ServiceConfig {
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
   speechmaticsApiKey: string;
+  webAgentUrl: string;
+  internalAuthToken: string;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -112,7 +114,10 @@ export function getServices(): ServiceContainer {
     transcriptionService: new SpeechmaticsTranscriptionAdapter(serviceConfig.speechmaticsApiKey),
     whatsappCloudApi: new WhatsAppCloudApiAdapter(serviceConfig.whatsappAccessToken),
     thumbnailGenerator: new ThumbnailGeneratorAdapter(),
-    linkPreviewFetcher: new OpenGraphFetcher(),
+    linkPreviewFetcher: createWebAgentLinkPreviewClient({
+      baseUrl: serviceConfig.webAgentUrl,
+      internalAuthToken: serviceConfig.internalAuthToken,
+    }),
   };
   return container;
 }

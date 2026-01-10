@@ -503,7 +503,7 @@ describe('compositeFeedRoutes', () => {
         payload: {
           notificationFilters: [
             { id: 'new-1', name: 'New Filter 1', app: ['WhatsApp'] },
-            { id: 'new-2', name: 'New Filter 2', source: ['slack'] },
+            { id: 'new-2', name: 'New Filter 2', source: 'slack' },
           ],
         },
       });
@@ -802,7 +802,7 @@ describe('compositeFeedRoutes', () => {
             id: 'f1',
             name: 'Complex Filter',
             app: ['WhatsApp'],
-            source: ['work'],
+            source: 'work',
             title: 'urgent',
           },
         ],
@@ -819,7 +819,7 @@ describe('compositeFeedRoutes', () => {
       const body = JSON.parse(response.payload);
       expect(body.data.notifications[0].criteria).toEqual({
         app: ['WhatsApp'],
-        source: ['work'],
+        source: 'work',
         title: 'urgent',
       });
     });

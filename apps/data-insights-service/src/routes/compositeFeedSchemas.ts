@@ -23,11 +23,7 @@ export const notificationFilterConfigInputSchema = {
       items: { type: 'string' },
       maxItems: 20,
     },
-    source: {
-      type: 'array',
-      items: { type: 'string' },
-      maxItems: 20,
-    },
+    source: { type: 'string' },
     title: { type: 'string', maxLength: 200 },
   },
   additionalProperties: false,
@@ -47,11 +43,7 @@ export const notificationFilterConfigSchema = {
       items: { type: 'string' },
       maxItems: 20,
     },
-    source: {
-      type: 'array',
-      items: { type: 'string' },
-      maxItems: 20,
-    },
+    source: { type: 'string' },
     title: { type: 'string', maxLength: 200 },
   },
   additionalProperties: false,
@@ -166,7 +158,7 @@ export const compositeFeedDataResponseSchema = {
             type: 'object',
             properties: {
               app: { type: 'array', items: { type: 'string' } },
-              source: { type: 'array', items: { type: 'string' } },
+              source: { type: 'string' },
               title: { type: 'string' },
             },
           },
@@ -223,7 +215,7 @@ export const snapshotResponseSchema = {
             type: 'object',
             properties: {
               app: { type: 'array', items: { type: 'string' } },
-              source: { type: 'array', items: { type: 'string' } },
+              source: { type: 'string' },
               title: { type: 'string' },
             },
           },

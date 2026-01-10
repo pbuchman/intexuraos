@@ -29,7 +29,7 @@ interface FiltersDoc {
     name: string;
     app?: string[];
     device?: string[];
-    source?: string[];
+    source?: string;
     title?: string;
     createdAt: string;
   }[];

@@ -190,7 +190,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: {
           userId,
-          filter: { source: ['ntfy'] },
+          filter: { source: 'ntfy' },
         },
       });
 
@@ -357,7 +357,7 @@ describe('Internal Routes', () => {
       expect(notif?.source).toBe('tasker');
     });
 
-    it('ignores empty filter arrays', async () => {
+    it('ignores empty filter values', async () => {
       process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
       const userId = 'user-empty-filter';
 
@@ -381,7 +381,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: {
           userId,
-          filter: { app: [], source: [], title: '' },
+          filter: { app: [], source: '', title: '' },
         },
       });
 
