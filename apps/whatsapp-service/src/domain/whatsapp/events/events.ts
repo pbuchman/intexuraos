@@ -156,7 +156,7 @@ export interface SendMessageEvent {
 
 /**
  * Event published when a command is ready for ingestion.
- * Triggers the commands-router to classify and create actions.
+ * Triggers the commands-agent to classify and create actions.
  */
 export interface CommandIngestEvent {
   /**

@@ -24,7 +24,7 @@ export interface EventPublisherPort {
 
   /**
    * Publish a command ingest event.
-   * Triggers command classification in commands-router.
+   * Triggers command classification in commands-agent.
    */
   publishCommandIngest(event: CommandIngestEvent): Promise<Result<void, WhatsAppError>>;
 

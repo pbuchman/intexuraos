@@ -117,10 +117,10 @@ describe('Logger utilities', () => {
 
     it('uses custom message', () => {
       logIncomingRequest(mockRequest as FastifyRequest, {
-        message: 'Received PubSub push to /internal/router/commands',
+        message: 'Received PubSub push to /internal/commands',
       });
 
-      expect(loggedPayloads[0]?.message).toBe('Received PubSub push to /internal/router/commands');
+      expect(loggedPayloads[0]?.message).toBe('Received PubSub push to /internal/commands');
     });
 
     it('includes additional fields', () => {

@@ -23,7 +23,7 @@ interface CommandEvent {
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post(
-    '/internal/router/commands',
+    '/internal/commands',
     {
       schema: {
         operationId: 'ingestCommand',
@@ -78,7 +78,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       // Log incoming request BEFORE auth check (for debugging)
       logIncomingRequest(request, {
-        message: 'Received PubSub push to /internal/router/commands',
+        message: 'Received PubSub push to /internal/commands',
         bodyPreviewLength: 500,
       });
 
@@ -184,7 +184,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post(
-    '/internal/router/retry-pending',
+    '/internal/retry-pending',
     {
       schema: {
         operationId: 'retryPendingClassifications',
@@ -217,7 +217,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to /internal/router/retry-pending',
+        message: 'Received request to /internal/retry-pending',
         bodyPreviewLength: 200,
       });
 
@@ -248,7 +248,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.get(
-    '/internal/router/commands/:commandId',
+    '/internal/commands/:commandId',
     {
       schema: {
         operationId: 'getCommandInternal',
@@ -309,7 +309,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to GET /internal/router/commands/:commandId',
+        message: 'Received request to GET /internal/commands/:commandId',
         bodyPreviewLength: 0,
       });
 

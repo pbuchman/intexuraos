@@ -4,18 +4,18 @@ import type { ActionServiceClient } from '../../domain/ports/actionServiceClient
 import type { Action } from '../../domain/models/action.js';
 import pino from 'pino';
 
-export interface CommandsRouterClientConfig {
+export interface CommandsAgentClientConfig {
   baseUrl: string;
   internalAuthToken: string;
 }
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'commandsRouterClient',
+  name: 'commandsAgentClient',
 });
 
-export function createCommandsRouterClient(
-  config: CommandsRouterClientConfig
+export function createCommandsAgentClient(
+  config: CommandsAgentClientConfig
 ): ActionServiceClient {
   return {
     async getAction(actionId: string): Promise<Result<Action | null>> {

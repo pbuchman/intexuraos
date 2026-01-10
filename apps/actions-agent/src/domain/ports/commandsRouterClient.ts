@@ -4,6 +4,6 @@ export interface CommandWithText {
   sourceType: string;
 }
 
-export interface CommandsRouterClient {
+export interface CommandsAgentClient {
   getCommand(commandId: string): Promise<CommandWithText | null>;
 }

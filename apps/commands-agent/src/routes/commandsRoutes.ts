@@ -45,15 +45,15 @@ const commandSchema = {
   ],
 } as const;
 
-export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.get(
-    '/router/commands',
+    '/commands',
     {
       schema: {
         operationId: 'listCommands',
         summary: 'List commands',
         description: 'List commands for the authenticated user.',
-        tags: ['router'],
+        tags: ['commands'],
         response: {
           200: {
             description: 'List of commands',
@@ -101,13 +101,13 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.post(
-    '/router/commands',
+    '/commands',
     {
       schema: {
         operationId: 'createCommand',
         summary: 'Create command',
         description: 'Create a new command from a shared text or link.',
-        tags: ['router'],
+        tags: ['commands'],
         body: {
           type: 'object',
           properties: {
@@ -181,14 +181,14 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.delete(
-    '/router/commands/:commandId',
+    '/commands/:commandId',
     {
       schema: {
         operationId: 'deleteCommand',
         summary: 'Delete command',
         description:
           'Delete a command. Only allowed for commands with status: received, pending_classification, or failed.',
-        tags: ['router'],
+        tags: ['commands'],
         params: {
           type: 'object',
           properties: {
@@ -269,13 +269,13 @@ export const routerRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch(
-    '/router/commands/:commandId',
+    '/commands/:commandId',
     {
       schema: {
         operationId: 'archiveCommand',
         summary: 'Archive command',
         description: 'Archive a classified command.',
-        tags: ['router'],
+        tags: ['commands'],
         params: {
           type: 'object',
           properties: {

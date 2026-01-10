@@ -47,7 +47,7 @@ const CLASSIFIER_PRICING: ModelPricing = {
 };
 
 export function initServices(config: ServiceConfig): void {
-  const logger = pino({ name: 'commands-router' });
+  const logger = pino({ name: 'commands-agent' });
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({

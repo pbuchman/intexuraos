@@ -19,7 +19,7 @@ const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
-describe('Commands Router Routes', () => {
+describe('Commands Agent Routes', () => {
   let app: FastifyInstance;
   let jwksServer: FastifyInstance;
   let jwksUrl: string;
@@ -108,7 +108,7 @@ describe('Commands Router Routes', () => {
     resetServices();
   });
 
-  describe('POST /internal/router/commands (PubSub push endpoint)', () => {
+  describe('POST /internal/commands (PubSub push endpoint)', () => {
     const validMessagePayload = {
       message: {
         data: Buffer.from(
@@ -130,7 +130,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         payload: validMessagePayload,
       });
 
@@ -142,7 +142,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': 'wrong-token',
         },
@@ -158,7 +158,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': 'any-token',
         },
@@ -173,7 +173,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -195,7 +195,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -213,7 +213,7 @@ describe('Commands Router Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/internal/router/commands',
+          url: '/internal/commands',
           headers: {
             'content-type': 'application/json',
             from: 'noreply@google.com',
@@ -247,7 +247,7 @@ describe('Commands Router Routes', () => {
 
         const response = await app.inject({
           method: 'POST',
-          url: '/internal/router/commands',
+          url: '/internal/commands',
           headers: {
             'content-type': 'application/json',
             // NO from: noreply@google.com
@@ -277,7 +277,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -316,7 +316,7 @@ describe('Commands Router Routes', () => {
       // First request
       await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -328,7 +328,7 @@ describe('Commands Router Routes', () => {
       // Second request (duplicate)
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -368,7 +368,7 @@ describe('Commands Router Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -409,7 +409,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -448,7 +448,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
@@ -480,7 +480,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-nokey' } },
       });
@@ -512,7 +512,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-svcfail' } },
       });
@@ -547,7 +547,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-withkey' } },
       });
@@ -566,13 +566,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('GET /router/commands (authenticated)', () => {
+  describe('GET /commands (authenticated)', () => {
     it('returns 401 when no auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/commands',
+        url: '/commands',
       });
 
       expect(response.statusCode).toBe(401);
@@ -584,7 +584,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/commands',
+        url: '/commands',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -622,7 +622,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/router/commands',
+        url: '/commands',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -639,13 +639,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('POST /router/commands (create command)', () => {
+  describe('POST /commands (create command)', () => {
     it('returns 401 when no auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/commands',
+        url: '/commands',
         payload: { text: 'Test shared content', source: 'pwa-shared' },
       });
 
@@ -658,7 +658,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/commands',
+        url: '/commands',
         headers: { authorization: `Bearer ${token}` },
         payload: { source: 'pwa-shared' },
       });
@@ -672,7 +672,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/commands',
+        url: '/commands',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Test content' },
       });
@@ -695,7 +695,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/commands',
+        url: '/commands',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Test shared content from PWA', source: 'pwa-shared' },
       });
@@ -725,7 +725,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/router/commands',
+        url: '/commands',
         headers: { authorization: `Bearer ${token}` },
         payload: { text: 'Research the latest news', source: 'pwa-shared' },
       });
@@ -765,7 +765,7 @@ describe('Commands Router Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-event1' } },
       });
@@ -802,7 +802,7 @@ describe('Commands Router Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-event2' } },
       });
@@ -836,7 +836,7 @@ describe('Commands Router Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/internal/router/commands',
+        url: '/internal/commands',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
         payload: { message: { data: messageData, messageId: 'pubsub-event3' } },
       });
@@ -850,13 +850,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('POST /internal/router/retry-pending', () => {
+  describe('POST /internal/retry-pending', () => {
     it('returns 401 when no internal auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
       });
 
       expect(response.statusCode).toBe(401);
@@ -867,7 +867,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': 'wrong-token' },
       });
 
@@ -879,7 +879,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake-oidc-token' },
       });
 
@@ -893,7 +893,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -937,7 +937,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -983,7 +983,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1021,7 +1021,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1077,7 +1077,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1120,7 +1120,7 @@ describe('Commands Router Routes', () => {
 
       await app.inject({
         method: 'POST',
-        url: '/internal/router/retry-pending',
+        url: '/internal/retry-pending',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1136,13 +1136,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('GET /internal/router/commands/:commandId', () => {
+  describe('GET /internal/commands/:commandId', () => {
     it('returns 401 without internal auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/router/commands/some-command-id',
+        url: '/internal/commands/some-command-id',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1153,7 +1153,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/router/commands/nonexistent',
+        url: '/internal/commands/nonexistent',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1180,7 +1180,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/internal/router/commands/whatsapp_text:cmd-test',
+        url: '/internal/commands/whatsapp_text:cmd-test',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
       });
 
@@ -1195,13 +1195,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('DELETE /router/commands/:commandId (authenticated)', () => {
+  describe('DELETE /commands/:commandId (authenticated)', () => {
     it('returns 401 when no auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/cmd-1',
+        url: '/commands/cmd-1',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1213,7 +1213,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/nonexistent',
+        url: '/commands/nonexistent',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1238,7 +1238,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/cmd-received',
+        url: '/commands/cmd-received',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1268,7 +1268,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/cmd-pending',
+        url: '/commands/cmd-pending',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1294,7 +1294,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/cmd-failed',
+        url: '/commands/cmd-failed',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1325,7 +1325,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/router/commands/cmd-classified',
+        url: '/commands/cmd-classified',
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1336,13 +1336,13 @@ describe('Commands Router Routes', () => {
     });
   });
 
-  describe('PATCH /router/commands/:commandId (authenticated)', () => {
+  describe('PATCH /commands/:commandId (authenticated)', () => {
     it('returns 401 when no auth header', async () => {
       app = await buildServer();
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/commands/cmd-1',
+        url: '/commands/cmd-1',
         payload: { status: 'archived' },
       });
 
@@ -1355,7 +1355,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/commands/nonexistent',
+        url: '/commands/nonexistent',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });
@@ -1387,7 +1387,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/commands/cmd-to-archive',
+        url: '/commands/cmd-to-archive',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });
@@ -1422,7 +1422,7 @@ describe('Commands Router Routes', () => {
 
       const response = await app.inject({
         method: 'PATCH',
-        url: '/router/commands/cmd-not-classified',
+        url: '/commands/cmd-not-classified',
         headers: { authorization: `Bearer ${token}` },
         payload: { status: 'archived' },
       });

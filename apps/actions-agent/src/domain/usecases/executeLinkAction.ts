@@ -3,14 +3,14 @@ import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { BookmarksServiceClient } from '../ports/bookmarksServiceClient.js';
-import type { CommandsRouterClient } from '../ports/commandsRouterClient.js';
+import type { CommandsAgentClient } from '../ports/commandsAgentClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Logger } from 'pino';
 
 export interface ExecuteLinkActionDeps {
   actionRepository: ActionRepository;
   bookmarksServiceClient: BookmarksServiceClient;
-  commandsRouterClient: CommandsRouterClient;
+  commandsAgentClient: CommandsAgentClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -44,7 +44,7 @@ export function createExecuteLinkActionUseCase(
   const {
     actionRepository,
     bookmarksServiceClient,
-    commandsRouterClient,
+    commandsAgentClient,
     whatsappPublisher,
     webAppUrl,
     logger,
@@ -126,7 +126,7 @@ export function createExecuteLinkActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    const command = await commandsRouterClient.getCommand(action.commandId);
+    const command = await commandsAgentClient.getCommand(action.commandId);
     const source = command?.sourceType ?? 'actions-agent';
 
     logger.info(

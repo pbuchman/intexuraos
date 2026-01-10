@@ -1,18 +1,18 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type {
-  CommandsRouterClient,
+  CommandsAgentClient,
   CommandWithText,
-} from '../../domain/ports/commandsRouterClient.js';
+} from '../../domain/ports/commandsAgentClient.js';
 import pino from 'pino';
 
-export interface CommandsRouterHttpClientConfig {
+export interface CommandsAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
 }
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'commandsRouterHttpClient',
+  name: 'commandsAgentHttpClient',
 });
 
 interface GetCommandResponse {
@@ -26,14 +26,14 @@ interface GetCommandResponse {
   };
 }
 
-export function createCommandsRouterHttpClient(
-  config: CommandsRouterHttpClientConfig
-): CommandsRouterClient {
+export function createCommandsAgentHttpClient(
+  config: CommandsAgentHttpClientConfig
+): CommandsAgentClient {
   return {
     async getCommand(commandId: string): Promise<CommandWithText | null> {
-      const url = `${config.baseUrl}/internal/router/commands/${commandId}`;
+      const url = `${config.baseUrl}/internal/commands/${commandId}`;
 
-      logger.info({ commandId, url }, 'Fetching command from commands-router');
+      logger.info({ commandId, url }, 'Fetching command from commands-agent');
 
       let response: Response;
       try {
@@ -64,8 +64,8 @@ export function createCommandsRouterHttpClient(
 
       const body = (await response.json()) as GetCommandResponse;
       if (!body.success || body.data === undefined) {
-        logger.error({ commandId, body }, 'Invalid response from commands-router');
-        throw new Error('Invalid response from commands-router');
+        logger.error({ commandId, body }, 'Invalid response from commands-agent');
+        throw new Error('Invalid response from commands-agent');
       }
 
       logger.info({ commandId }, 'Successfully fetched command');

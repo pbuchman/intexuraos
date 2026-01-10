@@ -1,6 +1,6 @@
 /**
  * Command classification prompt for categorizing user messages.
- * Used by commands-router to classify incoming commands into categories.
+ * Used by commands-agent to classify incoming commands into categories.
  */
 
 import type { PromptBuilder, PromptDeps } from '../types.js';

@@ -253,7 +253,7 @@ Observation to store:
 | whatsapp-service             | intexuraos-whatsapp-service             |
 | mobile-notifications-service | intexuraos-mobile-notifications-service |
 | research-agent               | intexuraos-research-agent               |
-| commands-router              | intexuraos-commands-router              |
+| commands-agent              | intexuraos-commands-agent              |
 | actions-agent                | intexuraos-actions-agent                |
 | data-insights-service        | intexuraos-data-insights-service        |
 

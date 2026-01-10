@@ -19,7 +19,7 @@ const commonSrcDir = join(repoRoot, 'packages', 'common-core', 'src');
 const FORBIDDEN_KEYWORDS = [
   // Domain models from apps
   'Action', // actions-agent domain
-  'Command', // commands-router domain
+  'Command', // commands-agent domain
   'Research', // research-agent domain
   'Notification', // mobile-notifications-service domain
   'Note', // notes-agent domain

@@ -67,7 +67,7 @@
       "description": "Aggregated LLM usage statistics by provider, model, and call type"
     },
     "commands": {
-      "owner": "commands-router",
+      "owner": "commands-agent",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
     },
     "actions": {

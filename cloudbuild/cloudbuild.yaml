@@ -247,32 +247,32 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===== commands-router =====
+  # ===== commands-agent =====
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-commands-router'
+    id: 'build-push-commands-agent'
     waitFor: ['-']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "=== Building commands-router ==="
-        docker pull ${_ARTIFACT_REGISTRY_URL}/commands-router:latest || true
+        echo "=== Building commands-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/commands-agent:latest || true
         docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/commands-agent:latest \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/commands-router:latest \
-          -f apps/commands-router/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/commands-router:latest
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/commands-agent:latest \
+          -f apps/commands-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/commands-agent:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-commands-router'
-    waitFor: ['build-push-commands-router']
+    id: 'deploy-commands-agent'
+    waitFor: ['build-push-commands-agent']
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-commands-router.sh']
+    args: ['-c', 'bash cloudbuild/scripts/deploy-commands-agent.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -587,7 +587,7 @@ steps:
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
           "research-agent:RESEARCH_AGENT"
-          "commands-router:COMMANDS_ROUTER"
+          "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
           "data-insights-service:DATA_INSIGHTS_SERVICE"
           "notes-agent:NOTES_AGENT"
