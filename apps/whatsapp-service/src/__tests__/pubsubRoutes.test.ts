@@ -596,6 +596,30 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.success).toBe(true);
       expect(responseBody.deletedCount).toBe(0);
     });
+
+    it('returns 500 when delete throws an unexpected exception', async () => {
+      mediaStorage.setThrowOnDelete(true);
+
+      const gcsPaths = ['path/to/file1.jpg'];
+      const body = createPubSubBody({
+        type: 'whatsapp.media.cleanup',
+        userId: 'user-123',
+        messageId: 'msg-123',
+        gcsPaths,
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/media-cleanup',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as { error: string };
+      expect(responseBody.error).toBe('Cleanup failed');
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/transcribe-audio', () => {
@@ -784,6 +808,32 @@ describe('Pub/Sub Routes', () => {
       const message = messageRepository.getMessageSync('msg-transcribe-fail');
       expect(message?.transcription?.status).toBe('failed');
     });
+
+    it('returns success and logs error when transcription throws an exception', async () => {
+      messageRepository.setThrowOnUpdateTranscription(true);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.audio.transcribe',
+        messageId: 'msg-throw-test',
+        userId: 'user-456',
+        gcsPath: 'path/to/audio.ogg',
+        mimeType: 'audio/ogg',
+        userPhoneNumber: '+1234567890',
+        originalWaMessageId: 'wamid.throw',
+        phoneNumberId: 'phone-789',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcribe-audio',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/process-webhook', () => {
@@ -877,6 +927,27 @@ describe('Pub/Sub Routes', () => {
         type: 'whatsapp.webhook.process',
         eventId: 'event-123',
         payload: '{"invalid": "payload"}',
+        phoneNumberId: 'phone-456',
+        receivedAt: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+
+    it('returns success and logs error when payload is not valid JSON', async () => {
+      const body = createPubSubBody({
+        type: 'whatsapp.webhook.process',
+        eventId: 'event-json-fail',
+        payload: 'this is not valid JSON!!!',
         phoneNumberId: 'phone-456',
         receivedAt: new Date().toISOString(),
       });
