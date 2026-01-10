@@ -598,36 +598,37 @@ steps:
         )
 
         # Fetch service URLs from Cloud Run API (not secrets)
+        # Note: $$ escapes $ for Cloud Build (passes literal $ to bash)
         declare -A SERVICE_URLS
-        for entry in "${CLOUD_RUN_SERVICES[@]}"; do
-          SERVICE_NAME="${entry%%:*}"
-          ENV_SUFFIX="${entry##*:}"
-          URL=$(gcloud run services describe "intexuraos-${SERVICE_NAME}" --region="$REGION" --format='value(status.url)')
-          SERVICE_URLS["INTEXURAOS_${ENV_SUFFIX}_URL"]="$URL"
-          echo "  ${ENV_SUFFIX}: ${URL}"
+        for entry in "$${CLOUD_RUN_SERVICES[@]}"; do
+          SERVICE_NAME="$${entry%%:*}"
+          ENV_SUFFIX="$${entry##*:}"
+          URL=$$(gcloud run services describe "intexuraos-$${SERVICE_NAME}" --region="$$REGION" --format='value(status.url)')
+          SERVICE_URLS["INTEXURAOS_$${ENV_SUFFIX}_URL"]="$$URL"
+          echo "  $${ENV_SUFFIX}: $${URL}"
         done
 
         # Fetch actual secrets (Auth0, Firebase)
-        AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
-        AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
-        AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-        FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
-        FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
-        FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
+        AUTH0_DOMAIN=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
+        AUTH0_SPA_CLIENT_ID=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
+        AUTH_AUDIENCE=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
+        FIREBASE_PROJECT_ID=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
+        FIREBASE_API_KEY=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
+        FIREBASE_AUTH_DOMAIN=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
 
         # Write .env file with secrets and service URLs
         cat > /workspace/apps/web/.env << EOF
-        INTEXURAOS_AUTH0_DOMAIN=$AUTH0_DOMAIN
-        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$AUTH0_SPA_CLIENT_ID
-        INTEXURAOS_AUTH_AUDIENCE=$AUTH_AUDIENCE
-        INTEXURAOS_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
-        INTEXURAOS_FIREBASE_API_KEY=$FIREBASE_API_KEY
-        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
+        INTEXURAOS_AUTH0_DOMAIN=$$AUTH0_DOMAIN
+        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$$AUTH0_SPA_CLIENT_ID
+        INTEXURAOS_AUTH_AUDIENCE=$$AUTH_AUDIENCE
+        INTEXURAOS_FIREBASE_PROJECT_ID=$$FIREBASE_PROJECT_ID
+        INTEXURAOS_FIREBASE_API_KEY=$$FIREBASE_API_KEY
+        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$$FIREBASE_AUTH_DOMAIN
         EOF
 
         # Append service URLs from associative array
-        for key in "${!SERVICE_URLS[@]}"; do
-          echo "${key}=${SERVICE_URLS[$key]}" >> /workspace/apps/web/.env
+        for key in "$${!SERVICE_URLS[@]}"; do
+          echo "$${key}=$${SERVICE_URLS[$$key]}" >> /workspace/apps/web/.env
         done
 
         echo "Config written to /workspace/apps/web/.env"
