@@ -265,6 +265,15 @@ resource "google_secret_manager_secret_iam_member" "web_agent_secrets" {
   member    = "serviceAccount:${google_service_account.web_agent.email}"
 }
 
+# API Docs Hub: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api_docs_hub.email}"
+}
+
 
 # PromptVault service: Firestore access
 resource "google_project_iam_member" "promptvault_service_firestore" {
