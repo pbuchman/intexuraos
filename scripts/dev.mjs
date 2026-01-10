@@ -309,6 +309,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
 };
 
+// Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
 const COMMON_SERVICE_ENV = {
   INTEXURAOS_AUTH_JWKS_URL: process.env.INTEXURAOS_AUTH_JWKS_URL ?? '',
   INTEXURAOS_AUTH_ISSUER: process.env.INTEXURAOS_AUTH_ISSUER ?? '',
@@ -319,16 +320,31 @@ const COMMON_SERVICE_ENV = {
   FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
 };
 
+// All service URLs - mirrors Terraform local.common_service_env_vars
+// All services get all URLs so they can call each other
+const COMMON_SERVICE_URLS = {
+  INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
+  INTEXURAOS_PROMPTVAULT_SERVICE_URL: 'http://localhost:8111',
+  INTEXURAOS_NOTION_SERVICE_URL: 'http://localhost:8112',
+  INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
+  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
+  INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
+  INTEXURAOS_COMMANDS_ROUTER_URL: 'http://localhost:8117',
+  INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
+  INTEXURAOS_DATA_INSIGHTS_SERVICE_URL: 'http://localhost:8119',
+  INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
+  INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
+  INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
+  INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
+  INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
+  INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
+  INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8126',
+};
+
+// Service-specific env vars (Pub/Sub topics, non-URL config)
+// URL configs removed - now provided by COMMON_SERVICE_URLS
 const SERVICE_ENV_MAPPINGS = {
-  'commands-router': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTEXURAOS_ACTIONS_AGENT_SERVICE_URL:
-      process.env.INTEXURAOS_ACTIONS_AGENT_SERVICE_URL ?? 'http://localhost:8118',
-  },
   'research-agent': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-    INTEXURAOS_IMAGE_SERVICE_URL:
-      process.env.INTEXURAOS_IMAGE_SERVICE_URL ?? 'http://localhost:8120',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -343,20 +359,10 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
   },
   'actions-agent': {
-    INTEXURAOS_COMMANDS_ROUTER_URL: 'http://localhost:8117',
-    INTEXURAOS_RESEARCH_AGENT_URL:
-      process.env.INTEXURAOS_RESEARCH_AGENT_URL ?? 'http://localhost:8116',
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
-  },
-  'data-insights-service': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
-  },
-  'image-service': {
-    INTEXURAOS_USER_SERVICE_URL: process.env.INTEXURAOS_USER_SERVICE_URL ?? 'http://localhost:8110',
   },
 };
 
@@ -370,6 +376,7 @@ function startService(service) {
   const env = {
     ...process.env,
     ...COMMON_SERVICE_ENV,
+    ...COMMON_SERVICE_URLS,
     ...(SERVICE_ENV_MAPPINGS[service.name] ?? {}),
     ...(service.name === 'api-docs-hub' ? API_DOCS_HUB_ENV : {}),
     PORT: String(service.port),

@@ -10,8 +10,8 @@ import { config as appConfig } from '../config';
 type ConfigKey = keyof typeof appConfig;
 
 const ENV_VAR_MAPPING: Record<string, ConfigKey> = {
-  INTEXURAOS_ACTIONS_AGENT_SERVICE_URL: 'actionsAgentUrl',
-  INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL: 'commandsRouterServiceUrl',
+  INTEXURAOS_ACTIONS_AGENT_URL: 'actionsAgentUrl',
+  INTEXURAOS_COMMANDS_ROUTER_URL: 'commandsRouterServiceUrl',
 };
 
 interface CacheEntry {

@@ -1,35 +1,67 @@
 # Manual trigger: Deploy web only
 steps:
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'fetch-secrets'
+    id: 'fetch-config'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "=== Fetching secrets for web ==="
+        echo "=== Fetching config for web ==="
+        REGION="${_REGION}"
+
+        # Cloud Run services to fetch URLs for (service-name:ENV_VAR_SUFFIX)
+        # Add new services here - URLs are auto-generated from Cloud Run API
+        CLOUD_RUN_SERVICES=(
+          "user-service:USER_SERVICE"
+          "promptvault-service:PROMPTVAULT_SERVICE"
+          "whatsapp-service:WHATSAPP_SERVICE"
+          "notion-service:NOTION_SERVICE"
+          "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
+          "research-agent:RESEARCH_AGENT"
+          "commands-router:COMMANDS_ROUTER"
+          "actions-agent:ACTIONS_AGENT"
+          "data-insights-service:DATA_INSIGHTS_SERVICE"
+          "notes-agent:NOTES_AGENT"
+          "todos-agent:TODOS_AGENT"
+          "bookmarks-agent:BOOKMARKS_AGENT"
+          "calendar-agent:CALENDAR_AGENT"
+          "app-settings-service:APP_SETTINGS_SERVICE"
+        )
+
+        # Fetch service URLs from Cloud Run API (not secrets)
+        declare -A SERVICE_URLS
+        for entry in "${CLOUD_RUN_SERVICES[@]}"; do
+          SERVICE_NAME="${entry%%:*}"
+          ENV_SUFFIX="${entry##*:}"
+          URL=$(gcloud run services describe "intexuraos-${SERVICE_NAME}" --region="$REGION" --format='value(status.url)')
+          SERVICE_URLS["INTEXURAOS_${ENV_SUFFIX}_URL"]="$URL"
+          echo "  ${ENV_SUFFIX}: ${URL}"
+        done
+
+        # Fetch actual secrets (Auth0, Firebase)
+        AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
+        AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
+        AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
+        FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
+        FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
+        FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
+
+        # Write .env file with secrets and service URLs
         cat > /workspace/apps/web/.env << EOF
-        INTEXURAOS_AUTH0_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
-        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
-        INTEXURAOS_AUTH_AUDIENCE=$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
-        INTEXURAOS_USER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_USER_SERVICE_URL)
-        INTEXURAOS_PROMPTVAULT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_PROMPTVAULT_SERVICE_URL)
-        INTEXURAOS_WHATSAPP_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_WHATSAPP_SERVICE_URL)
-        INTEXURAOS_NOTION_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTION_SERVICE_URL)
-        INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL)
-        INTEXURAOS_RESEARCH_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_RESEARCH_AGENT_URL)
-        INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_COMMANDS_ROUTER_SERVICE_URL)
-        INTEXURAOS_ACTIONS_AGENT_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_ACTIONS_AGENT_SERVICE_URL)
-        INTEXURAOS_DATA_INSIGHTS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_DATA_INSIGHTS_SERVICE_URL)
-        INTEXURAOS_NOTES_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_NOTES_AGENT_URL)
-        INTEXURAOS_TODOS_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_TODOS_AGENT_URL)
-        INTEXURAOS_BOOKMARKS_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_BOOKMARKS_AGENT_URL)
-        INTEXURAOS_CALENDAR_AGENT_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_CALENDAR_AGENT_URL)
-        INTEXURAOS_APP_SETTINGS_SERVICE_URL=$(gcloud secrets versions access latest --secret=INTEXURAOS_APP_SETTINGS_SERVICE_URL)
-        INTEXURAOS_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
-        INTEXURAOS_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
-        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
+        INTEXURAOS_AUTH0_DOMAIN=$AUTH0_DOMAIN
+        INTEXURAOS_AUTH0_SPA_CLIENT_ID=$AUTH0_SPA_CLIENT_ID
+        INTEXURAOS_AUTH_AUDIENCE=$AUTH_AUDIENCE
+        INTEXURAOS_FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+        INTEXURAOS_FIREBASE_API_KEY=$FIREBASE_API_KEY
+        INTEXURAOS_FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
         EOF
-        echo "Secrets written to /workspace/apps/web/.env"
+
+        # Append service URLs from associative array
+        for key in "${!SERVICE_URLS[@]}"; do
+          echo "${key}=${SERVICE_URLS[$key]}" >> /workspace/apps/web/.env
+        done
+
+        echo "Config written to /workspace/apps/web/.env"
 
   - name: 'node:22-slim'
     id: 'build'
