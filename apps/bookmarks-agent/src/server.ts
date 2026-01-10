@@ -17,6 +17,7 @@ import {
 } from '@intexuraos/http-server';
 import { bookmarkRoutes } from './routes/bookmarkRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { pubsubRoutes } from './routes/pubsubRoutes.js';
 
 const SERVICE_NAME = 'bookmarks-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -207,6 +208,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(bookmarkRoutes);
   await app.register(internalRoutes);
+  await app.register(pubsubRoutes);
 
   app.get(
     '/openapi.json',

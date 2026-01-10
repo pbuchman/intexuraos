@@ -9,13 +9,19 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_WEB_AGENT_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
+  const enrichTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];
+
   initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
+    webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'] ?? '',
+    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    bookmarkEnrichTopic: enrichTopic !== undefined && enrichTopic !== '' ? enrichTopic : null,
   });
 
   const app = await buildServer();

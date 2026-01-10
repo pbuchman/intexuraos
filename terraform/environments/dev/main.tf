@@ -1264,13 +1264,41 @@ module "bookmarks_agent" {
   }
 
   env_vars = {
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_GCP_PROJECT_ID         = var.project_id
+    INTEXURAOS_WEB_AGENT_URL          = module.web_agent.service_url
+    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH = "intexuraos-bookmark-enrich-${var.environment}"
   }
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.web_agent,
+  ]
+}
+
+# Pub/Sub for bookmark enrichment (link preview fetching)
+module "pubsub_bookmark_enrich" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-bookmark-enrich-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/enrich"
+  push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
+  push_audience              = module.bookmarks_agent.service_url
+  ack_deadline_seconds       = 60
+
+  publisher_service_accounts = {
+    bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.bookmarks_agent,
   ]
 }
 

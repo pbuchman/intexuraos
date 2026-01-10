@@ -215,6 +215,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const bookmarkId = result.value.id;
       const bookmarkUrl = `/#/bookmarks/${bookmarkId}`;
 
+      const { enrichPublisher } = getServices();
+      const publishResult = await enrichPublisher.publishEnrichBookmark({
+        type: 'bookmarks.enrich',
+        bookmarkId,
+        userId: request.body.userId,
+        url: request.body.url,
+      });
+
+      if (!publishResult.ok) {
+        request.log.warn(
+          { bookmarkId, error: publishResult.error },
+          'Failed to publish enrichment event'
+        );
+      }
+
       void reply.status(201);
       return await reply.ok({
         id: bookmarkId,

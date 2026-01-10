@@ -11,6 +11,8 @@ describe('Config', () => {
     delete process.env['INTEXURAOS_AUTH_ISSUER'];
     delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_WEB_AGENT_URL'];
+    delete process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];
   });
 
   afterEach(() => {
@@ -26,6 +28,8 @@ describe('Config', () => {
     expect(config.auth.issuer).toBe('');
     expect(config.auth.audience).toBe('');
     expect(config.internalAuthKey).toBe('');
+    expect(config.webAgentUrl).toBe('');
+    expect(config.bookmarkEnrichTopic).toBeNull();
   });
 
   it('loads values from environment variables', () => {
@@ -35,6 +39,8 @@ describe('Config', () => {
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-key';
+    process.env['INTEXURAOS_WEB_AGENT_URL'] = 'https://web-agent.example.com';
+    process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'] = 'bookmark-enrich-topic';
 
     const config = loadConfig();
 
@@ -44,5 +50,15 @@ describe('Config', () => {
     expect(config.auth.issuer).toBe('https://auth.example.com/');
     expect(config.auth.audience).toBe('test-audience');
     expect(config.internalAuthKey).toBe('secret-key');
+    expect(config.webAgentUrl).toBe('https://web-agent.example.com');
+    expect(config.bookmarkEnrichTopic).toBe('bookmark-enrich-topic');
+  });
+
+  it('returns null for bookmarkEnrichTopic when set to empty string', () => {
+    process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'] = '';
+
+    const config = loadConfig();
+
+    expect(config.bookmarkEnrichTopic).toBeNull();
   });
 });
