@@ -21,6 +21,7 @@ interface GetCommandResponse {
     command: {
       id: string;
       text: string;
+      sourceType: string;
     };
   };
 }
@@ -72,6 +73,7 @@ export function createCommandsRouterHttpClient(
       return {
         id: body.data.command.id,
         text: body.data.command.text,
+        sourceType: body.data.command.sourceType,
       };
     },
   };

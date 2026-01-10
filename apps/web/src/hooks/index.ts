@@ -1,5 +1,9 @@
 export { useApiClient, ApiError } from './useApiClient.js';
 export { useActionChanges, type UseActionChangesResult } from './useActionChanges.js';
+export {
+  useBookmarkChanges,
+  type UseBookmarkChangesResult,
+} from './useBookmarkChanges.js';
 export { useBookmarks } from './useBookmarks.js';
 export { useCalendarEvents } from './useCalendarEvents.js';
 export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';

@@ -893,7 +893,7 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
 
   return (
     <Card>
-      <button onClick={onOpen} className="w-full text-left" type="button">
+      <button onClick={onOpen} className="w-full cursor-pointer text-left" type="button">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

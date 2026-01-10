@@ -74,4 +74,5 @@ export type BookmarkErrorCode =
 export interface BookmarkError {
   code: BookmarkErrorCode;
   message: string;
+  existingBookmarkId?: string;
 }

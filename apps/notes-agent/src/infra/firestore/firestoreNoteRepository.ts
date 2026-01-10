@@ -96,7 +96,7 @@ export class FirestoreNoteRepository implements NoteRepository {
       const snapshot = await db
         .collection(COLLECTION)
         .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
+        .orderBy('updatedAt', 'desc')
         .get();
 
       const notes = snapshot.docs.map((doc) => toNote(doc.id, doc.data() as NoteDocument));

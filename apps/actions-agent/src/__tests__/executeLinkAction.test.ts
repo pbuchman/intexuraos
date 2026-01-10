@@ -5,6 +5,7 @@ import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
   FakeBookmarksServiceClient,
+  FakeCommandsRouterClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
 import pino from 'pino';
@@ -14,6 +15,7 @@ const silentLogger = pino({ level: 'silent' });
 describe('executeLinkAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
   let fakeBookmarksClient: FakeBookmarksServiceClient;
+  let fakeCommandsRouterClient: FakeCommandsRouterClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -33,13 +35,16 @@ describe('executeLinkAction usecase', () => {
   beforeEach(() => {
     fakeActionRepo = new FakeActionRepository();
     fakeBookmarksClient = new FakeBookmarksServiceClient();
+    fakeCommandsRouterClient = new FakeCommandsRouterClient();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
+    fakeCommandsRouterClient.setCommand('cmd-789', 'test command', 'whatsapp_text');
   });
 
   it('returns error when action not found', async () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -63,6 +68,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -84,6 +90,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -108,6 +115,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -141,6 +149,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -169,6 +178,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -197,6 +207,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -222,6 +233,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -250,6 +262,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -274,6 +287,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -304,6 +318,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -328,6 +343,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -342,7 +358,7 @@ describe('executeLinkAction usecase', () => {
       url: 'https://example.com/typescript',
       title: 'Great article about TypeScript',
       tags: [],
-      source: 'actions-agent',
+      source: 'whatsapp_text',
       sourceId: 'action-123',
     });
   });
@@ -358,6 +374,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -367,5 +384,51 @@ describe('executeLinkAction usecase', () => {
 
     const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
     expect(createdBookmarks[0]?.url).toBe('http://insecure-site.com/page');
+  });
+
+  it('uses fallback source when command not found', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      commandId: 'non-existent-cmd',
+      payload: { url: 'https://example.com/article' },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteLinkActionUseCase({
+      actionRepository: fakeActionRepo,
+      bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
+    expect(createdBookmarks[0]?.source).toBe('actions-agent');
+  });
+
+  it('uses command sourceType as bookmark source', async () => {
+    fakeCommandsRouterClient.setCommand('cmd-789', 'test command', 'pwa-shared');
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { url: 'https://example.com/article' },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteLinkActionUseCase({
+      actionRepository: fakeActionRepo,
+      bookmarksServiceClient: fakeBookmarksClient,
+      commandsRouterClient: fakeCommandsRouterClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
+    expect(createdBookmarks[0]?.source).toBe('pwa-shared');
   });
 });

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
@@ -112,4 +112,4 @@ export function setupTestContext(): TestContext {
   return context;
 }
 
-export { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach };
+export { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi };

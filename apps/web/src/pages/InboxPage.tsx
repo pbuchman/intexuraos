@@ -358,7 +358,28 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ActionStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<ActionStatus[]>(() => {
+    const stored = localStorage.getItem('inbox-status-filter');
+    if (stored !== null) {
+      try {
+        const parsed = JSON.parse(stored) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (s): s is ActionStatus =>
+              s === 'awaiting_approval' ||
+              s === 'approved' ||
+              s === 'rejected' ||
+              s === 'completed' ||
+              s === 'failed'
+          );
+        }
+      } catch {
+        // Invalid JSON, use defaults
+      }
+    }
+    // Default: show awaiting_approval and failed
+    return ['awaiting_approval', 'failed'];
+  });
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
   // 💰 CostGuard: Real-time action listener - only enabled when Actions tab is active
@@ -592,9 +613,12 @@ export function InboxPage(): React.JSX.Element {
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
 
-  // Handle status filter changes
+  // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
   useEffect(() => {
+    // Always persist filter state to localStorage
+    localStorage.setItem('inbox-status-filter', JSON.stringify(statusFilter));
+
     // Skip refetch if filter hasn't changed (prevents double fetch on mount)
     if (
       statusFilterRef.current.length === statusFilter.length &&

@@ -50,7 +50,7 @@ export function createMobileNotificationsClient(
           limit?: number;
         } = {
           userId,
-          limit: 100,
+          limit: 1000,
         };
 
         if (filter.app !== undefined || filter.source !== undefined || filter.title !== undefined) {
