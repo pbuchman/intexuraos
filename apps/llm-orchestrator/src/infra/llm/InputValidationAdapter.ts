@@ -10,9 +10,8 @@ import {
   inputQualityPrompt,
   isInputQualityResult,
 } from '@intexuraos/llm-common';
-import { getErrorMessage, type Result } from '@intexuraos/common-core';
+import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
-import type { Logger } from '@intexuraos/common-core';
 
 export interface ValidationResult {
   quality: 0 | 1 | 2;
@@ -40,6 +39,7 @@ export interface InputValidationProvider {
 
 export class InputValidationAdapter implements InputValidationProvider {
   private readonly client: GeminiClient;
+  private readonly model: string;
   private readonly logger: Logger | undefined;
 
   constructor(
@@ -50,20 +50,30 @@ export class InputValidationAdapter implements InputValidationProvider {
     logger?: Logger
   ) {
     this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.model = model;
     this.logger = logger;
   }
 
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
+    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Input validation LLM call failed'
+      );
+      return { ok: false, error };
     }
 
     const parsed = parseJson(result.value.content, isInputQualityResult);
     if (!parsed.ok) {
-      this.logger?.warn({ error: parsed.error }, 'Failed to parse input quality result');
+      this.logger?.error(
+        { model: this.model, parseError: parsed.error, rawContent: result.value.content },
+        'Input validation parse failed'
+      );
       return {
         ok: false,
         error: {
@@ -79,6 +89,10 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     const { usage } = result.value;
+    this.logger?.info(
+      { model: this.model, quality: parsed.value.quality, usage },
+      'Input validation completed'
+    );
     return {
       ok: true,
       value: {
@@ -94,14 +108,21 @@ export class InputValidationAdapter implements InputValidationProvider {
   }
 
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
+    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
-      return { ok: false, error: mapToLlmError(result.error) };
+      const error = mapToLlmError(result.error);
+      this.logger?.error(
+        { model: this.model, errorCode: error.code, errorMessage: error.message },
+        'Input improvement failed'
+      );
+      return { ok: false, error };
     }
 
     const { usage } = result.value;
+    this.logger?.info({ model: this.model, usage }, 'Input improvement completed');
     return {
       ok: true,
       value: {

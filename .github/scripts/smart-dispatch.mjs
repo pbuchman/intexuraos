@@ -32,6 +32,7 @@ const SERVICES = [
   'bookmarks-agent',
   'app-settings-service',
   'calendar-agent',
+  'web-agent',
 ];
 
 const SPECIAL_TARGETS = ['web', 'firestore'];

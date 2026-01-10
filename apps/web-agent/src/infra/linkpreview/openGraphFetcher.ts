@@ -1,48 +1,21 @@
-/**
- * Open Graph metadata fetcher adapter.
- * Fetches and parses HTML to extract link preview data.
- */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { LinkPreviewFetcherPort } from '../../domain/whatsapp/ports/linkPreviewFetcher.js';
-import type { LinkPreview, LinkPreviewError } from '../../domain/whatsapp/models/LinkPreview.js';
+import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
+import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
 import * as cheerio from 'cheerio';
 
-/**
- * Configuration for the Open Graph fetcher.
- */
 export interface OpenGraphFetcherConfig {
-  /**
-   * Request timeout in milliseconds.
-   * @default 5000
-   */
   timeoutMs: number;
-
-  /**
-   * Maximum response size in bytes.
-   * @default 512000 (500KB)
-   */
   maxResponseSize: number;
-
-  /**
-   * User agent string for requests.
-   */
   userAgent: string;
 }
 
-/**
- * Default configuration.
- */
 const DEFAULT_CONFIG: OpenGraphFetcherConfig = {
   timeoutMs: 5000,
   maxResponseSize: 512000,
   userAgent: 'Mozilla/5.0 (compatible; IntexuraOSBot/1.0; +https://intexuraos.cloud)',
 };
 
-/**
- * Extract favicon URL from HTML.
- */
 function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefined {
-  // Try various favicon link relations
   const iconSelectors = [
     'link[rel="icon"]',
     'link[rel="shortcut icon"]',
@@ -53,7 +26,6 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
   for (const selector of iconSelectors) {
     const href = $(selector).attr('href');
     if (href !== undefined && href !== '') {
-      // Resolve relative URLs
       try {
         return new URL(href, baseUrl).href;
       } catch {
@@ -62,19 +34,14 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
     }
   }
 
-  // Fallback to /favicon.ico
   try {
     const url = new URL(baseUrl);
     return `${url.origin}/favicon.ico`;
   } catch {
-    /* v8 ignore next - baseUrl comes from valid fetch URL, defensive only */
     return undefined;
   }
 }
 
-/**
- * Resolve image URL to absolute.
- */
 function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string | undefined {
   if (imageUrl === undefined || imageUrl === '') {
     return undefined;
@@ -87,9 +54,6 @@ function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string 
   }
 }
 
-/**
- * Open Graph metadata fetcher implementation.
- */
 export class OpenGraphFetcher implements LinkPreviewFetcherPort {
   private readonly config: OpenGraphFetcherConfig;
 
@@ -123,7 +87,6 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         });
       }
 
-      // Check content length
       const contentLength = response.headers.get('content-length');
       if (contentLength !== null && parseInt(contentLength, 10) > this.config.maxResponseSize) {
         return err({
@@ -132,7 +95,6 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         });
       }
 
-      // Read response with size limit
       const reader = response.body?.getReader();
       if (reader === undefined) {
         return err({
@@ -172,22 +134,18 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         }, new Uint8Array(0))
       );
 
-      // Parse HTML with cheerio
       const $ = cheerio.load(html);
 
-      // Extract Open Graph metadata
       const ogTitle = $('meta[property="og:title"]').attr('content');
       const ogDescription = $('meta[property="og:description"]').attr('content');
       const ogImage = $('meta[property="og:image"]').attr('content');
       const ogSiteName = $('meta[property="og:site_name"]').attr('content');
 
-      // Fallbacks
       const titleText = $('title').text().trim();
       const title = ogTitle ?? (titleText !== '' ? titleText : undefined);
       const metaDescription = $('meta[name="description"]').attr('content');
       const description = ogDescription ?? metaDescription;
 
-      // Build preview
       const preview: LinkPreview = {
         url,
       };

@@ -179,6 +179,7 @@ export interface AppConfig {
   notesAgentUrl: string;
   todosAgentUrl: string;
   bookmarksAgentUrl: string;
+  calendarAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -229,14 +230,14 @@ export interface NotificationFilter {
 
 /**
  * Saved notification filter from mobile-notifications-service.
- * Filter dimensions are arrays for multi-select.
+ * app/device are arrays for multi-select, source is single-select.
  */
 export interface SavedNotificationFilter {
   id: string;
   name: string;
   app?: string[];
   device?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
   createdAt: string;
 }
@@ -405,12 +406,13 @@ export interface GenerateTitleResponse {
 
 /**
  * Notification filter configuration for composite feeds.
+ * app is multi-select (array), source is single-select (string).
  */
 export interface CompositeFeedNotificationFilter {
   id: string;
   name: string;
   app?: string[];
-  source?: string[];
+  source?: string;
   title?: string;
 }
 
@@ -795,4 +797,38 @@ export interface AggregatedCosts {
   monthlyBreakdown: MonthlyCost[];
   byModel: ModelCost[];
   byCallType: CallTypeCost[];
+}
+
+/**
+ * Calendar event date/time specification
+ */
+export interface CalendarEventDateTime {
+  dateTime?: string;
+  date?: string;
+  timeZone?: string;
+}
+
+/**
+ * Calendar event attendee
+ */
+export interface CalendarEventAttendee {
+  email: string;
+  optional?: boolean;
+  responseStatus?: string;
+}
+
+/**
+ * Calendar event from calendar-agent
+ */
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  start: CalendarEventDateTime;
+  end: CalendarEventDateTime;
+  attendees?: CalendarEventAttendee[];
+  htmlLink?: string;
+  created?: string;
+  updated?: string;
 }

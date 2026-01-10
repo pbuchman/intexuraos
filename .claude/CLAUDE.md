@@ -13,10 +13,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Verification (MANDATORY)
 
 ```bash
-npm run ci                    # MUST pass before task completion
+npm run ci:tracked            # MUST pass before task completion (auto-tracks failures)
 tf fmt -check -recursive      # If terraform changed (from /terraform)
 tf validate                   # If terraform changed
 ```
+
+Failure data is stored in `.claude/ci-failures/` for learning. Run `npm run ci:report` to see patterns.
 
 **IMPORTANT:** Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
 

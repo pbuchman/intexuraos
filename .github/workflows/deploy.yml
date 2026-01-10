@@ -124,7 +124,7 @@ jobs:
   deploy-individual:
     name: Deploy Individual Services
     needs: analyze
-    if: needs.analyze.outputs.strategy == 'INDIVIDUAL'
+    if: needs.analyze.outputs.strategy == 'INDIVIDUAL' && github.event.inputs.force_strategy != 'monolith'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

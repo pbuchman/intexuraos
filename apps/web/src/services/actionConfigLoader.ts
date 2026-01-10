@@ -19,7 +19,7 @@ interface CacheEntry {
   timestamp: number;
 }
 
-const CACHE_DURATION_MS = import.meta.env.DEV ? 0 : 60_000; // 1 min in prod, no cache in dev
+const CACHE_DURATION_MS = import.meta.env.DEV ? 60_000 : Infinity;
 let cachedConfig: CacheEntry | null = null;
 
 /**

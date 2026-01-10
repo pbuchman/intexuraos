@@ -535,6 +535,38 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===== web-agent =====
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-web-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== Building web-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/web-agent:latest || true
+        docker build \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/web-agent:latest \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t ${_ARTIFACT_REGISTRY_URL}/web-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/web-agent:latest \
+          -f apps/web-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/web-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/web-agent:latest
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-web-agent'
+    waitFor: ['build-push-web-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-web-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   # ===== web (static frontend) =====
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-secrets'
