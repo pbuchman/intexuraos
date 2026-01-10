@@ -207,6 +207,26 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: bookmarkResponseSchema,
             },
           },
+          409: {
+            description: 'Bookmark with this URL already exists',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                  details: {
+                    type: 'object',
+                    properties: {
+                      existingBookmarkId: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -232,7 +252,9 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) {
         if (result.error.code === 'DUPLICATE_URL') {
-          return await reply.fail('CONFLICT', result.error.message);
+          return await reply.fail('CONFLICT', result.error.message, undefined, {
+            existingBookmarkId: result.error.existingBookmarkId,
+          });
         }
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
@@ -494,6 +516,132 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(formatBookmark(result.value));
+    }
+  );
+
+  fastify.get<{ Querystring: { url: string } }>(
+    '/images/proxy',
+    {
+      schema: {
+        operationId: 'proxyImage',
+        summary: 'Proxy external image',
+        description:
+          'Proxy an external image to bypass CORS restrictions. No authentication required as original images are already public.',
+        tags: ['images'],
+        querystring: {
+          type: 'object',
+          required: ['url'],
+          properties: {
+            url: { type: 'string', description: 'URL-encoded image URL to proxy' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Proxied image',
+            type: 'string',
+            contentMediaType: 'image/*',
+          },
+          400: {
+            description: 'Invalid URL',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Querystring: { url: string } }>,
+      reply: FastifyReply
+    ): Promise<void> => {
+      const { url: encodedUrl } = request.query;
+
+      let imageUrl: string;
+      try {
+        imageUrl = decodeURIComponent(encodedUrl);
+        const parsed = new URL(imageUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          void reply.status(400);
+          await reply.send({
+            success: false,
+            error: { code: 'INVALID_URL', message: 'Only HTTP/HTTPS URLs are allowed' },
+          });
+          return;
+        }
+      } catch {
+        void reply.status(400);
+        await reply.send({
+          success: false,
+          error: { code: 'INVALID_URL', message: 'Invalid URL format' },
+        });
+        return;
+      }
+
+      request.log.info({ imageUrl }, 'Proxying image');
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+          controller.abort();
+        }, 10000);
+
+        const response = await fetch(imageUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (compatible; IntexuraOS/1.0; +https://intexuraos.cloud)',
+            Accept: 'image/*',
+          },
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          request.log.warn({ imageUrl, status: response.status }, 'Failed to fetch image');
+          void reply.status(response.status);
+          await reply.send({
+            success: false,
+            error: { code: 'FETCH_FAILED', message: `Failed to fetch image: ${String(response.status)}` },
+          });
+          return;
+        }
+
+        const contentType = response.headers.get('content-type') ?? 'image/jpeg';
+        if (!contentType.startsWith('image/')) {
+          void reply.status(400);
+          await reply.send({
+            success: false,
+            error: { code: 'NOT_AN_IMAGE', message: 'URL does not point to an image' },
+          });
+          return;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        void reply.header('Content-Type', contentType);
+        void reply.header('Cache-Control', 'public, max-age=86400');
+        void reply.header('Access-Control-Allow-Origin', '*');
+        await reply.send(buffer);
+      } catch (error) {
+        const isAborted = error instanceof Error && error.name === 'AbortError';
+        request.log.error({ imageUrl, error: String(error), isAborted }, 'Error proxying image');
+        void reply.status(isAborted ? 504 : 500);
+        await reply.send({
+          success: false,
+          error: {
+            code: isAborted ? 'TIMEOUT' : 'PROXY_ERROR',
+            message: isAborted ? 'Image fetch timed out' : 'Failed to proxy image',
+          },
+        });
+      }
     }
   );
 

@@ -8,6 +8,12 @@ describe('isInputQualityResult', () => {
     expect(isInputQualityResult({ quality: 2, reason: 'test' })).toBe(true);
   });
 
+  it('accepts quality_scale as alias for quality', () => {
+    expect(isInputQualityResult({ quality_scale: 0, reason: 'test' })).toBe(true);
+    expect(isInputQualityResult({ quality_scale: 1, reason: 'test' })).toBe(true);
+    expect(isInputQualityResult({ quality_scale: 2, reason: 'test' })).toBe(true);
+  });
+
   it('returns false for invalid quality values', () => {
     expect(isInputQualityResult({ quality: 3, reason: 'test' })).toBe(false);
     expect(isInputQualityResult({ quality: -1, reason: 'test' })).toBe(false);

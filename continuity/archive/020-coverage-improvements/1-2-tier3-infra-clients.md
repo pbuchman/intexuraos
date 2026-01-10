@@ -10,7 +10,7 @@ These are 0% coverage files in `apps/research-agent/src/infra/` that need new te
 | --- | -------------------------------------------------------------------------- | -------- | --- | ----- | ------ |
 | 1   | `apps/research-agent/src/infra/action/commandsRouterClient.ts`             | 100%     | -   | -     | Done   |
 | 2   | `apps/research-agent/src/infra/notification/whatsappNotificationSender.ts` | 100%     | -   | -     | Done   |
-| 3   | `apps/research-agent/src/infra/research/llmOrchestratorClient.ts`          | 100%     | -   | -     | Done   |
+| 3   | `apps/research-agent/src/infra/research/ResearchAgentClient.ts`            | 100%     | -   | -     | Done   |
 
 ## Verification
 

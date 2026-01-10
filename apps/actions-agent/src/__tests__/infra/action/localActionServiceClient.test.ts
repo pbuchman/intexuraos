@@ -35,6 +35,46 @@ describe('localActionServiceClient', () => {
     vi.clearAllMocks();
   });
 
+  describe('getAction', () => {
+    it('returns action successfully', async () => {
+      const client = createLocalActionServiceClient(mockRepository);
+
+      const result = await client.getAction('action-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(existingAction);
+      }
+      expect(mockRepository.getById).toHaveBeenCalledWith('action-123');
+    });
+
+    it('returns null when action not found', async () => {
+      (mockRepository.getById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      const client = createLocalActionServiceClient(mockRepository);
+
+      const result = await client.getAction('nonexistent');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns error when repository throws', async () => {
+      (mockRepository.getById as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Database error')
+      );
+      const client = createLocalActionServiceClient(mockRepository);
+
+      const result = await client.getAction('action-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Failed to get action');
+      }
+    });
+  });
+
   describe('updateActionStatus', () => {
     it('updates action status successfully', async () => {
       const client = createLocalActionServiceClient(mockRepository);

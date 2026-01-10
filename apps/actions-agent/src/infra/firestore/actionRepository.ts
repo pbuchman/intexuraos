@@ -88,7 +88,7 @@ export function createFirestoreActionRepository(): ActionRepository {
         query = query.where('status', 'in', options.status);
       }
 
-      const snapshot = await query.orderBy('createdAt', 'desc').limit(100).get();
+      const snapshot = await query.orderBy('updatedAt', 'desc').limit(100).get();
 
       return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
     },

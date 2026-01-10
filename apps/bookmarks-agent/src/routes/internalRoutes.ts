@@ -207,7 +207,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) {
         if (result.error.code === 'DUPLICATE_URL') {
-          return await reply.fail('CONFLICT', result.error.message);
+          return await reply.fail('CONFLICT', result.error.message, undefined, {
+            existingBookmarkId: result.error.existingBookmarkId,
+          });
         }
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }

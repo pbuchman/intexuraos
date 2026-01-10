@@ -24,7 +24,7 @@ Improve test coverage to 100% across all packages and apps.
 1. Tier 3: Created tests for research-agent infra clients (3 files, 19 tests)
    - `commandsRouterClient.test.ts` - 8 tests
    - `whatsappNotificationSender.test.ts` - 4 tests
-   - `llmOrchestratorClient.test.ts` - 7 tests
+   - `ResearchAgentClient.test.ts` - 7 tests
 
 ## Now
 

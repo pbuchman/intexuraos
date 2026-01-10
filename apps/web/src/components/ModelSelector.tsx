@@ -1,6 +1,7 @@
+import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import type { LlmProvider, SupportedModel } from '@/services/llmOrchestratorApi.types';
+import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
 
 interface ModelOption {
   id: SupportedModel;
@@ -90,13 +91,20 @@ export function ModelSelector({
                   className={`font-medium ${!isRowDisabled ? 'text-slate-900' : 'text-slate-400'}`}
                 >
                   {provider.displayName}
-                  {!isConfigured ? ' (no key)' : ''}
                   {isProviderDisabled && isConfigured ? ' (already selected)' : ''}
                 </span>
                 {isActive ? (
                   <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
                     Active
                   </span>
+                ) : null}
+                {!isConfigured ? (
+                  <Link
+                    to="/settings/api-keys"
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    Configure API key →
+                  </Link>
                 ) : null}
               </div>
 

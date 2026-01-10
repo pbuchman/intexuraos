@@ -1,4 +1,4 @@
-# Task 6-2: Create LLM Orchestrator Types and API Client
+# Task 6-2: Create Research Agent Types and API Client
 
 **Tier:** 6 (Depends on backend Tier 5)
 
@@ -16,7 +16,7 @@
 
 ## Problem Statement
 
-Create TypeScript types and API client for the LLM Orchestrator research feature.
+Create TypeScript types and API client for the Research Agent research feature.
 
 ---
 
@@ -38,7 +38,7 @@ Create TypeScript types and API client for the LLM Orchestrator research feature
 
 ### Step 1: Create types file
 
-`apps/web/src/services/llmOrchestratorApi.types.ts`:
+`apps/web/src/services/ResearchAgentApi.types.ts`:
 
 ```typescript
 export type LlmProvider = 'google' | 'openai' | 'anthropic';
@@ -84,25 +84,25 @@ export interface ListResearchesResponse {
 
 ### Step 2: Create API client
 
-`apps/web/src/services/llmOrchestratorApi.ts`:
+`apps/web/src/services/ResearchAgentApi.ts`:
 
 ```typescript
 import type {
   Research,
   CreateResearchRequest,
   ListResearchesResponse,
-} from './llmOrchestratorApi.types.js';
+} from './ResearchAgentApi.types.js';
 
-const BASE_URL = import.meta.env.INTEXURAOS_LLM_ORCHESTRATOR_URL ?? '';
+const BASE_URL = import.meta.env.INTEXURAOS_RESEARCH_AGENT_URL ?? '';
 
-export interface LlmOrchestratorApi {
+export interface ResearchAgentApi {
   createResearch(request: CreateResearchRequest): Promise<Research>;
   listResearches(cursor?: string, limit?: number): Promise<ListResearchesResponse>;
   getResearch(id: string): Promise<Research>;
   deleteResearch(id: string): Promise<void>;
 }
 
-export function createLlmOrchestratorApi(getToken: () => Promise<string>): LlmOrchestratorApi {
+export function createResearchAgentApi(getToken: () => Promise<string>): ResearchAgentApi {
   const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
     const token = await getToken();
     return fetch(url, {
@@ -171,11 +171,8 @@ export function createLlmOrchestratorApi(getToken: () => Promise<string>): LlmOr
 ```typescript
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import {
-  createLlmOrchestratorApi,
-  type LlmOrchestratorApi,
-} from '../services/llmOrchestratorApi.js';
-import type { Research, CreateResearchRequest } from '../services/llmOrchestratorApi.types.js';
+import { createResearchAgentApi, type ResearchAgentApi } from '../services/ResearchAgentApi.js';
+import type { Research, CreateResearchRequest } from '../services/ResearchAgentApi.types.js';
 
 export function useResearch(id: string): {
   research: Research | null;
@@ -189,7 +186,7 @@ export function useResearch(id: string): {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
-    const api = createLlmOrchestratorApi(getAccessTokenSilently);
+    const api = createResearchAgentApi(getAccessTokenSilently);
     setLoading(true);
     setError(null);
     try {
@@ -237,8 +234,8 @@ export function useResearches(): {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
 
-  const getApi = useCallback((): LlmOrchestratorApi => {
-    return createLlmOrchestratorApi(getAccessTokenSilently);
+  const getApi = useCallback((): ResearchAgentApi => {
+    return createResearchAgentApi(getAccessTokenSilently);
   }, [getAccessTokenSilently]);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -310,8 +307,8 @@ export function useResearches(): {
 
 ## Step Checklist
 
-- [ ] Create `llmOrchestratorApi.types.ts`
-- [ ] Create `llmOrchestratorApi.ts`
+- [ ] Create `ResearchAgentApi.types.ts`
+- [ ] Create `ResearchAgentApi.ts`
 - [ ] Create `useResearch.ts` hook
 - [ ] Create `useResearches.ts` hook
 - [ ] Run verification commands

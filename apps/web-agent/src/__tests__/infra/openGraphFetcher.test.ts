@@ -7,7 +7,7 @@ describe('OpenGraphFetcher', () => {
 
   beforeAll(() => {
     nock.disableNetConnect();
-    fetcher = new OpenGraphFetcher({ timeoutMs: 5000, maxResponseSize: 512000 });
+    fetcher = new OpenGraphFetcher({ timeoutMs: 5000, maxResponseSize: 2097152 });
   });
 
   afterAll(() => {

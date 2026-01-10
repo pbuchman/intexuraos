@@ -52,9 +52,9 @@ npm run test:coverage
 
 Check the coverage for:
 
-- `apps/llm-orchestrator-service/src/domain/**`
-- `apps/llm-orchestrator-service/src/routes/**`
-- `apps/llm-orchestrator-service/src/infra/**`
+- `apps/research-agent-service/src/domain/**`
+- `apps/research-agent-service/src/routes/**`
+- `apps/research-agent-service/src/infra/**`
 
 ### Step 3: Identify gaps
 
@@ -75,7 +75,7 @@ If coverage is below threshold:
 ### Step 5: Verify final coverage
 
 ```bash
-npm run test:coverage 2>&1 | grep -A10 "llm-orchestrator-service"
+npm run test:coverage 2>&1 | grep -A10 "research-agent-service"
 ```
 
 ---

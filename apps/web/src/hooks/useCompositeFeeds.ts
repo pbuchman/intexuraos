@@ -90,7 +90,7 @@ interface UseCompositeFeedResult {
   getFeedData: () => Promise<CompositeFeedData>;
   feedData: CompositeFeedData | null;
   feedDataLoading: boolean;
-  getSnapshot: () => Promise<CompositeFeedSnapshot | null>;
+  getSnapshot: (options?: { refresh?: boolean }) => Promise<CompositeFeedSnapshot | null>;
   snapshot: CompositeFeedSnapshot | null;
   snapshotLoading: boolean;
 }
@@ -159,21 +159,24 @@ export function useCompositeFeed(id: string): UseCompositeFeedResult {
     }
   }, [id, getAccessToken]);
 
-  const getSnapshot = useCallback(async (): Promise<CompositeFeedSnapshot | null> => {
-    if (id === '') {
-      throw new Error('No composite feed ID');
-    }
+  const getSnapshot = useCallback(
+    async (options?: { refresh?: boolean }): Promise<CompositeFeedSnapshot | null> => {
+      if (id === '') {
+        throw new Error('No composite feed ID');
+      }
 
-    setSnapshotLoading(true);
-    try {
-      const token = await getAccessToken();
-      const data = await getCompositeFeedSnapshotApi(token, id);
-      setSnapshot(data);
-      return data;
-    } finally {
-      setSnapshotLoading(false);
-    }
-  }, [id, getAccessToken]);
+      setSnapshotLoading(true);
+      try {
+        const token = await getAccessToken();
+        const data = await getCompositeFeedSnapshotApi(token, id, options);
+        setSnapshot(data);
+        return data;
+      } finally {
+        setSnapshotLoading(false);
+      }
+    },
+    [id, getAccessToken]
+  );
 
   return {
     compositeFeed,

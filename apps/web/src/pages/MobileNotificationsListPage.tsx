@@ -791,7 +791,9 @@ export function MobileNotificationsListPage(): React.JSX.Element {
 
       {notifications.length > 0 ? (
         <p className="mt-6 text-center text-sm text-slate-500">
-          Showing {String(notifications.length)} notification{notifications.length === 1 ? '' : 's'}
+          Showing {String(notifications.length)} notification
+          {notifications.length === 1 ? '' : 's'}
+          {nextCursor !== undefined ? ' (more available)' : ''}
         </p>
       ) : null}
     </Layout>

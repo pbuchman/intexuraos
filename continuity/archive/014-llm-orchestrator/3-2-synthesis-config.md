@@ -41,7 +41,7 @@ Define the synthesis prompt template used by Gemini to combine research outputs 
 ### Step 1: Create config directory
 
 ```bash
-mkdir -p apps/llm-orchestrator-service/src/domain/research/config
+mkdir -p apps/research-agent-service/src/domain/research/config
 ```
 
 ### Step 2: Create config/synthesisPrompt.ts

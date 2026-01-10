@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -28,6 +29,11 @@ const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
 async function main(): Promise<void> {
   const config = loadConfig();
 
+  const logger = pino({
+    name: 'data-insights-service',
+    level: process.env['LOG_LEVEL'] ?? 'info',
+  });
+
   // Fetch pricing from app-settings-service
   process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
   const pricingResult = await fetchAllPricing(
@@ -53,6 +59,7 @@ async function main(): Promise<void> {
     mobileNotificationsClient: createMobileNotificationsClient({
       baseUrl: config.mobileNotificationsServiceUrl,
       internalAuthToken: config.internalAuthToken,
+      logger,
     }),
     snapshotRepository: new FirestoreSnapshotRepository(),
   });

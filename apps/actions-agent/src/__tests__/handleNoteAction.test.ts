@@ -146,6 +146,42 @@ describe('handleNoteAction usecase', () => {
     expect(actionStatus).toBe('awaiting_approval');
   });
 
+  it('returns success when getAction fails (deleted action)', async () => {
+    const usecase = createHandleNoteActionUseCase({
+      actionServiceClient: fakeActionClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    fakeActionClient.setFailOn('getAction', new Error('Database error'));
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
+    }
+  });
+
+  it('returns success when action is null (deleted between creation and handling)', async () => {
+    const usecase = createHandleNoteActionUseCase({
+      actionServiceClient: fakeActionClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
+    }
+  });
+
   it('returns success without sending notification when action already processed (idempotency)', async () => {
     const usecase = createHandleNoteActionUseCase({
       actionServiceClient: fakeActionClient,

@@ -6,7 +6,7 @@
 
 ## Context Snapshot
 
-- LLM Orchestrator runs research prompts on multiple LLMs including Gemini
+- Research Agent runs research prompts on multiple LLMs including Gemini
 - Gemini is unique: provides Google Search grounding for real-time web info
 - Gemini also performs synthesis of results from multiple LLMs
 - Uses `@google/generative-ai` SDK

@@ -1,12 +1,12 @@
 #!/bin/bash
 # Targeted verification for a single workspace
 # Usage: ./scripts/verify-workspace.sh <workspace-name>
-# Example: ./scripts/verify-workspace.sh llm-orchestrator
+# Example: ./scripts/verify-workspace.sh research-agent
 
 WORKSPACE=$1
 if [ -z "$WORKSPACE" ]; then
   echo "Usage: $0 <workspace-name>"
-  echo "Example: $0 llm-orchestrator"
+  echo "Example: $0 research-agent"
   exit 1
 fi
 

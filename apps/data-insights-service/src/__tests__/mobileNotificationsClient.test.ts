@@ -64,7 +64,7 @@ describe('mobileNotificationsClient', () => {
     it('sends userId and limit in request body', async () => {
       nock(baseUrl)
         .post('/internal/mobile-notifications/query', (body) => {
-          return body.userId === userId && body.limit === 100;
+          return body.userId === userId && body.limit === 1000;
         })
         .reply(200, { success: true, data: { notifications: [] } });
 

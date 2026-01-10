@@ -46,7 +46,7 @@ Create unit tests for:
 
 ### Step 1: Create fake LLM providers
 
-`apps/llm-orchestrator-service/src/__tests__/fakes/FakeLlmProviders.ts`:
+`apps/research-agent-service/src/__tests__/fakes/FakeLlmProviders.ts`:
 
 ```typescript
 import { ok, err, type Result } from '@intexuraos/common-core';
@@ -104,7 +104,7 @@ export class FakeSynthesizer implements LlmSynthesisProvider {
 
 ### Step 2: Create fake notification sender
 
-`apps/llm-orchestrator-service/src/__tests__/fakes/FakeNotificationSender.ts`:
+`apps/research-agent-service/src/__tests__/fakes/FakeNotificationSender.ts`:
 
 ```typescript
 import { ok, type Result } from '@intexuraos/common-core';
@@ -130,7 +130,7 @@ export class FakeNotificationSender implements NotificationSender {
 
 ### Step 3: Create usecase tests
 
-`apps/llm-orchestrator-service/src/__tests__/usecases.test.ts`:
+`apps/research-agent-service/src/__tests__/usecases.test.ts`:
 
 ```typescript
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -323,7 +323,7 @@ describe('Research Usecases', () => {
 ## Verification Commands
 
 ```bash
-npm run test -- apps/llm-orchestrator-service
+npm run test -- apps/research-agent-service
 ```
 
 ---
