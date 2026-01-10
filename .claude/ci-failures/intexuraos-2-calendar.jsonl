@@ -2,3 +2,6 @@
 {"ts":"2026-01-09T23:37:00.785Z","project":"intexuraos-2","branch":"calendar","runNumber":2,"passed":false,"durationMs":119346,"failureCount":1,"failures":[{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
 {"ts":"2026-01-09T23:44:55.270Z","project":"intexuraos-2","branch":"calendar","runNumber":3,"passed":true,"durationMs":126017,"failureCount":0,"failures":[]}
 {"ts":"2026-01-10T00:13:15.831Z","project":"intexuraos-2","branch":"calendar","runNumber":4,"passed":true,"durationMs":154114,"failureCount":0,"failures":[]}
+{"ts":"2026-01-10T00:21:14.215Z","project":"intexuraos-2","branch":"calendar","runNumber":5,"passed":false,"durationMs":76679,"failureCount":2,"failures":[{"type":"typecheck","code":"TS6133","file":"src/pages/CalendarPage.tsx","line":16,"message":"'formatEventTime' is declared but its value is never read.","snippet":null,"context":null},{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
+{"ts":"2026-01-10T00:23:24.164Z","project":"intexuraos-2","branch":"calendar","runNumber":6,"passed":true,"durationMs":101015,"failureCount":0,"failures":[]}
+{"ts":"2026-01-10T00:31:26.144Z","project":"intexuraos-2","branch":"calendar","runNumber":7,"passed":true,"durationMs":123294,"failureCount":0,"failures":[]}

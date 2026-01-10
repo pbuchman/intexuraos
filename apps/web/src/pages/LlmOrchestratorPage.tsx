@@ -52,7 +52,6 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showSingleProviderConfirm, setShowSingleProviderConfirm] = useState(false);
-  const [pendingResearchId, setPendingResearchId] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -303,7 +302,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
   const selectedModels = getSelectedModelsList(modelSelections);
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
-  const executeSubmit = async (showConfirmation: boolean): Promise<void> => {
+  const executeSubmit = async (): Promise<void> => {
     setSubmitting(true);
     setError(null);
 
@@ -343,14 +342,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
           request.inputContexts = contextObjects;
         }
         const research = await createResearch(token, request);
-
-        if (showConfirmation) {
-          setPendingResearchId(research.id);
-          setShowSingleProviderConfirm(true);
-          setSubmitting(false);
-        } else {
-          void navigate(`/research/${research.id}`);
-        }
+        void navigate(`/research/${research.id}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create research');
@@ -406,29 +398,22 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       }
     }
 
-    await executeSubmit(isSingleModelNoContext);
+    // Show confirmation dialog for single model without context (new research only)
+    if (isSingleModelNoContext && !isEditMode) {
+      setShowSingleProviderConfirm(true);
+      return;
+    }
+
+    await executeSubmit();
   };
 
   const handleConfirmProceed = (): void => {
-    if (pendingResearchId !== null) {
-      setShowSingleProviderConfirm(false);
-      void navigate(`/research/${pendingResearchId}`);
-    }
+    setShowSingleProviderConfirm(false);
+    void executeSubmit();
   };
 
-  const handleConfirmDiscard = async (): Promise<void> => {
-    if (pendingResearchId === null) return;
-
-    setDiscarding(true);
-    try {
-      const token = await getAccessToken();
-      const { deleteResearch } = await import('@/services/llmOrchestratorApi');
-      await deleteResearch(token, pendingResearchId);
-      window.location.reload();
-    } catch {
-      setError('Failed to discard research');
-      setDiscarding(false);
-    }
+  const handleConfirmDiscard = (): void => {
+    setShowSingleProviderConfirm(false);
   };
 
   const handleUseImprovedPrompt = (): void => {
@@ -438,8 +423,13 @@ export function LlmOrchestratorPage(): React.JSX.Element {
       setShowImprovementModal(false);
       setValidationWarning(null);
 
-      // Proceed with submission after accepting improved prompt
-      void executeSubmit(isSingleModelNoContext);
+      // Check for single model confirmation after improvement modal
+      if (isSingleModelNoContext && !isEditMode) {
+        setShowSingleProviderConfirm(true);
+        return;
+      }
+
+      void executeSubmit();
     }
   };
 
@@ -448,8 +438,13 @@ export function LlmOrchestratorPage(): React.JSX.Element {
     setShowImprovementModal(false);
     setValidationWarning(null);
 
-    // Proceed with submission using original prompt
-    void executeSubmit(isSingleModelNoContext);
+    // Check for single model confirmation after improvement modal
+    if (isSingleModelNoContext && !isEditMode) {
+      setShowSingleProviderConfirm(true);
+      return;
+    }
+
+    void executeSubmit();
   };
 
   const handleDiscardDraft = async (): Promise<void> => {
@@ -774,7 +769,7 @@ export function LlmOrchestratorPage(): React.JSX.Element {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Single Model Research</h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Research started with only one model (
+                  You selected only one model (
                   {PROVIDER_MODELS.flatMap((p) => p.models).find((m) => m.id === selectedModels[0])
                     ?.name ?? selectedModels[0]}
                   ) and no additional context.
@@ -787,15 +782,16 @@ export function LlmOrchestratorPage(): React.JSX.Element {
             <div className="flex justify-end gap-3">
               <Button
                 variant="secondary"
-                onClick={(): void => {
-                  void handleConfirmDiscard();
-                }}
-                disabled={discarding}
-                isLoading={discarding}
+                onClick={handleConfirmDiscard}
+                disabled={submitting}
               >
-                Discard
+                Cancel
               </Button>
-              <Button onClick={handleConfirmProceed} disabled={discarding}>
+              <Button
+                onClick={handleConfirmProceed}
+                disabled={submitting}
+                isLoading={submitting}
+              >
                 Proceed
               </Button>
             </div>

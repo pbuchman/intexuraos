@@ -179,6 +179,7 @@ export interface AppConfig {
   notesAgentUrl: string;
   todosAgentUrl: string;
   bookmarksAgentUrl: string;
+  calendarAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -795,4 +796,38 @@ export interface AggregatedCosts {
   monthlyBreakdown: MonthlyCost[];
   byModel: ModelCost[];
   byCallType: CallTypeCost[];
+}
+
+/**
+ * Calendar event date/time specification
+ */
+export interface CalendarEventDateTime {
+  dateTime?: string;
+  date?: string;
+  timeZone?: string;
+}
+
+/**
+ * Calendar event attendee
+ */
+export interface CalendarEventAttendee {
+  email: string;
+  optional?: boolean;
+  responseStatus?: string;
+}
+
+/**
+ * Calendar event from calendar-agent
+ */
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  start: CalendarEventDateTime;
+  end: CalendarEventDateTime;
+  attendees?: CalendarEventAttendee[];
+  htmlLink?: string;
+  created?: string;
+  updated?: string;
 }
