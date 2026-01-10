@@ -231,7 +231,6 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
           void handleToggleStatus();
         }}
         className="mt-0.5 shrink-0"
-        disabled={!isEditing}
       >
         <ItemStatusIcon status={item.status} />
       </button>
