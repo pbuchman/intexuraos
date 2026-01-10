@@ -109,15 +109,18 @@ export async function getCompositeFeedData(
 /**
  * Get pre-computed snapshot for a composite feed.
  * Returns cached data computed by scheduler (refreshed every 15 minutes).
+ * Use refresh=true to force recalculation.
  */
 export async function getCompositeFeedSnapshot(
   accessToken: string,
-  id: string
+  id: string,
+  options?: { refresh?: boolean }
 ): Promise<CompositeFeedSnapshot | null> {
   try {
+    const queryParams = options?.refresh === true ? '?refresh=true' : '';
     return await apiRequest<CompositeFeedSnapshot>(
       config.dataInsightsServiceUrl,
-      `/composite-feeds/${id}/snapshot`,
+      `/composite-feeds/${id}/snapshot${queryParams}`,
       accessToken
     );
   } catch (error) {

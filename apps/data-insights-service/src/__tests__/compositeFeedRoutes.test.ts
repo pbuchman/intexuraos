@@ -982,5 +982,42 @@ describe('compositeFeedRoutes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('forces refresh when refresh=true query param is provided', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot?refresh=true`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(true);
+      expect(body.data.feedId).toBe(feed?.id);
+      expect(body.data.feedName).toBe('Test Feed');
+    });
+
+    it('returns error when refresh fails due to non-existent feed', async () => {
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/composite-feeds/non-existent/snapshot?refresh=true',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+    });
   });
 });
