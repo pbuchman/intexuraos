@@ -129,3 +129,9 @@ export INTEXURAOS_USER_ID="google-oauth2|113131655542389277022"
 # =============================================================================
 # Used for redirect URIs in Auth0 SPA configuration during local development
 export INTEXURAOS_WEB_APP_URL="http://localhost:3000"
+
+# =============================================================================
+# Goocle Calendar Integration (for local testing)
+# =============================================================================
+# Used by calendar-agent for Google Calendar API integration during local development
+export INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8110/oauth/connections/google/callback
