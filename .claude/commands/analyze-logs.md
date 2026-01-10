@@ -255,7 +255,7 @@ Observation to store:
 | research-agent               | intexuraos-research-agent               |
 | commands-agent               | intexuraos-commands-agent               |
 | actions-agent                | intexuraos-actions-agent                |
-| data-insights-agent        | intexuraos-data-insights-agent        |
+| data-insights-agent          | intexuraos-data-insights-agent          |
 
 ---
 

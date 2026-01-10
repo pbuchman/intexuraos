@@ -8,9 +8,9 @@ output "service_accounts" {
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
     research_agent               = google_service_account.research_agent.email
-    commands_agent              = google_service_account.commands_agent.email
+    commands_agent               = google_service_account.commands_agent.email
     actions_agent                = google_service_account.actions_agent.email
-    data_insights_agent        = google_service_account.data_insights_agent.email
+    data_insights_agent          = google_service_account.data_insights_agent.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
     app_settings_service         = google_service_account.app_settings_service.email
