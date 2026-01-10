@@ -10,7 +10,7 @@ output "service_accounts" {
     research_agent               = google_service_account.research_agent.email
     commands_agent              = google_service_account.commands_agent.email
     actions_agent                = google_service_account.actions_agent.email
-    data_insights_service        = google_service_account.data_insights_service.email
+    data_insights_agent        = google_service_account.data_insights_agent.email
     image_service                = google_service_account.image_service.email
     notes_agent                  = google_service_account.notes_agent.email
     app_settings_service         = google_service_account.app_settings_service.email
@@ -66,9 +66,9 @@ output "actions_agent_sa" {
   value       = google_service_account.actions_agent.email
 }
 
-output "data_insights_service_sa" {
-  description = "Data Insights Service service account email"
-  value       = google_service_account.data_insights_service.email
+output "data_insights_agent_sa" {
+  description = "Data Insights Agent service account email"
+  value       = google_service_account.data_insights_agent.email
 }
 
 output "image_service_sa" {

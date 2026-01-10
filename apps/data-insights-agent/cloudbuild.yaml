@@ -6,15 +6,15 @@ steps:
     args:
       - '-c'
       - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
+        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest || true
         docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
-          -f apps/data-insights-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest \
+          -f apps/data-insights-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest
     env: ['DOCKER_BUILDKIT=1']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

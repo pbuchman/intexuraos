@@ -64,7 +64,7 @@ const SERVICES = [
   // these services depend on app-settings-service, so start them after
   { name: 'user-service', port: 8110, color: '\x1b[36m' },
   { name: 'research-agent', port: 8116, color: '\x1b[96m' },
-  { name: 'data-insights-service', port: 8119, color: '\x1b[92m' },
+  { name: 'data-insights-agent', port: 8119, color: '\x1b[92m' },
   { name: 'image-service', port: 8120, color: '\x1b[91m' },
 ];
 
@@ -300,7 +300,7 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://localhost:8117/openapi.json',
   INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
-  INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
+  INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL: 'http://localhost:8119/openapi.json',
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122/openapi.json',
@@ -331,7 +331,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
   INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
   INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
-  INTEXURAOS_DATA_INSIGHTS_SERVICE_URL: 'http://localhost:8119',
+  INTEXURAOS_DATA_INSIGHTS_AGENT_URL: 'http://localhost:8119',
   INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
   INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',

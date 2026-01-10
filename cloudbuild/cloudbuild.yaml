@@ -319,16 +319,16 @@ steps:
     args:
       - '-c'
       - |
-        echo "=== Building data-insights-service ==="
-        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest || true
+        echo "=== Building data-insights-agent ==="
+        docker pull ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest || true
         docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
+          --cache-from=${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest \
-          -f apps/data-insights-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-service:latest
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:$COMMIT_SHA \
+          -t ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest \
+          -f apps/data-insights-agent/Dockerfile .
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:$COMMIT_SHA
+        docker push ${_ARTIFACT_REGISTRY_URL}/data-insights-agent:latest
     env:
       - 'DOCKER_BUILDKIT=1'
 
@@ -589,7 +589,7 @@ steps:
           "research-agent:RESEARCH_AGENT"
           "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
-          "data-insights-service:DATA_INSIGHTS_SERVICE"
+          "data-insights-agent:DATA_INSIGHTS_AGENT"
           "notes-agent:NOTES_AGENT"
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
