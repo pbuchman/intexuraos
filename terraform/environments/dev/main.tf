@@ -255,9 +255,9 @@ locals {
     INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_COMMANDS_AGENT_URL              = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_COMMANDS_AGENT_URL               = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_DATA_INSIGHTS_AGENT_URL        = "https://${local.services.data_insights_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_DATA_INSIGHTS_AGENT_URL          = "https://${local.services.data_insights_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_IMAGE_SERVICE_URL                = "https://${local.services.image_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
@@ -619,7 +619,7 @@ module "pubsub_actions_queue" {
 
   publisher_service_accounts = {
     commands_agent = module.iam.service_accounts["commands_agent"]
-    actions_agent   = module.iam.service_accounts["actions_agent"]
+    actions_agent  = module.iam.service_accounts["actions_agent"]
   }
 
   depends_on = [
@@ -920,9 +920,9 @@ module "api_docs_hub" {
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
     INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
-    INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL              = "${module.commands_agent.service_url}/openapi.json"
+    INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL               = "${module.commands_agent.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
-    INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL        = "${module.data_insights_agent.service_url}/openapi.json"
+    INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL          = "${module.data_insights_agent.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
     INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL         = "${module.app_settings_service.service_url}/openapi.json"
     INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
