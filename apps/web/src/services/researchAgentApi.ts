@@ -8,7 +8,7 @@ import type {
   Research,
   SaveDraftRequest,
   SupportedModel,
-} from './ResearchAgentApi.types.js';
+} from './researchAgentApi.types.js';
 
 /**
  * Create a new research.
@@ -224,4 +224,4 @@ export type {
   SupportedModel,
   ValidateInputRequest,
   ValidateInputResponse,
-} from './ResearchAgentApi.types.js';
+} from './researchAgentApi.types.js';

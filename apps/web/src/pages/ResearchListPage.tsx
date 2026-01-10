@@ -6,7 +6,7 @@ import {
   getProviderForModel,
   type Research,
   type ResearchStatus,
-} from '@/services/ResearchAgentApi.types';
+} from '@/services/researchAgentApi.types';
 
 /**
  * Strip markdown formatting from text for clean display.
