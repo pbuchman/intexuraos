@@ -27,8 +27,8 @@ The `attributionStatus` field needs to be:
 
 ## Files to Modify
 
-| File                                                                      | Action                 |
-| ------------------------------------------------------------------------- | ---------------------- |
+| File                                                                    | Action                 |
+| ----------------------------------------------------------------------- | ---------------------- |
 | `apps/research-agent/src/domain/research/models/Research.ts`            | **MODIFY**             |
 | `apps/research-agent/src/infra/research/FirestoreResearchRepository.ts` | **MODIFY** (if needed) |
 

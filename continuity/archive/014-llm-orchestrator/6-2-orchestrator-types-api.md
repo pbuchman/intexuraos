@@ -171,10 +171,7 @@ export function createResearchAgentApi(getToken: () => Promise<string>): Researc
 ```typescript
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import {
-  createResearchAgentApi,
-  type ResearchAgentApi,
-} from '../services/ResearchAgentApi.js';
+import { createResearchAgentApi, type ResearchAgentApi } from '../services/ResearchAgentApi.js';
 import type { Research, CreateResearchRequest } from '../services/ResearchAgentApi.types.js';
 
 export function useResearch(id: string): {

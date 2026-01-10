@@ -31,8 +31,8 @@ After synthesis completes, add post-processing:
 
 ## Files to Modify
 
-| File                                                                 | Action     |
-| -------------------------------------------------------------------- | ---------- |
+| File                                                               | Action     |
+| ------------------------------------------------------------------ | ---------- |
 | `apps/research-agent/src/domain/research/usecases/runSynthesis.ts` | **MODIFY** |
 
 ## Files to Read First

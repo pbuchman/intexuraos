@@ -43,7 +43,7 @@ npm run emulators:logs
 | whatsapp-service             | 8113 | http://localhost:8113/health |
 | mobile-notifications-service | 8114 | http://localhost:8114/health |
 | api-docs-hub                 | 8115 | http://localhost:8115/docs   |
-| research-agent             | 8116 | http://localhost:8116/health |
+| research-agent               | 8116 | http://localhost:8116/health |
 
 ### Emulator Ports
 

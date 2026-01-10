@@ -75,4 +75,4 @@ gcloud run services describe intexuraos-<service> --project=intexuraos-dev-pbuch
 | whatsapp-service             | intexuraos-whatsapp-service             |
 | mobile-notifications-service | intexuraos-mobile-notifications-service |
 | api-docs-hub                 | intexuraos-api-docs-hub                 |
-| research-agent             | intexuraos-research-agent             |
+| research-agent               | intexuraos-research-agent               |

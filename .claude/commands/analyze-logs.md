@@ -88,7 +88,7 @@ gcloud logging read '
 
 | #   | Priority | Category        | Service          | Count | Sample Error                         |
 | --- | -------- | --------------- | ---------------- | ----- | ------------------------------------ |
-| 1   | P0       | Unhandled Error | research-agent | 3     | `TypeError: Cannot read property...` |
+| 1   | P0       | Unhandled Error | research-agent   | 3     | `TypeError: Cannot read property...` |
 | 2   | P1       | Auth Failure    | user-service     | 12    | `401 Unauthorized - JWT expired`     |
 | 3   | P4       | Retries         | whatsapp-service | 8     | `Retry attempt 3 for message...`     |
 | ... | ...      | ...             | ...              | ...   | ...                                  |
@@ -252,7 +252,7 @@ Observation to store:
 | notion-service               | intexuraos-notion-service               |
 | whatsapp-service             | intexuraos-whatsapp-service             |
 | mobile-notifications-service | intexuraos-mobile-notifications-service |
-| research-agent             | intexuraos-research-agent             |
+| research-agent               | intexuraos-research-agent               |
 | commands-router              | intexuraos-commands-router              |
 | actions-agent                | intexuraos-actions-agent                |
 | data-insights-service        | intexuraos-data-insights-service        |

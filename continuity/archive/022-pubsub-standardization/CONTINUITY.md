@@ -42,25 +42,25 @@ Reduce ~200 lines of duplicated publisher code and consolidate 4 separate `Publi
 
 ## Key Files Changed
 
-| File                                                                | Change                                |
-| ------------------------------------------------------------------- | ------------------------------------- |
-| `packages/infra-pubsub/src/basePublisher.ts`                        | NEW - shared base class               |
-| `packages/infra-pubsub/src/index.ts`                                | UPDATED - exports base class          |
-| `apps/whatsapp-service/src/infra/pubsub/publisher.ts`               | REFACTORED - extends base             |
+| File                                                              | Change                                |
+| ----------------------------------------------------------------- | ------------------------------------- |
+| `packages/infra-pubsub/src/basePublisher.ts`                      | NEW - shared base class               |
+| `packages/infra-pubsub/src/index.ts`                              | UPDATED - exports base class          |
+| `apps/whatsapp-service/src/infra/pubsub/publisher.ts`             | REFACTORED - extends base             |
 | `apps/research-agent/src/infra/pubsub/analyticsEventPublisher.ts` | REFACTORED - extends base             |
 | `apps/research-agent/src/infra/pubsub/researchEventPublisher.ts`  | REFACTORED - extends base             |
-| `apps/commands-router/src/infra/pubsub/actionEventPublisher.ts`     | REFACTORED - extends base             |
-| `apps/commands-router/src/infra/pubsub/config.ts`                   | REFACTORED - env vars                 |
-| `apps/commands-router/src/domain/ports/eventPublisher.ts`           | REFACTORED - uses shared PublishError |
+| `apps/commands-router/src/infra/pubsub/actionEventPublisher.ts`   | REFACTORED - extends base             |
+| `apps/commands-router/src/infra/pubsub/config.ts`                 | REFACTORED - env vars                 |
+| `apps/commands-router/src/domain/ports/eventPublisher.ts`         | REFACTORED - uses shared PublishError |
 
 ## Lines of Code Reduction
 
-| Component                   | Before  | After   | Reduction     |
-| --------------------------- | ------- | ------- | ------------- |
-| whatsapp-service publisher  | 232     | 103     | 129 (56%)     |
-| research-agent publishers | 168     | 92      | 76 (45%)      |
-| commands-router publisher   | 72      | 30      | 42 (58%)      |
-| **Total**                   | **472** | **225** | **247 (52%)** |
+| Component                  | Before  | After   | Reduction     |
+| -------------------------- | ------- | ------- | ------------- |
+| whatsapp-service publisher | 232     | 103     | 129 (56%)     |
+| research-agent publishers  | 168     | 92      | 76 (45%)      |
+| commands-router publisher  | 72      | 30      | 42 (58%)      |
+| **Total**                  | **472** | **225** | **247 (52%)** |
 
 ## Open Questions (Resolved)
 

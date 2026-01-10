@@ -153,13 +153,13 @@ Each task is a discrete unit of work. Complete in order. Run `npm run typecheck`
 
 ### Task Overview
 
-| Task                                                        | Description                                         | Depends On | Est. Violations |
-| ----------------------------------------------------------- | --------------------------------------------------- | ---------- | --------------- |
+| Task                                                      | Description                                         | Depends On | Est. Violations |
+| --------------------------------------------------------- | --------------------------------------------------- | ---------- | --------------- |
 | [TASK-01](tasks/TASK-01-llm-contract-types.md)            | Add individual model/provider types to llm-contract | -          | 0               |
 | [TASK-02](tasks/TASK-02-llm-contract-constants.md)        | Add LlmModels and LlmProviders constants            | TASK-01    | 0               |
 | [TASK-03](tasks/TASK-03-remove-deprecated.md)             | Remove SupportedModel and SYSTEM_DEFAULT_MODELS     | TASK-02    | 0               |
-| [TASK-04](./tasks/TASK-04-research-agent-domain.md)       | Migrate research-agent domain layer               | TASK-03    | ~50             |
-| [TASK-05](./tasks/TASK-05-research-agent-infra-routes.md) | Migrate research-agent infra and routes           | TASK-04    | ~50             |
+| [TASK-04](./tasks/TASK-04-research-agent-domain.md)       | Migrate research-agent domain layer                 | TASK-03    | ~50             |
+| [TASK-05](./tasks/TASK-05-research-agent-infra-routes.md) | Migrate research-agent infra and routes             | TASK-04    | ~50             |
 | [TASK-06](tasks/TASK-06-commands-router.md)               | Migrate commands-router app                         | TASK-03    | ~20             |
 | [TASK-07](tasks/TASK-07-actions-agent.md)                 | Migrate actions-agent app                           | TASK-03    | ~5              |
 | [TASK-08](tasks/TASK-08-image-service.md)                 | Migrate image-service app                           | TASK-02    | ~30             |
@@ -323,11 +323,11 @@ npx tsx scripts/verify-llm-architecture.ts
 
 ### Phase 4: Update actions-agent App (~15 violations)
 
-| File                                                     | Changes                                                         |
-| -------------------------------------------------------- | --------------------------------------------------------------- |
-| `src/domain/models/actionEvent.ts`                       | Replace `SupportedModel` → `ResearchModel`                      |
-| `src/domain/ports/researchServiceClient.ts`              | Update types                                                    |
-| `src/domain/usecases/executeResearchAction.ts`           | Replace `'claude-opus-4-5-20251101'` → `LlmModels.ClaudeOpus45` |
+| File                                                   | Changes                                                         |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| `src/domain/models/actionEvent.ts`                     | Replace `SupportedModel` → `ResearchModel`                      |
+| `src/domain/ports/researchServiceClient.ts`            | Update types                                                    |
+| `src/domain/usecases/executeResearchAction.ts`         | Replace `'claude-opus-4-5-20251101'` → `LlmModels.ClaudeOpus45` |
 | `src/infra/research/ResearchAgentClient.ts`            | Update types                                                    |
 | `__tests__/infra/research/ResearchAgentClient.test.ts` | Replace model strings                                           |
 
@@ -478,7 +478,7 @@ All checks passed! No violations found.
 
 | App/Package           | Approx Violations | Files to Change |
 | --------------------- | ----------------- | --------------- |
-| research-agent      | ~300              | ~25 files       |
+| research-agent        | ~300              | ~25 files       |
 | image-service         | ~100              | ~15 files       |
 | commands-router       | ~70               | ~8 files        |
 | llm-pricing           | ~50               | ~3 files        |

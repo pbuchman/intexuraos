@@ -536,6 +536,7 @@ CLOUD_RUN_SERVICES=(
 ```
 
 The format is `service-name:ENV_VAR_SUFFIX` where:
+
 - `service-name` matches the Cloud Run service (without `intexuraos-` prefix)
 - `ENV_VAR_SUFFIX` becomes `INTEXURAOS_<ENV_VAR_SUFFIX>_URL` in the .env file
 

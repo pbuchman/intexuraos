@@ -98,8 +98,8 @@ From violations-baseline.txt, approximately **600+ violations** are in test file
 
 ### actions-agent (~15 violations)
 
-| File                                                     | Approx Violations |
-| -------------------------------------------------------- | ----------------- |
+| File                                                   | Approx Violations |
+| ------------------------------------------------------ | ----------------- |
 | `__tests__/infra/research/ResearchAgentClient.test.ts` | 15                |
 
 ### app-settings-service (~15 violations)

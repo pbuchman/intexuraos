@@ -29,8 +29,8 @@ Test the end-to-end attribution flow:
 
 ## Files to Create/Modify
 
-| File                                                                                     | Action                   |
-| ---------------------------------------------------------------------------------------- | ------------------------ |
+| File                                                                                   | Action                   |
+| -------------------------------------------------------------------------------------- | ------------------------ |
 | `apps/research-agent/src/domain/research/usecases/__tests__/runSynthesis.test.ts`      | **MODIFY** or **CREATE** |
 | `apps/research-agent/src/domain/research/usecases/__tests__/repairAttribution.test.ts` | **CREATE**               |
 
