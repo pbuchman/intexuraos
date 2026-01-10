@@ -576,7 +576,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                   variant="secondary"
                   size="sm"
                   onClick={(): void => {
-                    void getSnapshot();
+                    void getSnapshot({ refresh: true });
                   }}
                   disabled={snapshotLoading}
                   isLoading={snapshotLoading}
