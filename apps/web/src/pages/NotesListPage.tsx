@@ -23,6 +23,32 @@ function truncateContent(content: string, maxLength = 150): string {
   return content.slice(0, maxLength).trim() + '...';
 }
 
+function renderTextWithLinks(text: string): React.JSX.Element {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlPattern);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlPattern) !== null) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 interface NoteModalProps {
   note: Note;
   onClose: () => void;
@@ -74,8 +100,17 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
     setShowDeleteConfirm(false);
   };
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -138,7 +173,9 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                   ))}
                 </div>
               ) : null}
-              <div className="whitespace-pre-wrap break-words text-slate-700">{note.content}</div>
+              <div className="whitespace-pre-wrap break-words text-slate-700">
+                {renderTextWithLinks(note.content)}
+              </div>
               <div className="text-xs text-slate-400">
                 <span>Created: {formatDate(note.createdAt)}</span>
                 <span className="mx-2">·</span>
@@ -264,8 +301,17 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
     }
   };
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={handleBackdropClick}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <h2 className="text-lg font-semibold text-slate-900">Create New Note</h2>

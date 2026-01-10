@@ -324,6 +324,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     const loadFilterOptions = async (): Promise<void> => {
@@ -442,7 +443,14 @@ export function CompositeFeedFormPage(): React.JSX.Element {
         });
       }
 
-      void navigate('/data-insights/composite-feeds');
+      if (isEditMode) {
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+        }, 3000);
+      } else {
+        void navigate('/data-insights/composite-feeds');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save composite feed');
     } finally {
@@ -492,6 +500,13 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {showSuccess ? (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <Check className="h-5 w-5" />
+          <span>Composite feed saved successfully</span>
         </div>
       ) : null}
 
@@ -670,6 +685,15 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                                 ? ` from ${filter.criteria.app.join(', ')}`
                                 : ''}
                             </div>
+                            {filter.items.length === 1000 ? (
+                              <div className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                                <span className="text-xs text-amber-800">
+                                  Reached 1000 notification limit. Some may be missing. Consider
+                                  narrowing your filter criteria.
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>
