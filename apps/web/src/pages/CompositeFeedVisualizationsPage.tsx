@@ -217,3 +217,5 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
     </Layout>
   );
 }
+
+export default CompositeFeedVisualizationsPage;

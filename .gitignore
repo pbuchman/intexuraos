@@ -7,6 +7,7 @@ coverage/
 .DS_Store
 .eslintcache
 scripts/test-results/
+.tsconfig.tests-workspace.json
 
 # IDE - exclude user-specific files but keep project configuration
 .idea/workspace.xml

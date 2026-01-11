@@ -1,9 +1,14 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
+
+const LazyCompositeFeedVisualizationsPage = lazy(
+  () => import('./pages/CompositeFeedVisualizationsPage')
+);
 
 (function handleShareTargetRedirect(): void {
   if (window.location.hash !== '') return;
@@ -19,7 +24,6 @@ import {
   CalendarPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
-  CompositeFeedVisualizationsPage,
   DataSourceFormPage,
   DataSourcesListPage,
   GoogleCalendarConnectionPage,
@@ -266,7 +270,15 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights/composite-feeds/:id/visualizations"
         element={
           <ProtectedRoute>
-            <CompositeFeedVisualizationsPage />
+            <Suspense
+              fallback={
+                <div className="flex min-h-screen items-center justify-center bg-slate-50">
+                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                </div>
+              }
+            >
+              <LazyCompositeFeedVisualizationsPage />
+            </Suspense>
           </ProtectedRoute>
         }
       />
