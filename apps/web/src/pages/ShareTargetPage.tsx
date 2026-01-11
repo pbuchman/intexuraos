@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Share2 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
-import { useAuth } from '@/context';
-import { createCommand } from '@/services/commandsApi';
+import { useSyncQueue } from '@/context';
 
 function combineSharedContent(params: {
   title: string | null;
@@ -33,7 +32,7 @@ function combineSharedContent(params: {
 export function ShareTargetPage(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getAccessToken } = useAuth();
+  const { addShare } = useSyncQueue();
 
   const title = searchParams.get('title');
   const text = searchParams.get('text');
@@ -42,8 +41,6 @@ export function ShareTargetPage(): React.JSX.Element {
   const initialContent = combineSharedContent({ title, text, url });
 
   const [content, setContent] = useState(initialContent);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialContent === '') {
@@ -51,23 +48,13 @@ export function ShareTargetPage(): React.JSX.Element {
     }
   }, [initialContent, navigate]);
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = (): void => {
     if (content.trim() === '') {
-      setError('Content cannot be empty');
       return;
     }
 
-    setSaving(true);
-    setError(null);
-
-    try {
-      const token = await getAccessToken();
-      await createCommand(token, { text: content.trim(), source: 'pwa-shared' });
-      void navigate('/inbox', { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
-      setSaving(false);
-    }
+    addShare(content.trim());
+    void navigate('/inbox', { replace: true });
   };
 
   const handleCancel = (): void => {
@@ -99,10 +86,6 @@ export function ShareTargetPage(): React.JSX.Element {
               </div>
             </div>
 
-            {error !== null && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
-            )}
-
             <textarea
               value={content}
               onChange={(e): void => {
@@ -110,27 +93,19 @@ export function ShareTargetPage(): React.JSX.Element {
               }}
               className="mb-6 h-48 w-full resize-none rounded-lg border border-slate-300 p-3 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="Shared content..."
-              disabled={saving}
             />
 
             <div className="flex gap-3">
-              <Button
-                variant="secondary"
-                onClick={handleCancel}
-                disabled={saving}
-                className="flex-1"
-              >
+              <Button variant="secondary" onClick={handleCancel} className="flex-1">
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                onClick={() => {
-                  void handleSave();
-                }}
-                disabled={saving || content.trim() === ''}
+                onClick={handleSave}
+                disabled={content.trim() === ''}
                 className="flex-1"
               >
-                {saving ? 'Saving...' : 'Save'}
+                Save
               </Button>
             </div>
           </div>

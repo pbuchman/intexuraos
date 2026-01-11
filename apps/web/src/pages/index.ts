@@ -20,6 +20,7 @@ export { CompositeFeedsListPage } from './CompositeFeedsListPage.js';
 export { CompositeFeedFormPage } from './CompositeFeedFormPage.js';
 export { CompositeFeedVisualizationsPage } from './CompositeFeedVisualizationsPage.js';
 export { NotesListPage } from './NotesListPage.js';
+export { ShareHistoryPage } from './ShareHistoryPage.js';
 export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
 export { LlmPricingPage } from './LlmPricingPage.js';
