@@ -445,6 +445,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
       if (isEditMode) {
         setShowSuccess(true);
+        void getSnapshot({ refresh: true });
         setTimeout(() => {
           setShowSuccess(false);
         }, 3000);
