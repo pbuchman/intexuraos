@@ -67,7 +67,7 @@ interface ReorderItemsBody {
   itemIds: string[];
 }
 
-const todoStatusEnum = ['pending', 'in_progress', 'completed', 'cancelled'];
+const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
 
 const createTodoBodySchema = {

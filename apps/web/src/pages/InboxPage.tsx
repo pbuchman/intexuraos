@@ -432,9 +432,16 @@ export function InboxPage(): React.JSX.Element {
 
           for (const changedAction of allFetchedActions) {
             const index = updated.findIndex((a) => a.id === changedAction.id);
+            const matchesFilter =
+              statusFilter.length === 0 || statusFilter.includes(changedAction.status);
+
             if (index >= 0) {
-              updated[index] = changedAction;
-            } else {
+              if (matchesFilter) {
+                updated[index] = changedAction;
+              } else {
+                updated.splice(index, 1);
+              }
+            } else if (matchesFilter) {
               updated.unshift(changedAction);
             }
           }
@@ -447,7 +454,7 @@ export function InboxPage(): React.JSX.Element {
         /* Best-effort batch fetch - silent fail */
       }
     },
-    [getAccessToken, clearActionChangedIds]
+    [getAccessToken, clearActionChangedIds, statusFilter]
   );
 
   // 💰 CostGuard: Fetch changed commands by refreshing the list

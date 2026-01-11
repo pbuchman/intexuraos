@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
-import { formatLlmErrorString } from '@/utils/formatLlmError';
 
 interface ModelOption {
   id: SupportedModel;
@@ -116,9 +115,7 @@ export function ModelSelector({
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <span className="text-xs text-red-600">Test failed</span>
                     <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg">
-                      <p className="text-xs text-red-700 mb-2">
-                        {formatLlmErrorString(testFailedError ?? '')}
-                      </p>
+                      <p className="text-xs text-red-700 mb-2">{testFailedError ?? ''}</p>
                       <Link
                         to="/settings/api-keys"
                         className="text-xs text-blue-600 hover:underline"

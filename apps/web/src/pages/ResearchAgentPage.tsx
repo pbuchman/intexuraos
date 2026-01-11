@@ -88,8 +88,8 @@ export function ResearchAgentPage(): React.JSX.Element {
     if (keys !== null) {
       for (const provider of PROVIDER_MODELS) {
         const testResult = keys.testResults[provider.id];
-        if (testResult?.error !== undefined) {
-          map.set(provider.id, testResult.error);
+        if (testResult?.status === 'failure') {
+          map.set(provider.id, testResult.message);
         }
       }
     }

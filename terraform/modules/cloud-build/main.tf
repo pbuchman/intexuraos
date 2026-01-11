@@ -199,6 +199,7 @@ resource "google_cloudbuild_trigger" "service" {
   service_account = google_service_account.cloud_build.id
 
   lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
     ignore_changes = [ignored_files]
   }
 }
@@ -227,6 +228,7 @@ resource "google_cloudbuild_trigger" "web" {
   service_account = google_service_account.cloud_build.id
 
   lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
     ignore_changes = [ignored_files]
   }
 }
@@ -250,6 +252,7 @@ resource "google_cloudbuild_trigger" "firestore" {
   service_account = google_service_account.cloud_build.id
 
   lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
     ignore_changes = [ignored_files]
   }
 }

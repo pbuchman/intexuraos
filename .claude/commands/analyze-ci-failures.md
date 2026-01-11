@@ -50,6 +50,7 @@ cat .claude/ci-failures/*.jsonl | jq -s '
 ## Phase 3: Present Findings to User
 
 Summarize:
+
 1. Total CI runs analyzed
 2. Top 5 error codes with counts and example messages
 3. Category breakdown (typecheck vs lint vs coverage vs test)
@@ -63,19 +64,22 @@ Ask user: "Which patterns should I add to CLAUDE.md? (default: top 4)"
 Read current "Common LLM Mistakes" section in `.claude/CLAUDE.md`.
 
 For each selected pattern:
+
 1. Create concise example showing wrong vs right approach
 2. Add or update entry in "Common LLM Mistakes" section
 
 **Format for each pattern:**
 
-```markdown
+````markdown
 ### N. [Short Title] — [Key Rule]
 
 ```typescript
 // X [wrong code]
 // V [correct code]
 ```
-```
+````
+
+````
 
 Keep examples minimal (2-4 lines max). Focus on actionable fix, not explanation.
 
@@ -99,7 +103,7 @@ Add entry to `.claude/ci-failures/README.md` under `## Changelog`:
 1. [What was added/updated in CLAUDE.md]
 
 **Result:** [Brief summary]
-```
+````
 
 ---
 

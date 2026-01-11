@@ -4,7 +4,13 @@
  * Pub/Sub infrastructure adapters for cross-service messaging.
  */
 
-export type { PublishError, SendMessageEvent, WhatsAppSendPublisherConfig } from './types.js';
+export type {
+  PublishError,
+  SendMessageEvent,
+  WhatsAppSendPublisherConfig,
+  TodoProcessingEvent,
+  TodosProcessingPublisherConfig,
+} from './types.js';
 
 export {
   BasePubSubPublisher,
@@ -17,3 +23,8 @@ export {
   type WhatsAppSendPublisher,
   createWhatsAppSendPublisher,
 } from './whatsappSendPublisher.js';
+
+export {
+  type TodosProcessingPublisher,
+  createTodosProcessingPublisher,
+} from './todosProcessingPublisher.js';

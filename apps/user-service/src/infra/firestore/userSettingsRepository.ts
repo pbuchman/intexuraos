@@ -202,7 +202,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       if (!doc.exists) {
         await docRef.set({
           userId,
-          llmTestResults: { [provider]: { response: '', testedAt: now } },
+          llmTestResults: { [provider]: { status: 'success', message: '', testedAt: now } },
           createdAt: now,
           updatedAt: now,
         });

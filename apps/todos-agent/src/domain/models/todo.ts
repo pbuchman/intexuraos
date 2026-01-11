@@ -1,5 +1,6 @@
 export type TodoStatus =
   | 'draft'
+  | 'processing'
   | 'pending'
   | 'in_progress'
   | 'completed'
