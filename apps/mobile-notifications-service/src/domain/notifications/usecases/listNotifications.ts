@@ -10,7 +10,7 @@ import type {
 } from '../ports/index.js';
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 1000;
 
 /**
  * Input for listing notifications.
