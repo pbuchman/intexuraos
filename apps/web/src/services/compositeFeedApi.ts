@@ -16,7 +16,7 @@ export async function createCompositeFeed(
   request: CreateCompositeFeedRequest
 ): Promise<CompositeFeed> {
   return await apiRequest<CompositeFeed>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     '/composite-feeds',
     accessToken,
     {
@@ -31,7 +31,7 @@ export async function createCompositeFeed(
  */
 export async function listCompositeFeeds(accessToken: string): Promise<CompositeFeed[]> {
   return await apiRequest<CompositeFeed[]>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     '/composite-feeds',
     accessToken
   );
@@ -42,7 +42,7 @@ export async function listCompositeFeeds(accessToken: string): Promise<Composite
  */
 export async function getCompositeFeed(accessToken: string, id: string): Promise<CompositeFeed> {
   return await apiRequest<CompositeFeed>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/composite-feeds/${id}`,
     accessToken
   );
@@ -57,7 +57,7 @@ export async function updateCompositeFeed(
   request: UpdateCompositeFeedRequest
 ): Promise<CompositeFeed> {
   return await apiRequest<CompositeFeed>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/composite-feeds/${id}`,
     accessToken,
     {
@@ -72,7 +72,7 @@ export async function updateCompositeFeed(
  */
 export async function deleteCompositeFeed(accessToken: string, id: string): Promise<void> {
   await apiRequest<undefined>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/composite-feeds/${id}`,
     accessToken,
     {
@@ -86,7 +86,7 @@ export async function deleteCompositeFeed(accessToken: string, id: string): Prom
  */
 export async function getCompositeFeedSchema(accessToken: string, id: string): Promise<object> {
   return await apiRequest<object>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/composite-feeds/${id}/schema`,
     accessToken
   );
@@ -100,7 +100,7 @@ export async function getCompositeFeedData(
   id: string
 ): Promise<CompositeFeedData> {
   return await apiRequest<CompositeFeedData>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/composite-feeds/${id}/data`,
     accessToken
   );
@@ -119,7 +119,7 @@ export async function getCompositeFeedSnapshot(
   try {
     const queryParams = options?.refresh === true ? '?refresh=true' : '';
     return await apiRequest<CompositeFeedSnapshot>(
-      config.dataInsightsServiceUrl,
+      config.dataInsightsAgentUrl,
       `/composite-feeds/${id}/snapshot${queryParams}`,
       accessToken
     );

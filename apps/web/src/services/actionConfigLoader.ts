@@ -11,7 +11,7 @@ type ConfigKey = keyof typeof appConfig;
 
 const ENV_VAR_MAPPING: Record<string, ConfigKey> = {
   INTEXURAOS_ACTIONS_AGENT_URL: 'actionsAgentUrl',
-  INTEXURAOS_COMMANDS_ROUTER_URL: 'commandsRouterServiceUrl',
+  INTEXURAOS_COMMANDS_AGENT_URL: 'commandsAgentServiceUrl',
 };
 
 interface CacheEntry {

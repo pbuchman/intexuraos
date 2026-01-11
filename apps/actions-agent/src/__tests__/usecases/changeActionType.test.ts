@@ -3,7 +3,7 @@ import { createChangeActionTypeUseCase } from '../../domain/usecases/changeActio
 import {
   FakeActionRepository,
   FakeActionTransitionRepository,
-  FakeCommandsRouterClient,
+  FakeCommandsAgentClient,
 } from '../fakes.js';
 import pino from 'pino';
 import type { Action } from '../../domain/models/action.js';
@@ -11,7 +11,7 @@ import type { Action } from '../../domain/models/action.js';
 describe('ChangeActionTypeUseCase', () => {
   let actionRepository: FakeActionRepository;
   let actionTransitionRepository: FakeActionTransitionRepository;
-  let commandsRouterClient: FakeCommandsRouterClient;
+  let commandsAgentClient: FakeCommandsAgentClient;
   let useCase: ReturnType<typeof createChangeActionTypeUseCase>;
 
   const testAction: Action = {
@@ -30,12 +30,12 @@ describe('ChangeActionTypeUseCase', () => {
   beforeEach(() => {
     actionRepository = new FakeActionRepository();
     actionTransitionRepository = new FakeActionTransitionRepository();
-    commandsRouterClient = new FakeCommandsRouterClient();
+    commandsAgentClient = new FakeCommandsAgentClient();
 
     useCase = createChangeActionTypeUseCase({
       actionRepository,
       actionTransitionRepository,
-      commandsRouterClient,
+      commandsAgentClient,
       logger: pino({ level: 'silent' }),
     });
   });
@@ -145,7 +145,7 @@ describe('ChangeActionTypeUseCase', () => {
 
   it('allows type change for pending action', async () => {
     await actionRepository.save({ ...testAction, status: 'pending' });
-    commandsRouterClient.setCommand(testAction.commandId, 'Test command text');
+    commandsAgentClient.setCommand(testAction.commandId, 'Test command text');
 
     const result = await useCase({
       actionId: testAction.id,
@@ -161,7 +161,7 @@ describe('ChangeActionTypeUseCase', () => {
 
   it('allows type change for awaiting_approval action', async () => {
     await actionRepository.save({ ...testAction, status: 'awaiting_approval' });
-    commandsRouterClient.setCommand(testAction.commandId, 'Test command text');
+    commandsAgentClient.setCommand(testAction.commandId, 'Test command text');
 
     const result = await useCase({
       actionId: testAction.id,
@@ -206,7 +206,7 @@ describe('ChangeActionTypeUseCase', () => {
 
   it('logs transition before updating action', async () => {
     await actionRepository.save({ ...testAction });
-    commandsRouterClient.setCommand(testAction.commandId, 'Original command text');
+    commandsAgentClient.setCommand(testAction.commandId, 'Original command text');
 
     const result = await useCase({
       actionId: testAction.id,
@@ -233,7 +233,7 @@ describe('ChangeActionTypeUseCase', () => {
     const freshAction = { ...testAction };
     const originalUpdatedAt = freshAction.updatedAt;
     await actionRepository.save(freshAction);
-    commandsRouterClient.setCommand(freshAction.commandId, 'Test command');
+    commandsAgentClient.setCommand(freshAction.commandId, 'Test command');
 
     await useCase({
       actionId: freshAction.id,

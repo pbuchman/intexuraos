@@ -14,7 +14,7 @@ export async function createDataSource(
   accessToken: string,
   request: CreateDataSourceRequest
 ): Promise<DataSource> {
-  return await apiRequest<DataSource>(config.dataInsightsServiceUrl, '/data-sources', accessToken, {
+  return await apiRequest<DataSource>(config.dataInsightsAgentUrl, '/data-sources', accessToken, {
     method: 'POST',
     body: request,
   });
@@ -25,7 +25,7 @@ export async function createDataSource(
  */
 export async function listDataSources(accessToken: string): Promise<DataSource[]> {
   return await apiRequest<DataSource[]>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     '/data-sources',
     accessToken
   );
@@ -36,7 +36,7 @@ export async function listDataSources(accessToken: string): Promise<DataSource[]
  */
 export async function getDataSource(accessToken: string, id: string): Promise<DataSource> {
   return await apiRequest<DataSource>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/data-sources/${id}`,
     accessToken
   );
@@ -51,7 +51,7 @@ export async function updateDataSource(
   request: UpdateDataSourceRequest
 ): Promise<DataSource> {
   return await apiRequest<DataSource>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     `/data-sources/${id}`,
     accessToken,
     {
@@ -65,7 +65,7 @@ export async function updateDataSource(
  * Delete a data source.
  */
 export async function deleteDataSource(accessToken: string, id: string): Promise<void> {
-  await apiRequest<undefined>(config.dataInsightsServiceUrl, `/data-sources/${id}`, accessToken, {
+  await apiRequest<undefined>(config.dataInsightsAgentUrl, `/data-sources/${id}`, accessToken, {
     method: 'DELETE',
   });
 }
@@ -78,7 +78,7 @@ export async function generateTitle(
   content: string
 ): Promise<GenerateTitleResponse> {
   return await apiRequest<GenerateTitleResponse>(
-    config.dataInsightsServiceUrl,
+    config.dataInsightsAgentUrl,
     '/data-sources/generate-title',
     accessToken,
     {

@@ -1,0 +1,8 @@
+import type { FastifyInstance } from 'fastify';
+import { internalRoutes } from './internalRoutes.js';
+import { commandsRoutes } from './commandsRoutes.js';
+
+export function registerRoutes(app: FastifyInstance): void {
+  void app.register(internalRoutes);
+  void app.register(commandsRoutes);
+}

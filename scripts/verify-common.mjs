@@ -19,12 +19,12 @@ const commonSrcDir = join(repoRoot, 'packages', 'common-core', 'src');
 const FORBIDDEN_KEYWORDS = [
   // Domain models from apps
   'Action', // actions-agent domain
-  'Command', // commands-router domain
+  'Command', // commands-agent domain
   'Research', // research-agent domain
   'Notification', // mobile-notifications-service domain
   'Note', // notes-agent domain
-  'Feed', // data-insights-service domain
-  'DataSource', // data-insights-service domain
+  'Feed', // data-insights-agent domain
+  'DataSource', // data-insights-agent domain
   'Message', // whatsapp-service domain
   'Webhook', // whatsapp-service domain
   // External service specific

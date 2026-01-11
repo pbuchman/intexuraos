@@ -9,7 +9,7 @@ import {
   FakeActionRepository,
   FakeActionEventPublisher,
   FakeActionTransitionRepository,
-  FakeCommandsRouterClient,
+  FakeCommandsAgentClient,
   createFakeServices,
   createFakeExecuteResearchActionUseCase,
 } from './fakes.js';
@@ -53,7 +53,7 @@ describe('Research Agent Routes', () => {
   let fakeActionRepository: FakeActionRepository;
   let fakeActionEventPublisher: FakeActionEventPublisher;
   let fakeActionTransitionRepository: FakeActionTransitionRepository;
-  let fakeCommandsRouterClient: FakeCommandsRouterClient;
+  let fakeCommandsAgentClient: FakeCommandsAgentClient;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -64,7 +64,7 @@ describe('Research Agent Routes', () => {
     fakeActionRepository = new FakeActionRepository();
     fakeActionEventPublisher = new FakeActionEventPublisher();
     fakeActionTransitionRepository = new FakeActionTransitionRepository();
-    fakeCommandsRouterClient = new FakeCommandsRouterClient();
+    fakeCommandsAgentClient = new FakeCommandsAgentClient();
 
     setServices(
       createFakeServices({
@@ -74,7 +74,7 @@ describe('Research Agent Routes', () => {
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
         actionTransitionRepository: fakeActionTransitionRepository,
-        commandsRouterClient: fakeCommandsRouterClient,
+        commandsAgentClient: fakeCommandsAgentClient,
       })
     );
 
@@ -877,7 +877,7 @@ describe('Research Agent Routes', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
-      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+      fakeCommandsAgentClient.setCommand('cmd-1', 'Test command text');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -910,7 +910,7 @@ describe('Research Agent Routes', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
-      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+      fakeCommandsAgentClient.setCommand('cmd-1', 'Test command text');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -943,7 +943,7 @@ describe('Research Agent Routes', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
-      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+      fakeCommandsAgentClient.setCommand('cmd-1', 'Test command text');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -970,7 +970,7 @@ describe('Research Agent Routes', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
-      fakeCommandsRouterClient.setCommand('cmd-1', 'Test command text');
+      fakeCommandsAgentClient.setCommand('cmd-1', 'Test command text');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -1004,7 +1004,7 @@ describe('Research Agent Routes', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
-      fakeCommandsRouterClient.setCommand('cmd-1', 'Original command text');
+      fakeCommandsAgentClient.setCommand('cmd-1', 'Original command text');
 
       await app.inject({
         method: 'PATCH',

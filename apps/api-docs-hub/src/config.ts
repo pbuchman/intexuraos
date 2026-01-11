@@ -33,16 +33,16 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     displayName: 'Research Agent API',
   },
   {
-    key: 'INTEXURAOS_COMMANDS_ROUTER_OPENAPI_URL',
-    displayName: 'Commands Router API',
+    key: 'INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL',
+    displayName: 'Commands Agent API',
   },
   {
     key: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
     displayName: 'Actions Agent API',
   },
   {
-    key: 'INTEXURAOS_DATA_INSIGHTS_SERVICE_OPENAPI_URL',
-    displayName: 'Data Insights Service API',
+    key: 'INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL',
+    displayName: 'Data Insights Agent API',
   },
   {
     key: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL',
