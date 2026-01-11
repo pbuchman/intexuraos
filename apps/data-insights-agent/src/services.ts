@@ -10,10 +10,6 @@ import type {
   MobileNotificationsClient,
 } from './domain/compositeFeed/index.js';
 import type { SnapshotRepository } from './domain/snapshot/index.js';
-import type {
-  VisualizationRepository,
-  VisualizationGenerationService,
-} from './domain/visualization/index.js';
 
 /**
  * Service container holding all adapter instances.
@@ -25,8 +21,6 @@ export interface ServiceContainer {
   feedNameGenerationService: FeedNameGenerationService;
   mobileNotificationsClient: MobileNotificationsClient;
   snapshotRepository: SnapshotRepository;
-  visualizationRepository: VisualizationRepository;
-  visualizationGenerationService: VisualizationGenerationService;
 }
 
 let container: ServiceContainer | null = null;

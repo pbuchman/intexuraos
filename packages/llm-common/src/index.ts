@@ -36,16 +36,6 @@ export {
   type ThumbnailPromptDeps,
 } from './image/index.js';
 
-// Visualization prompts (insights and Vega-Lite generation)
-export {
-  insightsPrompt,
-  type InsightsPromptInput,
-  type InsightsPromptDeps,
-  vegaLitePrompt,
-  type VegaLitePromptInput,
-  type VegaLitePromptDeps,
-} from './visualization/index.js';
-
 // Validation prompts (input quality and improvement)
 export {
   inputQualityPrompt,

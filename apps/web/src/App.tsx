@@ -6,9 +6,6 @@ import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
 
-const LazyCompositeFeedVisualizationsPage = lazy(
-  () => import('./pages/CompositeFeedVisualizationsPage')
-);
 
 (function handleShareTargetRedirect(): void {
   if (window.location.hash !== '') return;
@@ -272,22 +269,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <DataSourceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:id/visualizations"
-        element={
-          <ProtectedRoute>
-            <Suspense
-              fallback={
-                <div className="flex min-h-screen items-center justify-center bg-slate-50">
-                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-                </div>
-              }
-            >
-              <LazyCompositeFeedVisualizationsPage />
-            </Suspense>
           </ProtectedRoute>
         }
       />
