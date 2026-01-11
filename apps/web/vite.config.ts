@@ -90,6 +90,8 @@ export default defineConfig(({ mode }) => {
           },
         },
         workbox: {
+          // Allow larger bundles (Vega libraries are ~2.5MB)
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           // Skip waiting to activate new service worker immediately
           skipWaiting: true,
           clientsClaim: true,

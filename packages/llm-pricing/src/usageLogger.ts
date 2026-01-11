@@ -22,7 +22,12 @@ import type { LlmProvider } from './types.js';
 
 const COLLECTION_NAME = 'llm_usage_stats';
 
-export type CallType = 'research' | 'generate' | 'image_generation';
+export type CallType =
+  | 'research'
+  | 'generate'
+  | 'image_generation'
+  | 'visualization_insights'
+  | 'visualization_vegalite';
 
 export interface UsageLogParams {
   userId: string;

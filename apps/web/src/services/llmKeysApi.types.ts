@@ -8,7 +8,8 @@ export type { LlmProvider };
  * Test result for an LLM API key.
  */
 export interface LlmTestResult {
-  response: string;
+  status: 'success' | 'failure';
+  message: string; // LLM response (success) or user-friendly error (failure)
   testedAt: string;
 }
 

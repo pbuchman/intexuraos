@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
-import { formatLlmError, formatLlmErrorString } from '@/utils/formatLlmError';
 
 /**
  * Format a date as human-readable string.
@@ -16,22 +15,6 @@ function formatDate(isoString: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function FormattedErrorDisplay({ error }: { error: string }): React.JSX.Element {
-  const formatted = formatLlmError(error);
-
-  return (
-    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-      <p className="text-sm font-medium text-red-800">{formatted.title}</p>
-      {formatted.detail !== undefined && (
-        <p className="text-sm text-red-700 mt-1">{formatted.detail}</p>
-      )}
-      {formatted.retryIn !== undefined && (
-        <p className="text-xs text-red-600 mt-1">{formatted.retryIn}</p>
-      )}
-    </div>
-  );
 }
 
 interface ProviderConfig {
@@ -125,7 +108,7 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
             onDelete={async (): Promise<void> => {
               await deleteKey(provider.id);
             }}
-            onTest={async (): Promise<{ response: string; testedAt: string }> => {
+            onTest={async () => {
               return await testKey(provider.id);
             }}
           />
@@ -141,7 +124,7 @@ interface ApiKeyRowProps {
   savedTestResult: LlmTestResult | null;
   onSave: (apiKey: string) => Promise<void>;
   onDelete: () => Promise<void>;
-  onTest: () => Promise<{ response: string; testedAt: string }>;
+  onTest: () => Promise<LlmTestResult>;
 }
 
 function ApiKeyRow({
@@ -158,7 +141,6 @@ function ApiKeyRow({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const isConfigured = currentValue !== null;
@@ -191,17 +173,12 @@ function ApiKeyRow({
   const handleDelete = async (): Promise<void> => {
     await onDelete();
     setShowDeleteConfirm(false);
-    setTestError(null);
   };
 
   const handleTest = async (): Promise<void> => {
     setIsTesting(true);
-    setTestError(null);
-
     try {
       await onTest();
-    } catch (err) {
-      setTestError(err instanceof Error ? err.message : 'Test failed');
     } finally {
       setIsTesting(false);
     }
@@ -280,14 +257,28 @@ function ApiKeyRow({
             ✓ API key validated and saved successfully
           </p>
         </div>
-      ) : testError !== null ? (
-        <FormattedErrorDisplay error={testError} />
       ) : savedTestResult !== null ? (
-        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-sm font-medium text-green-800 mb-1">
-            LLM Response ({formatDate(savedTestResult.testedAt)}):
+        <div
+          className={`mt-3 rounded-lg border p-3 ${
+            savedTestResult.status === 'success'
+              ? 'border-green-200 bg-green-50'
+              : 'border-red-200 bg-red-50'
+          }`}
+        >
+          <p
+            className={`text-sm font-medium mb-1 ${
+              savedTestResult.status === 'success' ? 'text-green-800' : 'text-red-800'
+            }`}
+          >
+            {savedTestResult.status === 'success'
+              ? `LLM Response (${formatDate(savedTestResult.testedAt)}):`
+              : `API Key Error (${formatDate(savedTestResult.testedAt)}):`}
           </p>
-          <p className="text-sm text-green-700">{savedTestResult.response}</p>
+          <p
+            className={`text-sm ${savedTestResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}
+          >
+            {savedTestResult.message}
+          </p>
         </div>
       ) : null}
 
@@ -305,7 +296,7 @@ function ApiKeyRow({
             disabled={isSaving}
           />
           {validationError !== null ? (
-            <p className="text-sm text-red-600">{formatLlmErrorString(validationError)}</p>
+            <p className="text-sm text-red-600">{validationError}</p>
           ) : null}
           {isSaving ? <p className="text-sm text-blue-600">Validating API key...</p> : null}
           <div className="flex gap-2">

@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { refreshSnapshot } from '../../../../domain/snapshot/usecases/refreshSnapshot.js';
 import {
   FakeSnapshotRepository,
   FakeCompositeFeedRepository,
   FakeDataSourceRepository,
   FakeMobileNotificationsClient,
+  FakeVisualizationRepository,
+  FakeVisualizationGenerationService,
 } from '../../../fakes.js';
 
 describe('refreshSnapshot', () => {
@@ -201,5 +203,124 @@ describe('refreshSnapshot', () => {
       expect(result.value.data.staticSources).toHaveLength(0);
       expect(result.value.data.notifications).toHaveLength(0);
     }
+  });
+
+  it('triggers visualization refresh when requested', async () => {
+    const fakeVisualizationRepo = new FakeVisualizationRepository();
+    const fakeVisualizationService = new FakeVisualizationGenerationService();
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+      purpose: 'Test purpose',
+      staticSourceIds: [],
+      notificationFilters: [],
+    });
+
+    expect(feedResult.ok).toBe(true);
+    const feed = feedResult.ok ? feedResult.value : null;
+
+    await fakeVisualizationRepo.create(feed?.id ?? '', 'user-123', {
+      title: 'Test Viz',
+      description: 'Test desc',
+      type: 'chart',
+    });
+
+    const result = await refreshSnapshot(feed?.id ?? '', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+      visualizationRepository: fakeVisualizationRepo,
+      visualizationGenerationService: fakeVisualizationService,
+      refreshVisualizations: true,
+      logger: mockLogger,
+    });
+
+    expect(result.ok).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ feedId: feed?.id }),
+      'Starting visualization refresh'
+    );
+  });
+
+  it('does not trigger visualization refresh when not requested', async () => {
+    const fakeVisualizationRepo = new FakeVisualizationRepository();
+    const fakeVisualizationService = new FakeVisualizationGenerationService();
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+      purpose: 'Test purpose',
+      staticSourceIds: [],
+      notificationFilters: [],
+    });
+
+    expect(feedResult.ok).toBe(true);
+    const feed = feedResult.ok ? feedResult.value : null;
+
+    await refreshSnapshot(feed?.id ?? '', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+      visualizationRepository: fakeVisualizationRepo,
+      visualizationGenerationService: fakeVisualizationService,
+      refreshVisualizations: false,
+      logger: mockLogger,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const startVisualizationCalls = mockLogger.info.mock.calls.filter((call) =>
+      String(call[1]).includes('Starting visualization refresh')
+    );
+    expect(startVisualizationCalls).toHaveLength(0);
+  });
+
+  it('does not refresh visualizations when missing dependencies', async () => {
+    const fakeVisualizationRepo = new FakeVisualizationRepository();
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+      purpose: 'Test purpose',
+      staticSourceIds: [],
+      notificationFilters: [],
+    });
+
+    expect(feedResult.ok).toBe(true);
+    const feed = feedResult.ok ? feedResult.value : null;
+
+    const result = await refreshSnapshot(feed?.id ?? '', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+      visualizationRepository: fakeVisualizationRepo,
+      refreshVisualizations: true,
+      logger: mockLogger,
+    });
+
+    expect(result.ok).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const visualizationRefreshCalls = mockLogger.info.mock.calls.filter((call) =>
+      String(call[1]).includes('Starting visualization refresh')
+    );
+    expect(visualizationRefreshCalls).toHaveLength(0);
   });
 });

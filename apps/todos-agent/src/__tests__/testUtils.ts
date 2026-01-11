@@ -5,6 +5,25 @@ import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
+import type { TodosProcessingPublisher } from '@intexuraos/infra-pubsub';
+
+export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
+  public publishedEvents: { todoId: string; userId: string; title: string; correlationId?: string }[] = [];
+
+  async publishTodoCreated(params: {
+    todoId: string;
+    userId: string;
+    title: string;
+    correlationId?: string;
+  }): Promise<{ ok: true; value: undefined }> {
+    this.publishedEvents.push(params);
+    return { ok: true, value: undefined };
+  }
+
+  reset(): void {
+    this.publishedEvents = [];
+  }
+}
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -66,12 +85,14 @@ export async function teardownJwksServer(): Promise<void> {
 export interface TestContext {
   app: FastifyInstance;
   todoRepository: FakeTodoRepository;
+  todosProcessingPublisher: FakeTodosProcessingPublisher;
 }
 
 export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
     todoRepository: null as unknown as FakeTodoRepository,
+    todosProcessingPublisher: null as unknown as FakeTodosProcessingPublisher,
   };
 
   beforeAll(async () => {
@@ -85,7 +106,11 @@ export function setupTestContext(): TestContext {
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.todoRepository = new FakeTodoRepository();
-    setServices({ todoRepository: context.todoRepository });
+    context.todosProcessingPublisher = new FakeTodosProcessingPublisher();
+    setServices({
+      todoRepository: context.todoRepository,
+      todosProcessingPublisher: context.todosProcessingPublisher,
+    });
     clearJwksCache();
     context.app = await buildServer();
     await context.app.ready();

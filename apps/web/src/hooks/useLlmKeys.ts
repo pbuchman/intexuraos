@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey } from '@/services/llmKeysApi';
-import type { LlmKeysResponse, LlmProvider } from '@/services/llmKeysApi.types';
+import type { LlmKeysResponse, LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
 
 interface UseLlmKeysResult {
   keys: LlmKeysResponse | null;
@@ -10,7 +10,7 @@ interface UseLlmKeysResult {
   error: string | null;
   setKey: (provider: LlmProvider, apiKey: string) => Promise<void>;
   deleteKey: (provider: LlmProvider) => Promise<void>;
-  testKey: (provider: LlmProvider) => Promise<{ response: string; testedAt: string }>;
+  testKey: (provider: LlmProvider) => Promise<LlmTestResult>;
   refresh: () => Promise<void>;
 }
 
@@ -80,7 +80,7 @@ export function useLlmKeys(): UseLlmKeysResult {
   );
 
   const testKey = useCallback(
-    async (provider: LlmProvider): Promise<{ response: string; testedAt: string }> => {
+    async (provider: LlmProvider): Promise<LlmTestResult> => {
       const userId = user?.sub;
       if (userId === undefined) {
         throw new Error('User not authenticated');

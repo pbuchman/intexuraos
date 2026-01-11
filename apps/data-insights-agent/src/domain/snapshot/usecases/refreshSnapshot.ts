@@ -1,6 +1,7 @@
 /**
  * Refresh snapshot use case.
  * Computes fresh composite feed data and stores it as a snapshot.
+ * Optionally refreshes visualizations after snapshot is updated.
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
@@ -11,6 +12,11 @@ import type {
 import { getCompositeFeedData } from '../../compositeFeed/usecases/getCompositeFeedData.js';
 import type { DataSourceRepository } from '../../dataSource/index.js';
 import type { DataInsightSnapshot, SnapshotRepository } from '../index.js';
+import type {
+  VisualizationRepository,
+  VisualizationGenerationService,
+} from '../../visualization/index.js';
+import { refreshVisualizationsForFeed } from '../../visualization/index.js';
 
 interface BasicLogger {
   info: (obj: object, msg: string) => void;
@@ -23,7 +29,10 @@ export interface RefreshSnapshotDeps {
   compositeFeedRepository: CompositeFeedRepository;
   dataSourceRepository: DataSourceRepository;
   mobileNotificationsClient: MobileNotificationsClient;
+  visualizationRepository?: VisualizationRepository;
+  visualizationGenerationService?: VisualizationGenerationService;
   logger?: BasicLogger;
+  refreshVisualizations?: boolean;
 }
 
 export interface RefreshSnapshotError {
@@ -36,7 +45,16 @@ export async function refreshSnapshot(
   userId: string,
   deps: RefreshSnapshotDeps
 ): Promise<Result<DataInsightSnapshot, RefreshSnapshotError>> {
-  const { snapshotRepository, compositeFeedRepository, dataSourceRepository, mobileNotificationsClient, logger } = deps;
+  const {
+    snapshotRepository,
+    compositeFeedRepository,
+    dataSourceRepository,
+    mobileNotificationsClient,
+    visualizationRepository,
+    visualizationGenerationService,
+    logger,
+    refreshVisualizations = false,
+  } = deps;
 
   logger?.info({ feedId, userId }, 'Refreshing snapshot');
 
@@ -96,5 +114,40 @@ export async function refreshSnapshot(
   }
 
   logger?.info({ feedId, snapshotId: snapshotResult.value.feedId }, 'Snapshot refresh completed');
+
+  if (
+    refreshVisualizations &&
+    visualizationRepository !== undefined &&
+    visualizationGenerationService !== undefined
+  ) {
+    logger?.info({ feedId }, 'Starting visualization refresh');
+
+    refreshVisualizationsForFeed(feedId, userId, {
+      visualizationRepository,
+      visualizationGenerationService,
+      snapshotRepository,
+      ...(logger !== undefined ? { logger } : {}),
+    })
+      .then((result) => {
+        if (result.ok) {
+          logger?.info(
+            {
+              feedId,
+              total: result.value.total,
+              succeeded: result.value.succeeded,
+              failed: result.value.failed,
+            },
+            'Visualization refresh completed'
+          );
+          if (result.value.errors.length > 0) {
+            logger?.warn({ feedId, errors: result.value.errors }, 'Some visualizations failed to refresh');
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        logger?.warn({ feedId, error }, 'Visualization refresh failed (non-fatal)');
+      });
+  }
+
   return ok(snapshotResult.value);
 }

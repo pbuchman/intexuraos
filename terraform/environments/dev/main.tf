@@ -1148,8 +1148,10 @@ module "todos_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/todos-agent:latest"
 
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
+  secrets = local.common_service_secrets
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_TODOS_PROCESSING_TOPIC = "intexuraos-todos-processing-${var.environment}"
+  })
 
   depends_on = [
     module.artifact_registry,
@@ -1208,6 +1210,31 @@ module "pubsub_bookmark_enrich" {
     google_project_service.apis,
     module.iam,
     module.bookmarks_agent,
+  ]
+}
+
+# Pub/Sub for todos processing (AI breakdown of todos into items)
+module "pubsub_todos_processing" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-todos-processing-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.todos_agent.service_url}/internal/todos/pubsub/todos-processing"
+  push_service_account_email = module.iam.service_accounts["todos_agent"]
+  push_audience              = module.todos_agent.service_url
+  ack_deadline_seconds       = 60
+
+  publisher_service_accounts = {
+    todos_agent = module.iam.service_accounts["todos_agent"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.todos_agent,
   ]
 }
 

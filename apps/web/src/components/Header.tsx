@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/context';
-import { ChevronDown, LogOut, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useAuth, useSyncQueue } from '@/context';
+import { ChevronDown, LogOut, User, RefreshCw } from 'lucide-react';
 
 export function Header(): React.JSX.Element {
   const { user, logout } = useAuth();
+  const { pendingCount, isSyncing } = useSyncQueue();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -44,41 +46,56 @@ export function Header(): React.JSX.Element {
         </h1>
       </div>
 
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={(): void => {
-            setIsMenuOpen(!isMenuOpen);
-          }}
-          className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 md:px-3"
-        >
-          {userPicture !== undefined && userPicture !== '' ? (
-            <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
-          ) : (
-            <User className="h-5 w-5 text-slate-400" />
-          )}
-          <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userEmail}</span>
-          <ChevronDown
-            className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
+      <div className="flex items-center gap-4">
+        {pendingCount > 0 && (
+          <Link
+            to="/settings/share-history"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-slate-100"
+            title="Pending shares - click to view history"
+          >
+            <RefreshCw
+              className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : ''}`}
+            />
+            <span className="text-amber-600">{pendingCount} pending</span>
+          </Link>
+        )}
 
-        {isMenuOpen ? (
-          <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-            <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
-              <span className="text-sm text-slate-600">{userEmail}</span>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={(): void => {
+              setIsMenuOpen(!isMenuOpen);
+            }}
+            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 md:px-3"
+          >
+            {userPicture !== undefined && userPicture !== '' ? (
+              <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
+            ) : (
+              <User className="h-5 w-5 text-slate-400" />
+            )}
+            <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userEmail}</span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {isMenuOpen ? (
+            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
+                <span className="text-sm text-slate-600">{userEmail}</span>
+              </div>
+              <button
+                onClick={(): void => {
+                  logout();
+                  setIsMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+              >
+                <LogOut className="h-4 w-4" />
+                Log out
+              </button>
             </div>
-            <button
-              onClick={(): void => {
-                logout();
-                setIsMenuOpen(false);
-              }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              <LogOut className="h-4 w-4" />
-              Log out
-            </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </header>
   );

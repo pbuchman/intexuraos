@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Archive,
+  Ban,
   Calendar,
   Check,
   CheckSquare,
@@ -63,6 +64,8 @@ const PRIORITY_CONFIG: Record<TodoPriority, { label: string; className: string }
 };
 
 const STATUS_CONFIG: Record<TodoStatus, { label: string; className: string }> = {
+  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700' },
+  processing: { label: 'Processing', className: 'bg-purple-100 text-purple-700' },
   pending: { label: 'Pending', className: 'bg-slate-100 text-slate-700' },
   in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
   completed: { label: 'Completed', className: 'bg-green-100 text-green-700' },
@@ -311,6 +314,7 @@ interface TodoModalProps {
   onDelete: () => Promise<void>;
   onArchive: () => Promise<Todo>;
   onUnarchive: () => Promise<Todo>;
+  onCancel: () => Promise<Todo>;
   onAddItem: (request: CreateTodoItemRequest) => Promise<Todo>;
   onUpdateItem: (itemId: string, request: UpdateTodoItemRequest) => Promise<Todo>;
   onDeleteItem: (itemId: string) => Promise<Todo>;
@@ -323,6 +327,7 @@ function TodoModal({
   onDelete,
   onArchive,
   onUnarchive,
+  onCancel,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
@@ -338,6 +343,7 @@ function TodoModal({
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemTitle, setNewItemTitle] = useState('');
   const [addingItem, setAddingItem] = useState(false);
@@ -379,6 +385,16 @@ function TodoModal({
       setCurrentTodo(updated);
     } finally {
       setArchiving(false);
+    }
+  };
+
+  const handleCancelTodo = async (): Promise<void> => {
+    setCancelling(true);
+    try {
+      const updated = await onCancel();
+      setCurrentTodo(updated);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -698,6 +714,22 @@ function TodoModal({
                   {currentTodo.archived ? 'Unarchive' : 'Archive'}
                 </Button>
               ) : null}
+              {currentTodo.status !== 'completed' && currentTodo.status !== 'cancelled' ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleCancelTodo();
+                  }}
+                  disabled={cancelling}
+                  isLoading={cancelling}
+                  className="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                >
+                  <Ban className="mr-1 h-4 w-4" />
+                  Cancel
+                </Button>
+              ) : null}
             </div>
           )}
 
@@ -983,6 +1015,7 @@ export function TodosListPage(): React.JSX.Element {
     deleteTodo,
     archiveTodo,
     unarchiveTodo,
+    cancelTodo,
     addItem,
     updateItem,
     deleteItem,
@@ -1090,6 +1123,11 @@ export function TodosListPage(): React.JSX.Element {
           }}
           onUnarchive={async (): Promise<Todo> => {
             const updated = await unarchiveTodo(selectedTodo.id);
+            setSelectedTodo(updated);
+            return updated;
+          }}
+          onCancel={async (): Promise<Todo> => {
+            const updated = await cancelTodo(selectedTodo.id);
             setSelectedTodo(updated);
             return updated;
           }}
