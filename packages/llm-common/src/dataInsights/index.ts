@@ -14,3 +14,14 @@ export {
   type ParsedDataInsight,
   type ParseInsightResult,
 } from './parseInsightResponse.js';
+
+export {
+  chartDefinitionPrompt,
+  type ChartDefinitionPromptInput,
+  type ChartDefinitionPromptDeps,
+} from './chartDefinitionPrompt.js';
+
+export {
+  parseChartDefinition,
+  type ParsedChartDefinition,
+} from './parseChartDefinition.js';
