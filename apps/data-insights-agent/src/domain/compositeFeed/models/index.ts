@@ -2,6 +2,8 @@
  * Composite feed domain models.
  */
 
+import type { DataInsight } from '../dataInsights/index.js';
+
 /**
  * Configuration for a notification filter within a composite feed.
  * app is multi-select (array), source is single-select (string).
@@ -24,6 +26,7 @@ export interface CompositeFeed {
   purpose: string;
   staticSourceIds: string[];
   notificationFilters: NotificationFilterConfig[];
+  dataInsights: DataInsight[] | null;
   createdAt: Date;
   updatedAt: Date;
 }

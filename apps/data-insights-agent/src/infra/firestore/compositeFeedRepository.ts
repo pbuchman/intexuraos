@@ -12,6 +12,7 @@ import type {
   NotificationFilterConfig,
   UpdateCompositeFeedRequest,
 } from '../../domain/compositeFeed/index.js';
+import type { DataInsight } from '../../domain/dataInsights/index.js';
 
 const COLLECTION_NAME = 'composite_feeds';
 
@@ -24,6 +25,7 @@ interface CompositeFeedDoc {
   purpose: string;
   staticSourceIds: string[];
   notificationFilters: NotificationFilterConfig[];
+  dataInsights: DataInsight[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +41,7 @@ function toCompositeFeed(id: string, doc: CompositeFeedDoc): CompositeFeed {
     purpose: doc.purpose,
     staticSourceIds: doc.staticSourceIds,
     notificationFilters: doc.notificationFilters,
+    dataInsights: doc.dataInsights,
     createdAt: new Date(doc.createdAt),
     updatedAt: new Date(doc.updatedAt),
   };
@@ -63,6 +66,7 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
         purpose: request.purpose,
         staticSourceIds: request.staticSourceIds,
         notificationFilters: request.notificationFilters,
+        dataInsights: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -170,10 +174,12 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
 
       if (request.staticSourceIds !== undefined) {
         updates.staticSourceIds = request.staticSourceIds;
+        updates.dataInsights = null;
       }
 
       if (request.notificationFilters !== undefined) {
         updates.notificationFilters = request.notificationFilters;
+        updates.dataInsights = null;
       }
 
       await docRef.update(updates);

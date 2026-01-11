@@ -249,6 +249,7 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
         ...f,
         id: `filter-${String(idx + 1)}`,
       })),
+      dataInsights: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -321,6 +322,10 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
           ...f,
           id: `filter-${String(idx + 1)}`,
         })) ?? feed.notificationFilters,
+      dataInsights:
+        request.staticSourceIds !== undefined || request.notificationFilters !== undefined
+          ? null
+          : feed.dataInsights,
       updatedAt: new Date(),
     };
 
