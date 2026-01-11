@@ -14,6 +14,7 @@ import { createTitleGenerationService } from './infra/gemini/titleGenerationServ
 import { createFeedNameGenerationService } from './infra/gemini/feedNameGenerationService.js';
 import { createMobileNotificationsClient } from './infra/http/mobileNotificationsClient.js';
 import { createDataAnalysisService } from './infra/gemini/dataAnalysisService.js';
+import { createChartDefinitionService } from './infra/gemini/chartDefinitionService.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
     }),
     snapshotRepository: new FirestoreSnapshotRepository(),
     dataAnalysisService: createDataAnalysisService(userServiceClient, pricingContext),
+    chartDefinitionService: createChartDefinitionService(userServiceClient, pricingContext),
   });
 
   const app = await buildServer();

@@ -12,3 +12,10 @@ export {
   type AnalyzeDataError,
   type AnalyzeDataResult,
 } from './usecases/analyzeData.js';
+
+export {
+  generateChartDefinition,
+  type GenerateChartDefinitionDeps,
+  type GenerateChartDefinitionError,
+  type ChartDefinitionResult,
+} from './usecases/generateChartDefinition.js';

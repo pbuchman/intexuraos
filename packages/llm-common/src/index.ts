@@ -121,4 +121,9 @@ export {
   parseInsightResponse,
   type ParsedDataInsight,
   type ParseInsightResult,
+  chartDefinitionPrompt,
+  type ChartDefinitionPromptInput,
+  type ChartDefinitionPromptDeps,
+  parseChartDefinition,
+  type ParsedChartDefinition,
 } from './dataInsights/index.js';
