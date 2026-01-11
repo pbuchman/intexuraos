@@ -197,6 +197,47 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
     }
   }
 
+  async updateDataInsights(
+    id: string,
+    userId: string,
+    dataInsights: CompositeFeed['dataInsights']
+  ): Promise<Result<CompositeFeed, string>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(id);
+      const snapshot = await docRef.get();
+
+      if (!snapshot.exists) {
+        return err('Composite feed not found');
+      }
+
+      const data = snapshot.data() as CompositeFeedDoc;
+
+      if (data.userId !== userId) {
+        return err('Composite feed not found');
+      }
+
+      const now = new Date().toISOString();
+      const updates: Partial<CompositeFeedDoc> = {
+        dataInsights,
+        updatedAt: now,
+      };
+
+      await docRef.update(updates);
+
+      const updatedDoc: CompositeFeedDoc = {
+        ...data,
+        ...updates,
+      };
+
+      return ok(toCompositeFeed(id, updatedDoc));
+    } catch (error) {
+      return err(
+        `Failed to update data insights: ${getErrorMessage(error, 'Unknown Firestore error')}`
+      );
+    }
+  }
+
   async delete(id: string, userId: string): Promise<Result<void, string>> {
     try {
       const db = getFirestore();

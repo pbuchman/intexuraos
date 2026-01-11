@@ -333,6 +333,26 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
     return Promise.resolve(ok(updated));
   }
 
+  updateDataInsights(
+    id: string,
+    userId: string,
+    dataInsights: CompositeFeed['dataInsights']
+  ): Promise<Result<CompositeFeed, string>> {
+    const feed = this.feeds.get(id);
+    if (feed === undefined || feed.userId !== userId) {
+      return Promise.resolve(err('Composite feed not found'));
+    }
+
+    const updated: CompositeFeed = {
+      ...feed,
+      dataInsights,
+      updatedAt: new Date(),
+    };
+
+    this.feeds.set(id, updated);
+    return Promise.resolve(ok(updated));
+  }
+
   delete(id: string, userId: string): Promise<Result<void, string>> {
     if (this.shouldFailDelete) {
       this.shouldFailDelete = false;

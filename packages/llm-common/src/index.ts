@@ -111,3 +111,14 @@ export {
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+// Data insights prompts and parsers
+export {
+  dataAnalysisPrompt,
+  type DataAnalysisPromptInput,
+  type DataAnalysisPromptDeps,
+  type ChartTypeInfo,
+  parseInsightResponse,
+  type ParsedDataInsight,
+  type ParseInsightResult,
+} from './dataInsights/index.js';
