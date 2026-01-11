@@ -9,9 +9,11 @@ import { initServices } from './services.js';
 import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepository.js';
 import { FirestoreCompositeFeedRepository } from './infra/firestore/compositeFeedRepository.js';
 import { FirestoreSnapshotRepository } from './infra/firestore/snapshotRepository.js';
+import { FirestoreVisualizationRepository } from './infra/firestore/visualizationRepository.js';
 import { createUserServiceClient } from './infra/user/userServiceClient.js';
 import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
 import { createFeedNameGenerationService } from './infra/gemini/feedNameGenerationService.js';
+import { createVisualizationAnalysisService } from './infra/gemini/visualizationAnalysisService.js';
 import { createMobileNotificationsClient } from './infra/http/mobileNotificationsClient.js';
 
 const REQUIRED_ENV = [
@@ -62,6 +64,12 @@ async function main(): Promise<void> {
       logger,
     }),
     snapshotRepository: new FirestoreSnapshotRepository(),
+    visualizationRepository: new FirestoreVisualizationRepository(),
+    visualizationGenerationService: createVisualizationAnalysisService(
+      userServiceClient,
+      pricingContext,
+      logger
+    ),
   });
 
   const app = await buildServer();

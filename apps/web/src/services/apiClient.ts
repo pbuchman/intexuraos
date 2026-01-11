@@ -4,6 +4,7 @@ export class ApiError extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    public readonly status: number,
     public readonly details?: Record<string, unknown>
   ) {
     super(message);
@@ -57,7 +58,7 @@ export async function apiRequest<T>(
   const data = (await response.json()) as ApiResponse<T>;
 
   if (!data.success) {
-    throw new ApiError(data.error.code, data.error.message, data.error.details);
+    throw new ApiError(data.error.code, data.error.message, response.status, data.error.details);
   }
 
   return data.data;

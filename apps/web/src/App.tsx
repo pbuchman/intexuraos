@@ -1,9 +1,14 @@
+import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
-import { AuthProvider, useAuth } from '@/context';
+import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
+
+const LazyCompositeFeedVisualizationsPage = lazy(
+  () => import('./pages/CompositeFeedVisualizationsPage')
+);
 
 (function handleShareTargetRedirect(): void {
   if (window.location.hash !== '') return;
@@ -34,6 +39,7 @@ import {
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
+  ShareHistoryPage,
   ShareTargetPage,
   SystemHealthPage,
   TodosListPage,
@@ -187,6 +193,14 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/settings/share-history"
+        element={
+          <ProtectedRoute>
+            <ShareHistoryPage />
+          </ProtectedRoute>
+        }
+      />
       {/* Research Agent routes */}
       <Route
         path="/research/new"
@@ -217,7 +231,7 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights"
         element={
           <ProtectedRoute>
-            <DataSourcesListPage />
+            <CompositeFeedsListPage />
           </ProtectedRoute>
         }
       />
@@ -225,7 +239,7 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights/new"
         element={
           <ProtectedRoute>
-            <DataSourceFormPage />
+            <CompositeFeedFormPage />
           </ProtectedRoute>
         }
       />
@@ -233,31 +247,47 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights/:id"
         element={
           <ProtectedRoute>
+            <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/static-sources"
+        element={
+          <ProtectedRoute>
+            <DataSourcesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/static-sources/new"
+        element={
+          <ProtectedRoute>
             <DataSourceFormPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/data-insights/composite-feeds"
+        path="/data-insights/static-sources/:id"
         element={
           <ProtectedRoute>
-            <CompositeFeedsListPage />
+            <DataSourceFormPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/data-insights/composite-feeds/new"
+        path="/data-insights/:id/visualizations"
         element={
           <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/composite-feeds/:id"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
+            <Suspense
+              fallback={
+                <div className="flex min-h-screen items-center justify-center bg-slate-50">
+                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                </div>
+              }
+            >
+              <LazyCompositeFeedVisualizationsPage />
+            </Suspense>
           </ProtectedRoute>
         }
       />
@@ -377,10 +407,12 @@ export function App(): React.JSX.Element {
       >
         <HashRouter>
           <AuthProvider>
-            <AppRoutes />
-            <UpdateBanner />
-            <IOSInstallBanner />
-            <AndroidInstallBanner />
+            <SyncQueueProvider>
+              <AppRoutes />
+              <UpdateBanner />
+              <IOSInstallBanner />
+              <AndroidInstallBanner />
+            </SyncQueueProvider>
           </AuthProvider>
         </HashRouter>
       </Auth0Provider>

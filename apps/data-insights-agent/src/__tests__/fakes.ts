@@ -540,3 +540,231 @@ export class FakeSnapshotRepository implements SnapshotRepository {
     return Promise.resolve(ok(snapshots));
   }
 }
+
+/**
+ * Fake Visualization repository for testing.
+ */
+export class FakeVisualizationRepository {
+  private visualizations = new Map<string, import('../domain/visualization/index.js').Visualization>();
+  private idCounter = 1;
+  private shouldFailCreate = false;
+  private shouldFailGet = false;
+  private shouldFailList = false;
+  private shouldFailUpdate = false;
+  private shouldFailDelete = false;
+  private shouldFailIncrement = false;
+
+  setFailNextCreate(fail: boolean): void {
+    this.shouldFailCreate = fail;
+  }
+
+  setFailNextGet(fail: boolean): void {
+    this.shouldFailGet = fail;
+  }
+
+  setFailNextList(fail: boolean): void {
+    this.shouldFailList = fail;
+  }
+
+  setFailNextUpdate(fail: boolean): void {
+    this.shouldFailUpdate = fail;
+  }
+
+  setFailNextDelete(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
+  setFailNextIncrement(fail: boolean): void {
+    this.shouldFailIncrement = fail;
+  }
+
+  async create(
+    feedId: string,
+    userId: string,
+    data: {
+      title: string;
+      description: string;
+      type: import('../domain/visualization/index.js').VisualizationType;
+    }
+  ): Promise<Result<import('../domain/visualization/index.js').Visualization, string>> {
+    if (this.shouldFailCreate) {
+      this.shouldFailCreate = false;
+      return err('Simulated create failure');
+    }
+
+    const id = `viz-${String(this.idCounter++)}`;
+    const now = new Date();
+    const visualization: import('../domain/visualization/index.js').Visualization = {
+      id,
+      feedId,
+      userId,
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      status: 'pending',
+      htmlContent: null,
+      errorMessage: null,
+      renderErrorCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      lastGeneratedAt: null,
+    };
+
+    this.visualizations.set(id, visualization);
+    return ok(visualization);
+  }
+
+  async getById(
+    id: string,
+    feedId: string,
+    userId: string
+  ): Promise<Result<import('../domain/visualization/index.js').Visualization | null, string>> {
+    if (this.shouldFailGet) {
+      this.shouldFailGet = false;
+      return err('Simulated get failure');
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
+      return ok(null);
+    }
+
+    return ok(viz);
+  }
+
+  async listByFeedId(
+    feedId: string,
+    userId: string
+  ): Promise<Result<import('../domain/visualization/index.js').Visualization[], string>> {
+    if (this.shouldFailList) {
+      this.shouldFailList = false;
+      return err('Simulated list failure');
+    }
+
+    const visualizations = Array.from(this.visualizations.values())
+      .filter((v) => v.feedId === feedId && v.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return ok(visualizations);
+  }
+
+  async update(
+    id: string,
+    feedId: string,
+    userId: string,
+    data: {
+      title?: string;
+      description?: string;
+      type?: import('../domain/visualization/index.js').VisualizationType;
+      status?: import('../domain/visualization/index.js').VisualizationStatus;
+      htmlContent?: string | null;
+      errorMessage?: string | null;
+      renderErrorCount?: number;
+      lastGeneratedAt?: Date;
+    }
+  ): Promise<Result<import('../domain/visualization/index.js').Visualization, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return err('Simulated update failure');
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
+      return err('Visualization not found');
+    }
+
+    const updated: import('../domain/visualization/index.js').Visualization = {
+      ...viz,
+      title: data.title ?? viz.title,
+      description: data.description ?? viz.description,
+      type: data.type ?? viz.type,
+      status: data.status ?? viz.status,
+      htmlContent: data.htmlContent !== undefined ? data.htmlContent : viz.htmlContent,
+      errorMessage: data.errorMessage !== undefined ? data.errorMessage : viz.errorMessage,
+      renderErrorCount: data.renderErrorCount ?? viz.renderErrorCount,
+      lastGeneratedAt: data.lastGeneratedAt ?? viz.lastGeneratedAt,
+      updatedAt: new Date(),
+    };
+
+    this.visualizations.set(id, updated);
+    return ok(updated);
+  }
+
+  async delete(
+    id: string,
+    feedId: string,
+    userId: string
+  ): Promise<Result<void, string>> {
+    if (this.shouldFailDelete) {
+      this.shouldFailDelete = false;
+      return err('Simulated delete failure');
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
+      return err('Visualization not found');
+    }
+
+    this.visualizations.delete(id);
+    return ok(undefined);
+  }
+
+  async incrementRenderErrorCount(
+    id: string,
+    feedId: string,
+    userId: string
+  ): Promise<Result<number, string>> {
+    if (this.shouldFailIncrement) {
+      this.shouldFailIncrement = false;
+      return err('Simulated increment failure');
+    }
+
+    const viz = this.visualizations.get(id);
+    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
+      return err('Visualization not found');
+    }
+
+    const newCount = viz.renderErrorCount + 1;
+    const updated: import('../domain/visualization/index.js').Visualization = {
+      ...viz,
+      renderErrorCount: newCount,
+      updatedAt: new Date(),
+    };
+
+    this.visualizations.set(id, updated);
+    return ok(newCount);
+  }
+
+  clear(): void {
+    this.visualizations.clear();
+    this.idCounter = 1;
+  }
+}
+
+/**
+ * Fake Visualization generation service for testing.
+ */
+export class FakeVisualizationGenerationService {
+  private shouldFail = false;
+  private generatedHtml = '<html><body><h1>Fake Visualization</h1></body></html>';
+
+  setGeneratedHtml(html: string): void {
+    this.generatedHtml = html;
+  }
+
+  setFailNextGeneration(fail: boolean): void {
+    this.shouldFail = fail;
+  }
+
+  async generateContent(
+    _snapshotData: object,
+    _request: import('../domain/visualization/index.js').GenerateVisualizationContentRequest
+  ): Promise<import('../domain/visualization/index.js').GeneratedVisualizationContent> {
+    if (this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error('Simulated generation failure');
+    }
+
+    return { htmlContent: this.generatedHtml };
+  }
+}

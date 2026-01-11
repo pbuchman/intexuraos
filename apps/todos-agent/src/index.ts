@@ -9,6 +9,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_TODOS_PROCESSING_TOPIC',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -16,6 +17,7 @@ validateRequiredEnv(REQUIRED_ENV);
 async function main(): Promise<void> {
   initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
+    todosProcessingTopic: process.env['INTEXURAOS_TODOS_PROCESSING_TOPIC'] ?? '',
   });
 
   const app = await buildServer();

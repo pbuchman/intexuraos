@@ -503,6 +503,47 @@ export interface CompositeFeedSnapshot extends CompositeFeedData {
   expiresAt: string;
 }
 
+export type VisualizationType = 'chart' | 'table' | 'summary' | 'custom';
+export type VisualizationStatus = 'pending' | 'ready' | 'error';
+
+/**
+ * Visualization from data-insights-agent.
+ * Represents LLM-generated visual content for a composite feed.
+ */
+export interface Visualization {
+  id: string;
+  feedId: string;
+  userId: string;
+  title: string;
+  description: string;
+  type: VisualizationType;
+  status: VisualizationStatus;
+  htmlContent: string | null;
+  errorMessage: string | null;
+  renderErrorCount: number;
+  createdAt: string;
+  updatedAt: string;
+  lastGeneratedAt: string | null;
+}
+
+/**
+ * Request to create a visualization.
+ */
+export interface CreateVisualizationRequest {
+  title: string;
+  description: string;
+  type: VisualizationType;
+}
+
+/**
+ * Request to update a visualization.
+ */
+export interface UpdateVisualizationRequest {
+  title?: string;
+  description?: string;
+  type?: VisualizationType;
+}
+
 /**
  * Note from notes-agent
  */
@@ -546,7 +587,13 @@ export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
 /**
  * Todo status values
  */
-export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type TodoStatus =
+  | 'draft'
+  | 'processing'
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
 
 /**
  * Todo item (nested within a todo)

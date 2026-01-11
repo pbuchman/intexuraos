@@ -12,6 +12,7 @@ import { deleteTodoItem } from '../domain/usecases/deleteTodoItem.js';
 import { reorderTodoItems } from '../domain/usecases/reorderTodoItems.js';
 import { archiveTodo } from '../domain/usecases/archiveTodo.js';
 import { unarchiveTodo } from '../domain/usecases/unarchiveTodo.js';
+import { cancelTodo } from '../domain/usecases/cancelTodo.js';
 import type { Todo, TodoItem, TodoStatus, TodoPriority } from '../domain/models/todo.js';
 
 interface CreateTodoBody {
@@ -66,7 +67,7 @@ interface ReorderItemsBody {
   itemIds: string[];
 }
 
-const todoStatusEnum = ['pending', 'in_progress', 'completed', 'cancelled'];
+const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
 
 const createTodoBodySchema = {
@@ -824,6 +825,58 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
+        }
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(formatTodo(result.value));
+    }
+  );
+
+  fastify.post<{ Params: TodoParams }>(
+    '/todos/:id/cancel',
+    {
+      schema: {
+        operationId: 'cancelTodo',
+        summary: 'Cancel todo',
+        description: 'Cancel a todo. Completed todos cannot be cancelled.',
+        tags: ['todos'],
+        security: [{ bearerAuth: [] }],
+        params: todoParamsSchema,
+        response: {
+          200: {
+            description: 'Cancelled todo',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: todoResponseSchema,
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { todoRepository } = getServices();
+      const result = await cancelTodo(
+        { todoRepository, logger: request.log },
+        request.params.id,
+        user.userId
+      );
+
+      if (!result.ok) {
+        if (result.error.code === 'NOT_FOUND') {
+          return await reply.fail('NOT_FOUND', 'Todo not found');
+        }
+        if (result.error.code === 'FORBIDDEN') {
+          return await reply.fail('FORBIDDEN', 'Access denied');
+        }
+        if (result.error.code === 'INVALID_OPERATION') {
+          return await reply.fail('INVALID_REQUEST', result.error.message);
         }
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }

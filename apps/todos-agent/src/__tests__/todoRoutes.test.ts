@@ -633,6 +633,123 @@ describe('Todo Routes', () => {
     });
   });
 
+  describe('POST /todos/:id/cancel', () => {
+    it('cancels pending todo', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/todos/${createResult.value.id}/cancel`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.status).toBe('cancelled');
+    });
+
+    it('returns 400 for completed todo', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const todo = createResult.value;
+      todo.status = 'completed';
+      await ctx.todoRepository.update(todo.id, todo);
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/todos/${todo.id}/cancel`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 for non-existent todo', async () => {
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/non-existent/cancel',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 for non-owner', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const token = await createToken({ sub: 'other-user' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/todos/${createResult.value.id}/cancel`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/todos/any-id/cancel',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 500 on storage error', async () => {
+      const createResult = await ctx.todoRepository.create({
+        userId: 'user-1',
+        title: 'Test',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.todoRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'Update failed',
+      });
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/todos/${createResult.value.id}/cancel`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
   describe('Additional coverage for filters', () => {
     it('filters by archived', async () => {
       const createResult = await ctx.todoRepository.create({

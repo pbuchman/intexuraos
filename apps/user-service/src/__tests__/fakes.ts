@@ -379,7 +379,8 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       const llmTestResults = existing.llmTestResults ?? {};
       const existingResult = llmTestResults[provider];
       llmTestResults[provider] = {
-        response: existingResult?.response ?? '',
+        status: existingResult?.status ?? 'success',
+        message: existingResult?.message ?? '',
         testedAt: now,
       };
       existing.llmTestResults = llmTestResults;

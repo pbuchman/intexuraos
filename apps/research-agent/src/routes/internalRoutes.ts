@@ -17,6 +17,7 @@ import {
   calculateAccurateCost,
   type ResearchModel,
 } from '../domain/research/index.js';
+import { formatLlmError } from '../domain/research/formatLlmError.js';
 import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { supportedModelSchema, researchSchema } from './schemas/index.js';
@@ -694,18 +695,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const durationMs = Date.now() - startTime;
 
         if (!llmResult.ok) {
-          request.log.error(
+          const rawError = llmResult.error.message;
+          const formattedError = formatLlmError(rawError);
+
+          request.log.warn(
             {
               researchId: event.researchId,
               model: event.model,
-              error: llmResult.error.message,
+              rawError,
               durationMs,
             },
             '[3.3] LLM research call failed'
           );
           await researchRepo.updateLlmResult(event.researchId, event.model, {
             status: 'failed',
-            error: llmResult.error.message,
+            error: formattedError,
             completedAt: new Date().toISOString(),
             durationMs,
           });
@@ -713,7 +717,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             event.userId,
             event.researchId,
             event.model,
-            llmResult.error.message
+            formattedError
           );
 
           const failCompletionAction = await checkLlmCompletion(event.researchId, { researchRepo });

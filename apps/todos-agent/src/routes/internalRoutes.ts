@@ -18,7 +18,7 @@ interface CreateTodoBody {
 }
 
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
-const todoStatusEnum = ['draft', 'pending', 'in_progress', 'completed', 'cancelled'];
+const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
 
 const createTodoBodySchema = {
   type: 'object',
@@ -166,7 +166,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Unauthorized' };
       }
 
-      const { todoRepository } = getServices();
+      const { todoRepository, todosProcessingPublisher } = getServices();
       const result = await createTodo(
         { todoRepository, logger: request.log },
         {
@@ -176,7 +176,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           tags: request.body.tags,
           priority: request.body.priority,
           dueDate: parseDate(request.body.dueDate),
-          status: request.body.status,
+          status: 'processing',
           source: request.body.source,
           sourceId: request.body.sourceId,
           items: request.body.items?.map((item) => ({
@@ -191,14 +191,30 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      const todoId = result.value.id;
+      const todo = result.value;
+      const todoId = todo.id;
       const url = `/#/todos/${todoId}`;
+
+      const publishResult = await todosProcessingPublisher.publishTodoCreated({
+        todoId,
+        userId: todo.userId,
+        title: todo.title,
+      });
+
+      if (!publishResult.ok) {
+        request.log.error(
+          { todoId, error: publishResult.error },
+          'Failed to publish todo processing event'
+        );
+      } else {
+        request.log.info({ todoId }, 'Published todo processing event');
+      }
 
       void reply.status(201);
       return await reply.ok({
         id: todoId,
         url,
-        todo: formatTodo(result.value),
+        todo: formatTodo(todo),
       });
     }
   );

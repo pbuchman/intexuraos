@@ -17,6 +17,7 @@ import {
 } from '@intexuraos/http-server';
 import { todoRoutes } from './routes/todoRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { pubsubRoutes } from './routes/pubsubRoutes.js';
 
 const SERVICE_NAME = 'todos-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -207,6 +208,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(todoRoutes);
   await app.register(internalRoutes);
+  await app.register(pubsubRoutes);
 
   app.get(
     '/openapi.json',
