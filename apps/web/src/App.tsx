@@ -231,7 +231,7 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights"
         element={
           <ProtectedRoute>
-            <DataSourcesListPage />
+            <CompositeFeedsListPage />
           </ProtectedRoute>
         }
       />
@@ -239,7 +239,7 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights/new"
         element={
           <ProtectedRoute>
-            <DataSourceFormPage />
+            <CompositeFeedFormPage />
           </ProtectedRoute>
         }
       />
@@ -247,36 +247,36 @@ function AppRoutes(): React.JSX.Element {
         path="/data-insights/:id"
         element={
           <ProtectedRoute>
+            <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/static-sources"
+        element={
+          <ProtectedRoute>
+            <DataSourcesListPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/static-sources/new"
+        element={
+          <ProtectedRoute>
             <DataSourceFormPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/data-insights/composite-feeds"
+        path="/data-insights/static-sources/:id"
         element={
           <ProtectedRoute>
-            <CompositeFeedsListPage />
+            <DataSourceFormPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/data-insights/composite-feeds/new"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/composite-feeds/:id"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/composite-feeds/:id/visualizations"
+        path="/data-insights/:id/visualizations"
         element={
           <ProtectedRoute>
             <Suspense

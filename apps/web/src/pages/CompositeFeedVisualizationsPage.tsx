@@ -116,7 +116,7 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6">
         <Link
-          to={`/data-insights/composite-feeds/${id}`}
+          to={`/data-insights/${id}`}
           className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
