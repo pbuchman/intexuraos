@@ -857,19 +857,21 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { response: string; testedAt: string };
+        data: { status: string; message: string; testedAt: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.response).toBe('Hello! I am Gemini Pro.');
+      expect(body.data.status).toBe('success');
+      expect(body.data.message).toBe('Hello! I am Gemini Pro.');
       expect(body.data.testedAt).toBeDefined();
 
       // Verify test result was saved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored?.llmTestResults?.google).toBeDefined();
-      expect(stored?.llmTestResults?.google?.response).toBe('Hello! I am Gemini Pro.');
+      expect(stored?.llmTestResults?.google?.status).toBe('success');
+      expect(stored?.llmTestResults?.google?.message).toBe('Hello! I am Gemini Pro.');
     });
 
-    it('returns 502 and stores error when test request fails', { timeout: 20000 }, async () => {
+    it('returns 200 with failure status and stores error when test request fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-fail';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       fakeSettingsRepo.setSettings({
@@ -896,19 +898,21 @@ describe('LLM Keys Routes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string };
+        data: { status: string; message: string; testedAt: string };
       };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failure');
+      expect(body.data.message).toBe('Test request failed');
+      expect(body.data.testedAt).toBeDefined();
 
       // Verify error was stored for persistence across page refresh
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored?.llmTestResults?.google).toBeDefined();
-      expect(stored?.llmTestResults?.google?.error).toBe('Test request failed');
-      expect(stored?.llmTestResults?.google?.response).toBeUndefined();
+      expect(stored?.llmTestResults?.google?.status).toBe('failure');
+      expect(stored?.llmTestResults?.google?.message).toBe('Test request failed');
     });
 
     it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
@@ -945,10 +949,11 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { response: string; testedAt: string };
+        data: { status: string; message: string; testedAt: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.response).toBe('Hello! I am Claude.');
+      expect(body.data.status).toBe('success');
+      expect(body.data.message).toBe('Hello! I am Claude.');
     });
 
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {

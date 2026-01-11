@@ -60,7 +60,7 @@ export class FakeTodoRepository implements TodoRepository {
       dueDate: input.dueDate ?? null,
       source: input.source,
       sourceId: input.sourceId,
-      status: 'pending',
+      status: input.status ?? 'pending',
       archived: false,
       items,
       completedAt: null,

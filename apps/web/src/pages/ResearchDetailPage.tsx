@@ -30,7 +30,6 @@ import {
   PROVIDER_MODELS,
   getSelectedModelsList,
 } from '@/components';
-import { formatLlmError } from '@/utils';
 import { useAuth } from '@/context';
 import { useLlmKeys, useResearch } from '@/hooks';
 import {
@@ -1328,17 +1327,9 @@ function ErrorDisplay({
   error: string;
   className?: string;
 }): React.JSX.Element {
-  const formatted = formatLlmError(error);
-
   return (
     <div className={className}>
-      <p className="text-sm font-medium text-red-700">{formatted.title}</p>
-      {formatted.detail !== undefined ? (
-        <p className="text-sm text-red-600">{formatted.detail}</p>
-      ) : null}
-      {formatted.retryIn !== undefined ? (
-        <p className="text-xs text-red-500">{formatted.retryIn}</p>
-      ) : null}
+      <p className="text-sm text-red-600">{error}</p>
     </div>
   );
 }

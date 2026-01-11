@@ -192,11 +192,32 @@
       .event.send-message {
         border-left-color: #10b981;
       }
+      .event.webhook-process {
+        border-left-color: #a78bfa;
+      }
+      .event.transcription {
+        border-left-color: #34d399;
+      }
       .event.commands-ingest {
         border-left-color: #f59e0b;
       }
-      .event.actions-research {
+      .event.actions-queue {
         border-left-color: #06b6d4;
+      }
+      .event.research-process {
+        border-left-color: #3b82f6;
+      }
+      .event.llm-analytics {
+        border-left-color: #6366f1;
+      }
+      .event.llm-call {
+        border-left-color: #8b5cf6;
+      }
+      .event.bookmark-enrich {
+        border-left-color: #f97316;
+      }
+      .event.todos-processing-local {
+        border-left-color: #ec4899;
       }
 
       .event-header {
@@ -231,12 +252,40 @@
         background: #10b981;
         color: white;
       }
+      .webhook-process .event-badge {
+        background: #a78bfa;
+        color: white;
+      }
+      .transcription .event-badge {
+        background: #34d399;
+        color: white;
+      }
       .commands-ingest .event-badge {
         background: #f59e0b;
         color: white;
       }
-      .actions-research .event-badge {
+      .actions-queue .event-badge {
         background: #06b6d4;
+        color: white;
+      }
+      .research-process .event-badge {
+        background: #3b82f6;
+        color: white;
+      }
+      .llm-analytics .event-badge {
+        background: #6366f1;
+        color: white;
+      }
+      .llm-call .event-badge {
+        background: #8b5cf6;
+        color: white;
+      }
+      .bookmark-enrich .event-badge {
+        background: #f97316;
+        color: white;
+      }
+      .todos-processing-local .event-badge {
+        background: #ec4899;
         color: white;
       }
 
@@ -445,8 +494,15 @@
               <option value="">Select a topic...</option>
               <option value="whatsapp-send-message">whatsapp-send-message</option>
               <option value="whatsapp-media-cleanup">whatsapp-media-cleanup</option>
+              <option value="whatsapp-webhook-process">whatsapp-webhook-process</option>
+              <option value="whatsapp-transcription">whatsapp-transcription</option>
               <option value="commands-ingest">commands-ingest</option>
-              <option value="actions-research">actions-research</option>
+              <option value="actions-queue">actions-queue</option>
+              <option value="research-process">research-process</option>
+              <option value="llm-analytics">llm-analytics</option>
+              <option value="llm-call">llm-call</option>
+              <option value="bookmark-enrich">bookmark-enrich</option>
+              <option value="todos-processing-local">todos-processing-local</option>
             </select>
           </div>
 
@@ -475,7 +531,6 @@
         'whatsapp-send-message': {
           type: 'whatsapp.message.send',
           userId: '{userId}',
-          phoneNumber: '+48123456789',
           message: 'Test message from Pub/Sub UI',
           correlationId: 'ui-{timestamp}',
           timestamp: '{timestamp}',
@@ -490,6 +545,20 @@
           ],
           timestamp: '{timestamp}',
         },
+        'whatsapp-webhook-process': {
+          type: 'whatsapp.webhook.process',
+          eventId: 'evt-{timestamp}',
+          payload: '{"test":"webhook payload"}',
+          phoneNumberId: '1234567890',
+          receivedAt: '{timestamp}',
+        },
+        'whatsapp-transcription': {
+          type: 'whatsapp.audio.transcribe',
+          messageId: 'msg-{timestamp}',
+          userId: '{userId}',
+          gcsPath: 'whatsapp/{userId}/audio-{timestamp}.ogg',
+          mimeType: 'audio/ogg',
+        },
         'commands-ingest': {
           type: 'command.ingest',
           userId: '{userId}',
@@ -498,7 +567,7 @@
           text: 'Research latest AI developments',
           timestamp: '{timestamp}',
         },
-        'actions-research': {
+        'actions-queue': {
           type: 'action.created',
           actionId: 'action-{timestamp}',
           userId: '{userId}',
@@ -510,6 +579,42 @@
             confidence: 0.95,
             selectedLlms: ['google', 'anthropic'],
           },
+          timestamp: '{timestamp}',
+        },
+        'research-process': {
+          type: 'research.process',
+          researchId: 'research-{timestamp}',
+          userId: '{userId}',
+          triggeredBy: 'create',
+        },
+        'llm-analytics': {
+          type: 'llm.report',
+          researchId: 'research-{timestamp}',
+          userId: '{userId}',
+          provider: 'anthropic',
+          model: 'claude-3-sonnet-20240229',
+          inputTokens: 1000,
+          outputTokens: 500,
+          durationMs: 2500,
+        },
+        'llm-call': {
+          type: 'llm.call',
+          researchId: 'research-{timestamp}',
+          userId: '{userId}',
+          model: 'claude-3-sonnet-20240229',
+          prompt: 'What are the latest AI developments?',
+        },
+        'bookmark-enrich': {
+          type: 'bookmarks.enrich',
+          bookmarkId: 'bookmark-{timestamp}',
+          userId: '{userId}',
+          url: 'https://example.com',
+        },
+        'todos-processing-local': {
+          type: 'todos.processing.created',
+          todoId: 'todo-{timestamp}',
+          userId: '{userId}',
+          correlationId: 'ui-{timestamp}',
           timestamp: '{timestamp}',
         },
       };

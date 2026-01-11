@@ -11,6 +11,7 @@ import { requireAuth } from '@intexuraos/common-http';
 import type { EncryptedValue } from '../infra/encryption.js';
 import { getServices } from '../services.js';
 import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
+import { formatLlmError } from '../domain/settings/formatLlmError.js';
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys
@@ -50,37 +51,41 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         type: 'object',
                         nullable: true,
                         properties: {
-                          response: { type: 'string' },
-                          error: { type: 'string' },
+                          status: { type: 'string', enum: ['success', 'failure'] },
+                          message: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
+                        required: ['status', 'message', 'testedAt'],
                       },
                       openai: {
                         type: 'object',
                         nullable: true,
                         properties: {
-                          response: { type: 'string' },
-                          error: { type: 'string' },
+                          status: { type: 'string', enum: ['success', 'failure'] },
+                          message: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
+                        required: ['status', 'message', 'testedAt'],
                       },
                       anthropic: {
                         type: 'object',
                         nullable: true,
                         properties: {
-                          response: { type: 'string' },
-                          error: { type: 'string' },
+                          status: { type: 'string', enum: ['success', 'failure'] },
+                          message: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
+                        required: ['status', 'message', 'testedAt'],
                       },
                       perplexity: {
                         type: 'object',
                         nullable: true,
                         properties: {
-                          response: { type: 'string' },
-                          error: { type: 'string' },
+                          status: { type: 'string', enum: ['success', 'failure'] },
+                          message: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
+                        required: ['status', 'message', 'testedAt'],
                       },
                     },
                   },
@@ -335,9 +340,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
-                  response: { type: 'string' },
+                  status: { type: 'string', enum: ['success', 'failure'] },
+                  message: { type: 'string' },
                   testedAt: { type: 'string' },
                 },
+                required: ['status', 'message', 'testedAt'],
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
@@ -423,22 +430,33 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const testedAt = new Date().toISOString();
 
       if (!testResult.ok) {
+        const rawError = testResult.error.message;
+        request.log.warn({ provider: params.provider, rawError }, 'LLM test failed');
+
+        const formattedMessage = formatLlmError(rawError);
         const llmTestResult: LlmTestResult = {
-          error: testResult.error.message,
+          status: 'failure',
+          message: formattedMessage,
           testedAt,
         };
         await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
-        return await reply.fail('DOWNSTREAM_ERROR', testResult.error.message);
+        return await reply.ok({
+          status: 'failure',
+          message: formattedMessage,
+          testedAt,
+        });
       }
 
       const llmTestResult: LlmTestResult = {
-        response: testResult.value.content,
+        status: 'success',
+        message: testResult.value.content,
         testedAt,
       };
       await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
 
       return await reply.ok({
-        response: testResult.value.content,
+        status: 'success',
+        message: testResult.value.content,
         testedAt,
       });
     }

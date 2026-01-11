@@ -72,7 +72,7 @@ describe('visualizationAnalysisService', () => {
         .mockResolvedValueOnce(mockGenerateResult('The data shows an upward trend.'))
         .mockResolvedValueOnce(
           mockGenerateResult(
-            '{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","data":{"values":[]}}'
+            '{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","mark":"bar","data":{"values":[]}}'
           )
         );
 
@@ -92,7 +92,7 @@ describe('visualizationAnalysisService', () => {
     it('escapes HTML special characters in title', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -113,7 +113,7 @@ describe('visualizationAnalysisService', () => {
         .mockResolvedValueOnce(
           mockGenerateResult('Trend: <strong>up</strong> & "significant"')
         )
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -129,7 +129,7 @@ describe('visualizationAnalysisService', () => {
     it('trims whitespace from insights', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('  Insights with spaces  '))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -143,7 +143,7 @@ describe('visualizationAnalysisService', () => {
     it('trims whitespace from Vega-Lite spec', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('  {"data":{}}  '));
+        .mockResolvedValueOnce(mockGenerateResult('  {"mark":"bar","data":{}}  '));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -151,13 +151,13 @@ describe('visualizationAnalysisService', () => {
       );
       const result = await service.generateContent(mockSnapshotData, mockRequest);
 
-      expect(result.htmlContent).toContain('{"data":{}}');
+      expect(result.htmlContent).toContain('{"mark":"bar","data":{}}');
     });
 
     it('includes Vega-Lite CDN scripts', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -173,7 +173,7 @@ describe('visualizationAnalysisService', () => {
     it('includes vegaEmbed initialization', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -188,7 +188,7 @@ describe('visualizationAnalysisService', () => {
     it('uses feed description as purpose in prompts', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -202,7 +202,7 @@ describe('visualizationAnalysisService', () => {
     it('passes snapshot data to prompts', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -218,7 +218,7 @@ describe('visualizationAnalysisService', () => {
     it('passes insights to Vega-Lite prompt', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Key insights here'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -291,7 +291,7 @@ describe('visualizationAnalysisService', () => {
     it('creates Gemini client with correct configuration', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const service = createVisualizationAnalysisService(
         mockUserServiceClient,
@@ -310,7 +310,7 @@ describe('visualizationAnalysisService', () => {
     it('uses pricing context for Gemini 2.5 Flash model', async () => {
       mockGenerate
         .mockResolvedValueOnce(mockGenerateResult('Insights'))
-        .mockResolvedValueOnce(mockGenerateResult('{"data":{}}'));
+        .mockResolvedValueOnce(mockGenerateResult('{"mark":"bar","data":{}}'));
 
       const getPricingSpy = vi.spyOn(fakePricingContext, 'getPricing');
 
@@ -321,6 +321,80 @@ describe('visualizationAnalysisService', () => {
       await service.generateContent(mockSnapshotData, mockRequest);
 
       expect(getPricingSpy).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+    });
+
+    it('throws error when LLM returns invalid JSON', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(mockGenerateResult('Insights'))
+        .mockResolvedValueOnce(mockGenerateResult('not valid json'));
+
+      const service = createVisualizationAnalysisService(
+        mockUserServiceClient,
+        fakePricingContext
+      );
+
+      await expect(service.generateContent(mockSnapshotData, mockRequest)).rejects.toThrow(
+        'LLM returned invalid JSON for Vega-Lite spec'
+      );
+    });
+
+    it('throws error when LLM returns non-object value', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(mockGenerateResult('Insights'))
+        .mockResolvedValueOnce(mockGenerateResult('[1, 2, 3]'));
+
+      const service = createVisualizationAnalysisService(
+        mockUserServiceClient,
+        fakePricingContext
+      );
+
+      await expect(service.generateContent(mockSnapshotData, mockRequest)).rejects.toThrow(
+        'LLM returned non-object value for Vega-Lite spec'
+      );
+    });
+
+    it('throws error when LLM returns spec without mark property', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(mockGenerateResult('Insights'))
+        .mockResolvedValueOnce(mockGenerateResult('{"data":{"values":[]}}'));
+
+      const service = createVisualizationAnalysisService(
+        mockUserServiceClient,
+        fakePricingContext
+      );
+
+      await expect(service.generateContent(mockSnapshotData, mockRequest)).rejects.toThrow(
+        'Invalid Vega-Lite spec: missing required property'
+      );
+    });
+
+    it('accepts spec with layer property instead of mark', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(mockGenerateResult('Insights'))
+        .mockResolvedValueOnce(mockGenerateResult('{"layer":[{"mark":"bar"}]}'));
+
+      const service = createVisualizationAnalysisService(
+        mockUserServiceClient,
+        fakePricingContext
+      );
+      const result = await service.generateContent(mockSnapshotData, mockRequest);
+
+      expect(result.htmlContent).toContain('layer');
+    });
+
+    it('strips markdown code fences from Vega-Lite spec', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(mockGenerateResult('Insights'))
+        .mockResolvedValueOnce(mockGenerateResult('```json\n{"mark":"bar"}\n```'));
+
+      const service = createVisualizationAnalysisService(
+        mockUserServiceClient,
+        fakePricingContext
+      );
+      const result = await service.generateContent(mockSnapshotData, mockRequest);
+
+      expect(result.htmlContent).toContain('{"mark":"bar"}');
+      expect(result.htmlContent).not.toContain('```');
     });
   });
 });

@@ -91,6 +91,7 @@ npm run ci:report -- --json       # JSON output
 | Template literal types | 9 | ESLint |
 
 **Actions taken:**
+
 1. Added "Test-First Development (MANDATORY)" section to CLAUDE.md
 2. Added "Common LLM Mistakes" section with top 4 patterns + examples
 3. Updated "Web App Exception" with test requirements for logic code

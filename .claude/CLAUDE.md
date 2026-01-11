@@ -139,6 +139,22 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
 
 Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
 
+### New Topic Registration (MANDATORY)
+
+**RULE:** When adding a NEW Pub/Sub topic, you MUST update THREE locations:
+
+1. **Terraform:** `terraform/environments/dev/main.tf` — Add `module "pubsub_<topic-name>"` declaration
+2. **Pub/Sub UI:** `tools/pubsub-ui/server.mjs` — Add to `TOPICS` array and `TOPIC_ENDPOINTS` mapping
+3. **Test Script:** `scripts/pubsub-publish-test.mjs` — Add event template to `EVENTS` object
+
+**Why:** The Pub/Sub UI auto-creates topics on emulator startup and provides manual testing interface. Missing registration breaks local development workflow.
+
+**Files to update:**
+- `tools/pubsub-ui/server.mjs` — TOPICS array + TOPIC_ENDPOINTS object
+- `tools/pubsub-ui/index.html` — CSS styles, dropdown option, EVENT_TEMPLATES
+- `tools/pubsub-ui/README.md` — Documentation tables
+- `scripts/pubsub-publish-test.mjs` — Event type + usage docs
+
 ---
 
 ## Terraform (`terraform/**`)
@@ -318,6 +334,7 @@ When adding new functionality:
 ### Web App Exception
 
 The `web` workspace has adjusted verification (planned complete refactoring):
+
 - Tests run but **coverage threshold is not enforced**
 - Test typecheck step skipped (Vite-specific patterns incompatible with strict tsconfig)
 - Tests remain in nested `__tests__` directories within feature folders
@@ -325,6 +342,7 @@ The `web` workspace has adjusted verification (planned complete refactoring):
 **Tests are OPTIONAL for UI components** (pages, layout, styling).
 
 **Tests are REQUIRED for:**
+
 - Helper functions (`utils/`)
 - Services with logic (`services/`)
 - Hooks with business logic (`hooks/`)

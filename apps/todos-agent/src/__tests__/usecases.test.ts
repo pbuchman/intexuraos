@@ -12,6 +12,7 @@ import { reorderTodoItems } from '../domain/usecases/reorderTodoItems.js';
 import { archiveTodo } from '../domain/usecases/archiveTodo.js';
 import { unarchiveTodo } from '../domain/usecases/unarchiveTodo.js';
 import { cancelTodo } from '../domain/usecases/cancelTodo.js';
+import { processTodoCreated } from '../domain/usecases/processTodoCreated.js';
 
 const mockLogger = {
   info: (): void => {
@@ -1852,6 +1853,113 @@ describe('cancelTodo', () => {
       { todoRepository, logger: mockLogger },
       createResult.value.id,
       'user-1'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+});
+
+describe('processTodoCreated', () => {
+  let todoRepository: FakeTodoRepository;
+
+  beforeEach(() => {
+    todoRepository = new FakeTodoRepository();
+  });
+
+  it('changes processing todo status to pending', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('skips todo that is not in processing status', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger },
+      'non-existent'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns error on findById storage failure', async () => {
+    todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger },
+      'any-id'
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('returns error on update storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id
     );
 
     expect(result.ok).toBe(false);

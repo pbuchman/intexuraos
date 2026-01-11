@@ -13,11 +13,10 @@ export type { LlmProvider };
 
 /**
  * Result of testing an LLM API key.
- * Either `response` (success) or `error` (failure) will be present.
  */
 export interface LlmTestResult {
-  response?: string;
-  error?: string;
+  status: 'success' | 'failure';
+  message: string; // LLM response (success) or user-friendly error (failure)
   testedAt: string; // ISO timestamp
 }
 

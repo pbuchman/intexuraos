@@ -84,7 +84,10 @@ export async function updateTodoItem(
   const updatedItems = [...todo.items];
   updatedItems[itemIndex] = updatedItem;
 
-  const newTodoStatus = todo.status === 'cancelled' ? 'cancelled' : computeTodoStatus(updatedItems);
+  const newTodoStatus =
+    todo.status === 'cancelled' || todo.status === 'processing'
+      ? todo.status
+      : computeTodoStatus(updatedItems);
   const isTodoCompleting = newTodoStatus === 'completed' && todo.status !== 'completed';
 
   const updatedTodo: Todo = {

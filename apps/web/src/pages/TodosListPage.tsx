@@ -64,6 +64,8 @@ const PRIORITY_CONFIG: Record<TodoPriority, { label: string; className: string }
 };
 
 const STATUS_CONFIG: Record<TodoStatus, { label: string; className: string }> = {
+  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700' },
+  processing: { label: 'Processing', className: 'bg-purple-100 text-purple-700' },
   pending: { label: 'Pending', className: 'bg-slate-100 text-slate-700' },
   in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
   completed: { label: 'Completed', className: 'bg-green-100 text-green-700' },
@@ -725,7 +727,7 @@ function TodoModal({
                   className="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
                 >
                   <Ban className="mr-1 h-4 w-4" />
-                  Cancel Todo
+                  Cancel
                 </Button>
               ) : null}
             </div>

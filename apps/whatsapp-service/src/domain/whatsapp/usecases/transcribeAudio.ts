@@ -26,6 +26,7 @@ import type { WhatsAppCloudApiPort } from '../ports/whatsappCloudApi.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from '../utils/logger.js';
+import { formatSpeechmaticsError } from '../formatSpeechmaticsError.js';
 
 /**
  * Input for transcribing an audio message.
@@ -173,13 +174,27 @@ export class TranscribeAudioUseCase {
       });
 
       if (!submitResult.ok) {
+        const rawError = submitResult.error.message;
+        const formattedMessage = formatSpeechmaticsError(rawError);
+
+        // Log raw error for debugging
+        logger.info(
+          {
+            event: 'transcription_submit_error_raw',
+            messageId,
+            rawError,
+            errorCode: submitResult.error.code,
+          },
+          'Raw Speechmatics submit error'
+        );
+
         const errorState: TranscriptionState = {
           status: 'failed',
           startedAt,
           completedAt: new Date().toISOString(),
           error: {
             code: submitResult.error.code,
-            message: submitResult.error.message,
+            message: formattedMessage,
           },
         };
         if (submitResult.error.apiCall !== undefined) {
@@ -191,7 +206,7 @@ export class TranscribeAudioUseCase {
           phoneNumberId,
           userPhoneNumber,
           originalWaMessageId,
-          `Transcription submission failed: ${submitResult.error.message}`
+          `Transcription submission failed: ${formattedMessage}`
         );
         logger.error(
           { event: 'transcription_submit_error', messageId, error: submitResult.error },
@@ -251,12 +266,30 @@ export class TranscribeAudioUseCase {
       }
 
       if (pollResult.status === 'rejected') {
+        const rawError = pollResult.error?.message ?? 'Job was rejected';
+        const formattedMessage = formatSpeechmaticsError(rawError);
+
+        // Log raw error for debugging
+        logger.info(
+          {
+            event: 'transcription_rejected_raw',
+            messageId,
+            jobId,
+            rawError,
+            errorCode: pollResult.error?.code,
+          },
+          'Raw Speechmatics rejection error'
+        );
+
         const errorState: TranscriptionState = {
           status: 'failed',
           jobId,
           startedAt,
           completedAt: new Date().toISOString(),
-          error: pollResult.error ?? { code: 'JOB_REJECTED', message: 'Job was rejected' },
+          error: {
+            code: pollResult.error?.code ?? 'JOB_REJECTED',
+            message: formattedMessage,
+          },
         };
         if (pollResult.lastApiCall !== undefined) {
           errorState.lastApiCall = pollResult.lastApiCall;
@@ -267,7 +300,7 @@ export class TranscribeAudioUseCase {
           phoneNumberId,
           userPhoneNumber,
           originalWaMessageId,
-          `Transcription failed: ${pollResult.error?.message ?? 'Job was rejected'}`
+          `Transcription failed: ${formattedMessage}`
         );
         logger.error(
           { event: 'transcription_rejected', messageId, jobId, error: pollResult.error },
@@ -287,6 +320,21 @@ export class TranscribeAudioUseCase {
       const transcriptResult = await transcriptionService.getTranscript(jobId);
 
       if (!transcriptResult.ok) {
+        const rawError = transcriptResult.error.message;
+        const formattedMessage = formatSpeechmaticsError(rawError);
+
+        // Log raw error for debugging
+        logger.info(
+          {
+            event: 'transcription_fetch_error_raw',
+            messageId,
+            jobId,
+            rawError,
+            errorCode: transcriptResult.error.code,
+          },
+          'Raw Speechmatics fetch error'
+        );
+
         const errorState: TranscriptionState = {
           status: 'failed',
           jobId,
@@ -294,7 +342,7 @@ export class TranscribeAudioUseCase {
           completedAt: new Date().toISOString(),
           error: {
             code: transcriptResult.error.code,
-            message: transcriptResult.error.message,
+            message: formattedMessage,
           },
         };
         if (transcriptResult.error.apiCall !== undefined) {
@@ -306,7 +354,7 @@ export class TranscribeAudioUseCase {
           phoneNumberId,
           userPhoneNumber,
           originalWaMessageId,
-          `Failed to fetch transcript: ${transcriptResult.error.message}`
+          `Failed to fetch transcript: ${formattedMessage}`
         );
         logger.error(
           { event: 'transcription_fetch_error', messageId, jobId, error: transcriptResult.error },
@@ -371,6 +419,12 @@ export class TranscribeAudioUseCase {
         transcript
       );
     } catch (error) {
+      // Log raw error for debugging
+      logger.error(
+        { event: 'transcription_unexpected_error_raw', messageId, error },
+        'Raw unexpected error during transcription'
+      );
+
       const errorMessage = getErrorMessage(error);
       const errorState: TranscriptionState = {
         status: 'failed',

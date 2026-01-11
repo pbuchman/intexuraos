@@ -71,6 +71,9 @@ export INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION=media-cleanup-sub-local
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC=whatsapp-send-message
 export INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION=whatsapp-send-message-sub
 
+# Required for todos processing (todos-agent publishes and subscribes)
+export INTEXURAOS_TODOS_PROCESSING_TOPIC=todos-processing-local
+
 # =============================================================================
 # SERVICE-TO-SERVICE AUTHENTICATION
 # =============================================================================

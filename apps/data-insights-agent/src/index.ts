@@ -67,7 +67,8 @@ async function main(): Promise<void> {
     visualizationRepository: new FirestoreVisualizationRepository(),
     visualizationGenerationService: createVisualizationAnalysisService(
       userServiceClient,
-      pricingContext
+      pricingContext,
+      logger
     ),
   });
 

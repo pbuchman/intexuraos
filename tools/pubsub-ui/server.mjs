@@ -14,15 +14,33 @@ const INTEXURAOS_INTERNAL_AUTH_TOKEN =
 const TOPICS = [
   'whatsapp-media-cleanup',
   'whatsapp-send-message',
+  'whatsapp-webhook-process',
+  'whatsapp-transcription',
   'commands-ingest',
-  'actions-research',
+  'actions-queue',
+  'research-process',
+  'llm-analytics',
+  'llm-call',
+  'bookmark-enrich',
+  'todos-processing-local',
 ];
 
 const TOPIC_ENDPOINTS = {
   'whatsapp-send-message': 'http://host.docker.internal:8113/internal/whatsapp/pubsub/send-message',
   'whatsapp-media-cleanup':
     'http://host.docker.internal:8113/internal/whatsapp/pubsub/media-cleanup',
-  'actions-research': 'http://host.docker.internal:8118/internal/actions/research',
+  'whatsapp-webhook-process':
+    'http://host.docker.internal:8113/internal/whatsapp/pubsub/process-webhook',
+  'whatsapp-transcription':
+    'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcribe-audio',
+  'commands-ingest': 'http://host.docker.internal:8117/internal/commands',
+  'actions-queue': 'http://host.docker.internal:8118/internal/actions/process',
+  'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',
+  'llm-analytics': 'http://host.docker.internal:8116/internal/llm/pubsub/report-analytics',
+  'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
+  'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
+  'todos-processing-local':
+    'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
 };
 
 const app = express();

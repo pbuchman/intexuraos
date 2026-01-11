@@ -89,8 +89,9 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('returns settings with llmTestResults when present', async () => {
       const testResult: LlmTestResult = {
+        status: 'success',
+        message: 'Hello!',
         testedAt: new Date().toISOString(),
-        response: 'Hello!',
       };
       const settings = createTestSettings({
         llmTestResults: { google: testResult },
@@ -104,7 +105,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.llmTestResults).toBeDefined();
-        expect(result.value.llmTestResults?.google?.response).toBe('Hello!');
+        expect(result.value.llmTestResults?.google?.message).toBe('Hello!');
       }
     });
 
@@ -175,7 +176,8 @@ describe('FirestoreUserSettingsRepository', () => {
     it('preserves llmTestResults when updating other fields', async () => {
       const testResult: LlmTestResult = {
         testedAt: new Date().toISOString(),
-        response: 'Hello from GPT!',
+        status: 'success',
+        message:'Hello from GPT!',
       };
       const initialSettings = createTestSettings({
         llmTestResults: { openai: testResult },
@@ -195,7 +197,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const result = await repo.getSettings('user-123');
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.llmTestResults?.openai?.response).toBe('Hello from GPT!');
+        expect(result.value.llmTestResults?.openai?.message).toBe('Hello from GPT!');
       }
     });
   });
@@ -276,7 +278,8 @@ describe('FirestoreUserSettingsRepository', () => {
     it('deletes associated test result when deleting key', async () => {
       await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('key'));
       await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
-        response: 'Test passed',
+        status: 'success',
+        message:'Test passed',
         testedAt: new Date().toISOString(),
       });
 
@@ -309,7 +312,8 @@ describe('FirestoreUserSettingsRepository', () => {
     it('creates new settings document if user does not exist', async () => {
       const testResult: LlmTestResult = {
         testedAt: new Date().toISOString(),
-        response: 'Test response',
+        status: 'success',
+        message:'Test response',
       };
 
       const result = await repo.updateLlmTestResult('new-user', LlmProviders.Google, testResult);
@@ -320,7 +324,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmTestResults?.google?.response).toBe('Test response');
+        expect(stored.value.llmTestResults?.google?.message).toBe('Test response');
       }
     });
 
@@ -329,7 +333,8 @@ describe('FirestoreUserSettingsRepository', () => {
 
       const testResult: LlmTestResult = {
         testedAt: new Date().toISOString(),
-        response: 'OpenAI response',
+        status: 'success',
+        message:'OpenAI response',
       };
 
       const result = await repo.updateLlmTestResult('user-123', LlmProviders.OpenAI, testResult);
@@ -339,7 +344,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmTestResults?.openai?.response).toBe('OpenAI response');
+        expect(stored.value.llmTestResults?.openai?.message).toBe('OpenAI response');
       }
     });
 
@@ -347,7 +352,8 @@ describe('FirestoreUserSettingsRepository', () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
       const result = await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
-        response: 'Test response',
+        status: 'success',
+        message:'Test response',
         testedAt: new Date().toISOString(),
       });
 
@@ -370,7 +376,8 @@ describe('FirestoreUserSettingsRepository', () => {
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
         expect(stored.value.llmTestResults?.google?.testedAt).toBeDefined();
-        expect(stored.value.llmTestResults?.google?.response).toBe('');
+        expect(stored.value.llmTestResults?.google?.status).toBe('success');
+        expect(stored.value.llmTestResults?.google?.message).toBe('');
       }
     });
 
