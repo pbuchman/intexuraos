@@ -417,6 +417,10 @@ resource "google_monitoring_dashboard" "main" {
       ]
     }
   })
+
+  lifecycle {
+    ignore_changes = [dashboard_json]
+  }
 }
 
 # =============================================================================
