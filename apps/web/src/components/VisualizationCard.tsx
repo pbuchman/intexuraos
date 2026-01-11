@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { Edit2, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Edit2, Trash2, RefreshCw, AlertCircle, Clock } from 'lucide-react';
 import { Button, Card } from '@/components';
-import { VegaChart } from './VegaChart';
-import type { Visualization, CompositeFeedData } from '@/types';
+import type { Visualization } from '@/types';
 
 interface VisualizationCardProps {
   visualization: Visualization;
-  feedData: CompositeFeedData;
   onEdit: (visualization: Visualization) => void;
   onDelete: (visualizationId: string) => Promise<void>;
   onRegenerate: (visualizationId: string) => Promise<void>;
@@ -14,7 +12,6 @@ interface VisualizationCardProps {
 
 export function VisualizationCard({
   visualization,
-  feedData,
   onEdit,
   onDelete,
   onRegenerate,
@@ -22,7 +19,6 @@ export function VisualizationCard({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [renderError, setRenderError] = useState<string | null>(null);
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true);
@@ -36,7 +32,6 @@ export function VisualizationCard({
 
   const handleRegenerate = async (): Promise<void> => {
     setIsRegenerating(true);
-    setRenderError(null);
     try {
       await onRegenerate(visualization.id);
     } finally {
@@ -44,16 +39,16 @@ export function VisualizationCard({
     }
   };
 
-  const handleRenderError = (error: Error): void => {
-    setRenderError(error.message);
-  };
+  const isPending = visualization.status === 'pending';
+  const hasError = visualization.status === 'error';
+  const isReady = visualization.status === 'ready';
 
   return (
     <Card>
       <div className="mb-4 flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-slate-900">{visualization.title}</h3>
-          <p className="mt-1 text-sm text-slate-600">{visualization.insights}</p>
+          <p className="mt-1 text-sm text-slate-600">{visualization.description}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -64,7 +59,7 @@ export function VisualizationCard({
             onClick={(): void => {
               void handleRegenerate();
             }}
-            disabled={isRegenerating || isDeleting}
+            disabled={isRegenerating || isDeleting || isPending}
             isLoading={isRegenerating}
             className="text-slate-400 hover:text-blue-600"
             title="Regenerate chart"
@@ -102,12 +97,24 @@ export function VisualizationCard({
         </div>
       </div>
 
-      {renderError !== null ? (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+      {isPending ? (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <Clock className="h-5 w-5 flex-shrink-0 text-amber-600" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-800">Generating visualization...</p>
+            <p className="mt-1 text-sm text-amber-700">
+              The chart is being generated. This may take a moment.
+            </p>
+          </div>
+        </div>
+      ) : hasError ? (
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
           <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-600" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-800">Chart rendering failed</p>
-            <p className="mt-1 text-sm text-red-700">{renderError}</p>
+            <p className="text-sm font-medium text-red-800">Generation failed</p>
+            <p className="mt-1 text-sm text-red-700">
+              {visualization.errorMessage ?? 'Unknown error occurred'}
+            </p>
             <Button
               type="button"
               variant="danger"
@@ -124,9 +131,18 @@ export function VisualizationCard({
             </Button>
           </div>
         </div>
+      ) : isReady && visualization.htmlContent !== null ? (
+        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <iframe
+            srcDoc={visualization.htmlContent}
+            title={visualization.title}
+            className="w-full h-[500px] border-0"
+            sandbox="allow-scripts"
+          />
+        </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <VegaChart spec={visualization.vegaSpec} data={feedData} onRenderError={handleRenderError} />
+        <div className="flex items-center justify-center py-8 text-slate-500">
+          No content available
         </div>
       )}
 

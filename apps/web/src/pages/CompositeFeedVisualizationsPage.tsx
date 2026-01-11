@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Plus, BarChart3, ArrowLeft } from 'lucide-react';
 import { Button, Card, Layout, VisualizationCard } from '@/components';
 import { useCompositeFeed } from '@/hooks/useCompositeFeeds';
 import { useVisualizations } from '@/hooks/useVisualizations';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
-import type { Visualization, CompositeFeedData } from '@/types';
+import type { Visualization } from '@/types';
 
 const MAX_VISUALIZATIONS = 3;
 
 export function CompositeFeedVisualizationsPage(): React.JSX.Element {
   const { id = '' } = useParams();
-  const { compositeFeed, loading: feedLoading, error: feedError, getFeedData } = useCompositeFeed(id);
+  const { compositeFeed, loading: feedLoading, error: feedError } = useCompositeFeed(id);
   const {
     visualizations,
     loading: visualizationsLoading,
@@ -21,43 +21,24 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
     regenerateVisualization,
   } = useVisualizations(id);
 
-  const [feedData, setFeedData] = useState<CompositeFeedData | null>(null);
-  const [feedDataLoading, setFeedDataLoading] = useState(false);
-  const [feedDataError, setFeedDataError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingVisualization, setEditingVisualization] = useState<Visualization | null>(null);
 
-  useEffect(() => {
-    if (id === '') {
-      return;
-    }
-
-    const loadFeedData = async (): Promise<void> => {
-      setFeedDataLoading(true);
-      setFeedDataError(null);
-      try {
-        const data = await getFeedData();
-        setFeedData(data);
-      } catch (err) {
-        setFeedDataError(getErrorMessage(err, 'Failed to load feed data'));
-      } finally {
-        setFeedDataLoading(false);
-      }
-    };
-
-    void loadFeedData();
-  }, [id, getFeedData]);
-
   const handleCreateVisualization = async (): Promise<void> => {
-    if (feedData === null) {
+    if (compositeFeed === null) {
       return;
     }
 
     setIsCreating(true);
     setCreateError(null);
     try {
-      await createVisualization({ dataSnapshot: feedData });
+      const chartNumber = visualizations.length + 1;
+      await createVisualization({
+        title: `Chart ${String(chartNumber)}`,
+        description: `Visualization for ${compositeFeed.name}`,
+        type: 'chart',
+      });
     } catch (err) {
       setCreateError(getErrorMessage(err, 'Failed to create visualization'));
     } finally {
@@ -77,8 +58,8 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
     setEditingVisualization(visualization);
   };
 
-  const loading = feedLoading || visualizationsLoading || feedDataLoading;
-  const error = feedError ?? visualizationsError ?? feedDataError;
+  const loading = feedLoading || visualizationsLoading;
+  const error = feedError ?? visualizationsError;
 
   if (loading) {
     return (
@@ -100,7 +81,7 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
     );
   }
 
-  if (compositeFeed === null || feedData === null) {
+  if (compositeFeed === null) {
     return (
       <Layout>
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-700">
@@ -184,7 +165,6 @@ export function CompositeFeedVisualizationsPage(): React.JSX.Element {
             <VisualizationCard
               key={visualization.id}
               visualization={visualization}
-              feedData={feedData}
               onEdit={handleEditVisualization}
               onDelete={handleDeleteVisualization}
               onRegenerate={handleRegenerateVisualization}
