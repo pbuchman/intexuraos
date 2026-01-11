@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
-import { AuthProvider, useAuth } from '@/context';
+import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
@@ -39,6 +39,7 @@ import {
   NotionConnectionPage,
   ResearchDetailPage,
   ResearchListPage,
+  ShareHistoryPage,
   ShareTargetPage,
   SystemHealthPage,
   TodosListPage,
@@ -189,6 +190,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <LlmCostsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/share-history"
+        element={
+          <ProtectedRoute>
+            <ShareHistoryPage />
           </ProtectedRoute>
         }
       />
@@ -398,10 +407,12 @@ export function App(): React.JSX.Element {
       >
         <HashRouter>
           <AuthProvider>
-            <AppRoutes />
-            <UpdateBanner />
-            <IOSInstallBanner />
-            <AndroidInstallBanner />
+            <SyncQueueProvider>
+              <AppRoutes />
+              <UpdateBanner />
+              <IOSInstallBanner />
+              <AndroidInstallBanner />
+            </SyncQueueProvider>
           </AuthProvider>
         </HashRouter>
       </Auth0Provider>
