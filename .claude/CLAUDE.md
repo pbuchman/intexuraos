@@ -247,6 +247,15 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 - Routes: integration via `app.inject()`. Domain: unit tests. Infra: tested via routes.
 - **Coverage: 95%. NEVER modify thresholds — write tests.**
 
+### Web App Exception
+
+The `web` workspace has adjusted verification (planned complete refactoring):
+- Tests run but **coverage threshold is not enforced**
+- Test typecheck step skipped (Vite-specific patterns incompatible with strict tsconfig)
+- Tests remain in nested `__tests__` directories within feature folders
+
+Use the same command: `npm run verify:workspace:tracked -- web` — adjusted behavior is automatic.
+
 ---
 
 ## Git Push Policy

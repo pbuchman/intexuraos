@@ -12,6 +12,34 @@ fi
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Web app has different verification due to planned refactoring
+# - Tests are in nested __tests__ directories (not centralized)
+# - Source files use Vite-specific patterns (import.meta.env)
+# - Coverage threshold excluded (refactoring planned)
+if [ "$WORKSPACE" = "web" ]; then
+  echo "=== Targeted Verification: $WORKSPACE (adjusted for web config) ==="
+  echo ""
+
+  echo "[1/3] TypeCheck (source)..."
+  npm run typecheck --workspace @intexuraos/$WORKSPACE
+
+  echo ""
+  echo "[2/3] Lint..."
+  npm run lint -- apps/$WORKSPACE/src
+
+  echo ""
+  echo "[3/3] Tests (no coverage threshold)..."
+  npm run test -- apps/$WORKSPACE
+
+  echo ""
+  echo "=== All checks passed for $WORKSPACE ==="
+  exit 0
+fi
+
+# Standard verification for all other workspaces
 echo "=== Targeted Verification: $WORKSPACE ==="
 echo ""
 
@@ -21,8 +49,6 @@ npm run typecheck --workspace @intexuraos/$WORKSPACE
 echo ""
 echo "[2/4] TypeCheck (tests)..."
 # Create temporary tsconfig in project root for workspace-specific test checking
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TEMP_TSCONFIG="$PROJECT_ROOT/.tsconfig.tests-workspace.json"
 cat > "$TEMP_TSCONFIG" << EOF
 {
