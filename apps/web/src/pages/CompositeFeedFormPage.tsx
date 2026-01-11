@@ -468,7 +468,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
           setShowSuccess(false);
         }, 3000);
       } else {
-        void navigate('/data-insights/composite-feeds');
+        void navigate('/data-insights');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save composite feed');
@@ -740,7 +740,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
             type="button"
             variant="secondary"
             onClick={(): void => {
-              void navigate('/data-insights/composite-feeds');
+              void navigate('/data-insights');
             }}
             disabled={saving}
           >
