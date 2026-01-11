@@ -25,3 +25,11 @@ export {
   parseChartDefinition,
   type ParsedChartDefinition,
 } from './parseChartDefinition.js';
+
+export {
+  dataTransformPrompt,
+  type DataTransformPromptInput,
+  type DataTransformPromptDeps,
+} from './dataTransformPrompt.js';
+
+export { parseTransformedData } from './parseTransformedData.js';

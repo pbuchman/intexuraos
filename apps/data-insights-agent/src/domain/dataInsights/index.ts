@@ -19,3 +19,10 @@ export {
   type GenerateChartDefinitionError,
   type ChartDefinitionResult,
 } from './usecases/generateChartDefinition.js';
+
+export {
+  transformDataForPreview,
+  type TransformDataForPreviewDeps,
+  type TransformDataForPreviewError,
+  type TransformDataForPreviewInput,
+} from './usecases/transformDataForPreview.js';

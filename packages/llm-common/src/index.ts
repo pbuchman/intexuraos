@@ -126,4 +126,8 @@ export {
   type ChartDefinitionPromptDeps,
   parseChartDefinition,
   type ParsedChartDefinition,
+  dataTransformPrompt,
+  type DataTransformPromptInput,
+  type DataTransformPromptDeps,
+  parseTransformedData,
 } from './dataInsights/index.js';
