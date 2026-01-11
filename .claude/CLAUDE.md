@@ -207,6 +207,46 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ---
 
+## Common LLM Mistakes (LEARN FROM HISTORY)
+
+These patterns cause 80% of CI failures. Internalize them.
+
+### 1. ESM Imports — Always use `.js` extension
+
+```typescript
+// ❌ import { foo } from '../services/bar';
+// ✅ import { foo } from '../services/bar.js';
+```
+
+### 2. ServiceContainer — Check existing tests before adding services
+
+When modifying `ServiceContainer`, **read existing test files first** to see all required fields.
+New fields break ALL tests that use `setServices()`.
+
+```typescript
+// ❌ Adding new service without updating tests
+setServices({ existingRepo: fakeRepo }); // Missing new required field!
+
+// ✅ Check services.ts interface, update ALL test files
+setServices({ existingRepo: fakeRepo, newService: fakeNewService });
+```
+
+### 3. exactOptionalPropertyTypes — Use `?:` not `| undefined`
+
+```typescript
+// ❌ type Deps = { logger: Logger | undefined };
+// ✅ type Deps = { logger?: Logger };
+```
+
+### 4. Template Literals — Wrap non-strings with `String()`
+
+```typescript
+// ❌ `Status: ${response.status}` // status is number
+// ✅ `Status: ${String(response.status)}`
+```
+
+---
+
 ## Code Smells (Fix & Document)
 
 **RULE:** When fixing a new smell, add it here.
