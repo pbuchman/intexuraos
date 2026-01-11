@@ -417,6 +417,23 @@ export interface CompositeFeedNotificationFilter {
 }
 
 /**
+ * Chart type IDs for the 6 supported visualization types.
+ */
+export type ChartTypeId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
+
+/**
+ * A single data insight generated from composite feed analysis.
+ */
+export interface DataInsight {
+  id: string;
+  title: string;
+  description: string;
+  trackableMetric: string;
+  suggestedChartType: ChartTypeId;
+  generatedAt: string;
+}
+
+/**
  * Composite feed from data-insights-agent.
  * Aggregates static data sources and notification filters.
  */
@@ -427,6 +444,7 @@ export interface CompositeFeed {
   purpose: string;
   staticSourceIds: string[];
   notificationFilters: CompositeFeedNotificationFilter[];
+  dataInsights: DataInsight[] | null;
   createdAt: string;
   updatedAt: string;
 }
