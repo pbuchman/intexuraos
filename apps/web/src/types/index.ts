@@ -173,9 +173,9 @@ export interface AppConfig {
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
   ResearchAgentUrl: string;
-  commandsRouterServiceUrl: string;
+  commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
-  dataInsightsServiceUrl: string;
+  dataInsightsAgentUrl: string;
   notesAgentUrl: string;
   todosAgentUrl: string;
   bookmarksAgentUrl: string;
@@ -272,7 +272,7 @@ export interface UserSettings {
 }
 
 /**
- * Command classification type from commands-router
+ * Command classification type from commands-agent
  */
 export type CommandType =
   | 'todo'
@@ -309,7 +309,7 @@ export interface CommandClassification {
 }
 
 /**
- * Command from commands-router
+ * Command from commands-agent
  */
 export interface Command {
   id: string;
@@ -338,7 +338,7 @@ export type ActionStatus =
   | 'archived';
 
 /**
- * Action from commands-router
+ * Action from commands-agent
  */
 export interface Action {
   id: string;
@@ -370,7 +370,7 @@ export interface ActionsResponse {
 }
 
 /**
- * Custom data source from data-insights-service
+ * Custom data source from data-insights-agent
  */
 export interface DataSource {
   id: string;
@@ -417,7 +417,7 @@ export interface CompositeFeedNotificationFilter {
 }
 
 /**
- * Composite feed from data-insights-service.
+ * Composite feed from data-insights-agent.
  * Aggregates static data sources and notification filters.
  */
 export interface CompositeFeed {

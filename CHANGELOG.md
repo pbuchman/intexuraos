@@ -108,13 +108,13 @@ This release includes comprehensive development across the platform with 187 fun
 55. `POST /internal/llm/pubsub/process-llm-call` - Process LLM API call
 56. `POST /internal/llm/pubsub/report-analytics` - Report LLM analytics
 
-### API Endpoints - Commands Router
+### API Endpoints - Commands Agent
 
-57. `POST /router/commands` - Process natural language command
-58. `GET /router/commands/:id` - Get command processing status
+57. `POST /commands` - Process natural language command
+58. `GET /commands/:id` - Get command processing status
 59. `POST /internal/commands/process` - Process command (internal)
 
-### API Endpoints - Data Insights Service
+### API Endpoints - Data Insights Agent
 
 60. `GET /insights` - Get data insights for user
 61. `POST /insights/custom-sources` - Add custom data source
@@ -206,12 +206,12 @@ This release includes comprehensive development across the platform with 187 fun
 114. CheckLlmCompletionUseCase - Monitor LLM progress
 115. RetryFailedLlmsUseCase - Retry specific failed providers
 
-### Use Cases - Commands Router
+### Use Cases - Commands Agent
 
 116. ProcessCommandUseCase - Parse natural language
 117. CreateActionsFromCommandUseCase - Generate actions
 
-### Use Cases - Data Insights Service
+### Use Cases - Data Insights Agent
 
 118. GenerateInsightsUseCase - Analyze user data
 119. AddCustomSourceUseCase - Add custom data
@@ -321,8 +321,8 @@ This release includes comprehensive development across the platform with 187 fun
 5. **promptvault-service** - Prompt template management
 6. **research-agent** - Multi-LLM research orchestration
 7. **actions-agent** - Action management and execution
-8. **commands-router** - Natural language command processing
-9. **data-insights-service** - Data analysis and insights
+8. **commands-agent** - Natural language command processing
+9. **data-insights-agent** - Data analysis and insights
 10. **api-docs-hub** - Unified API documentation
 11. **web** - React frontend application
 12. **auth-service** - Authentication service (later merged into user-service)

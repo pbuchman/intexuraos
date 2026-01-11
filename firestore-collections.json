@@ -67,7 +67,7 @@
       "description": "Aggregated LLM usage statistics by provider, model, and call type"
     },
     "commands": {
-      "owner": "commands-router",
+      "owner": "commands-agent",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
     },
     "actions": {
@@ -79,15 +79,15 @@
       "description": "Logs of user corrections to action types for ML training"
     },
     "custom_data_sources": {
-      "owner": "data-insights-service",
+      "owner": "data-insights-agent",
       "description": "User-created custom data sources for analysis"
     },
     "composite_feeds": {
-      "owner": "data-insights-service",
+      "owner": "data-insights-agent",
       "description": "User-created composite feeds aggregating data sources and notifications"
     },
     "composite_feed_snapshots": {
-      "owner": "data-insights-service",
+      "owner": "data-insights-agent",
       "description": "Pre-computed snapshots of composite feed data for fast LLM retrieval"
     },
     "generated_images": {

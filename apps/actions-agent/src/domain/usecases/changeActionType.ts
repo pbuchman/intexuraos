@@ -2,7 +2,7 @@ import type { Logger, ErrorCode } from '@intexuraos/common-core';
 import type { Result } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ActionTransitionRepository } from '../ports/actionTransitionRepository.js';
-import type { CommandsRouterClient } from '../ports/commandsRouterClient.js';
+import type { CommandsAgentClient } from '../ports/commandsAgentClient.js';
 import type { ActionType } from '../models/action.js';
 import { createActionTransition } from '../models/actionTransition.js';
 
@@ -15,7 +15,7 @@ export interface ChangeActionTypeParams {
 export interface ChangeActionTypeDeps {
   actionRepository: ActionRepository;
   actionTransitionRepository: ActionTransitionRepository;
-  commandsRouterClient: CommandsRouterClient;
+  commandsAgentClient: CommandsAgentClient;
   logger: Logger;
 }
 
@@ -31,7 +31,7 @@ export type ChangeActionTypeUseCase = (
 export function createChangeActionTypeUseCase(deps: ChangeActionTypeDeps): ChangeActionTypeUseCase {
   return async (params) => {
     const { actionId, userId, newType } = params;
-    const { actionRepository, actionTransitionRepository, commandsRouterClient, logger } = deps;
+    const { actionRepository, actionTransitionRepository, commandsAgentClient, logger } = deps;
 
     // 1. Fetch action
     const action = await actionRepository.getById(actionId);
@@ -56,8 +56,8 @@ export function createChangeActionTypeUseCase(deps: ChangeActionTypeDeps): Chang
       return { ok: true, value: { actionId } };
     }
 
-    // 4. Fetch command text from commands-router (never trust frontend)
-    const command = await commandsRouterClient.getCommand(action.commandId);
+    // 4. Fetch command text from commands-agent (never trust frontend)
+    const command = await commandsAgentClient.getCommand(action.commandId);
     if (command === null) {
       return { ok: false, error: { code: 'NOT_FOUND', message: 'Command not found' } };
     }

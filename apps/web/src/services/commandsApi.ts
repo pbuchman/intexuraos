@@ -21,9 +21,9 @@ export async function getCommands(
     params.set('cursor', options.cursor);
   }
   const queryString = params.toString();
-  const path = queryString !== '' ? `/router/commands?${queryString}` : '/router/commands';
+  const path = queryString !== '' ? `/commands?${queryString}` : '/commands';
 
-  return await apiRequest<CommandsResponse>(config.commandsRouterServiceUrl, path, accessToken);
+  return await apiRequest<CommandsResponse>(config.commandsAgentServiceUrl, path, accessToken);
 }
 
 export async function getActions(
@@ -77,8 +77,8 @@ export async function deleteAction(accessToken: string, actionId: string): Promi
 
 export async function deleteCommand(accessToken: string, commandId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
-    config.commandsRouterServiceUrl,
-    `/router/commands/${commandId}`,
+    config.commandsAgentServiceUrl,
+    `/commands/${commandId}`,
     accessToken,
     { method: 'DELETE' }
   );
@@ -86,8 +86,8 @@ export async function deleteCommand(accessToken: string, commandId: string): Pro
 
 export async function archiveCommand(accessToken: string, commandId: string): Promise<Command> {
   const response = await apiRequest<{ command: Command }>(
-    config.commandsRouterServiceUrl,
-    `/router/commands/${commandId}`,
+    config.commandsAgentServiceUrl,
+    `/commands/${commandId}`,
     accessToken,
     {
       method: 'PATCH',
@@ -121,8 +121,8 @@ export async function createCommand(
   params: { text: string; source: CommandSourceType }
 ): Promise<Command> {
   const response = await apiRequest<{ command: Command }>(
-    config.commandsRouterServiceUrl,
-    '/router/commands',
+    config.commandsAgentServiceUrl,
+    '/commands',
     accessToken,
     {
       method: 'POST',

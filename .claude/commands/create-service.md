@@ -8,7 +8,7 @@ Create a new backend service in the IntexuraOS monorepo.
 /create-service <service-name>
 ```
 
-Example: `/create-service agent-router`
+Example: `/create-service web-agent`
 
 ---
 

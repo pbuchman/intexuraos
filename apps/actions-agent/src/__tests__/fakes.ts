@@ -6,9 +6,9 @@ import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from '../domain/ports/actionTransitionRepository.js';
 import type {
-  CommandsRouterClient,
+  CommandsAgentClient,
   CommandWithText,
-} from '../domain/ports/commandsRouterClient.js';
+} from '../domain/ports/commandsAgentClient.js';
 import type {
   TodosServiceClient,
   CreateTodoRequest,
@@ -338,7 +338,7 @@ export class FakeActionTransitionRepository implements ActionTransitionRepositor
   }
 }
 
-export class FakeCommandsRouterClient implements CommandsRouterClient {
+export class FakeCommandsAgentClient implements CommandsAgentClient {
   private commands = new Map<string, CommandWithText>();
   private failNext = false;
   private failError: Error | null = null;
@@ -592,7 +592,7 @@ export function createFakeServices(deps: {
   notificationSender: FakeNotificationSender;
   actionRepository?: FakeActionRepository;
   actionTransitionRepository?: FakeActionTransitionRepository;
-  commandsRouterClient?: FakeCommandsRouterClient;
+  commandsAgentClient?: FakeCommandsAgentClient;
   todosServiceClient?: FakeTodosServiceClient;
   notesServiceClient?: FakeNotesServiceClient;
   bookmarksServiceClient?: FakeBookmarksServiceClient;
@@ -609,7 +609,7 @@ export function createFakeServices(deps: {
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
-  const commandsRouterClient = deps.commandsRouterClient ?? new FakeCommandsRouterClient();
+  const commandsAgentClient = deps.commandsAgentClient ?? new FakeCommandsAgentClient();
   const todosServiceClient = deps.todosServiceClient ?? new FakeTodosServiceClient();
   const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
@@ -650,7 +650,7 @@ export function createFakeServices(deps: {
     createChangeActionTypeUseCase({
       actionRepository,
       actionTransitionRepository,
-      commandsRouterClient,
+      commandsAgentClient,
       logger: pino({ level: 'silent' }),
     });
 
@@ -660,7 +660,7 @@ export function createFakeServices(deps: {
     notificationSender: deps.notificationSender,
     actionRepository,
     actionTransitionRepository,
-    commandsRouterClient,
+    commandsAgentClient,
     todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,

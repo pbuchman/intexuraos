@@ -50,11 +50,11 @@ resource "google_service_account" "research_agent" {
   description  = "Service account for research-agent Cloud Run deployment"
 }
 
-# Service account for commands-router
-resource "google_service_account" "commands_router" {
-  account_id   = "intexuraos-cmd-router-${var.environment}"
-  display_name = "IntexuraOS Commands Router (${var.environment})"
-  description  = "Service account for commands-router Cloud Run deployment"
+# Service account for commands-agent
+resource "google_service_account" "commands_agent" {
+  account_id   = "intexuraos-commands-agents-${var.environment}"
+  display_name = "IntexuraOS Commands Agent (${var.environment})"
+  description  = "Service account for commands-agent Cloud Run deployment"
 }
 
 # Service account for actions-agent
@@ -64,11 +64,11 @@ resource "google_service_account" "actions_agent" {
   description  = "Service account for actions-agent Cloud Run deployment"
 }
 
-# Service account for data-insights-service
-resource "google_service_account" "data_insights_service" {
+# Service account for data-insights-agent
+resource "google_service_account" "data_insights_agent" {
   account_id   = "intexuraos-insights-${var.environment}"
-  display_name = "IntexuraOS Data Insights Service (${var.environment})"
-  description  = "Service account for data-insights-service Cloud Run deployment"
+  display_name = "IntexuraOS Data Insights Agent (${var.environment})"
+  description  = "Service account for data-insights-agent Cloud Run deployment"
 }
 
 # Service account for image-service
@@ -175,13 +175,13 @@ resource "google_secret_manager_secret_iam_member" "research_agent_secrets" {
   member    = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Router: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "commands_router_secrets" {
+# Commands Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "commands_agent_secrets" {
   for_each = var.secret_ids
 
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.commands_router.email}"
+  member    = "serviceAccount:${google_service_account.commands_agent.email}"
 }
 
 # Actions Agent: Secret Manager access
@@ -193,13 +193,13 @@ resource "google_secret_manager_secret_iam_member" "actions_agent_secrets" {
   member    = "serviceAccount:${google_service_account.actions_agent.email}"
 }
 
-# Data Insights Service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "data_insights_service_secrets" {
+# Data Insights Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "data_insights_agent_secrets" {
   for_each = var.secret_ids
 
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.data_insights_service.email}"
+  member    = "serviceAccount:${google_service_account.data_insights_agent.email}"
 }
 
 # Image Service: Secret Manager access
@@ -331,11 +331,11 @@ resource "google_project_iam_member" "research_agent_firestore" {
   member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Router: Firestore access
-resource "google_project_iam_member" "commands_router_firestore" {
+# Commands Agent: Firestore access
+resource "google_project_iam_member" "commands_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.commands_router.email}"
+  member  = "serviceAccount:${google_service_account.commands_agent.email}"
 }
 
 # Actions Agent: Firestore access
@@ -345,11 +345,11 @@ resource "google_project_iam_member" "actions_agent_firestore" {
   member  = "serviceAccount:${google_service_account.actions_agent.email}"
 }
 
-# Data Insights Service: Firestore access
-resource "google_project_iam_member" "data_insights_service_firestore" {
+# Data Insights Agent: Firestore access
+resource "google_project_iam_member" "data_insights_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.data_insights_service.email}"
+  member  = "serviceAccount:${google_service_account.data_insights_agent.email}"
 }
 
 # Image Service: Firestore access
@@ -443,11 +443,11 @@ resource "google_project_iam_member" "research_agent_logging" {
   member  = "serviceAccount:${google_service_account.research_agent.email}"
 }
 
-# Commands Router: Cloud Logging
-resource "google_project_iam_member" "commands_router_logging" {
+# Commands Agent: Cloud Logging
+resource "google_project_iam_member" "commands_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.commands_router.email}"
+  member  = "serviceAccount:${google_service_account.commands_agent.email}"
 }
 
 # Actions Agent: Cloud Logging
@@ -457,11 +457,11 @@ resource "google_project_iam_member" "actions_agent_logging" {
   member  = "serviceAccount:${google_service_account.actions_agent.email}"
 }
 
-# Data Insights Service: Cloud Logging
-resource "google_project_iam_member" "data_insights_service_logging" {
+# Data Insights Agent: Cloud Logging
+resource "google_project_iam_member" "data_insights_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.data_insights_service.email}"
+  member  = "serviceAccount:${google_service_account.data_insights_agent.email}"
 }
 
 # Image Service: Cloud Logging

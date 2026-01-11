@@ -24,7 +24,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'createAction',
         summary: 'Create new action',
         description:
-          'Internal endpoint for creating actions. Called by commands-router after classification.',
+          'Internal endpoint for creating actions. Called by commands-agent after classification.',
         tags: ['internal'],
         body: {
           type: 'object',

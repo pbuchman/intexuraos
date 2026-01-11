@@ -5,7 +5,7 @@ import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
   FakeBookmarksServiceClient,
-  FakeCommandsRouterClient,
+  FakeCommandsAgentClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
 import pino from 'pino';
@@ -15,7 +15,7 @@ const silentLogger = pino({ level: 'silent' });
 describe('executeLinkAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
   let fakeBookmarksClient: FakeBookmarksServiceClient;
-  let fakeCommandsRouterClient: FakeCommandsRouterClient;
+  let fakeCommandsAgentClient: FakeCommandsAgentClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -35,16 +35,16 @@ describe('executeLinkAction usecase', () => {
   beforeEach(() => {
     fakeActionRepo = new FakeActionRepository();
     fakeBookmarksClient = new FakeBookmarksServiceClient();
-    fakeCommandsRouterClient = new FakeCommandsRouterClient();
+    fakeCommandsAgentClient = new FakeCommandsAgentClient();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
-    fakeCommandsRouterClient.setCommand('cmd-789', 'test command', 'whatsapp_text');
+    fakeCommandsAgentClient.setCommand('cmd-789', 'test command', 'whatsapp_text');
   });
 
   it('returns error when action not found', async () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -68,7 +68,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -90,7 +90,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -115,7 +115,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -149,7 +149,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -178,7 +178,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -207,7 +207,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -233,7 +233,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -262,7 +262,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -287,7 +287,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -318,7 +318,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -343,7 +343,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -374,7 +374,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -397,7 +397,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,
@@ -410,7 +410,7 @@ describe('executeLinkAction usecase', () => {
   });
 
   it('uses command sourceType as bookmark source', async () => {
-    fakeCommandsRouterClient.setCommand('cmd-789', 'test command', 'pwa-shared');
+    fakeCommandsAgentClient.setCommand('cmd-789', 'test command', 'pwa-shared');
     const action = createAction({
       status: 'awaiting_approval',
       payload: { url: 'https://example.com/article' },
@@ -420,7 +420,7 @@ describe('executeLinkAction usecase', () => {
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
       bookmarksServiceClient: fakeBookmarksClient,
-      commandsRouterClient: fakeCommandsRouterClient,
+      commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
       logger: silentLogger,

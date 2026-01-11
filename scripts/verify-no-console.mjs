@@ -24,7 +24,7 @@ const ALLOWED_PATHS = [
 function main() {
   try {
     const result = execSync(
-      'grep -r "eslint-disable.*no-console" --include="*.ts" --include="*.tsx" apps/ packages/ || true',
+      'grep -r "eslint-disable.*no-console" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules apps/ packages/ || true',
       { encoding: 'utf-8' }
     );
 

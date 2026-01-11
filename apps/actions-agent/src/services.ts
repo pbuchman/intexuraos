@@ -3,7 +3,7 @@ import type { ResearchServiceClient } from './domain/ports/researchServiceClient
 import type { NotificationSender } from './domain/ports/notificationSender.js';
 import type { ActionRepository } from './domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from './domain/ports/actionTransitionRepository.js';
-import type { CommandsRouterClient } from './domain/ports/commandsRouterClient.js';
+import type { CommandsAgentClient } from './domain/ports/commandsAgentClient.js';
 import type { TodosServiceClient } from './domain/ports/todosServiceClient.js';
 import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
@@ -53,7 +53,7 @@ import { createResearchAgentClient } from './infra/research/researchAgentClient.
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
-import { createCommandsRouterHttpClient } from './infra/http/commandsRouterHttpClient.js';
+import { createCommandsAgentHttpClient } from './infra/http/commandsAgentHttpClient.js';
 import { createTodosServiceHttpClient } from './infra/http/todosServiceHttpClient.js';
 import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClient.js';
 import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
@@ -66,7 +66,7 @@ export interface Services {
   notificationSender: NotificationSender;
   actionRepository: ActionRepository;
   actionTransitionRepository: ActionTransitionRepository;
-  commandsRouterClient: CommandsRouterClient;
+  commandsAgentClient: CommandsAgentClient;
   todosServiceClient: TodosServiceClient;
   notesServiceClient: NotesServiceClient;
   bookmarksServiceClient: BookmarksServiceClient;
@@ -92,7 +92,7 @@ export interface Services {
 export interface ServiceConfig {
   ResearchAgentUrl: string;
   userServiceUrl: string;
-  commandsRouterUrl: string;
+  commandsAgentUrl: string;
   todosAgentUrl: string;
   notesAgentUrl: string;
   bookmarksAgentUrl: string;
@@ -109,8 +109,8 @@ export function initServices(config: ServiceConfig): void {
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
 
-  const commandsRouterClient = createCommandsRouterHttpClient({
-    baseUrl: config.commandsRouterUrl,
+  const commandsAgentClient = createCommandsAgentHttpClient({
+    baseUrl: config.commandsAgentUrl,
     internalAuthToken: config.internalAuthToken,
   });
 
@@ -175,7 +175,7 @@ export function initServices(config: ServiceConfig): void {
   const executeLinkActionUseCase = createExecuteLinkActionUseCase({
     actionRepository,
     bookmarksServiceClient,
-    commandsRouterClient,
+    commandsAgentClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'executeLinkAction' }),
@@ -228,7 +228,7 @@ export function initServices(config: ServiceConfig): void {
   const changeActionTypeUseCase = createChangeActionTypeUseCase({
     actionRepository,
     actionTransitionRepository,
-    commandsRouterClient,
+    commandsAgentClient,
     logger: pino({ name: 'changeActionType' }),
   });
 
@@ -238,7 +238,7 @@ export function initServices(config: ServiceConfig): void {
     notificationSender,
     actionRepository,
     actionTransitionRepository,
-    commandsRouterClient,
+    commandsAgentClient,
     todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
