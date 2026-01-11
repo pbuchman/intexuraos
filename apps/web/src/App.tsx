@@ -19,6 +19,7 @@ import {
   CalendarPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
+  CompositeFeedVisualizationsPage,
   DataSourceFormPage,
   DataSourcesListPage,
   GoogleCalendarConnectionPage,
@@ -258,6 +259,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/composite-feeds/:id/visualizations"
+        element={
+          <ProtectedRoute>
+            <CompositeFeedVisualizationsPage />
           </ProtectedRoute>
         }
       />

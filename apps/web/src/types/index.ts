@@ -504,6 +504,37 @@ export interface CompositeFeedSnapshot extends CompositeFeedData {
 }
 
 /**
+ * Visualization from data-insights-agent.
+ * Represents a chart generated for a composite feed.
+ */
+export interface Visualization {
+  id: string;
+  feedId: string;
+  userId: string;
+  title: string;
+  vegaSpec: object;
+  insights: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request to create a visualization.
+ */
+export interface CreateVisualizationRequest {
+  dataSnapshot: object;
+}
+
+/**
+ * Request to update a visualization.
+ */
+export interface UpdateVisualizationRequest {
+  title?: string;
+  vegaSpec?: object;
+  insights?: string;
+}
+
+/**
  * Note from notes-agent
  */
 export interface Note {

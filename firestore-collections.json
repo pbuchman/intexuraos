@@ -109,6 +109,10 @@
     "bookmarks": {
       "owner": "bookmarks-agent",
       "description": "User-scoped bookmarks with OG metadata, AI summaries, and tags"
+    },
+    "visualizations": {
+      "owner": "data-insights-agent",
+      "description": "LLM-generated data visualizations with insights and Vega-Lite specs"
     }
   }
 }

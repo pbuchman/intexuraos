@@ -11,4 +11,6 @@ export { AudioPlayer } from './AudioPlayer.js';
 export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
+export { VegaChart } from './VegaChart.js';
+export { VisualizationCard } from './VisualizationCard.js';
 export * from './ui/index.js';
