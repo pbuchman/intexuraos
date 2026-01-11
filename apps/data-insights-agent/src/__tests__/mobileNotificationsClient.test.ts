@@ -9,9 +9,16 @@ describe('mobileNotificationsClient', () => {
 
   let client: ReturnType<typeof createMobileNotificationsClient>;
 
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+
   beforeEach(() => {
-    client = createMobileNotificationsClient({ baseUrl, internalAuthToken });
+    client = createMobileNotificationsClient({ baseUrl, internalAuthToken, logger: mockLogger });
     nock.cleanAll();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -203,6 +210,112 @@ describe('mobileNotificationsClient', () => {
       });
 
       expect(nock.isDone()).toBe(true);
+    });
+
+    it('logs successful query', async () => {
+      nock(baseUrl)
+        .post('/internal/mobile-notifications/query')
+        .reply(200, {
+          success: true,
+          data: { notifications: [{ id: 'n1', app: 'WhatsApp', title: 'Test', body: 'Body', timestamp: '2024-01-01T00:00:00Z' }] },
+        });
+
+      await client.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ userId }),
+        'Querying mobile-notifications-service'
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ notificationCount: 1 }),
+        'Successfully queried mobile-notifications-service'
+      );
+    });
+
+    it('logs HTTP error responses', async () => {
+      nock(baseUrl)
+        .post('/internal/mobile-notifications/query')
+        .reply(500, 'Internal Server Error');
+
+      await client.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 500 }),
+        'Mobile-notifications-service returned error status'
+      );
+    });
+
+    it('handles error when unable to read response body', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: vi.fn().mockRejectedValue(new Error('Stream closed')),
+        json: vi.fn(),
+      };
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+      try {
+        const result = await client.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('HTTP 500');
+        }
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ errorText: 'Unable to read response body' }),
+          'Mobile-notifications-service returned error status'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('logs API error responses', async () => {
+      nock(baseUrl)
+        .post('/internal/mobile-notifications/query')
+        .reply(200, { success: false, error: 'Invalid filter' });
+
+      await client.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Invalid filter' }),
+        'Mobile-notifications-service returned error response'
+      );
+    });
+
+    it('logs network errors', async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      try {
+        await client.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ baseUrl }),
+          'Failed to connect to mobile-notifications-service'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('works without a logger', async () => {
+      const clientWithoutLogger = createMobileNotificationsClient({ baseUrl, internalAuthToken });
+
+      nock(baseUrl)
+        .post('/internal/mobile-notifications/query')
+        .reply(200, {
+          success: true,
+          data: { notifications: [] },
+        });
+
+      const result = await clientWithoutLogger.queryNotifications(userId, { id: 'f1', name: 'Test' });
+
+      expect(result.ok).toBe(true);
     });
   });
 });

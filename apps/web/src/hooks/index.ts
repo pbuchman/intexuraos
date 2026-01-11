@@ -13,3 +13,4 @@ export { useLlmKeys } from './useLlmKeys.js';
 export { useNotes } from './useNotes.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useTodos } from './useTodos.js';
+export { useVisualization, useVisualizations } from './useVisualizations.js';

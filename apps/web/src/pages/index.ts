@@ -18,6 +18,7 @@ export { DataSourcesListPage } from './DataSourcesListPage.js';
 export { DataSourceFormPage } from './DataSourceFormPage.js';
 export { CompositeFeedsListPage } from './CompositeFeedsListPage.js';
 export { CompositeFeedFormPage } from './CompositeFeedFormPage.js';
+export { CompositeFeedVisualizationsPage } from './CompositeFeedVisualizationsPage.js';
 export { NotesListPage } from './NotesListPage.js';
 export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
