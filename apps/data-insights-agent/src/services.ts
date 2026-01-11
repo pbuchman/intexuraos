@@ -12,6 +12,7 @@ import type {
 import type { SnapshotRepository } from './domain/snapshot/index.js';
 import type { DataAnalysisService } from './infra/gemini/dataAnalysisService.js';
 import type { ChartDefinitionService } from './infra/gemini/chartDefinitionService.js';
+import type { DataTransformService } from './infra/gemini/dataTransformService.js';
 
 /**
  * Service container holding all adapter instances.
@@ -25,6 +26,7 @@ export interface ServiceContainer {
   snapshotRepository: SnapshotRepository;
   dataAnalysisService: DataAnalysisService;
   chartDefinitionService: ChartDefinitionService;
+  dataTransformService: DataTransformService;
 }
 
 let container: ServiceContainer | null = null;
