@@ -6,9 +6,11 @@ export type { LlmProvider };
 
 /**
  * Test result for an LLM API key.
+ * Either `response` (success) or `error` (failure) will be present.
  */
 export interface LlmTestResult {
-  response: string;
+  response?: string;
+  error?: string;
   testedAt: string;
 }
 

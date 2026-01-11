@@ -51,6 +51,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         nullable: true,
                         properties: {
                           response: { type: 'string' },
+                          error: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
                       },
@@ -59,6 +60,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         nullable: true,
                         properties: {
                           response: { type: 'string' },
+                          error: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
                       },
@@ -67,6 +69,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         nullable: true,
                         properties: {
                           response: { type: 'string' },
+                          error: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
                       },
@@ -75,6 +78,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         nullable: true,
                         properties: {
                           response: { type: 'string' },
+                          error: { type: 'string' },
                           testedAt: { type: 'string' },
                         },
                       },
@@ -416,20 +420,26 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         params.uid
       );
 
+      const testedAt = new Date().toISOString();
+
       if (!testResult.ok) {
+        const llmTestResult: LlmTestResult = {
+          error: testResult.error.message,
+          testedAt,
+        };
+        await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
         return await reply.fail('DOWNSTREAM_ERROR', testResult.error.message);
       }
 
-      // Save the test result with timestamp
       const llmTestResult: LlmTestResult = {
         response: testResult.value.content,
-        testedAt: new Date().toISOString(),
+        testedAt,
       };
       await userSettingsRepository.updateLlmTestResult(params.uid, params.provider, llmTestResult);
 
       return await reply.ok({
         response: testResult.value.content,
-        testedAt: llmTestResult.testedAt,
+        testedAt,
       });
     }
   );

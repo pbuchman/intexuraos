@@ -869,7 +869,7 @@ describe('LLM Keys Routes', () => {
       expect(stored?.llmTestResults?.google?.response).toBe('Hello! I am Gemini Pro.');
     });
 
-    it('returns 502 when test request fails', { timeout: 20000 }, async () => {
+    it('returns 502 and stores error when test request fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-fail';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       fakeSettingsRepo.setSettings({
@@ -903,6 +903,12 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+
+      // Verify error was stored for persistence across page refresh
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmTestResults?.google).toBeDefined();
+      expect(stored?.llmTestResults?.google?.error).toBe('Test request failed');
+      expect(stored?.llmTestResults?.google?.response).toBeUndefined();
     });
 
     it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
