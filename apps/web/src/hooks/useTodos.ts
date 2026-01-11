@@ -4,6 +4,7 @@ import { useAuth } from '@/context';
 import {
   addTodoItem as addTodoItemApi,
   archiveTodo as archiveTodoApi,
+  cancelTodo as cancelTodoApi,
   createTodo as createTodoApi,
   deleteTodo as deleteTodoApi,
   deleteTodoItem as deleteTodoItemApi,
@@ -33,6 +34,7 @@ interface UseTodosResult {
   deleteTodo: (id: string) => Promise<void>;
   archiveTodo: (id: string) => Promise<Todo>;
   unarchiveTodo: (id: string) => Promise<Todo>;
+  cancelTodo: (id: string) => Promise<Todo>;
   addItem: (todoId: string, request: CreateTodoItemRequest) => Promise<Todo>;
   updateItem: (todoId: string, itemId: string, request: UpdateTodoItemRequest) => Promise<Todo>;
   deleteItem: (todoId: string, itemId: string) => Promise<Todo>;
@@ -113,6 +115,16 @@ export function useTodos(): UseTodosResult {
     [getAccessToken]
   );
 
+  const cancelTodo = useCallback(
+    async (id: string): Promise<Todo> => {
+      const token = await getAccessToken();
+      const updated = await cancelTodoApi(token, id);
+      setTodos((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      return updated;
+    },
+    [getAccessToken]
+  );
+
   const addItem = useCallback(
     async (todoId: string, request: CreateTodoItemRequest): Promise<Todo> => {
       const token = await getAccessToken();
@@ -155,6 +167,7 @@ export function useTodos(): UseTodosResult {
     deleteTodo,
     archiveTodo,
     unarchiveTodo,
+    cancelTodo,
     addItem,
     updateItem,
     deleteItem,

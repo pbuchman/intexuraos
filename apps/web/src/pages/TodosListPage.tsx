@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Archive,
+  Ban,
   Calendar,
   Check,
   CheckSquare,
@@ -311,6 +312,7 @@ interface TodoModalProps {
   onDelete: () => Promise<void>;
   onArchive: () => Promise<Todo>;
   onUnarchive: () => Promise<Todo>;
+  onCancel: () => Promise<Todo>;
   onAddItem: (request: CreateTodoItemRequest) => Promise<Todo>;
   onUpdateItem: (itemId: string, request: UpdateTodoItemRequest) => Promise<Todo>;
   onDeleteItem: (itemId: string) => Promise<Todo>;
@@ -323,6 +325,7 @@ function TodoModal({
   onDelete,
   onArchive,
   onUnarchive,
+  onCancel,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
@@ -338,6 +341,7 @@ function TodoModal({
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemTitle, setNewItemTitle] = useState('');
   const [addingItem, setAddingItem] = useState(false);
@@ -379,6 +383,16 @@ function TodoModal({
       setCurrentTodo(updated);
     } finally {
       setArchiving(false);
+    }
+  };
+
+  const handleCancelTodo = async (): Promise<void> => {
+    setCancelling(true);
+    try {
+      const updated = await onCancel();
+      setCurrentTodo(updated);
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -698,6 +712,22 @@ function TodoModal({
                   {currentTodo.archived ? 'Unarchive' : 'Archive'}
                 </Button>
               ) : null}
+              {currentTodo.status !== 'completed' && currentTodo.status !== 'cancelled' ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(): void => {
+                    void handleCancelTodo();
+                  }}
+                  disabled={cancelling}
+                  isLoading={cancelling}
+                  className="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                >
+                  <Ban className="mr-1 h-4 w-4" />
+                  Cancel Todo
+                </Button>
+              ) : null}
             </div>
           )}
 
@@ -983,6 +1013,7 @@ export function TodosListPage(): React.JSX.Element {
     deleteTodo,
     archiveTodo,
     unarchiveTodo,
+    cancelTodo,
     addItem,
     updateItem,
     deleteItem,
@@ -1090,6 +1121,11 @@ export function TodosListPage(): React.JSX.Element {
           }}
           onUnarchive={async (): Promise<Todo> => {
             const updated = await unarchiveTodo(selectedTodo.id);
+            setSelectedTodo(updated);
+            return updated;
+          }}
+          onCancel={async (): Promise<Todo> => {
+            const updated = await cancelTodo(selectedTodo.id);
             setSelectedTodo(updated);
             return updated;
           }}
