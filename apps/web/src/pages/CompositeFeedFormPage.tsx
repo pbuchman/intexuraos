@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Check, ChevronDown, Plus, Trash2, RefreshCw, Clock, AlertCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { BarChart3, Check, ChevronDown, Plus, Trash2, RefreshCw, Clock, AlertCircle } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useCompositeFeed, useDataSources } from '@/hooks';
@@ -505,15 +505,25 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">
-          {isEditMode ? 'Edit Composite Feed' : 'Create Composite Feed'}
-        </h2>
-        <p className="text-slate-600">
-          {isEditMode
-            ? 'Update your composite feed configuration.'
-            : 'Create a feed that aggregates data sources and notification filters.'}
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            {isEditMode ? 'Edit Composite Feed' : 'Create Composite Feed'}
+          </h2>
+          <p className="text-slate-600">
+            {isEditMode
+              ? 'Update your composite feed configuration.'
+              : 'Create a feed that aggregates data sources and notification filters.'}
+          </p>
+        </div>
+        {isEditMode ? (
+          <Link to={`/data-insights/${id}/visualizations`}>
+            <Button type="button" variant="secondary">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Visualizations
+            </Button>
+          </Link>
+        ) : null}
       </div>
 
       {error !== null && error !== '' ? (
