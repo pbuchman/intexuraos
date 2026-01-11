@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, ChevronDown, Plus, Trash2, RefreshCw, Clock, AlertCircle } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
@@ -64,9 +64,7 @@ function MultiSelectDropdown({
   const displayText =
     selected.length === 0
       ? allLabel
-      : selected.length === 1
-        ? selected[0]
-        : `${String(selected.length)} selected`;
+      : `${String(selected.length)} selected`;
 
   return (
     <div className="relative flex flex-col gap-1">
@@ -77,10 +75,10 @@ function MultiSelectDropdown({
           if (!disabled) setIsOpen(!isOpen);
         }}
         disabled={disabled}
-        className="flex min-w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        className="flex w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
       >
         <span className="truncate">{displayText}</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen ? (
@@ -325,6 +323,8 @@ export function CompositeFeedFormPage(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showSnapshotLoader, setShowSnapshotLoader] = useState(false);
+  const loaderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const loadFilterOptions = async (): Promise<void> => {
@@ -360,6 +360,24 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       void getSnapshot();
     }
   }, [isEditMode, compositeFeed, getSnapshot]);
+
+  useEffect(() => {
+    if (snapshotLoading) {
+      setShowSnapshotLoader(true);
+      if (loaderTimeoutRef.current !== null) {
+        clearTimeout(loaderTimeoutRef.current);
+      }
+    } else if (showSnapshotLoader) {
+      loaderTimeoutRef.current = setTimeout(() => {
+        setShowSnapshotLoader(false);
+      }, 1000);
+    }
+    return (): void => {
+      if (loaderTimeoutRef.current !== null) {
+        clearTimeout(loaderTimeoutRef.current);
+      }
+    };
+  }, [snapshotLoading, showSnapshotLoader]);
 
   const handleAddFilter = (): void => {
     if (notificationFilters.length < MAX_NOTIFICATION_FILTERS) {
@@ -582,126 +600,137 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
         {isEditMode && compositeFeed !== null ? (
           <Card title="Snapshot Preview">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-500">
-                  Pre-computed snapshot data (refreshed every 15 minutes)
-                </p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(): void => {
-                    void getSnapshot({ refresh: true });
-                  }}
-                  disabled={snapshotLoading}
-                  isLoading={snapshotLoading}
-                >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Refresh
-                </Button>
-              </div>
-
-              {snapshotLoading && snapshot === null ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+            <div className="relative">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-500">
+                    Pre-computed snapshot data (refreshed every 15 minutes)
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={(): void => {
+                      void getSnapshot({ refresh: true });
+                    }}
+                    disabled={snapshotLoading}
+                    isLoading={snapshotLoading}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh
+                  </Button>
                 </div>
-              ) : snapshot === null ? (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                  <div className="flex gap-2">
-                    <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
-                    <div>
-                      <p className="font-medium text-amber-900">Snapshot Not Yet Generated</p>
-                      <p className="text-sm text-amber-700 mt-1">
-                        Snapshots are generated every 15 minutes by the scheduler. Please check back
-                        soon.
-                      </p>
+
+                {snapshotLoading && snapshot === null ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                  </div>
+                ) : snapshot === null ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex gap-2">
+                      <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                      <div>
+                        <p className="font-medium text-amber-900">Snapshot Not Yet Generated</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          Snapshots are generated every 15 minutes by the scheduler. Please check back
+                          soon.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1 text-slate-600">
-                      <Clock className="h-4 w-4" />
-                      <span>
-                        Generated: {new Date(snapshot.generatedAt).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1 text-slate-600">
+                        <Clock className="h-4 w-4" />
+                        <span>
+                          Generated: {new Date(snapshot.generatedAt).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <div className="text-slate-500">
+                        Expires: {new Date(snapshot.expiresAt).toLocaleString('en-US', {
                           hour: 'numeric',
                           minute: '2-digit',
                         })}
-                      </span>
+                      </div>
                     </div>
-                    <div className="text-slate-500">
-                      Expires: {new Date(snapshot.expiresAt).toLocaleString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </div>
-                  </div>
 
-                  {snapshot.staticSources.length > 0 ? (
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">
-                        Static Sources ({snapshot.staticSources.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {snapshot.staticSources.map((source) => {
-                          const rows = source.content.split('\n').length;
-                          const chars = source.content.length;
-                          return (
+                    {snapshot.staticSources.length > 0 ? (
+                      <div>
+                        <h4 className="text-sm font-medium text-slate-700 mb-2">
+                          Static Sources ({snapshot.staticSources.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {snapshot.staticSources.map((source) => {
+                            const rows = source.content.split('\n').length;
+                            const chars = source.content.length;
+                            return (
+                              <div
+                                key={source.id}
+                                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                              >
+                                <div className="font-medium text-slate-900 text-sm">{source.name}</div>
+                                <div className="text-xs text-slate-500 mt-1">
+                                  {rows} rows, {chars.toLocaleString()} characters
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {snapshot.notifications.length > 0 ? (
+                      <div>
+                        <h4 className="text-sm font-medium text-slate-700 mb-2">
+                          Notification Filters ({snapshot.notifications.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {snapshot.notifications.map((filter) => (
                             <div
-                              key={source.id}
+                              key={filter.filterId}
                               className="rounded-lg border border-slate-200 bg-slate-50 p-3"
                             >
-                              <div className="font-medium text-slate-900 text-sm">{source.name}</div>
+                              <div className="font-medium text-slate-900 text-sm">
+                                {filter.filterName}
+                              </div>
                               <div className="text-xs text-slate-500 mt-1">
-                                {rows} rows, {chars.toLocaleString()} characters
+                                {filter.items.length} notifications
+                                {filter.criteria.app !== undefined && filter.criteria.app.length > 0
+                                  ? ` from ${filter.criteria.app.join(', ')}`
+                                  : ''}
                               </div>
+                              {filter.items.length === 1000 ? (
+                                <div className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+                                  <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                                  <span className="text-xs text-amber-800">
+                                    Reached 1000 notification limit. Some may be missing. Consider
+                                    narrowing your filter criteria.
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </>
+                )}
+              </div>
 
-                  {snapshot.notifications.length > 0 ? (
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">
-                        Notification Filters ({snapshot.notifications.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {snapshot.notifications.map((filter) => (
-                          <div
-                            key={filter.filterId}
-                            className="rounded-lg border border-slate-200 bg-slate-50 p-3"
-                          >
-                            <div className="font-medium text-slate-900 text-sm">
-                              {filter.filterName}
-                            </div>
-                            <div className="text-xs text-slate-500 mt-1">
-                              {filter.items.length} notifications
-                              {filter.criteria.app !== undefined && filter.criteria.app.length > 0
-                                ? ` from ${filter.criteria.app.join(', ')}`
-                                : ''}
-                            </div>
-                            {filter.items.length === 1000 ? (
-                              <div className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
-                                <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
-                                <span className="text-xs text-amber-800">
-                                  Reached 1000 notification limit. Some may be missing. Consider
-                                  narrowing your filter criteria.
-                                </span>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </>
-              )}
+              {showSnapshotLoader && snapshot !== null ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-[1px] transition-opacity duration-300">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                    <span className="text-sm text-slate-600">Refreshing snapshot...</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </Card>
         ) : null}
