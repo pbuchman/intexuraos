@@ -282,7 +282,14 @@ function ApiKeyRow({
         </div>
       ) : testError !== null ? (
         <FormattedErrorDisplay error={testError} />
-      ) : savedTestResult !== null ? (
+      ) : savedTestResult?.error !== undefined ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm font-medium text-red-800 mb-1">
+            Test failed ({formatDate(savedTestResult.testedAt)}):
+          </p>
+          <p className="text-sm text-red-700">{savedTestResult.error}</p>
+        </div>
+      ) : savedTestResult?.response !== undefined ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
           <p className="text-sm font-medium text-green-800 mb-1">
             LLM Response ({formatDate(savedTestResult.testedAt)}):
