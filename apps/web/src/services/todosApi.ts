@@ -83,6 +83,12 @@ export async function unarchiveTodo(accessToken: string, id: string): Promise<To
   });
 }
 
+export async function cancelTodo(accessToken: string, id: string): Promise<Todo> {
+  return await apiRequest<Todo>(config.todosAgentUrl, `/todos/${id}/cancel`, accessToken, {
+    method: 'POST',
+  });
+}
+
 export async function addTodoItem(
   accessToken: string,
   todoId: string,

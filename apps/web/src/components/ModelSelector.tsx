@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
+import { formatLlmErrorString } from '@/utils/formatLlmError';
 
 interface ModelOption {
   id: SupportedModel;
@@ -55,6 +56,8 @@ export interface ModelSelectorProps {
   onChange: (provider: LlmProvider, model: SupportedModel | null) => void;
   configuredProviders: LlmProvider[];
   disabledProviders?: Set<LlmProvider>;
+  failedProviders?: Map<LlmProvider, string>;
+  loading?: boolean;
   disabled?: boolean | undefined;
 }
 
@@ -63,16 +66,26 @@ export function ModelSelector({
   onChange,
   configuredProviders,
   disabledProviders,
+  failedProviders,
+  loading = false,
   disabled = false,
 }: ModelSelectorProps): React.JSX.Element {
   return (
     <div className="space-y-3">
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-400 text-sm mb-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading API key status...</span>
+        </div>
+      ) : null}
       {PROVIDER_MODELS.map((provider) => {
         const isConfigured = configuredProviders.includes(provider.id);
         const isProviderDisabled = disabledProviders?.has(provider.id) === true;
+        const isTestFailed = failedProviders?.has(provider.id) === true;
+        const testFailedError = isTestFailed ? failedProviders.get(provider.id) : undefined;
         const selectedModel = selectedModels.get(provider.id) ?? null;
         const isActive = selectedModel !== null;
-        const isRowDisabled = !isConfigured || isProviderDisabled || disabled;
+        const isRowDisabled = loading || !isConfigured || isTestFailed || isProviderDisabled || disabled;
 
         return (
           <div
@@ -98,7 +111,23 @@ export function ModelSelector({
                     Active
                   </span>
                 ) : null}
-                {!isConfigured ? (
+                {isTestFailed ? (
+                  <div className="flex items-center gap-1 group relative">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <span className="text-xs text-red-600">Test failed</span>
+                    <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg">
+                      <p className="text-xs text-red-700 mb-2">
+                        {formatLlmErrorString(testFailedError ?? '')}
+                      </p>
+                      <Link
+                        to="/settings/api-keys"
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Fix in Settings →
+                      </Link>
+                    </div>
+                  </div>
+                ) : !isConfigured ? (
                   <Link
                     to="/settings/api-keys"
                     className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
