@@ -671,4 +671,8 @@ options:
   env:
     - 'DOCKER_BUILDKIT=1'
 
+# Substitutions
+substitutions:
+  _REGION: europe-west1
+
 timeout: 1800s
