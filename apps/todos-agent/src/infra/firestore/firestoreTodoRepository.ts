@@ -7,6 +7,7 @@ import type {
   CreateTodoInput,
   TodoFilters,
   TodoStatus,
+  TodoItemStatus,
   TodoPriority,
 } from '../../domain/models/todo.js';
 import type { TodoRepository, TodoError } from '../../domain/ports/todoRepository.js';
@@ -16,7 +17,7 @@ const COLLECTION = 'todos';
 interface TodoItemDocument {
   id: string;
   title: string;
-  status: TodoStatus;
+  status: TodoItemStatus;
   priority: TodoPriority | null;
   dueDate: string | null;
   position: number;

@@ -1403,7 +1403,7 @@ describe('updateTodoItem - additional coverage', () => {
     }
   });
 
-  it('sets in_progress when item marked in_progress', async () => {
+  it('sets in_progress when item marked completed', async () => {
     const createResult = await todoRepository.create({
       userId: 'user-1',
       title: 'Test',
@@ -1424,7 +1424,7 @@ describe('updateTodoItem - additional coverage', () => {
       createResult.value.id,
       itemId,
       'user-1',
-      { status: 'in_progress' }
+      { status: 'completed' }
     );
 
     expect(result.ok).toBe(true);
