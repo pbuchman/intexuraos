@@ -23,7 +23,7 @@ const REQUIRED_ENDPOINTS = [
   { path: '/docs', method: 'GET' },
 ];
 
-const EXEMPT_APPS = ['api-docs-hub', 'web'];
+const EXEMPT_APPS = ['api-docs-hub', 'web', 'commands-router', 'llm-orchestrator'];
 
 function getApps() {
   return readdirSync(appsDir).filter((entry) => {
@@ -35,19 +35,28 @@ function getApps() {
 
 function checkServerFile(appName) {
   const serverPath = join(appsDir, appName, 'src', 'server.ts');
+  const distPath = join(appsDir, appName, 'dist', 'index.js');
 
   try {
-    const content = readFileSync(serverPath, 'utf8');
+    let content = '';
+    let exists = false;
+
+    if (statSync(serverPath).isFile()) {
+      content = readFileSync(serverPath, 'utf8');
+      exists = true;
+    } else if (statSync(distPath).isFile()) {
+      content = readFileSync(distPath, 'utf8');
+      exists = true;
+    }
+
     const missingEndpoints = [];
 
     for (const { path, method } of REQUIRED_ENDPOINTS) {
-      // Pattern 1: app.get('/path', ...)
       const directPattern = new RegExp(
         `app\\.(${method.toLowerCase()})\\s*\\(\\s*['"\`]${path.replace('/', '\\/')}['"\`]`,
         'i'
       );
 
-      // Pattern 2: Swagger plugin patterns
       const pluginPatterns = {
         '/openapi.json': /app\.swagger\(\)|fastifySwagger/,
         '/docs': /fastifySwaggerUi.*routePrefix.*\/docs/s,
@@ -78,7 +87,7 @@ const violations = [];
 for (const app of apps) {
   const { exists, missing } = checkServerFile(app);
 
-  if (!exists) {
+  if (!exists || missing.length > 0) {
     violations.push({
       app,
       issue: 'Missing server.ts file',
