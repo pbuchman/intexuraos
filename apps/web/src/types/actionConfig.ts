@@ -180,4 +180,6 @@ export interface ActionExecutionResult {
   resource_url?: string;
   /** Error message if status is 'failed' */
   error?: string;
+  /** Existing bookmark ID (for duplicate link conflicts) */
+  existingBookmarkId?: string;
 }

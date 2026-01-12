@@ -31,21 +31,6 @@ resource "google_logging_metric" "llm_errors" {
   }
 }
 
-resource "google_logging_metric" "pubsub_dlq_messages" {
-  name        = "pubsub-dead-letter-messages"
-  description = "Messages sent to dead letter queues"
-  filter      = <<-EOT
-    resource.type="cloud_run_revision"
-    (textPayload=~"dead.letter" OR textPayload=~"dlq" OR jsonPayload.message=~"dead.letter|dlq")
-  EOT
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
-  }
-}
-
 resource "google_logging_metric" "whatsapp_webhook_errors" {
   name        = "whatsapp-webhook-errors"
   description = "WhatsApp webhook processing errors"
@@ -211,7 +196,7 @@ resource "google_monitoring_dashboard" "main" {
         {
           xPos   = 0
           yPos   = 14
-          width  = 4
+          width  = 3
           height = 4
           widget = {
             title = "3. Pub/Sub Unacked Messages"
@@ -224,7 +209,6 @@ resource "google_monitoring_dashboard" "main" {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_MEAN"
                       crossSeriesReducer = "REDUCE_SUM"
-                      groupByFields      = ["resource.label.subscription_id"]
                     }
                   }
                 }
@@ -237,9 +221,9 @@ resource "google_monitoring_dashboard" "main" {
           }
         },
         {
-          xPos   = 4
+          xPos   = 3
           yPos   = 14
-          width  = 4
+          width  = 3
           height = 4
           widget = {
             title = "4. WhatsApp Webhook Errors"
@@ -264,9 +248,9 @@ resource "google_monitoring_dashboard" "main" {
           }
         },
         {
-          xPos   = 8
+          xPos   = 6
           yPos   = 14
-          width  = 4
+          width  = 3
           height = 4
           widget = {
             title = "5. E2E Latency (All Services P95)"
@@ -279,7 +263,6 @@ resource "google_monitoring_dashboard" "main" {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_PERCENTILE_95"
                       crossSeriesReducer = "REDUCE_MAX"
-                      groupByFields      = ["resource.label.service_name"]
                     }
                   }
                 }
@@ -288,6 +271,34 @@ resource "google_monitoring_dashboard" "main" {
               yAxis = {
                 scale = "LINEAR"
                 label = "ms"
+              }
+            }
+          }
+        },
+        {
+          xPos   = 9
+          yPos   = 14
+          width  = 3
+          height = 4
+          widget = {
+            title = "6. DLQ Messages (by subscription)"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_MEAN"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["resource.label.subscription_id"]
+                    }
+                  }
+                }
+                plotType = "STACKED_BAR"
+              }]
+              yAxis = {
+                scale = "LINEAR"
               }
             }
           }
@@ -360,11 +371,11 @@ resource "google_monitoring_dashboard" "main" {
           width  = 3
           height = 3
           widget = {
-            title = "Unacked Messages"
+            title = "DLQ Messages"
             scorecard = {
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\""
+                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
                   aggregation = {
                     alignmentPeriod    = "60s"
                     perSeriesAligner   = "ALIGN_MEAN"
@@ -373,14 +384,14 @@ resource "google_monitoring_dashboard" "main" {
                 }
               }
               thresholds = [{
-                value     = 100
-                color     = "YELLOW"
-                direction = "ABOVE"
-                }, {
-                value     = 1000
+                value     = 0
                 color     = "RED"
                 direction = "ABOVE"
               }]
+              gaugeView = {
+                lowerBound = 0
+                upperBound = 100
+              }
             }
           }
         },
@@ -574,6 +585,45 @@ resource "google_monitoring_alert_policy" "pubsub_backlog" {
 
   documentation {
     content   = "Pub/Sub message backlog is growing. Subscribers may be failing or slow."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "dlq_messages" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Dead Letter Queue Has Messages"
+
+  combiner = "OR"
+  conditions {
+    display_name = "DLQ contains failed messages"
+    condition_threshold {
+      filter          = <<-EOT
+        resource.type="pubsub_subscription"
+        metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
+        resource.label.subscription_id=has_substring("-dlq-sub")
+      EOT
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "60s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_MEAN"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email[0].name]
+
+  alert_strategy {
+    auto_close = "3600s"
+  }
+
+  documentation {
+    content   = "Messages have failed processing and moved to DLQ. Investigate immediately - messages will expire after 7 days."
     mime_type = "text/markdown"
   }
 }

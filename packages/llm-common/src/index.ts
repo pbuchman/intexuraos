@@ -29,6 +29,13 @@ export {
   type CommandClassifierPromptDeps,
 } from './classification/index.js';
 
+// Todo prompts (item extraction)
+export {
+  itemExtractionPrompt,
+  type ItemExtractionPromptInput,
+  type ItemExtractionPromptDeps,
+} from './todos/index.js';
+
 // Image prompts (thumbnail generation)
 export {
   thumbnailPrompt,

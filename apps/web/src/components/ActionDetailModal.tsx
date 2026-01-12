@@ -20,7 +20,8 @@ import { useActionConfig } from '@/hooks/useActionConfig';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
 import { Button } from './ui/Button';
 import { useAuth } from '@/context/AuthContext';
-import { updateAction } from '@/services/commandsApi';
+import { updateAction, resolveDuplicateAction } from '@/services/commandsApi';
+import { BookmarkConflictModal } from './BookmarkConflictModal';
 
 interface ActionDetailModalProps {
   action: Action;
@@ -86,7 +87,7 @@ export function ActionDetailModal({
   const { getAccessToken } = useAuth();
   const [executionResult, setExecutionResult] = useState<{
     actionId: string;
-    status: 'completed' | 'failed';
+    status: 'completed' | 'failed' | 'rejected';
     resource_url?: string;
     message?: string;
     linkLabel?: string;
@@ -96,6 +97,11 @@ export function ActionDetailModal({
   const [typeChangeError, setTypeChangeError] = useState<string | null>(null);
   // Track if current action result has resource_url (used to prevent modal close)
   const hasResourceUrlRef = useRef(false);
+  // Conflict modal state for duplicate bookmarks
+  const [conflictInfo, setConflictInfo] = useState<{
+    url: string;
+    existingBookmarkId: string;
+  } | null>(null);
 
   const canChangeType = action.status === 'pending' || action.status === 'awaiting_approval';
 
@@ -151,6 +157,16 @@ export function ActionDetailModal({
   };
 
   const handleResult = (result: ActionExecutionResult, button: ResolvedActionButton): void => {
+    // Check for duplicate bookmark conflict
+    if (result.existingBookmarkId !== undefined) {
+      const urlFromPayload = typeof action.payload['url'] === 'string' ? action.payload['url'] : action.title;
+      setConflictInfo({
+        url: urlFromPayload,
+        existingBookmarkId: result.existingBookmarkId,
+      });
+      return;
+    }
+
     if (result.resource_url !== undefined) {
       const newResult: typeof executionResult = {
         actionId: result.actionId,
@@ -164,6 +180,46 @@ export function ActionDetailModal({
       setExecutionResult(newResult);
     }
   };
+
+  const handleSkipConflict = useCallback(async (): Promise<void> => {
+    if (conflictInfo === null) return;
+    try {
+      const token = await getAccessToken();
+      await resolveDuplicateAction(token, action.id, 'skip');
+      onActionUpdated?.({ ...action, status: 'rejected' });
+      setConflictInfo(null);
+      onClose();
+    } catch {
+      // Error handled by modal
+    }
+  }, [conflictInfo, action, getAccessToken, onActionUpdated, onClose]);
+
+  const handleUpdateConflict = useCallback(async (): Promise<void> => {
+    if (conflictInfo === null) return;
+    try {
+      const token = await getAccessToken();
+      const result = await resolveDuplicateAction(token, action.id, 'update');
+      onActionUpdated?.({
+        ...action,
+        status: result.status,
+        payload: {
+          ...action.payload,
+          resource_url: result.resource_url,
+        },
+      });
+      setConflictInfo(null);
+      // Show success view
+      if (result.resource_url !== undefined) {
+        setExecutionResult({
+          actionId: result.actionId,
+          status: result.status,
+          resource_url: normalizeResourceUrl(result.resource_url),
+        });
+      }
+    } catch {
+      // Error handled by modal
+    }
+  }, [conflictInfo, action, getAccessToken, onActionUpdated]);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (e.target === e.currentTarget) {
@@ -340,6 +396,23 @@ export function ActionDetailModal({
           </div>
         )}
       </div>
+
+      {/* Conflict Modal */}
+      {conflictInfo !== null && (
+        <BookmarkConflictModal
+          isOpen
+          url={conflictInfo.url}
+          onSkip={(): void => {
+            void handleSkipConflict();
+          }}
+          onUpdate={async (): Promise<void> => {
+            await handleUpdateConflict();
+          }}
+          onClose={(): void => {
+            setConflictInfo(null);
+          }}
+        />
+      )}
     </div>
   );
 }
