@@ -647,6 +647,7 @@ export function InboxPage(): React.JSX.Element {
   };
 
   // Deep linking: open action modal from URL query parameter
+  // When filters are active, the action may not be in the displayed list, so fetch it directly
   useEffect(() => {
     const hash = window.location.hash;
     const queryString = hash.includes('?') ? hash.split('?')[1] : '';
@@ -657,13 +658,39 @@ export function InboxPage(): React.JSX.Element {
     const params = new URLSearchParams(queryString);
     const actionId = params.get('action');
 
-    if (actionId !== null && actions.length > 0) {
-      const action = actions.find((a) => a.id === actionId);
-      if (action !== undefined) {
-        setSelectedAction(action);
-      }
+    if (actionId === null) {
+      return;
     }
-  }, [actions]);
+
+    // First check if action is in current list (fast path)
+    const actionInList = actions.find((a) => a.id === actionId);
+    if (actionInList !== undefined) {
+      setSelectedAction(actionInList);
+      return;
+    }
+
+    // If not found and we haven't tried fetching yet, fetch directly
+    // Use sessionStorage to track attempted fetches to avoid loops
+    const fetchKey = `fetched-action-${actionId}`;
+    if (sessionStorage.getItem(fetchKey) === 'true') {
+      return;
+    }
+    sessionStorage.setItem(fetchKey, 'true');
+
+    // Fetch the specific action even if it doesn't match current filters
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const fetchedActions = await batchGetActions(token, [actionId]);
+        const action = fetchedActions.find((a) => a.id === actionId);
+        if (action !== undefined) {
+          setSelectedAction(action);
+        }
+      } catch {
+        // Action not found or fetch failed - silently ignore
+      }
+    })();
+  }, [actions, getAccessToken]);
 
   const handleRefresh = (): void => {
     void fetchData(true);
