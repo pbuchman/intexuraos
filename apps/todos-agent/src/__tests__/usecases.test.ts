@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
+import { setupTestContext } from './testUtils.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
 import { getTodo } from '../domain/usecases/getTodo.js';
 import { listTodos } from '../domain/usecases/listTodos.js';
@@ -1864,9 +1865,11 @@ describe('cancelTodo', () => {
 
 describe('processTodoCreated', () => {
   let todoRepository: FakeTodoRepository;
+  let context: Awaited<ReturnType<typeof setupTestContext>>;
 
-  beforeEach(() => {
-    todoRepository = new FakeTodoRepository();
+  beforeEach(async () => {
+    context = await setupTestContext();
+    todoRepository = context.todoRepository;
   });
 
   it('changes processing todo status to pending', async () => {
@@ -1882,7 +1885,30 @@ describe('processTodoCreated', () => {
     if (!createResult.ok) return;
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('changes processing todo status to pending', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
@@ -1904,7 +1930,7 @@ describe('processTodoCreated', () => {
     if (!createResult.ok) return;
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
@@ -1916,7 +1942,7 @@ describe('processTodoCreated', () => {
 
   it('returns NOT_FOUND for non-existent todo', async () => {
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       'non-existent'
     );
 
@@ -1930,7 +1956,7 @@ describe('processTodoCreated', () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       'any-id'
     );
 
@@ -1958,7 +1984,7 @@ describe('processTodoCreated', () => {
     });
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
