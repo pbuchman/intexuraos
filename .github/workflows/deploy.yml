@@ -1,5 +1,11 @@
 name: Deploy
 
+# Region configuration
+# Cloud Build triggers/workers run in europe-west1 (build region)
+# Cloud Run services run in europe-central2 (runtime region)
+env:
+  CLOUD_BUILD_REGION: europe-west1
+
 on:
   push:
     branches:
@@ -84,7 +90,7 @@ jobs:
           echo "🚀 Triggering MONOLITH build (all services)"
           BUILD_ID=$(gcloud builds triggers run intexuraos-dev-deploy \
             --branch="${GITHUB_REF_NAME}" \
-            --region=europe-central2 \
+            --region="${{ env.CLOUD_BUILD_REGION }}" \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
             --format="value(metadata.build.id)")
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
@@ -97,7 +103,7 @@ jobs:
           echo "Waiting for build $BUILD_ID..."
 
           while true; do
-            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region="${{ env.CLOUD_BUILD_REGION }}" --format="value(status)")
             echo "Build status: $STATUS"
 
             case "$STATUS" in
@@ -107,7 +113,7 @@ jobs:
                 ;;
               FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
                 echo "❌ Build failed with status: $STATUS"
-                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
+                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region="${{ env.CLOUD_BUILD_REGION }}" --format="value(logUrl)")
                 echo "Logs: $LOGS_URL"
                 exit 1
                 ;;
@@ -147,7 +153,7 @@ jobs:
           echo "🎯 Triggering individual build: ${{ matrix.target }}"
           BUILD_ID=$(gcloud builds triggers run ${{ matrix.target }} \
             --branch="${GITHUB_REF_NAME}" \
-            --region=europe-central2 \
+            --region="${{ env.CLOUD_BUILD_REGION }}" \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
             --format="value(metadata.build.id)")
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
@@ -160,7 +166,7 @@ jobs:
           echo "Waiting for build $BUILD_ID (${{ matrix.target }})..."
 
           while true; do
-            STATUS=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(status)")
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region="${{ env.CLOUD_BUILD_REGION }}" --format="value(status)")
             echo "Build status: $STATUS"
 
             case "$STATUS" in
@@ -170,7 +176,7 @@ jobs:
                 ;;
               FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)
                 echo "❌ Build failed with status: $STATUS"
-                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region=europe-central2 --format="value(logUrl)")
+                LOGS_URL=$(gcloud builds describe "$BUILD_ID" --region="${{ env.CLOUD_BUILD_REGION }}" --format="value(logUrl)")
                 echo "Logs: $LOGS_URL"
                 exit 1
                 ;;
