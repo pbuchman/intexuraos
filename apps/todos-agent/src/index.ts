@@ -9,19 +9,23 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_TODOS_PROCESSING_TOPIC',
+  'INTEXURAOS_TODOS_PROCESS_ING_TOPIC',
+  'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
 
 async function main(): Promise<void> {
-  initServices({
+  await initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
-    todosProcessingTopic: process.env['INTEXURAOS_TODOS_PROCESSING_TOPIC'] ?? '',
+    todosProcessingTopic: process.env['INTEXURAOS_TODOS_PROCESS_ING_TOPIC'] ?? '',
+    internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
+    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? 'http://localhost:8113',
   });
 
   const app = await buildServer();
-  const port = parseInt(process.env['PORT'] ?? '8080', 10);
 
   const close = (): void => {
     app.close().then(
@@ -33,6 +37,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', close);
   process.on('SIGINT', close);
 
+  const port = parseInt(process.env['PORT'] ?? '8080', 10);
   await app.listen({ port, host: '0.0.0.0' });
 }
 
