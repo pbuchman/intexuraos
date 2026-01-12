@@ -4,26 +4,56 @@ import {
   createTodosProcessingPublisher,
   type TodosProcessingPublisher,
 } from '@intexuraos/infra-pubsub';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
+import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
 export interface ServiceContainer {
   todoRepository: TodoRepository;
   todosProcessingPublisher: TodosProcessingPublisher;
+  userServiceClient: UserServiceClient;
+  todoItemExtractionService: TodoItemExtractionService;
 }
 
 export interface ServiceConfig {
   gcpProjectId: string;
   todosProcessingTopic: string;
+  internalAuthKey: string;
+  userServiceUrl: string;
+  appSettingsServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
 
-export function initServices(config: ServiceConfig): void {
+export async function initServices(config: ServiceConfig): Promise<void> {
+  const pricingResult = await fetchAllPricing(
+    config.appSettingsServiceUrl,
+    config.internalAuthKey
+  );
+
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+
+  const pricingContext = createPricingContext(pricingResult.value, [LlmModels.Gemini25Flash] as FastModel[]);
+
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthKey,
+  });
+
   container = {
     todoRepository: new FirestoreTodoRepository(),
     todosProcessingPublisher: createTodosProcessingPublisher({
       projectId: config.gcpProjectId,
       topicName: config.todosProcessingTopic,
     }),
+    userServiceClient,
+    todoItemExtractionService: createTodoItemExtractionService(
+      userServiceClient,
+      pricingContext
+    ),
   };
 }
 
