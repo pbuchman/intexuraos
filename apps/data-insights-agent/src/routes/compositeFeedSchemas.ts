@@ -104,6 +104,26 @@ export const compositeFeedParamsSchema = {
 } as const;
 
 /**
+ * Schema for a single data insight.
+ */
+export const dataInsightSchema = {
+  type: 'object',
+  required: ['id', 'title', 'description', 'trackableMetric', 'suggestedChartType', 'generatedAt'],
+  properties: {
+    id: { type: 'string' },
+    title: { type: 'string' },
+    description: { type: 'string' },
+    trackableMetric: { type: 'string' },
+    suggestedChartType: {
+      type: 'string',
+      enum: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'],
+    },
+    generatedAt: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+} as const;
+
+/**
  * Schema for composite feed response.
  */
 export const compositeFeedResponseSchema = {
@@ -120,6 +140,16 @@ export const compositeFeedResponseSchema = {
     notificationFilters: {
       type: 'array',
       items: notificationFilterConfigSchema,
+    },
+    dataInsights: {
+      oneOf: [
+        { type: 'null' },
+        {
+          type: 'array',
+          items: dataInsightSchema,
+          maxItems: 5,
+        },
+      ],
     },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },

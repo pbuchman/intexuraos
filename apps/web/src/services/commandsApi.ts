@@ -131,3 +131,24 @@ export async function createCommand(
   );
   return response.command;
 }
+
+export async function resolveDuplicateAction(
+  accessToken: string,
+  actionId: string,
+  choice: 'skip' | 'update'
+): Promise<{ actionId: string; status: 'rejected' | 'completed'; resource_url?: string }> {
+  const response = await apiRequest<{
+    actionId: string;
+    status: 'rejected' | 'completed';
+    resource_url?: string;
+  }>(
+    config.actionsAgentUrl,
+    `/actions/${actionId}/resolve-duplicate`,
+    accessToken,
+    {
+      method: 'POST',
+      body: { action: choice },
+    }
+  );
+  return response;
+}

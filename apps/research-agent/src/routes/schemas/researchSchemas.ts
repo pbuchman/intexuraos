@@ -318,3 +318,26 @@ export const enhanceResearchResponseSchema = {
     },
   },
 } as const;
+
+export const toggleFavouriteBodySchema = {
+  type: 'object',
+  required: ['favourite'],
+  properties: {
+    favourite: { type: 'boolean' },
+  },
+} as const;
+
+export const toggleFavouriteResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: researchSchema,
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

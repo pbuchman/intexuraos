@@ -236,6 +236,24 @@ describe('Bookmark Routes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/bookmarks',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: {
+          url: 'https://example.com',
+          tags: [],
+          source: 'web',
+          sourceId: 'src-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
   });
 
   describe('GET /bookmarks/:id', () => {
@@ -308,6 +326,15 @@ describe('Bookmark Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    it('returns 401 without auth', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/bookmarks/any-id',
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 

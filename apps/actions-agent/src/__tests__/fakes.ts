@@ -23,6 +23,7 @@ import type {
   BookmarksServiceClient,
   CreateBookmarkRequest,
   CreateBookmarkResponse,
+  ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
@@ -458,6 +459,23 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
       userId: request.userId,
       url: request.url,
       title: request.title ?? null,
+    });
+  }
+
+  async forceRefreshBookmark(
+    _bookmarkId: string
+  ): Promise<Result<ForceRefreshBookmarkResponse>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    // For testing, return a successful refresh result
+    return ok({
+      id: _bookmarkId,
+      url: 'https://example.com',
+      status: 'active',
+      ogPreview: null,
+      ogFetchStatus: 'processed',
     });
   }
 }

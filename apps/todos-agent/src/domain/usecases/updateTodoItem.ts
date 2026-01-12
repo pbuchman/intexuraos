@@ -22,10 +22,8 @@ function computeTodoStatus(items: TodoItem[]): 'pending' | 'in_progress' | 'comp
     return 'completed';
   }
 
-  const anyInProgress = items.some(
-    (item) => item.status === 'in_progress' || item.status === 'completed'
-  );
-  if (anyInProgress) {
+  const anyCompleted = items.some((item) => item.status === 'completed');
+  if (anyCompleted) {
     return 'in_progress';
   }
 

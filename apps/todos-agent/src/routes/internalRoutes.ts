@@ -19,6 +19,7 @@ interface CreateTodoBody {
 
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
 const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
+const todoItemStatusEnum = ['pending', 'completed'];
 
 const createTodoBodySchema = {
   type: 'object',
@@ -53,7 +54,7 @@ const todoItemResponseSchema = {
   properties: {
     id: { type: 'string' },
     title: { type: 'string' },
-    status: { type: 'string', enum: todoStatusEnum },
+    status: { type: 'string', enum: todoItemStatusEnum },
     priority: { type: ['string', 'null'], enum: [...todoPriorityEnum, null] },
     dueDate: { type: ['string', 'null'], format: 'date-time' },
     position: { type: 'number' },

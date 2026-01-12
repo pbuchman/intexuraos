@@ -15,6 +15,8 @@ import {
   Plus,
   RefreshCw,
   Share2,
+  Star,
+  StarOff,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -38,6 +40,7 @@ import {
   deleteResearch,
   enhanceResearch,
   retryFromFailed,
+  toggleResearchFavourite,
   unshareResearch,
 } from '@/services/researchAgentApi';
 import {
@@ -240,6 +243,7 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  const [togglingFavourite, setTogglingFavourite] = useState(false);
   const [enhanceModelSelections, setEnhanceModelSelections] = useState<
     Map<LlmProvider, SupportedModel | null>
   >(() => new Map());
@@ -449,6 +453,20 @@ export function ResearchDetailPage(): React.JSX.Element {
     setEnhanceError(null);
   };
 
+  const handleToggleFavourite = async (): Promise<void> => {
+    if (research === null) return;
+    setTogglingFavourite(true);
+    try {
+      const token = await getAccessToken();
+      await toggleResearchFavourite(token, research.id, !(research.favourite ?? false));
+      await refresh();
+    } catch {
+      // Silently fail for now
+    } finally {
+      setTogglingFavourite(false);
+    }
+  };
+
   const getExistingProviders = (): Set<LlmProvider> => {
     if (research === null) return new Set();
     return new Set(research.selectedModels.map(getProviderForModel));
@@ -523,6 +541,20 @@ export function ResearchDetailPage(): React.JSX.Element {
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-2xl font-bold text-slate-900">{getDisplayTitle()}</h2>
           <ResearchStatusBadge status={research.status} />
+          <button
+            onClick={(): void => {
+              void handleToggleFavourite();
+            }}
+            disabled={togglingFavourite}
+            className="p-2 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+            aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
+          >
+            {research.favourite === true ? (
+              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+            ) : (
+              <StarOff className="h-5 w-5 text-slate-300" />
+            )}
+          </button>
           <span className="text-sm text-slate-500">
             {isProcessing || research.status === 'awaiting_confirmation'
               ? `Started ${formatElapsedTime(research.startedAt)}`

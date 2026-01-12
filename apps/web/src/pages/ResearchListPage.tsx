@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Star, StarOff } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
+import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
+import { toggleResearchFavourite } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
   type Research,
@@ -42,7 +45,24 @@ const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
 };
 
 export function ResearchListPage(): React.JSX.Element {
-  const { researches, loading, error, hasMore, loadMore, deleteResearch } = useResearches();
+  const { researches, loading, error, hasMore, loadMore, deleteResearch, refresh } = useResearches();
+  const { getAccessToken } = useAuth();
+  const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
+
+  const handleToggleFavourite = (researchId: string, favourite: boolean): void => {
+    setUpdatingFavourite(researchId);
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        await toggleResearchFavourite(token, researchId, favourite);
+        await refresh();
+      } catch {
+        // Error handling - silently fail for now
+      } finally {
+        setUpdatingFavourite(null);
+      }
+    })();
+  };
 
   if (loading && researches.length === 0) {
     return (
@@ -90,6 +110,8 @@ export function ResearchListPage(): React.JSX.Element {
               onDelete={(): void => {
                 void deleteResearch(research.id);
               }}
+              onToggleFavourite={handleToggleFavourite}
+              updatingFavourite={updatingFavourite}
             />
           ))}
 
@@ -114,9 +136,11 @@ export function ResearchListPage(): React.JSX.Element {
 interface ResearchCardProps {
   research: Research;
   onDelete: () => void;
+  onToggleFavourite: (researchId: string, favourite: boolean) => void;
+  updatingFavourite: string | null;
 }
 
-function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Element {
+function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite }: ResearchCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[research.status];
@@ -157,11 +181,28 @@ function ResearchCard({ research, onDelete }: ResearchCardProps): React.JSX.Elem
           </h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
         </div>
-        <span
-          className={`ml-4 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
-        >
-          {status.label}
-        </span>
+        <div className="ml-4 flex items-center gap-2">
+          <button
+            onClick={(e): void => {
+              e.stopPropagation();
+              onToggleFavourite(research.id, !(research.favourite ?? false));
+            }}
+            disabled={updatingFavourite === research.id}
+            className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50"
+            aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
+          >
+            {research.favourite === true ? (
+              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+            ) : (
+              <StarOff className="h-5 w-5 text-slate-300" />
+            )}
+          </button>
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
+          >
+            {status.label}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">

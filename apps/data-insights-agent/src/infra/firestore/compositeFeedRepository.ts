@@ -12,6 +12,7 @@ import type {
   NotificationFilterConfig,
   UpdateCompositeFeedRequest,
 } from '../../domain/compositeFeed/index.js';
+import type { DataInsight } from '../../domain/dataInsights/index.js';
 
 const COLLECTION_NAME = 'composite_feeds';
 
@@ -24,6 +25,7 @@ interface CompositeFeedDoc {
   purpose: string;
   staticSourceIds: string[];
   notificationFilters: NotificationFilterConfig[];
+  dataInsights: DataInsight[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +41,7 @@ function toCompositeFeed(id: string, doc: CompositeFeedDoc): CompositeFeed {
     purpose: doc.purpose,
     staticSourceIds: doc.staticSourceIds,
     notificationFilters: doc.notificationFilters,
+    dataInsights: doc.dataInsights,
     createdAt: new Date(doc.createdAt),
     updatedAt: new Date(doc.updatedAt),
   };
@@ -63,6 +66,7 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
         purpose: request.purpose,
         staticSourceIds: request.staticSourceIds,
         notificationFilters: request.notificationFilters,
+        dataInsights: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -170,10 +174,12 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
 
       if (request.staticSourceIds !== undefined) {
         updates.staticSourceIds = request.staticSourceIds;
+        updates.dataInsights = null;
       }
 
       if (request.notificationFilters !== undefined) {
         updates.notificationFilters = request.notificationFilters;
+        updates.dataInsights = null;
       }
 
       await docRef.update(updates);
@@ -187,6 +193,47 @@ export class FirestoreCompositeFeedRepository implements CompositeFeedRepository
     } catch (error) {
       return err(
         `Failed to update composite feed: ${getErrorMessage(error, 'Unknown Firestore error')}`
+      );
+    }
+  }
+
+  async updateDataInsights(
+    id: string,
+    userId: string,
+    dataInsights: CompositeFeed['dataInsights']
+  ): Promise<Result<CompositeFeed, string>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(id);
+      const snapshot = await docRef.get();
+
+      if (!snapshot.exists) {
+        return err('Composite feed not found');
+      }
+
+      const data = snapshot.data() as CompositeFeedDoc;
+
+      if (data.userId !== userId) {
+        return err('Composite feed not found');
+      }
+
+      const now = new Date().toISOString();
+      const updates: Partial<CompositeFeedDoc> = {
+        dataInsights,
+        updatedAt: now,
+      };
+
+      await docRef.update(updates);
+
+      const updatedDoc: CompositeFeedDoc = {
+        ...data,
+        ...updates,
+      };
+
+      return ok(toCompositeFeed(id, updatedDoc));
+    } catch (error) {
+      return err(
+        `Failed to update data insights: ${getErrorMessage(error, 'Unknown Firestore error')}`
       );
     }
   }
