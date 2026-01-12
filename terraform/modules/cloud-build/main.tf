@@ -5,6 +5,12 @@
 # Then import it into Terraform state before running apply.
 # See docs/setup/03-cloud-build-trigger.md for setup instructions.
 
+locals {
+  # Cloud Build resources (triggers, connection) can be in a different region
+  # than runtime resources for cost optimization. Defaults to runtime region.
+  build_region = var.build_region != null ? var.build_region : var.region
+}
+
 # -----------------------------------------------------------------------------
 # 2nd Gen Repository Connection
 # -----------------------------------------------------------------------------
@@ -15,7 +21,7 @@
 # The lifecycle block prevents Terraform from trying to recreate it if it already exists.
 resource "google_cloudbuildv2_connection" "github" {
   project  = var.project_id
-  location = var.region
+  location = local.build_region
   name     = var.github_connection_name
 
   # GitHub config is managed by the Console OAuth flow
@@ -32,7 +38,7 @@ resource "google_cloudbuildv2_connection" "github" {
 # Link the repository to the connection
 resource "google_cloudbuildv2_repository" "intexuraos" {
   project           = var.project_id
-  location          = var.region
+  location          = local.build_region
   name              = var.github_repo
   parent_connection = google_cloudbuildv2_connection.github.name
   remote_uri        = "https://github.com/${var.github_owner}/${var.github_repo}.git"
@@ -122,7 +128,7 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
 resource "google_cloudbuild_trigger" "manual_main" {
   name        = "intexuraos-${var.environment}-deploy"
   description = "Deploy trigger - builds and deploys all services unconditionally"
-  location    = var.region
+  location    = local.build_region
 
   source_to_build {
     repository = google_cloudbuildv2_repository.intexuraos.id
@@ -177,7 +183,7 @@ resource "google_cloudbuild_trigger" "service" {
 
   name        = each.key
   description = "Deploy ${each.key} only"
-  location    = var.region
+  location    = local.build_region
 
   source_to_build {
     repository = google_cloudbuildv2_repository.intexuraos.id
@@ -208,7 +214,7 @@ resource "google_cloudbuild_trigger" "service" {
 resource "google_cloudbuild_trigger" "web" {
   name        = "web"
   description = "Deploy web frontend only"
-  location    = var.region
+  location    = local.build_region
 
   source_to_build {
     repository = google_cloudbuildv2_repository.intexuraos.id
@@ -237,7 +243,7 @@ resource "google_cloudbuild_trigger" "web" {
 resource "google_cloudbuild_trigger" "firestore" {
   name        = "firestore"
   description = "Deploy Firestore migrations only"
-  location    = var.region
+  location    = local.build_region
 
   source_to_build {
     repository = google_cloudbuildv2_repository.intexuraos.id
