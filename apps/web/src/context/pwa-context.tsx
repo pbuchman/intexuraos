@@ -113,6 +113,13 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
           (window as { __updateSW?: () => Promise<void> }).__updateSW = registerSW({
             onNeedRefresh(): void {
               setUpdateAvailable(true);
+              // Re-show install prompts when new version is available
+              // The version check happens inside isDismissedForCurrentVersion()
+              if (isIOS && !isInstalled && !isDismissedForCurrentVersion()) {
+                setShowIOSInstallPrompt(true);
+              } else if (deferredPrompt !== null && !isDismissedForCurrentVersion()) {
+                setShowAndroidInstallPrompt(true);
+              }
             },
             onOfflineReady(): void {
               // App is ready for offline use
@@ -128,7 +135,7 @@ export function PWAProvider({ children }: { children: ReactNode }): React.JSX.El
           // PWA registration failed, likely in dev mode
         });
     }
-  }, []);
+  }, [deferredPrompt, isIOS, isInstalled]);
 
   const dismissIOSInstallPrompt = useCallback((): void => {
     dismissForCurrentVersion();
