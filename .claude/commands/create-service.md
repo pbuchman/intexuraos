@@ -91,7 +91,7 @@ COPY apps/<service-name>/package*.json ./apps/<service-name>/
 COPY packages/*/package*.json ./packages/
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -100,7 +100,7 @@ COPY packages/ ./packages/
 COPY apps/<service-name>/ ./apps/<service-name>/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/<service-name>
+RUN pnpm run --filter @intexuraos/<service-name>
 
 # Stage 2: Production
 FROM node:22-alpine
@@ -109,7 +109,7 @@ WORKDIR /app
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/<service-name>/dist/package.json ./
-RUN npm install --omit=dev
+RUN pnpm install --omit=dev
 
 # Copy built file
 COPY --from=builder /app/apps/<service-name>/dist/index.js ./dist/
@@ -126,7 +126,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 CMD ["node", "dist/index.js"]
 ```
 
-Note: The build script auto-generates `dist/package.json` with all transitive npm dependencies.
+Note: The build script auto-generates `dist/package.json` with all transitive dependencies.
 
 ### 4. Create src/index.ts
 
@@ -596,8 +596,8 @@ This ensures developers can run the service locally with proper configuration.
 ### 14. Run Verification
 
 ```bash
-npm install
-npm run ci
+pnpm install
+pnpm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
 
@@ -638,7 +638,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`scripts/dev.mjs`)
 - [ ] Updated domain docs registry
-- [ ] `npm run ci` passes
+- [ ] `pnpm run ci` passes
 - [ ] `terraform validate` passes
 
 ---

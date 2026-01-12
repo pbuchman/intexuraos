@@ -371,14 +371,14 @@ This release includes comprehensive development across the platform with 187 fun
 ### Build System
 
 45. TypeScript monorepo configuration
-46. npm workspaces setup
+46. pnpm workspaces setup
 47. Shared tsconfig.base.json
 48. Per-service tsconfig.json
 49. ESLint configuration with TypeScript
 50. Prettier code formatting
 51. Type checking for tests (tsconfig.tests-check.json)
 52. Build scripts in package.json
-53. npm scripts for testing, linting, type-checking
+53. pnpm scripts for testing, linting, type-checking
 
 ### CI/CD Pipeline
 

@@ -17,7 +17,6 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const eslintBin = join(repoRoot, 'node_modules', '.bin', 'eslint');
 
 // Temp directories
 // OUTSIDE boundaries: packages/orphan/src/** (doesn't match any pattern)
@@ -34,12 +33,15 @@ const testCode = `export const placeholder = "test" as const;
 
 /**
  * Run ESLint with specific rules and return result
+ * Note: Use 'npx' to execute eslint - the binary is a bash script
+ * that cannot be executed directly by Node.js
  */
 function runEslint(filePath) {
-  return spawnSync(process.execPath, [eslintBin, filePath], {
+  return spawnSync('npx', ['eslint', filePath], {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
+    shell: true,
   });
 }
 
@@ -124,9 +126,9 @@ try {
   // --- Final verification: check config ---
   console.log('\nVERIFYING CONFIG...');
   const configResult = spawnSync(
-    process.execPath,
-    [eslintBin, '--print-config', join(repoRoot, 'packages', 'common', 'src', 'result.ts')],
-    { cwd: repoRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    'npx',
+    ['eslint', '--print-config', join(repoRoot, 'packages', 'http-contracts', 'src', 'index.ts')],
+    { cwd: repoRoot, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], shell: true }
   );
 
   if (configResult.status !== 0) {

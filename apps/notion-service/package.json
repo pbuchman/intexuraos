@@ -13,12 +13,12 @@
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/common-http": "*",
-    "@intexuraos/infra-firestore": "*",
-    "@intexuraos/infra-notion": "*",
-    "@intexuraos/http-contracts": "*",
-    "@intexuraos/http-server": "*",
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/common-http": "workspace:*",
+    "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-notion": "workspace:*",
+    "@intexuraos/http-contracts": "workspace:*",
+    "@intexuraos/http-server": "workspace:*",
     "@fastify/cors": "^10.0.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",

@@ -22,8 +22,8 @@ issues:
 
       1. **Read `.github/copilot-instructions.md`** — all coding standards
       2. **Read `.github/instructions/apps.instructions.md`** — app patterns
-      3. **Run Prettier before CI**: `npx prettier --write .`
-      4. **All verification must pass**: `npm run ci`
+      3. **Run Prettier before CI**: `pnpm prettier --write .`
+      4. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -58,13 +58,13 @@ issues:
 
       - [ ] All 4 test cases implemented and passing
       - [ ] Branch coverage ≥ 90% for promptRoutes.ts
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Coverage Reporting (REQUIRED)
 
       **Before starting**, run:
       ```bash
-      npm run test:coverage 2>&1 | grep -A2 "promptRoutes.ts"
+      pnpm run test:coverage 2>&1 | grep -A2 "promptRoutes.ts"
       ```
 
       **After completing**, include BOTH outputs in PR description.
@@ -89,8 +89,8 @@ issues:
 
       1. **Read `.github/copilot-instructions.md`** — all coding standards
       2. **Read `.github/instructions/apps.instructions.md`** — app patterns
-      3. **Run Prettier before CI**: `npx prettier --write .`
-      4. **All verification must pass**: `npm run ci`
+      3. **Run Prettier before CI**: `pnpm prettier --write .`
+      4. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -125,13 +125,13 @@ issues:
 
       - [ ] All 4 test cases implemented and passing
       - [ ] Branch coverage ≥ 90% for messageRoutes.ts
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Coverage Reporting (REQUIRED)
 
       **Before starting**, run:
       ```bash
-      npm run test:coverage 2>&1 | grep -A2 "messageRoutes.ts"
+      pnpm run test:coverage 2>&1 | grep -A2 "messageRoutes.ts"
       ```
 
       **After completing**, include BOTH outputs in PR description.
@@ -155,8 +155,8 @@ issues:
       Before writing ANY code, you MUST:
 
       1. **Read `.github/copilot-instructions.md`** — all coding standards
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -184,13 +184,13 @@ issues:
 
       - [ ] All uncovered branches tested
       - [ ] Branch coverage = 100% for shared.ts
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Coverage Reporting (REQUIRED)
 
       **Before starting**, run:
       ```bash
-      npm run test:coverage 2>&1 | grep -A2 "shared.ts"
+      pnpm run test:coverage 2>&1 | grep -A2 "shared.ts"
       ```
 
       ## Effort Estimate
@@ -212,8 +212,8 @@ issues:
       Before writing ANY code, you MUST:
 
       1. **Read `.github/copilot-instructions.md`** — all coding standards
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -244,13 +244,13 @@ issues:
 
       - [ ] All 3 test cases implemented and passing
       - [ ] Branch coverage ≥ 90% for transcribeAudio.ts
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Coverage Reporting (REQUIRED)
 
       **Before starting**, run:
       ```bash
-      npm run test:coverage 2>&1 | grep -A2 "transcribeAudio.ts"
+      pnpm run test:coverage 2>&1 | grep -A2 "transcribeAudio.ts"
       ```
 
       ## Effort Estimate
@@ -270,8 +270,8 @@ issues:
       ## ⚠️ MANDATORY: Repository Standards
 
       1. **Read `.github/copilot-instructions.md`**
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -292,7 +292,7 @@ issues:
       ## Acceptance Criteria
 
       - [ ] Test case implemented and passing
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Effort Estimate
 
@@ -311,8 +311,8 @@ issues:
       ## ⚠️ MANDATORY: Repository Standards
 
       1. **Read `.github/copilot-instructions.md`**
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -333,7 +333,7 @@ issues:
       ## Acceptance Criteria
 
       - [ ] Test case implemented and passing
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Effort Estimate
 
@@ -352,8 +352,8 @@ issues:
       ## ⚠️ MANDATORY: Repository Standards
 
       1. **Read `.github/copilot-instructions.md`**
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -374,7 +374,7 @@ issues:
       ## Acceptance Criteria
 
       - [ ] Test case implemented and passing
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Effort Estimate
 
@@ -393,8 +393,8 @@ issues:
       ## ⚠️ MANDATORY: Repository Standards
 
       1. **Read `.github/copilot-instructions.md`**
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -415,7 +415,7 @@ issues:
       ## Acceptance Criteria
 
       - [ ] Test case implemented and passing
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Effort Estimate
 
@@ -434,8 +434,8 @@ issues:
       ## ⚠️ MANDATORY: Repository Standards
 
       1. **Read `.github/copilot-instructions.md`**
-      2. **Run Prettier before CI**: `npx prettier --write .`
-      3. **All verification must pass**: `npm run ci`
+      2. **Run Prettier before CI**: `pnpm prettier --write .`
+      3. **All verification must pass**: `pnpm run ci`
 
       ## Target File
 
@@ -456,7 +456,7 @@ issues:
       ## Acceptance Criteria
 
       - [ ] Test case implemented and passing
-      - [ ] `npm run ci` passes
+      - [ ] `pnpm run ci` passes
 
       ## Effort Estimate
 

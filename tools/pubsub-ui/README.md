@@ -16,7 +16,7 @@ Real-time web dashboard for monitoring Pub/Sub events during local development.
 The UI is automatically started when you run:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Then open: **http://localhost:8105**
@@ -124,7 +124,7 @@ To run standalone (outside docker-compose):
 
 ```bash
 cd tools/pubsub-ui
-npm install
+pnpm install
 PUBSUB_EMULATOR_HOST=localhost:8102 \
 PUBSUB_PROJECT_ID=demo-intexuraos \
 PORT=8105 \

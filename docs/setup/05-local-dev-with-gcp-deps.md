@@ -6,7 +6,7 @@ This document describes how to run IntexuraOS services locally while using GCP F
 
 Local uses:
 
-- **Local services**: Node.js processes via `docker-compose` or `npm run dev`
+- **Local services**: Node.js processes via `docker-compose` or `ppnpm run dev`
 - **Remote Firestore**: Dev project's Firestore database
 - **Remote Secret Manager**: Dev project's secrets (or local .env override)
 
@@ -85,16 +85,16 @@ LOG_LEVEL=debug
 
 ## 4. Run Services Locally
 
-### Option A: Using npm scripts
+### Option A: Using pnpm scripts
 
 ```bash
 # Terminal 1: Auth service
 cd apps/user-service
-npm run dev
+ppnpm run dev
 
 # Terminal 2: PromptVault service
 cd apps/promptvault-service
-npm run dev
+ppnpm run dev
 ```
 
 ### Option B: Using Docker Compose
@@ -132,9 +132,9 @@ open http://localhost:8081/docs
 Tests use **in-memory fake repositories** via dependency injection—no external services required:
 
 ```bash
-npm run test          # Run all tests
-npm run test:coverage # Run with coverage report
-npm run ci            # Full CI pipeline
+ppnpm run test          # Run all tests
+ppppnpm run test:coverage # Run with coverage report
+ppnpm run ci            # Full CI pipeline
 ```
 
 ## Project Structure for Local Development
@@ -189,7 +189,7 @@ Ensure your user has `roles/datastore.user` on the project.
 ### Services can't connect to each other
 
 In Docker Compose, services use container names as hostnames.
-In local npm dev, services run on different ports on localhost.
+In local dev, services run on different ports on localhost.
 
 ### Environment variables not loading
 
@@ -215,7 +215,7 @@ Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
 
 After completing these steps, you can:
 
-- [x] Run services locally with `npm run dev` or Docker Compose
+- [x] Run services locally with `ppnpm run dev` or Docker Compose
 - [x] Connect to dev Firestore database
 - [x] Access secrets via ADC or direct environment variables
 - [x] Test API endpoints locally
@@ -223,7 +223,7 @@ After completing these steps, you can:
 ## Development Workflow
 
 1. Make code changes
-2. Run `npm run ci` to validate
-3. Test locally with `npm run dev`
+2. Run `ppnpm run ci` to validate
+3. Test locally with `ppnpm run dev`
 4. Push to `development` branch
 5. Cloud Build automatically deploys

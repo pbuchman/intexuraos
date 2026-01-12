@@ -4,12 +4,9 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
   },
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:emulators": "node scripts/dev.mjs --emulators-only",
@@ -23,12 +20,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "node scripts/typecheck-parallel.mjs",
-    "typecheck:sequential": "npm run typecheck --workspaces --if-present",
+    "typecheck:sequential": "pnpm -r --if-present typecheck",
     "typecheck:tests": "tsc --project tsconfig.tests-check.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build": "npm run build --workspaces --if-present",
+    "build": "pnpm -r --if-present build",
     "build:all": "node scripts/build-all-services.mjs",
     "clean": "rm -rf apps/*/dist packages/*/dist packages/*/*/dist node_modules/.cache",
     "verify:package-json": "node scripts/verify-package-json.mjs",
@@ -44,7 +41,7 @@
     "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "verify:no-console": "node scripts/verify-no-console.mjs",
-    "verify:llm-architecture": "npx tsx scripts/verify-llm-architecture.ts",
+    "verify:llm-architecture": "pnpm tsx scripts/verify-llm-architecture.ts",
     "verify:workspace": "./scripts/verify-workspace.sh",
     "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",
     "migrate": "node scripts/migrate.mjs",
@@ -62,8 +59,11 @@
     "esbuild": "^0.25.0",
     "eslint": "^9.17.0",
     "eslint-plugin-boundaries": "^5.3.1",
+    "firebase-admin": "^13.6.0",
     "firebase-tools": "15.1.0",
     "globals": "^15.14.0",
+    "jose": "^5.9.6",
+    "nock": "^13.5.6",
     "prettier": "^3.4.2",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
