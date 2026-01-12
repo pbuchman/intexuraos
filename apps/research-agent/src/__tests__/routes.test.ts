@@ -210,6 +210,19 @@ describe('Research Routes - Unauthenticated', () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
+
+  it('PATCH /research/:id/favourite returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/research/test-id/favourite',
+      payload: { favourite: true },
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
 });
 
 describe('Research Routes - Authenticated', () => {
@@ -2605,6 +2618,103 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
+
+  describe('PATCH /research/:id/favourite', () => {
+    it('sets favourite to true', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/test-research-123/favourite',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { favourite: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.favourite).toBe(true);
+
+      const updated = fakeRepo.getAll()[0];
+      expect(updated?.favourite).toBe(true);
+    });
+
+    it('sets favourite to false (unfavourite)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ favourite: true });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/test-research-123/favourite',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { favourite: false },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.favourite).toBe(false);
+
+      const updated = fakeRepo.getAll()[0];
+      expect(updated?.favourite).toBe(false);
+    });
+
+    it('returns 404 for non-existent research', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/non-existent/favourite',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { favourite: true },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 when user does not own the research', async () => {
+      const token = await createToken(OTHER_USER_ID);
+      const research = createTestResearch({ userId: TEST_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/test-research-123/favourite',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { favourite: true },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 500 on repository error', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch();
+      fakeRepo.addResearch(research);
+      fakeRepo.setFailNextUpdate(true);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/test-research-123/favourite',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { favourite: true },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
 });
 
 describe('System Endpoints', () => {
@@ -3776,5 +3886,4 @@ describe('Internal Routes', () => {
       expect(result?.error).toContain('Unexpected repository error');
     });
   });
-
 });
