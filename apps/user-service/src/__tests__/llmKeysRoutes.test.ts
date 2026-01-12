@@ -240,6 +240,32 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
+    it('catches unexpected exceptions and returns 500', { timeout: 20000 }, async () => {
+      fakeSettingsRepo.setThrowOnGet(true);
+
+      app = await buildServer();
+
+      const userId = 'auth0|user-unexpected-error';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to get LLM keys');
+    });
+
     it('returns null when decryption fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-decrypt-fail';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
