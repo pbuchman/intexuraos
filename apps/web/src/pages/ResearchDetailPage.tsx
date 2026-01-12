@@ -256,6 +256,19 @@ export function ResearchDetailPage(): React.JSX.Element {
       ? []
       : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
 
+  const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
+    const map = new Map<LlmProvider, string>();
+    if (keys !== null) {
+      for (const provider of PROVIDER_MODELS) {
+        const testResult = keys.testResults[provider.id];
+        if (testResult?.status === 'failure') {
+          map.set(provider.id, testResult.message);
+        }
+      }
+    }
+    return map;
+  })();
+
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
     setCopiedSection(section);
@@ -1034,6 +1047,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onChange={handleEnhanceModelChange}
                 configuredProviders={configuredProviders}
                 disabledProviders={getExistingProviders()}
+                failedProviders={failedProviders}
                 disabled={enhancing}
               />
               <p className="text-xs text-slate-500 mt-2">
