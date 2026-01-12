@@ -29,6 +29,20 @@ import type {
 import type { DataInsightSnapshot, SnapshotRepository } from '../domain/snapshot/index.js';
 import type { CompositeFeedData } from '../domain/compositeFeed/schemas/index.js';
 import { SNAPSHOT_TTL_MS } from '../domain/snapshot/models/index.js';
+import type {
+  DataAnalysisService,
+  DataAnalysisResult,
+  DataAnalysisError,
+} from '../infra/gemini/dataAnalysisService.js';
+import type {
+  ChartDefinitionService,
+  ChartDefinitionError,
+} from '../infra/gemini/chartDefinitionService.js';
+import type {
+  DataTransformService,
+  DataTransformError,
+} from '../infra/gemini/dataTransformService.js';
+import type { ParsedChartDefinition } from '@intexuraos/llm-common';
 
 /**
  * Fake DataSource repository for testing.
@@ -338,6 +352,11 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
     userId: string,
     dataInsights: CompositeFeed['dataInsights']
   ): Promise<Result<CompositeFeed, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err('Simulated update failure'));
+    }
+
     const feed = this.feeds.get(id);
     if (feed === undefined || feed.userId !== userId) {
       return Promise.resolve(err('Composite feed not found'));
@@ -455,7 +474,6 @@ export class FakeMobileNotificationsClient implements MobileNotificationsClient 
     return Promise.resolve(ok(this.notifications));
   }
 }
-
 /**
  * Fake Snapshot repository for testing.
  */
@@ -563,5 +581,131 @@ export class FakeSnapshotRepository implements SnapshotRepository {
       .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
 
     return Promise.resolve(ok(snapshots));
+  }
+}
+
+/**
+ * Fake VisualizationRepository for testing (placeholder - visualizations deprecated).
+ */
+export class FakeVisualizationRepository {
+  private visualizations = new Map<string, object>();
+  clear(): void {
+    this.visualizations.clear();
+  }
+}
+
+/**
+ * Fake VisualizationGenerationService for testing (placeholder - visualizations deprecated).
+ */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
+export class FakeVisualizationGenerationService {}
+
+/**
+ * Fake DataAnalysisService for testing.
+ */
+export class FakeDataAnalysisService implements DataAnalysisService {
+  private errorToReturn: DataAnalysisError | null = null;
+  private resultToReturn: DataAnalysisResult | null = null;
+
+  setError(error: DataAnalysisError | null): void {
+    this.errorToReturn = error;
+  }
+
+  setResult(result: DataAnalysisResult): void {
+    this.resultToReturn = result;
+  }
+
+  async analyzeData(
+    _userId: string,
+    _jsonSchema: object,
+    _snapshotData: object,
+    _chartTypes: unknown[]
+  ): Promise<Result<DataAnalysisResult, DataAnalysisError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(ok({ insights: [] }));
+  }
+}
+
+/**
+ * Fake ChartDefinitionService for testing.
+ */
+export class FakeChartDefinitionService implements ChartDefinitionService {
+  private errorToReturn: ChartDefinitionError | null = null;
+  private resultToReturn: ParsedChartDefinition | null = null;
+
+  setError(error: ChartDefinitionError | null): void {
+    this.errorToReturn = error;
+  }
+
+  setResult(result: ParsedChartDefinition): void {
+    this.resultToReturn = result;
+  }
+
+  async generateChartDefinition(
+    _userId: string,
+    _jsonSchema: object,
+    _snapshotData: object,
+    _targetChartSchema: object,
+    _insight: { title: string; trackableMetric: string; suggestedChartType: string }
+  ): Promise<Result<ParsedChartDefinition, ChartDefinitionError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(
+      ok({ vegaLiteConfig: {}, transformInstructions: 'No transform needed' })
+    );
+  }
+}
+
+/**
+ * Fake DataTransformService for testing.
+ */
+export class FakeDataTransformService implements DataTransformService {
+  private errorToReturn: DataTransformError | null = null;
+  private resultToReturn: unknown[] | null = null;
+
+  setError(error: DataTransformError | null): void {
+    this.errorToReturn = error;
+  }
+
+  setResult(result: unknown[]): void {
+    this.resultToReturn = result;
+  }
+
+  async transformData(
+    _userId: string,
+    _jsonSchema: object,
+    _snapshotData: object,
+    _chartConfig: object,
+    _transformInstructions: string,
+    _insight: { title: string; trackableMetric: string }
+  ): Promise<Result<unknown[], DataTransformError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(ok([]));
   }
 }

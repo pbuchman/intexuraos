@@ -114,7 +114,10 @@ export const previewResponseSchema = {
         chartData: {
           type: 'array',
           description: 'Transformed data ready for Vega-Lite rendering',
-          items: { type: 'object' },
+          items: {
+            type: 'object',
+            additionalProperties: true,
+          },
         },
       },
     },
